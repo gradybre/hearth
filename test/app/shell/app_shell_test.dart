@@ -128,19 +128,12 @@ void main() {
       handle.dispose();
     });
 
-    // KNOWN DEFECT, not yet fixed — §6.3 is a non-negotiable and this breaks
-    // it. A nested Navigator (which StatefulShellRoute.indexedStack uses for
-    // each branch) emits a `scopesRoute` semantics node that drops every
-    // sibling node, so the shell chrome vanishes from the accessibility tree.
-    //
-    // Reproduced minimally: AppShell with a plain child yields 5 semantics
-    // labels; with a nested Navigator child it yields 1 (only the content).
-    // `opaque: false`, `explicitChildNodes`, and wrapping either side in an
-    // outer `scopesRoute` all failed to restore it. The isolation test above
-    // proves the sidebar itself is labelled correctly, so this is a
-    // routing-level defect rather than a widget one.
-    //
-    // Screen-reader users cannot reach navigation until this is resolved.
+    // Regression guard for a defect that shipped silently once: a nested
+    // Navigator (as every go_router shell route creates) emits a `scopesRoute`
+    // semantics node that drops sibling nodes, which hid the entire navigation
+    // chrome from screen readers while every visual test still passed. The
+    // router deliberately avoids nested navigators; this test is what keeps it
+    // that way.
     testWidgets(
       'navigation chrome is reachable by a screen reader in the real app',
       (WidgetTester tester) async {
@@ -156,8 +149,6 @@ void main() {
         }
         handle.dispose();
       },
-      // See the KNOWN DEFECT note above this test.
-      skip: true,
     );
 
     testWidgets('bottom tabs meet the minimum touch target', (

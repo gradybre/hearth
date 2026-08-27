@@ -5,6 +5,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
+import '../../domain/parsing/direction_parser.dart';
 
 /// A temporary screen showing the real type and colour tokens on realistic
 /// content, so the design language can be judged in context rather than on a
@@ -50,11 +51,12 @@ class TypeSpecimenScreen extends StatelessWidget {
           const SizedBox(height: HearthSpacing.xl),
           Text('Directions', style: text.sectionHeader),
           const SizedBox(height: HearthSpacing.md),
-          Text(
+          const _Directions(
             'Season the ribs generously and sear them in a heavy pot until '
-            'deeply browned on every side. Lower the heat, add the aromatics, '
-            'and let them soften without colouring before the wine goes in.',
-            style: text.body.copyWith(color: colors.textSecondary),
+            'deeply browned on every side. Lower the heat and add the '
+            'aromatics. Pour in 1.5 cups of dry red wine and scrape up the '
+            'browned bits. Cover and cook for approx. 3 hr. Serve over '
+            'polenta.',
           ),
         ],
       ),
@@ -235,6 +237,53 @@ class _Ingredient extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Directions rendered as numbered steps.
+///
+/// Prose is run through [DirectionParser] rather than shown as a paragraph:
+/// structured steps are what cook-along walks through one card at a time, and
+/// a numbered list is far easier to hold your place in with messy hands
+/// (spec §5.2).
+class _Directions extends StatelessWidget {
+  const _Directions(this.prose);
+
+  final String prose;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final HearthTextStyles text = context.text;
+    final ParsedDirections parsed = DirectionParser.parse(prose);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        for (final ParsedStep step in parsed.steps)
+          Padding(
+            padding: const EdgeInsets.only(bottom: HearthSpacing.md),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                SizedBox(
+                  width: 28,
+                  child: Text(
+                    '${step.number}.',
+                    style: text.ingredient.copyWith(color: colors.accent),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    step.text,
+                    style: text.body.copyWith(color: colors.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
