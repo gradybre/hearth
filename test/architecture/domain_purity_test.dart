@@ -23,8 +23,9 @@ void main() {
       final List<String> lines = entity.readAsLinesSync();
       for (int i = 0; i < lines.length; i++) {
         final String line = lines[i].trim();
-        if (!line.startsWith('import ') && !line.startsWith('export '))
-          continue;
+        final bool isDirective =
+            line.startsWith('import ') || line.startsWith('export ');
+        if (!isDirective) continue;
         if (line.contains('package:flutter/') ||
             line.contains('package:flutter_test/') ||
             line.contains('dart:ui')) {
