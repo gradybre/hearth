@@ -99,6 +99,10 @@ colima start                          # start the container runtime first
 supabase start                        # local Postgres + Auth + Storage
 supabase db reset                     # re-apply all migrations from scratch
 supabase db diff -f <name>            # capture schema changes as a migration
+
+# Schema/RLS guards — run after any migration change
+docker exec -i supabase_db_hearth psql -U postgres -d postgres \
+  -v ON_ERROR_STOP=1 < supabase/tests/schema_guards.sql
 supabase functions serve              # Edge Functions locally (Phase 3+)
 ```
 
