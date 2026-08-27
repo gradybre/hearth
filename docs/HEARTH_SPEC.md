@@ -1,0 +1,443 @@
+# Hearth — Product & Technical Specification
+
+**Version:** 0.8 (planning draft)
+**Owner:** Brendan
+**Status:** Pre-build. This document is the source of truth for the initial build and is intended to be committed to the repo and used with Claude Code's Plan Mode.
+
+---
+
+## 1. Vision
+
+Hearth is a private, household-oriented app that consolidates several recurring parts of home and relationship life into one place. It is built to grow: the long-term shape is a multi-module hub (food, date ideas, watchlist, events, movies in theaters), but **v1 ships one pillar only — Food & Meal Planning — built end to end**, with the data layer and navigation structured so later pillars bolt on without a refactor.
+
+The guiding principles:
+
+- **Household-first.** Two linked accounts (Brendan + partner) share a common library while keeping personal logs private.
+- **Modular from day one.** Food is the first module; the app shell, auth, and data layer are pillar-agnostic.
+- **Works where you actually use it.** Offline-capable in the kitchen and the store; online for lookups and imports.
+- **User-in-the-loop.** Automation (AI import, shopping export) always passes through a human review step before anything commits externally.
+
+**Definition of done (v1 success bar):** Hearth succeeds when **both Brendan and his partner have fully replaced MacrosFirst for daily logging, for at least two weeks straight.** This is the bar every scope call is judged against — it means Hearth must beat the tool already in use on the unglamorous core loop (log a meal fast), not just match it, before the cozy/AI/household features matter.
+
+**Build approach:** all Phase-1 areas are built together (not a strict vertical slice) — a deliberate choice; see the load-bearing risk note in §12.
+
+---
+
+## 2. Platforms & Tech Stack
+
+### Targets
+- **iOS** (phone — primary capture surface: camera, barcode, on-the-go logging)
+- **macOS** (desktop — roomy planning, recipe management)
+- **Windows** (desktop — same)
+- *Android intentionally out of scope for v1* (near-free later via the same codebase)
+
+### Recommended stack
+| Layer | Choice | Rationale |
+|---|---|---|
+| Client framework | **Flutter** | Single codebase covering iOS + macOS + Windows with stable desktop support and near-native feel; strong camera/barcode plugins. |
+| Backend | **Supabase** (Postgres + Auth + Storage + Realtime) | Row-Level Security maps cleanly onto the shared-household + private-logs model; one backend serves all three clients. |
+| Local DB / offline cache | **Drift** (SQLite) or **Hive** | Local store for recipes, personal food library, and current week's plan; write-queue for offline sync. |
+| AI features | **Supabase Edge Function → Claude API** | Photo/URL recipe extraction runs server-side so the API key never ships in the app. |
+| Auth | Supabase Auth (email/password to start) | Simple account model; household linking handled at the data layer. |
+
+**Tradeoff noted:** Dart is a new language for Brendan (vs. Python/web comfort). Claude Code handles Flutter well, so this is manageable. Fallback if a web stack is strongly preferred: React/TypeScript + Capacitor (iOS) + Tauri (desktop) — more familiar language, but three wrappers to maintain and fiddlier native camera. **Decision: Flutter**, for cohesion across the three targets.
+
+---
+
+## 3. Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│  Flutter App (iOS / macOS / Windows)         │
+│  ┌───────────────┐  ┌──────────────────────┐ │
+│  │ App Shell     │  │ Local Cache (Drift)  │ │
+│  │ (pillar nav)  │  │ recipes, food lib,   │ │
+│  └───────────────┘  │ current-week plan,   │ │
+│  ┌───────────────┐  │ write queue          │ │
+│  │ Food Module   │  └──────────────────────┘ │
+│  │ (v1)          │                            │
+│  └───────────────┘                            │
+└──────────────┬──────────────────────────────┘
+               │ sync (online)
+┌──────────────▼──────────────────────────────┐
+│  Supabase                                     │
+│  Postgres + RLS · Auth · Storage · Realtime   │
+│  ┌─────────────────────────────────────────┐ │
+│  │ Edge Functions                          │ │
+│  │  • recipe-import (Claude API)           │ │
+│  │  • nutrition-lookup (OFF → USDA)        │ │
+│  │  • shopping-export (Walmart adapter)    │ │
+│  └─────────────────────────────────────────┘ │
+└───────────────────────────────────────────────┘
+        │                │                │
+   Open Food Facts   USDA FDC        Walmart adapter
+                                     (deep-link / list;
+                                      swappable)
+```
+
+**Key design rule:** external integrations (nutrition sources, shopping export) sit behind interfaces so a source can be swapped (e.g., add Nutritionix, or swap Walmart for Instacart) without touching the UI.
+
+**AI cost/usage:** photo import and generation incur real API cost. An **enforced monthly ceiling** applies: a soft cap in the Edge Function warns at 75% and refuses new AI calls past 100% until manually lifted, with **Anthropic billing usage limits as the hard backstop** (guards against a dev-time retry loop, the bigger real risk than normal two-user usage). Usage is also logged/observable. Images are resized before send and originals discarded post-extraction to keep costs down.
+
+---
+
+## 4. Data Model (initial)
+
+Core entities (Postgres tables, RLS-scoped):
+
+- **user** — id, email, display_name, household_id, units_preference (imperial/metric — per-user display)
+- **household** — id, name; links two+ users; owns the shared library
+- **recipe** — id, household_id, title, prep_time, cook_time, servings (yield — required), cuisine, tags[], source (manual / import / AI-generated), photo_url, notes, created_by, is_deleted (soft delete)
+- **recipe_section** — id, recipe_id, name (e.g., "Sauce", "Main", "Marinade"), sort_order; a recipe has one or more sections (default "Main" for simple recipes). Groups both ingredients and steps.
+- **recipe_ingredient** — id, recipe_id, section_id, food_id (nullable), raw_text, quantity, unit, prep_note (e.g., "minced"), is_optional (excluded from shopping list + macro math when true), sort_order
+- **recipe_step** — id, recipe_id, section_id, step_number, text, timer_seconds (nullable)
+- **recipe_favorite** — id, user_id, recipe_id (favoriting is personal/per-user, not household-wide)
+- **collection** — id, household_id, name (e.g., "Weeknight", "Paella experiments"), sort_order; user-organizable recipe groupings ("cookbooks")
+- **recipe_collection** — id, collection_id, recipe_id (many-to-many; a recipe can live in multiple collections)
+- **food_profile** — id, user_id, calories_per_meal_prefs, protein_targets, preferred_meal_types[] (bowls, soups, rice bowls, etc.), dietary_preferences[], dislikes[], allergies[], default_macro_targets, learned_signals (derived). Seeded by a 10–20 question onboarding pass (skippable/resumable) and then **adapts over time** from what the user actually logs and what they search/ask in the AI generation chat.
+- **ingredient_match** — id, household_id, ingredient_string (normalized, e.g., "evoo"), food_id; remembers user-confirmed ingredient-string → food mappings so a correction never has to be made twice.
+- **food** — id, household_id (nullable = global), name, brand, store_tag, barcode, serving_options[], macros (kcal, protein_g, carb_g, fat_g per serving), macros_overridden (bool), source (OFF / USDA / manual), is_deleted (soft delete)
+- **personal_food** — user or household scoped foods created via manual entry / failed barcode
+- **meal_plan_day** — id, user_id, date, notes
+- **meal_plan_entry** — id, meal_plan_day_id, meal_slot (breakfast/lunch/dinner/snack), ref_type (food/recipe), ref_id, servings, is_planned, is_logged, logged_at, **macro_snapshot** (kcal/protein/carb/fat + portion frozen at log time)
+- **macro_target** — id, user_id, week_start_date, kcal, protein_g, carb_g, fat_g
+- **shopping_list** — id, household_id, week_start_date, status
+- **shopping_list_item** — id, shopping_list_id, food_id/raw_name, aggregated_quantity, unit, store_tag, checked (on-hand), is_manual (non-recipe item), source_recipe_ids[]
+
+**Sharing model:** recipes and foods are **household-scoped** (shared library). Meal plans, logs, macro targets, favorites, and the AI generation chat are **user-scoped** (private). Editing a shared recipe edits the shared copy (single source of truth), not a fork.
+
+**Data integrity rules:**
+- **Frozen log history.** Every log entry snapshots its macros + portion at log time (`macro_snapshot`). Editing or deleting a recipe/food later never rewrites past days.
+- **Soft delete.** Recipes **and foods** are soft-deleted (hidden, not physically removed) so historical logs and references stay intact.
+- **User overrides win.** If OFF/USDA macro data for a food is wrong, the user can correct it and their correction sticks (household-local) for all future use.
+- **Silent recipe updates.** Editing a shared recipe updates the single shared copy in place (no version history in v1); frozen snapshots already protect past logs.
+- **Canonical units.** Ingredient quantities are stored in one canonical unit and converted at display time, so per-user imperial/metric preferences render from the same source of truth.
+- **Recipe macros = sum of ingredients**, derived live (cached for list views, recomputed on any ingredient edit).
+- **Round on display only.** Stored math keeps canonical precision; rounding happens at render time to avoid drift (e.g., 4 × 0.25 must equal 1).
+- **Incomplete data flags, never blocks.** Ingredients with no nutrition match are excluded from totals but the recipe carries a visible "incomplete" flag.
+- **Duplicate prevention.** Likely duplicate foods (same barcode, or a near-identical manual "chicken breast") trigger a **soft warning** with a merge option; allowed if the user confirms.
+
+---
+
+## 5. Feature Specifications
+
+### 5.1 Accounts & Household Sharing
+- Email/password login; account creation.
+- **Solo by default:** a single user is a household of one; forming a two-person household is optional and can happen anytime. No requirement to link before using the app.
+- **Invite via share code:** the household owner generates a share code/link the other person enters — no email-deliverability dependency.
+- **Retroactive visibility:** recipes/foods created solo before the partner joins become visible to them on join (the household owns the data).
+- Recipes/foods created by either member are visible to both. Meal plans, daily logs, macro targets, favorites, and the AI generation chat are private per user.
+- **Unlink:** on unlink, the shared library is **duplicated into each person's new solo household** so both keep a full copy.
+
+### 5.2 Recipe Management
+- **Fields (all included):** title, ingredients, directions, prep time, cook time, servings, tags/cuisine, source, photo, personal notes.
+- **Photo:** one hero image per recipe for v1 (step-by-step / gallery photos deferred).
+- **Display rounding:** friendly fractions for volume (e.g., 1⅓ tbsp), decimals for weight (e.g., 50 g). Values are stored canonically and rounded only for display.
+- **Yield & nutrition basis:** `servings` (yield) is required. Nutrition is shown **per serving** by default, with a whole-recipe toggle.
+- **Structured ingredients:** free-typed or AI-imported ingredient lines are parsed into quantity / unit / item / prep-note fields — this is what makes scaling and shopping aggregation work.
+- **Optional / to-taste ingredients:** ingredients can be flagged optional (salt to taste, garnish); optional ingredients are excluded from the shopping list and macro totals.
+- **Favorites:** any user can favorite recipes (personal, not shared) and filter to a favorites-only view.
+- **Organization at scale:** **collections** ("cookbooks", e.g., *Weeknight*, *Paella experiments*) that a recipe can belong to more than one of, plus **search** and **filter**. Search is **scoped per section** for v1 (recipe search lives in Recipes, food search in Foods; unified search later). Recipe filters are **combinable chips**: tag, cuisine, total time, calories/serving, protein/serving, collection, favorites.
+- **Live nutrition while building:** per-serving and whole-recipe macros update in real time as ingredients are added/edited — a major quality-of-life win and expected behavior in strong recipe UIs.
+- **Two structured areas:** Ingredients and Directions (steps).
+- **Component groups (sections).** A recipe can be split into named sections (e.g., *Sauce*, *Main dish*, *Marinade*), each with its own ingredient list and its own steps, so complex recipes read the way a cookbook writes them. Simple recipes default to a single "Main" section that's visually transparent (no group header shown).
+  - Ingredients and steps both belong to a section; sections are ordered and reorderable.
+  - **Consolidation / flatten:** the app can always roll a recipe's ingredients back up into a single combined list (summing duplicates that appear across sections — e.g., olive oil in both the sauce and the main) for shopping-cart building and total-macro calculation. Grouped view is for cooking; flattened view is for shopping and nutrition.
+- **Scaling — smart unit conversion.** Scale a recipe up or down with intelligent unit normalization (e.g., 3 tsp → 1 tbsp). Requires an ingredient unit system with volume/weight handling.
+  - **Scale control:** by **target servings** ("I want 6") as the primary control, or by **multiplier** (2×). Both supported.
+  - **Scaling scope:** whole-recipe by default (scale everything at once). A per-section scale option is available when needed (e.g., scale just the sauce), but is not the default path.
+  - *Data note:* volume↔weight conversion (cups → grams) needs per-ingredient density data. Start with a density table for common ingredients; fall back to literal multiply when density is unknown, and flag it.
+  - Non-linear items (salt, leavening, bake time) are **flagged, not auto-adjusted** — the user sees a note that these may not scale linearly.
+- **Cook-along walkthrough (Claude-style, all features):**
+  - Step-by-step cards, one step in focus.
+  - Checkable steps.
+  - Ingredients pinned/visible on screen during steps.
+  - Embedded timers, with **multiple concurrent timers** (sauce + pasta + oven at once) — single-timer feels broken in real cooking.
+  - **Large tap targets / tap-anywhere-to-advance** for messy-hands use; **keep-screen-awake** while in cook mode.
+  - *Voice control deferred to a later phase* (large targets + keep-awake cover v1).
+  - **Session snapshot:** cook-along loads a local snapshot of the recipe for the session, so a partner editing the shared recipe mid-cook can't yank it out from under you.
+
+### 5.3 AI Recipe Import
+- **Sources (all):** cookbook/printed page photo, handwritten card, website screenshot, paste a recipe URL.
+- **Multi-image stitch:** a single recipe can be assembled from **1–3 screenshots** (e.g., a MacrosFirst recipe that spans multiple screens) — the import combines them into one recipe before extraction. This is the primary migration path off MacrosFirst (no native connector exists), so it's a near-launch concern, not a nice-to-have.
+- Runs server-side (Edge Function → Claude API). Extracts into the standardized two-section format (ingredients + directions) plus detectable metadata (servings, times).
+- **Mandatory review screen** before saving: user confirms/edits extracted ingredients, steps, and metadata. **Low-confidence fields are highlighted** (e.g., an ambiguous "1/2 vs 12 tsp") so the user knows exactly what to double-check rather than scanning everything flat.
+- **Ingredient → nutrition matching (order):** first check **remembered matches** (`ingredient_match`), then **previously-used** foods, then a **best-guess automatch across all** OFF/USDA results. Chosen match is shown with its source and is one tap to change; genuinely ambiguous ones are flagged for review.
+- **Match review screen (the workhorse UI):** each ingredient row shows, compactly — matched food name, **source badge** (OFF / USDA / personal / manual), serving used, resulting macros, and a **confidence flag**. "Doesn't match anything" offers **inline lightweight manual entry** (promotable to a full food later). Correcting a match is **remembered** (`ingredient_match`) so the same string (e.g., "evoo") never needs fixing twice.
+- **Missing data never blocks:** an ingredient with no nutrition match is included with what's known; the recipe is flagged as having **incomplete data** rather than blocking the save.
+- **Fail-soft:** on AI or network failure mid-import, input is preserved (saved as a draft) with a clear message and a retry — nothing the user entered/captured is lost.
+- **Image handling:** screenshots/photos are **resized/compressed before** being sent to the API (cheaper, faster); originals are **discarded after successful extraction**.
+
+### 5.4 AI Recipe Generation (agentic chat)
+- A **chat-style section** where the user describes what they want ("a high-protein weeknight pasta for two, no shellfish") and Claude generates a full recipe in Hearth's standardized format (sectioned ingredients + steps, yield, times).
+- **Conversational refinement:** the user iterates ("make it spicier", "swap chicken for tofu", "cut the carbs") until aligned on the recipe.
+- Runs through the same Edge Function → Claude API path as import.
+- **Save-to-library hand-off:** once aligned, the generated recipe drops into the recipe system exactly like any other recipe — so it immediately flows into cook-along, scaling, the planner, and shopping with no special-casing. Same mandatory review-before-save step as import.
+- **Context-aware:** the generator reads the user's **food profile** (dietary preferences, dislikes, allergies, default macro targets) so it tailors recipes without the user re-stating constraints every time.
+- **Verified nutrition:** generated recipes are **not** trusted on AI-estimated macros. At save time their ingredients are run through the real OFF → USDA lookup (same chain as import); the model's own numbers are only a fallback for ingredients that can't be matched, and are labeled as estimates.
+- **Privacy:** the generation chat is **private to each user**, not a shared household surface. The resulting recipe becomes part of the shared household library once saved, like any other recipe.
+- Generated recipes are tagged `source = AI-generated` for provenance.
+- **Later enhancements (deferred):** "cook from what I have" (generate from on-hand ingredients) and whole-week plan generation. Single-recipe generation ships first.
+- **Fail-soft:** on AI/network failure mid-generation, the chat and any in-progress recipe are preserved with a retry — no lost work.
+
+### 5.5 Food Data & Barcode
+- **Lookup order:** personal/household library → Open Food Facts → USDA FoodData Central (Branded, 2M+ UPC-searchable) → manual entry.
+- Barcode scanning: individual food logging **and** in-recipe ingredient capture.
+- **Barcode miss → manual entry**, saved to the personal library and searched first on future scans.
+- Store-brand coverage (Kirkland/Publix) is patchy in OFF; USDA Branded is the main backstop. **Nutritionix** noted as an optional paid phase-2 source if gaps annoy.
+- **Serving sizes:** per-food defined serving options (tbsp, tsp, cup, g, item, etc.), each mapped to macros.
+
+### 5.6 Daily / Weekly Planner + Logging
+- **Combined plan + track in one view.** Each day/slot supports a *planned* state and a *logged* (actually eaten) state.
+- **Meal slots:** breakfast, lunch, dinner, snack.
+- Add individual foods or recipes (recipe added as N servings) to any slot on any day.
+- **Week starts Monday.**
+- **Weekly summary view:** per-day totals for the four tracked macros — **calories, protein, carbohydrates, fat** — across the week. Tap a day to see slot-level detail.
+- **Macro targets:** fixed daily targets set per week (can change week to week), set **manually** (goal presets that calculate from body stats are a later option). Progress bars fill against targets.
+- **At-a-glance tracking:** a **remaining-for-the-day** view ("142 g protein left") with over/under **color coding**, not just totals. **Calories are the primary focus**, with the three macros secondary.
+- **Portions are fully independent per person.** You and your partner each log your own amounts against your own targets; no shared portion math.
+- **Meal-prep assignment:** assign a specific recipe at a specific serving size to a meal slot across **multiple selected days at once** (e.g., "this batch is my dinner Mon/Tue/Wed") — one action, not adding it day by day. Distinct from copy-day (which copies a whole day's contents).
+- **Copy day:** to a single day, to multiple selected days, and as a repeating pattern (all three).
+- **Week templates:** save a good week's plan and reuse it (later phase).
+- **Fast entry:** recents, favorites, and "log again" surfaced in the logging flow for quick daily use. (Research: logging speed is the single biggest driver of whether a tracker gets used — "every extra tap is a tax you pay three times a day.")
+- **Planned → logged:** confirming a planned item as eaten is **one tap by default**, with the option to adjust the portion.
+- **Partial servings:** a portion stepper at log time (e.g., 0.5× a plated serving). *[Flagged for review — Brendan to refine this UX against a live draft.]*
+- **Log without a plan:** logging never requires a pre-existing plan entry — eat something unplanned and log it straight to today.
+- **Backdating:** any day is editable (forgot to log yesterday, etc.); frozen snapshots keep past integrity intact.
+
+### 5.7 Shopping List + Walmart Adapter
+- Build a week's shopping list from the planned recipes/foods.
+- **Aggregation:** two-stage. First, each recipe's sections are flattened to a single per-recipe ingredient total (duplicates across sections summed). Then duplicate ingredients across all the week's recipes combine into one line item. Optional/to-taste ingredients are excluded.
+- **Mixed-unit aggregation:** when the same ingredient appears in different units across recipes (2 tbsp + 50 g butter), convert to one sensible unit **when density is known**; otherwise list both quantities under a single line item.
+- **Units — recipe vs. purchase:** v1 aggregates and displays in **recipe units** (e.g., "3 tbsp olive oil"); the store hand-off communicates *what the week needs*, not a mapping to purchase sizes (e.g., "one 500 ml bottle"). Purchase-size mapping is a later refinement.
+- **Manual items:** arbitrary non-recipe items can be added to the list (paper towels, coffee) via `is_manual`.
+- **Store tagging:** each food can carry a store tag (Costco / Publix / Walmart); tagging is flexible (single store or preference).
+- **Pantry:** lightweight — a check-off ("already have this") at list-build time that crosses off the **whole line** (not a quantity subtraction); not a maintained inventory. Quantity-level subtraction is a later refinement.
+- **Grouping:** list groups by store, and within a store by category/aisle.
+- **Big user-review touchpoint:** the list is fully editable before any export — add/remove, adjust quantities, check off on-hand items.
+- **Walmart export (realistic v1):** Walmart has **no public consumer cart API** (the transactional/AddToCart services exist but are partner-gated and not open to solo devs). So v1 export = deep-link each item into a Walmart search and/or one-tap "copy list." Built behind a swappable adapter interface so a true partner cart API (or Instacart, which does offer one) can slot in later without UI changes.
+
+### 5.8 Onboarding & First Run
+- **Minimal flow (~3 core screens, fast to productive):** create account → create-or-join household → set macro targets + units → land on an empty current week.
+- **No seed content** for v1 — the library starts empty (starter recipes reconsidered later).
+- **Food-profile questionnaire:** an optional **10–20 question** pass covering calories per meal, protein targets, and preferred meal types (bowls, soups, rice bowls, etc.), plus dislikes/allergies. **Skippable and resumable** — can be completed or revised anytime.
+- **Adaptive over time:** the profile isn't static. Beyond the questionnaire, it evolves from real behavior — what the user actually logs and what they search/ask in the AI generation chat — so tailoring improves with use.
+
+---
+
+## 6. Design Language, UI & Navigation
+
+### 6.1 Design language (warm / rustic / cozy)
+Hearth should feel like a home, not a calorie cop — deliberately counter to the clinical white-and-neon-green look of typical nutrition apps. This direction is also on-trend: earthy, warm palettes are a recognized 2026 direction for wellbeing/lifestyle products, valued for reducing visual fatigue and reading as elevated/premium.
+
+- **Palette discipline (60/30/10, 2–4 colors total):** one primary surface tone, one or two neutrals, one accent.
+  - Primary/background: warm off-white / "paper" cream.
+  - Neutrals: dark wood browns / cocoa for text and structure.
+  - Accent: a single hearth-glow tone (terracotta / warm amber) for actions and highlights.
+- **Typography:** a serif for recipe titles and headers (editorial, warm); a clean humanist sans for body and data.
+- **Texture & depth:** soft shadows, gentle rounding, subtle warmth — tactile rather than flat-clinical.
+- **Dark mode:** theming built in from **day one** (design tokens / theme system), ship light first, dark available at/near launch.
+- **Kitchen-first legibility:** high contrast and large type in cook-along and logging, where the app is used at arm's length with messy hands.
+- *Reference direction:* warm brown/cream recipe-app aesthetics (cream grounds, cocoa text, terracotta accent, serif titles).
+
+### 6.2 Navigation & screens
+- **App shell** with pillar-level navigation (tabs or sidebar; desktop uses sidebar, phone uses bottom tabs). v1 shows only the Food pillar; shell is built to accept more.
+- **Food pillar sections:**
+  1. **Recipes** — library (favorites-only filter, collections, search/filter), create/edit, AI import, AI generation (chat), cook-along mode.
+  2. **Plan** — weekly summary (macro totals per day) → day detail (slots) → planned/logged toggle; remaining-for-day at-a-glance.
+  3. **Shopping** — generated list, edit, export.
+  4. **Foods** — personal/household food library, barcode add, manual entry.
+- Responsive layouts: phone = capture & log; desktop = plan & manage.
+- **Recipe reader principle:** in cook/read mode, show ingredients and directions and little else — minimal chrome (research: the reader should be ruthlessly focused).
+
+### 6.3 Accessibility (baseline, non-negotiable)
+- **Dynamic type / font scaling** honored throughout.
+- **Screen-reader labels** on all interactive elements and data.
+- **Never color-alone** for meaning — over/under macro states carry an icon/label as well as color.
+- **Reduced motion** — honor the OS setting for any animation.
+
+---
+
+## 7. Sync, Offline, Notifications & Data
+
+### 7.1 Offline
+- **Offline-first** for the two low-signal moments: **cook-along** and **meal logging/viewing**.
+  - Cache locally: recipes, personal/household food library, current week's plan.
+  - Writes queue locally and sync on reconnect.
+  - Conflict handling: **whole-record last-write-wins** (sufficient for a two-person household). Because logs are snapshotted, a partner editing a recipe while you've logged it offline never affects your log on reconnect.
+- **Online-only** (with graceful "needs connection" states): barcode external lookups, AI import, AI generation, shopping export.
+
+### 7.2 Sync
+- **Near-realtime** partner sync via Supabase Realtime (a recipe your partner adds appears on your device without a manual refresh). Acceptable to relax to refresh-on-open for v1 if it simplifies the first build.
+
+### 7.3 Notifications
+- **Cook timers** fire even when the app is backgrounded (local notifications).
+- **Opt-in reminders** only (e.g., a weekly "plan your week" nudge) — off by default, never nagging.
+
+### 7.4 Backup & export
+- **Full data export** (JSON/CSV) so the user is never locked in — cheap insurance and on-brand for a personal tool. Covers recipes, foods, logs, plans.
+
+---
+
+## 8. Security & Secrets
+
+### 8.1 API keys
+- **Client ships only the Supabase publishable key** (`sb_publishable_…`). It is public by design and safe to embed in a mobile/desktop bundle; RLS is what protects the data behind it — a visible publishable key is not a leak.
+- **Secret key (`sb_secret_…`) is server-only** — Edge Functions / trusted environments only. It bypasses RLS and must never appear in the app, the repo, or a built bundle.
+- **Third-party keys (Claude API, USDA FoodData Central; later Walmart/affiliate) live only in Edge Function secrets** (`supabase secrets set`), never client-side. (Open Food Facts needs no key.)
+- Start on the **new publishable/secret key format** — legacy anon/service_role keys are deprecated end of 2026.
+
+### 8.2 Database / RLS (the real security boundary)
+- **RLS enabled on every table, default-deny** (no policy = no access). Because the client key is public, RLS *is* the security boundary, not an add-on.
+- **Household-scoped tables** (recipe, recipe_section/ingredient/step, food, collection, recipe_collection, ingredient_match, shopping_list/item): readable/writable only by members of the row's household.
+- **User-scoped tables** (meal_plan_day/entry, macro_target, recipe_favorite, food_profile, generation chat): readable/writable only by the owning user.
+- **Global foods** (household_id null): world-readable, writes restricted to server/admin.
+- Policies are the tenant boundary — reviewed as carefully as app logic. Postgres is encrypted at rest; all traffic is TLS.
+- **Cross-household negative tests** (authenticate as household A, assert every read/write of household B's rows is denied) are **deferred to a later dedicated test-suite stage** — accepted risk (see §12). Cheap while it's just the two users; the deferral stops being cheap the moment a third person joins a household before those tests exist.
+
+### 8.3 Auth / logins
+- **Supabase Auth** (email/password) — never roll our own hashing/session logic.
+- **Email verification** on signup.
+- **Leaked-password protection** enabled (HaveIBeenPwned check) plus a minimum password policy.
+- JWT + refresh-token sessions managed by Supabase.
+- MFA (TOTP) available but optional / out of scope for the two-person v1.
+
+### 8.4 Device / local data
+- **Session tokens in secure OS storage** via `flutter_secure_storage` (iOS/macOS Keychain, Windows Credential Manager) — never plain preferences or files.
+- **Local Drift cache** holds personal health data → rely on OS disk encryption (iOS default; macOS FileVault; ensure BitLocker on Windows) plus the biometric app-lock. **SQLCipher** noted as optional defense-in-depth, not v1 scope.
+- **Optional biometric app lock** on open (Face ID / Touch ID / OS equivalent) — a setting, off by default.
+
+### 8.5 Edge Functions
+- **Verify the caller's JWT** before calling Claude/USDA, so only authenticated household members can trigger paid AI/lookup calls (protects the API budget). Ties directly to the AI cost/usage guardrail (§3).
+- **Enforce the monthly AI ceiling** here (soft cap: warn at 75%, refuse past 100% until lifted), with Anthropic billing limits as the hard backstop.
+
+### 8.6 Secrets hygiene (Claude Code workflow)
+- Real keys in **`.env.local`, gitignored**; server secrets via `supabase secrets set`.
+- **Pre-commit / CI check** that no `sb_secret_` (or other secret) ever lands in a commit or built bundle; rotate immediately if one does.
+
+---
+
+## 9. Testing & QA Strategy
+
+A layered strategy. **Automated tests** (authored by Claude Code alongside each area, run on every change) are the regression backbone and prove the app *works*. **Manual/exploratory testing** (Brendan, handed off after each area's automated suite is green) proves the app is *good* — feel, device behavior, and judgment calls no automated test can make.
+
+### 9.1 Unit tests (Dart pure logic — highest value, cheapest)
+- Unit conversion: tsp↔tbsp↔cup, g↔kg, volume↔weight via density table, and the unknown-density literal-multiply fallback.
+- Recipe scaling: whole-recipe **and** per-section; by multiplier **and** by target servings.
+- Section flatten/consolidation: duplicate ingredients summed correctly across sections.
+- Macro math: per-serving vs whole-recipe; optional/to-taste ingredients excluded; incomplete-data flag set when an ingredient is unmatched.
+- Rounding: display-only, no stored drift (assert 4 × 0.25 == 1).
+- Ingredient parsing: quantity / unit / item / prep-note extracted from free text.
+- Remaining-for-day math and over/under state.
+- Frozen snapshot: editing a recipe/food after a log leaves the log's `macro_snapshot` unchanged.
+- Shopping aggregation: two-stage (section flatten → cross-recipe merge) and mixed-unit handling.
+- `ingredient_match` resolution order (remembered → previously-used → best-guess).
+
+### 9.2 Widget tests (Flutter components)
+- Recipe editor: add/remove/reorder ingredients and sections; live-nutrition updates.
+- Cook-along: step advance, tap-anywhere-to-advance, checkable steps, **multiple concurrent timers**, keep-awake.
+- Logging: one-tap confirm + portion stepper.
+- Macro progress bars: correct fill, and over/under conveyed by **icon/label, not color alone** (accessibility).
+- Combinable filter chips.
+- Match review screen: low-confidence highlight, source badges, inline manual entry.
+- Onboarding screens (skippable/resumable profile).
+
+### 9.3 Integration tests (in-app end-to-end, `integration_test`, against a test Supabase project)
+- Onboarding → create/join household → set targets → land on empty week.
+- Create recipe by hand → live macros → save → add to day → log → daily/weekly totals update.
+- Barcode scan → OFF/USDA lookup → log.
+- Multi-screenshot import → review (confidence flags) → save → nutrition matched.
+- AI generation chat → refine → verified-nutrition save → appears in shared library.
+- Meal-prep multi-day assignment; copy day (single/multi/pattern).
+- Build shopping list → aggregate → export via adapter.
+- Offline: log offline → reconnect → sync; whole-record last-write-wins; snapshot integrity preserved.
+
+### 9.4 Contract / adapter tests (external integrations behind interfaces, externals mocked)
+- Nutrition fallback chain: OFF hit; OFF miss → USDA; both miss → manual entry saved to personal library.
+- User macro override wins over source data.
+- Walmart adapter interface (deep-link / copy) — swappable without UI change.
+- Edge Function contracts: recipe-import, recipe-generate, nutrition-lookup, shopping-export.
+
+### 9.5 Security tests
+- **RLS cross-household negative tests:** authenticate as household A, assert every read/write of household B's rows is denied, on every table. *(Lands at the dedicated test-suite stage per §8.2.)*
+- Edge Function JWT verification: unauthenticated call is refused.
+- AI ceiling enforcement: soft cap warns at 75%, refuses past 100%.
+- Secret scanning: no `sb_secret_` (or other secret) in any commit or built bundle.
+
+### 9.6 Accessibility tests
+- Semantics labels present on all interactive elements/data.
+- Dynamic type scaling doesn't break layouts.
+- Contrast meets baseline; reduced-motion honored; macro states not color-alone.
+
+### 9.7 Regression suite
+- All automated tests above run on every change in CI.
+- **Every bug found gets a failing test that reproduces it *before* the fix** — the regression set only grows.
+- Golden/snapshot tests on key screens catch unintended UI changes.
+
+### 9.8 Load / performance tests (modest for two users, but validate scale)
+- Large library: 500 recipes / 1,000 foods / 1 year of logs — search, filter, and week aggregation stay responsive.
+- Local Drift query performance at that volume.
+- Sync throughput on reconnect with a backlog of queued offline writes.
+- Edge Function burst (also exercises the cost ceiling).
+- Cold-start and cook-along responsiveness on the oldest/weakest target device.
+
+### 9.9 Manual / exploratory testing (Brendan — handoff after each area is green)
+- **Logging speed (the success-bar test):** time a real meal log end to end — does it beat MacrosFirst? The core judgment call.
+- **Cook-along in a real kitchen:** messy hands, tap targets, backgrounded timers, keep-awake.
+- **AI extraction accuracy:** import ~10 real MacrosFirst screenshots — are ingredients/steps/macros right, and where does it misread?
+- **AI generation quality:** does it produce recipes you'd actually cook, and respect the food profile?
+- **Design feel:** reads cozy/warm not clinical; dark mode; across all three platforms.
+- **Cross-device:** iOS + macOS + Windows — layout, native pickers, camera, biometrics.
+- **Real-week dogfood:** you and your partner plan and log a full week — the true integration test of the success bar.
+- **Bug capture:** each bug reported → gets a pinned regression test (§9.7) before the fix.
+
+### 9.10 Tooling & sequencing
+- Flutter: `flutter_test` (unit/widget), `integration_test`, `mocktail` for mocks, golden tests.
+- DB/RLS: pgTAP or Supabase-client-based negative tests.
+- CI: unit/widget/contract on every commit; integration + load on a schedule / pre-release.
+- **Sequence:** Claude Code authors detailed automated tests per area alongside the build → Brendan's manual UAT pass once that area's suite is green → RLS negative suite lands at the dedicated test-suite stage.
+
+---
+
+## 10. Build Order (phased roadmap)
+
+1. **Foundation** — accounts (solo-first + share-code household) + household linking, **RLS default-deny on every table + Supabase Auth (email verification, leaked-password protection) + secure token storage**, **theme system + dark mode + accessibility baseline**, recipes (all fields + sections + scaling + cook-along w/ multi-timer + favorites + collections + search/filter chips + live nutrition), manual food entry, planner + logging (summary, macros, progress bars, remaining-for-day, copy day, meal-prep multi-day assignment, fast entry, frozen log snapshots), offline cache for recipes/logs.
+2. **Barcode scan** — individual food + in-recipe capture; OFF → USDA → manual lookup chain; personal library; duplicate soft-warn.
+3. **AI import & generation** — multi-screenshot import (MacrosFirst migration) + URL/photo import, agentic chat generation reading the food profile → review screen (confidence flags, source badges, remembered matches) → save; ingredient→nutrition matching.
+4. **Shopping list** — build from plan, aggregate, store grouping, pantry check-off, manual items, editable list, Walmart deep-link/copy export behind adapter.
+5. **Household sharing polish + data** — invites, near-realtime sync hardening, data export, week templates.
+
+---
+
+## 11. Future Pillars (structure now, build later)
+
+Captured as future modules so the shell and data layer accommodate them:
+
+- **Date ideas** — track/plan dates.
+- **Watchlist** — movies/shows to watch together.
+- **Upcoming events** — shared calendar of events.
+- **Movies in theaters** — now playing + coming soon.
+
+These share the household model and slot into the pillar navigation without a data-layer refactor.
+
+---
+
+## 12. Open Decisions / To Confirm
+
+**Load-bearing risks surfaced during plan stress-test (accepted, not yet mitigated):**
+- **Food-data coverage is the single biggest threat to the success bar.** If OFF/USDA misses too much of what Brendan and his partner actually eat, daily logging becomes a manual-entry chore and they'll bounce off the app inside a week — failing the "replace MacrosFirst" test. Currently an **accepted assumption**; cheapest insurance whenever willing: pull one real week of logs and measure the OFF/USDA hit rate before building the logging UI around it. If coverage is low, the fix is to make the personal food library the *primary* path (seeded from MacrosFirst history), not a fallback.
+- **Solo build + new language (Dart) + uncut, all-at-once Phase 1 = stall risk.** Vertical-slice-first was considered as the mitigation and **declined** — Phase 1 areas are built together. Residual risk is time-to-first-usable; eyes open.
+- **RLS correctness before the test-suite stage.** Cross-household negative tests are deferred (§8.2). Blast radius is small while only the two users have data; it grows if anyone else joins a household first.
+
+**Other open items:**
+- Ingredient **density table** scope for v1 (which ingredients get real volume↔weight conversion vs. literal-multiply fallback).
+- Whether AI import should also attempt **auto-tagging** (cuisine/tags) or leave tags manual.
+- Exact **deep-link format** for Walmart search export (to be finalized during phase 4).
+- Whether to add **water/weight/exercise** tracking later (currently out of scope — food only).
+- Auth: add social login later, or keep email/password.
+- **Partial-serving log UX** — portion stepper approach to be refined against a live draft (Brendan to guide).
+- **Explicitly deferred (out of scope for v1):** micronutrients beyond the 4 macros; sugar / fiber / sodium tracking; water / weight / exercise logging; recipe ratings & reviews; purchase-size mapping for shopping; quantity-level pantry subtraction; voice control in cook-along; "cook from what I have" generation; whole-week AI plan generation; goal presets from body stats; leftovers/batch draw-down tracking; sub-recipes (a recipe used as an ingredient in another); recipe step/gallery photos; starter/seed recipes.
+
+---
+
+*End of spec v0.8. Recommended next step: bring this into Claude Code Plan Mode to generate the phase-1 implementation plan.*

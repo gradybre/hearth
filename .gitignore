@@ -1,0 +1,109 @@
+# ─────────────────────────────────────────────────────────────
+# Secrets — see HEARTH_SPEC.md §8.6. Nothing with a real key
+# ever lands in this repo. Keep .env.example committed as a
+# template with key NAMES only and empty values.
+# ─────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.env
+
+# Keys, certs, service-account files
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+key.properties
+secrets.json
+service-account*.json
+
+# Supabase local state (may contain generated keys)
+.supabase/
+supabase/.branches/
+supabase/.temp/
+supabase/functions/**/.env
+
+# ─────────────────────────────────────────────────────────────
+# Flutter / Dart
+# ─────────────────────────────────────────────────────────────
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.flutter-versions
+*.lock.bak
+coverage/
+doc/api/
+*.g.dart.bak
+
+# Drift / generated code caches
+*.moor.dart.bak
+
+# Test output
+test/failures/
+**/failures/
+*.log
+
+# ─────────────────────────────────────────────────────────────
+# iOS
+# ─────────────────────────────────────────────────────────────
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+ios/Flutter/flutter_export_environment.sh
+ios/Runner/GeneratedPluginRegistrant.*
+ios/ServiceDefinitions.json
+**/*.xcworkspace/xcuserdata/
+**/*.xcodeproj/xcuserdata/
+**/*.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# ─────────────────────────────────────────────────────────────
+# macOS
+# ─────────────────────────────────────────────────────────────
+macos/Pods/
+macos/Flutter/ephemeral/
+macos/Flutter/GeneratedPluginRegistrant.swift
+macos/Flutter/Flutter-Debug.xcconfig
+macos/Flutter/Flutter-Release.xcconfig
+macos/Flutter/Flutter-Profile.xcconfig
+
+# ─────────────────────────────────────────────────────────────
+# Windows
+# ─────────────────────────────────────────────────────────────
+windows/flutter/ephemeral/
+windows/flutter/generated_plugin_registrant.*
+windows/flutter/generated_plugins.cmake
+x64/
+x86/
+Debug/
+Release/
+*.exe
+*.pdb
+*.ilk
+
+# ─────────────────────────────────────────────────────────────
+# Editors & OS
+# ─────────────────────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.iml
+*.swp
+*~
+Thumbs.db
