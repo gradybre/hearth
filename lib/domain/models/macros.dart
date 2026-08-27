@@ -1,0 +1,74 @@
+import 'package:meta/meta.dart';
+
+/// The four tracked macros (spec §5.6): calories, protein, carbohydrate, fat.
+///
+/// Micronutrients, sugar, fibre, and sodium are explicitly out of scope for v1
+/// (spec §12) — do not add fields here without that decision changing.
+///
+/// Values are full precision. Rounding is a display concern and happens in the
+/// format layer, never here (spec §4).
+@immutable
+class Macros {
+  const Macros({
+    this.kcal = 0,
+    this.proteinG = 0,
+    this.carbG = 0,
+    this.fatG = 0,
+  });
+
+  final double kcal;
+  final double proteinG;
+  final double carbG;
+  final double fatG;
+
+  static const Macros zero = Macros();
+
+  bool get isZero => kcal == 0 && proteinG == 0 && carbG == 0 && fatG == 0;
+
+  Macros operator +(Macros other) => Macros(
+    kcal: kcal + other.kcal,
+    proteinG: proteinG + other.proteinG,
+    carbG: carbG + other.carbG,
+    fatG: fatG + other.fatG,
+  );
+
+  Macros operator -(Macros other) => Macros(
+    kcal: kcal - other.kcal,
+    proteinG: proteinG - other.proteinG,
+    carbG: carbG - other.carbG,
+    fatG: fatG - other.fatG,
+  );
+
+  Macros scaledBy(num factor) {
+    final double f = factor.toDouble();
+    return Macros(
+      kcal: kcal * f,
+      proteinG: proteinG * f,
+      carbG: carbG * f,
+      fatG: fatG * f,
+    );
+  }
+
+  /// Sums a collection. Used for recipe totals and daily logs.
+  static Macros sum(Iterable<Macros> parts) =>
+      parts.fold(zero, (Macros a, Macros b) => a + b);
+
+  @override
+  bool operator ==(Object other) =>
+      other is Macros &&
+      other.kcal == kcal &&
+      other.proteinG == proteinG &&
+      other.carbG == carbG &&
+      other.fatG == fatG;
+
+  @override
+  int get hashCode => Object.hash(kcal, proteinG, carbG, fatG);
+
+  @override
+  String toString() => 'Macros(${kcal}kcal P$proteinG C$carbG F$fatG)';
+}
+
+/// Which of the four macros a UI element is talking about.
+///
+/// Calories are the primary focus, the other three secondary (spec §5.6).
+enum MacroKind { calories, protein, carbs, fat }

@@ -1,12 +1,20 @@
 /// Ingredient densities in grams per millilitre, for volume <-> weight
 /// conversion (spec §5.2).
 ///
-/// **Scope is deliberately small and is an open decision (spec §12).** These are
-/// pantry staples where a cup-to-gram figure is stable and well documented.
-/// Anything absent falls back to a literal multiply that is *flagged* rather
-/// than silently guessed — an unflagged wrong conversion is worse than an
-/// honest "we don't know".
+/// **Scope is deliberately small and is an open decision (spec §12), parked for
+/// now.** The expectation is that per-food serving weights coming from Open
+/// Food Facts / USDA (spec §5.5) will supply most real conversions once Phase 2
+/// lands — a food record that says "1 cup = 240 g" beats any generic table.
+/// `UnitConverter.crossKind` already takes a `gramsPerMillilitre` override for
+/// exactly that hand-off.
+///
+/// Until then this covers pantry staples where a cup-to-gram figure is stable
+/// and well documented. Anything absent is *flagged* rather than silently
+/// guessed — an unflagged wrong conversion is worse than an honest
+/// "we don't know".
 library;
+
+import '../text/text_normaliser.dart';
 
 /// A density lookup over a normalised ingredient name.
 abstract final class DensityTable {
@@ -84,13 +92,11 @@ abstract final class DensityTable {
     'cornflour': 'cornstarch',
   };
 
-  /// Normalises an ingredient string for lookup: lowercase, punctuation
-  /// stripped, whitespace collapsed.
-  static String normalise(String raw) => raw
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .trim();
+  /// Normalises an ingredient string for lookup.
+  ///
+  /// Delegates to the shared normaliser so density lookup, consolidation, and
+  /// remembered matches all key on the same string.
+  static String normalise(String raw) => normaliseKey(raw);
 
   /// Density for [ingredient] in g/ml, or null when unknown.
   ///
