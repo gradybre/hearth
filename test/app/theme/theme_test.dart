@@ -1,0 +1,147 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/app/theme/hearth_colors.dart';
+import 'package:hearth/app/theme/hearth_theme.dart';
+import 'package:hearth/app/theme/hearth_typography.dart';
+
+double _widthOf(TextStyle style, String text) {
+  final TextPainter painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  final double width = painter.width;
+  painter.dispose();
+  return width;
+}
+
+void main() {
+  group('theme construction', () {
+    test('both themes carry the Hearth token extensions', () {
+      for (final ThemeData theme in <ThemeData>[
+        HearthTheme.light(),
+        HearthTheme.dark(),
+      ]) {
+        expect(theme.extension<HearthColors>(), isNotNull);
+        expect(theme.extension<HearthTextStyles>(), isNotNull);
+      }
+    });
+
+    test('brightness and ground match the palette', () {
+      final ThemeData light = HearthTheme.light();
+      expect(light.brightness, Brightness.light);
+      expect(light.scaffoldBackgroundColor, HearthColors.light().background);
+
+      final ThemeData dark = HearthTheme.dark();
+      expect(dark.brightness, Brightness.dark);
+      expect(dark.scaffoldBackgroundColor, HearthColors.dark().background);
+    });
+
+    test(
+      'body text inherits the primary text colour, not Material default',
+      () {
+        final ThemeData light = HearthTheme.light();
+        expect(
+          light.textTheme.bodyMedium!.color,
+          HearthColors.light().textPrimary,
+        );
+      },
+    );
+  });
+
+  group('typography tokens', () {
+    test('titles are the serif, body and data are the sans', () {
+      final HearthTextStyles t = HearthTextStyles.of(isDark: false);
+      expect(t.recipeTitle.fontFamily, HearthTypography.serif);
+      expect(t.sectionHeader.fontFamily, HearthTypography.serif);
+      expect(t.body.fontFamily, HearthTypography.sans);
+      expect(t.ingredient.fontFamily, HearthTypography.sans);
+      expect(t.macroReadout.fontFamily, HearthTypography.sans);
+      expect(t.metadata.fontFamily, HearthTypography.sans);
+    });
+
+    test('every numeric style uses tabular figures', () {
+      // Macro columns must align, and a live readout must not jitter as its
+      // digits change (spec §5.6).
+      final HearthTextStyles t = HearthTextStyles.of(isDark: false);
+      for (final MapEntry<String, TextStyle> style in <String, TextStyle>{
+        'ingredient': t.ingredient,
+        'macroReadout': t.macroReadout,
+        'metadata': t.metadata,
+      }.entries) {
+        expect(
+          style.value.fontFeatures,
+          contains(const FontFeature.tabularFigures()),
+          reason: '${style.key} carries numbers and must be tabular',
+        );
+      }
+    });
+
+    test('tabular figures actually hold digit widths equal', () {
+      final TextStyle style = HearthTypography.macroReadout();
+      // '1' is the narrowest digit in most proportional fonts; if the feature
+      // were not applied, these would differ.
+      expect(_widthOf(style, '1111'), closeTo(_widthOf(style, '8888'), 0.01));
+    });
+
+    test('serif headers lighten in dark mode to stop them blooming', () {
+      expect(HearthTypography.serifHeaderWeight(isDark: false), 600);
+      expect(HearthTypography.serifHeaderWeight(isDark: true), 500);
+      expect(
+        HearthTextStyles.of(isDark: true).recipeTitle.fontWeight,
+        FontWeight.w500,
+      );
+      expect(
+        HearthTextStyles.of(isDark: false).recipeTitle.fontWeight,
+        FontWeight.w600,
+      );
+    });
+
+    test('Fraunces axes are set deliberately', () {
+      final TextStyle title = HearthTypography.recipeTitle(isDark: false);
+      final Map<String, double> axes = <String, double>{
+        for (final FontVariation v in title.fontVariations!) v.axis: v.value,
+      };
+      expect(axes['SOFT'], 50, reason: 'softened corners, ink-on-paper feel');
+      expect(axes['WONK'], 0, reason: 'wonk costs legibility at arm\'s length');
+      expect(
+        axes['opsz'],
+        title.fontSize,
+        reason: 'optical size should track the rendered size',
+      );
+      expect(axes['wght'], 600);
+    });
+
+    test('optical size differs between title and section header', () {
+      double opsz(TextStyle s) => <String, double>{
+        for (final FontVariation v in s.fontVariations!) v.axis: v.value,
+      }['opsz']!;
+
+      expect(
+        opsz(HearthTypography.recipeTitle(isDark: false)),
+        isNot(opsz(HearthTypography.sectionHeader(isDark: false))),
+      );
+    });
+  });
+
+  group('bundled fonts', () {
+    test(
+      'the two families really are distinct faces, not a shared fallback',
+      () {
+        // If the bundled fonts failed to load, both styles would fall back to
+        // the same default and measure identically — which would make every
+        // golden test meaningless.
+        const String sample = 'Hearth recipe 12345';
+        final double serif = _widthOf(
+          HearthTypography.recipeTitle(isDark: false),
+          sample,
+        );
+        final double sans = _widthOf(
+          HearthTypography.body().copyWith(fontSize: 32),
+          sample,
+        );
+        expect(serif, isNot(closeTo(sans, 0.5)));
+        expect(serif, greaterThan(0));
+      },
+    );
+  });
+}
