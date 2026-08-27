@@ -1,12 +1,17 @@
 # ─────────────────────────────────────────────────────────────
 # Secrets — see HEARTH_SPEC.md §8.6. Nothing with a real key
-# ever lands in this repo. Keep .env.example committed as a
-# template with key NAMES only and empty values.
+# ever lands in this repo. config/example.json is the committed
+# template: key NAMES only, empty values.
 # ─────────────────────────────────────────────────────────────
 .env
 .env.*
-!.env.example
 *.env
+
+# Runtime config passed via --dart-define-from-file. Holds the Supabase URL +
+# publishable key. config/example.json is the committed template (names only).
+config/local.json
+config/*.json
+!config/example.json
 
 # Keys, certs, service-account files
 *.pem

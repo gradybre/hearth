@@ -1,0 +1,28 @@
+# Static analysis config. Run with `flutter analyze`.
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    - ios/**
+    - macos/**
+    - windows/**
+    - "**/*.g.dart"
+    - "**/*.drift.dart"
+    - android/**
+    - web/**
+    - linux/**
+  errors:
+    # Generated code is excluded above; anything left is ours and should be clean.
+    invalid_annotation_target: ignore
+
+linter:
+  rules:
+    - prefer_single_quotes
+    - always_declare_return_types
+    - avoid_print
+    - unawaited_futures
+    - prefer_const_constructors
+    - prefer_final_locals
+    - directives_ordering
+    - require_trailing_commas

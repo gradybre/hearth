@@ -70,24 +70,44 @@ Kitchen-first legibility in cook-along and logging. (§6.1)
 
 ## Secrets hygiene
 
-- Real keys go in `.env.local` — **gitignored**. Keep `.env.example` committed with key names
-  and empty values only.
+- The app's runtime config lives in `config/local.json` — **gitignored** — and is passed in
+  with `--dart-define-from-file`. It holds only `SUPABASE_URL` and the
+  `sb_publishable_…` key, which are public by design. `config/example.json` is the
+  committed template: key names, empty values.
+- `sb_secret_…`, the Claude API key, and USDA keys go in Edge Function secrets
+  (`supabase secrets set`) and nowhere else — never in `config/`, never in the repo.
 - Never paste a real key into a commit, a test fixture, a log line, or a chat message.
 - If a secret ever lands in a commit or a bundle: say so immediately and rotate it. Do not
   quietly amend the history and move on.
 
 ## Commands
 
-*(Conventional Flutter defaults — starting point only. Update this list once the project is
-actually scaffolded so it matches reality.)*
-
 ```bash
-flutter pub get            # install dependencies
-flutter analyze            # static analysis / lints
-dart format .              # format
-flutter test               # unit + widget tests
-flutter test integration_test   # integration tests (needs a test Supabase project)
-flutter run -d macos       # run on macOS
-flutter run -d windows     # run on Windows
-flutter run -d ios         # run on iOS simulator
+flutter pub get                       # install dependencies
+flutter analyze                       # static analysis (must be clean)
+dart format .                         # format
+flutter test                          # unit + widget + golden tests
+flutter test --update-goldens         # re-baseline goldens (review the diff!)
+dart run build_runner build --delete-conflicting-outputs   # drift + riverpod codegen
+
+# Run the app (config/local.json is gitignored; see Secrets hygiene)
+flutter run -d macos --dart-define-from-file=config/local.json
+flutter run -d ios   --dart-define-from-file=config/local.json
+
+# Supabase — local stack runs on Colima, not Docker Desktop
+colima start                          # start the container runtime first
+supabase start                        # local Postgres + Auth + Storage
+supabase db reset                     # re-apply all migrations from scratch
+supabase db diff -f <name>            # capture schema changes as a migration
+supabase functions serve              # Edge Functions locally (Phase 3+)
 ```
+
+**Stack:** Flutter 3.47 / Dart 3.13 · Riverpod (state) · Drift (local SQLite) ·
+go_router (navigation) · supabase_flutter · flutter_secure_storage · mocktail (mocks).
+Generated files (`*.g.dart`, `*.drift.dart`) are excluded from analysis — never hand-edit
+them; change the source and re-run build_runner.
+
+**Layering:** `lib/domain/` is pure Dart with **no Flutter imports** — models, unit
+conversion, scaling, macro math, aggregation. It is the cheapest test surface (§9.1) and a
+test enforces the boundary. Features talk to `lib/data/repositories/`, never to Supabase or
+Drift directly. External integrations (nutrition, shopping) sit behind adapter interfaces.
