@@ -1,20 +1,25 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/local/collection_store.dart';
 import '../data/local/food_store.dart';
 import '../data/local/hearth_database.dart';
 import '../data/local/ingredient_match_store.dart';
 import '../data/local/pending_write_store.dart';
 import '../data/local/plan_store.dart';
 import '../data/local/recipe_store.dart';
+import '../data/repositories/collection_repository.dart';
 import '../data/repositories/food_repository.dart';
 import '../data/repositories/plan_repository.dart';
 import '../data/repositories/recipe_repository.dart';
 import '../domain/models/food.dart';
+import '../domain/models/macros.dart';
 import '../domain/models/recipe.dart';
 import '../domain/planning/day_progress.dart';
 import '../domain/planning/meal_plan.dart';
 import '../domain/planning/recent_log.dart';
 import '../domain/planning/week.dart';
+import '../domain/recipes/macro_calculator.dart';
+import '../domain/recipes/recipe_query.dart';
 
 /// The app's object graph.
 ///
@@ -219,3 +224,122 @@ final FutureProvider<Map<DateTime, List<MealPlanEntry>>> weekEntriesProvider =
           .watch(planRepositoryProvider)
           .entriesBetween(days.first, days.last);
     });
+
+// ── Favourites and collections (spec §5.2) ───────────────────────────────────
+
+final Provider<CollectionStore> collectionStoreProvider =
+    Provider<CollectionStore>(
+      (Ref ref) => CollectionStore(ref.watch(databaseProvider)),
+    );
+
+final Provider<CollectionRepository> collectionRepositoryProvider =
+    Provider<CollectionRepository>(
+      (Ref ref) => CollectionRepository(
+        database: ref.watch(databaseProvider),
+        store: ref.watch(collectionStoreProvider),
+        queue: ref.watch(pendingWriteStoreProvider),
+        householdId: ref.watch(currentHouseholdIdProvider),
+        userId: ref.watch(currentUserIdProvider),
+      ),
+    );
+
+/// The recipes this user has hearted. Personal — never the household's.
+final StreamProvider<Set<String>> favoriteRecipeIdsProvider =
+    StreamProvider<Set<String>>(
+      (Ref ref) => ref.watch(collectionRepositoryProvider).watchFavoriteIds(),
+    );
+
+/// The household's cookbooks, each with the recipes in it.
+final StreamProvider<List<CollectionSummary>> collectionsProvider =
+    StreamProvider<List<CollectionSummary>>(
+      (Ref ref) => ref.watch(collectionRepositoryProvider).watchCollections(),
+    );
+
+/// Which collections each recipe belongs to, for filtering in one pass.
+final StreamProvider<Map<String, Set<String>>> recipeCollectionsProvider =
+    StreamProvider<Map<String, Set<String>>>(
+      (Ref ref) => ref.watch(collectionRepositoryProvider).watchMembership(),
+    );
+
+/// The library's live search text and filter chips.
+///
+/// Held in a provider rather than the screen's state so it survives navigating
+/// into a recipe and back — losing your filters every time you look at
+/// something is the kind of small tax that stops a library being browsed.
+final NotifierProvider<RecipeFilterController, RecipeFilter>
+recipeFilterProvider = NotifierProvider<RecipeFilterController, RecipeFilter>(
+  RecipeFilterController.new,
+);
+
+class RecipeFilterController extends Notifier<RecipeFilter> {
+  @override
+  RecipeFilter build() => RecipeFilter.none;
+
+  void search(String text) => state = state.copyWith(text: text);
+  void toggleFavoritesOnly() =>
+      state = state.copyWith(favoritesOnly: !state.favoritesOnly);
+  void toggleTag(String tag) => state = state.toggleTag(tag);
+  void toggleCuisine(String cuisine) => state = state.toggleCuisine(cuisine);
+  void toggleCollection(String id) => state = state.toggleCollection(id);
+
+  /// Null clears the chip — it is a single-choice dimension, so choosing the
+  /// lit value again turns it off.
+  void setMaxTotalTime(Duration? value) => state = value == null
+      ? state.copyWith(clearMaxTotalTime: true)
+      : state.copyWith(maxTotalTime: value);
+
+  void setMaxKcal(double? value) => state = value == null
+      ? state.copyWith(clearMaxKcal: true)
+      : state.copyWith(maxKcalPerServing: value);
+
+  void setMinProtein(double? value) => state = value == null
+      ? state.copyWith(clearMinProtein: true)
+      : state.copyWith(minProteinPerServing: value);
+
+  /// Clears the chips but keeps what was typed — they are separate controls,
+  /// and wiping the search box out from under the cursor is startling.
+  void clearChips() => state = RecipeFilter(text: state.text);
+
+  void clearAll() => state = RecipeFilter.none;
+}
+
+/// The library as the screen shows it: filtered, and favourites first.
+final Provider<AsyncValue<List<Recipe>>> filteredRecipesProvider =
+    Provider<AsyncValue<List<Recipe>>>((Ref ref) {
+      final AsyncValue<List<Recipe>> library = ref.watch(recipeLibraryProvider);
+      final RecipeFilter filter = ref.watch(recipeFilterProvider);
+      final Set<String> favorites =
+          ref.watch(favoriteRecipeIdsProvider).value ?? const <String>{};
+      final Map<String, Set<String>> membership =
+          ref.watch(recipeCollectionsProvider).value ??
+          const <String, Set<String>>{};
+      final Map<String, Food> foods = <String, Food>{
+        for (final Food food
+            in ref.watch(foodLibraryProvider).value ?? <Food>[])
+          food.id: food,
+      };
+
+      return library.whenData(
+        (List<Recipe> recipes) => RecipeSearch.apply(
+          recipes,
+          filter,
+          contextOf: (Recipe recipe) => RecipeContext(
+            isFavorite: favorites.contains(recipe.id),
+            collectionIds: membership[recipe.id] ?? const <String>{},
+            perServing: _perServingIfComplete(recipe, foods),
+          ),
+        ),
+      );
+    });
+
+/// A recipe's per-serving macros, but only when every ingredient counted.
+///
+/// A recipe with unmatched ingredients has a number that is missing part of
+/// itself. Filtering "under 600 kcal" on that would hand back a 900 kcal dish
+/// because half of it was invisible — so an incomplete recipe reports no
+/// macros at all and the macro chips exclude it (spec §5.3's flag-don't-guess).
+Macros? _perServingIfComplete(Recipe recipe, Map<String, Food> foods) {
+  if (recipe.allIngredients.isEmpty) return null;
+  final RecipeMacros macros = MacroCalculator.forRecipe(recipe, foods: foods);
+  return macros.isIncomplete ? null : macros.perServing;
+}

@@ -247,3 +247,48 @@ class IngredientMatches extends Table {
     <Column<Object>>{householdId, ingredientString},
   ];
 }
+
+/// A recipe favourited by one user (spec §5.2, §8.2).
+///
+/// User-scoped, not household-scoped: favouriting is personal, so a partner's
+/// hearts must never show up as yours. The primary key is the pair, which
+/// makes favouriting idempotent — tapping twice cannot create two rows.
+@DataClassName('RecipeFavoriteRow')
+class RecipeFavorites extends Table {
+  TextColumn get userId => text()();
+  TextColumn get recipeId =>
+      text().references(Recipes, #id, onDelete: KeyAction.cascade)();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{userId, recipeId};
+}
+
+/// A "cookbook" — a household-shared grouping of recipes (spec §5.2).
+@DataClassName('CollectionRow')
+class Collections extends Table {
+  TextColumn get id => text()();
+  TextColumn get householdId => text()();
+  TextColumn get name => text()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
+/// Membership: a recipe can live in several collections at once (spec §5.2).
+@DataClassName('RecipeCollectionRow')
+class RecipeCollections extends Table {
+  TextColumn get collectionId =>
+      text().references(Collections, #id, onDelete: KeyAction.cascade)();
+  TextColumn get recipeId =>
+      text().references(Recipes, #id, onDelete: KeyAction.cascade)();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{
+    collectionId,
+    recipeId,
+  };
+}

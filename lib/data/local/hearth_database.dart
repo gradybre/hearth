@@ -20,6 +20,9 @@ part 'hearth_database.g.dart';
     RecipeSections,
     RecipeIngredients,
     RecipeSteps,
+    RecipeFavorites,
+    Collections,
+    RecipeCollections,
     Foods,
     FoodServingOptions,
     MealPlanDays,
@@ -36,7 +39,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -45,6 +48,13 @@ class HearthDatabase extends _$HearthDatabase {
       // changes, so the existing cache is kept rather than rebuilt.
       if (from < 2) {
         await m.createTable(ingredientMatches);
+      }
+      // v3 adds favourites and collections (spec §5.2). Additive again — the
+      // cached library is untouched, so no re-sync is needed to upgrade.
+      if (from < 3) {
+        await m.createTable(recipeFavorites);
+        await m.createTable(collections);
+        await m.createTable(recipeCollections);
       }
     },
     beforeOpen: (OpeningDetails details) async {

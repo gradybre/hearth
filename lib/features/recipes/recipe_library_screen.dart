@@ -8,6 +8,8 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
 import '../../domain/models/recipe.dart';
+import '../../domain/recipes/recipe_query.dart';
+import 'recipe_filter_bar.dart';
 
 /// The household's recipe library (spec §5.2).
 ///
@@ -19,10 +21,17 @@ class RecipeLibraryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<List<Recipe>> library = ref.watch(recipeLibraryProvider);
+    final AsyncValue<List<Recipe>> shown = ref.watch(filteredRecipesProvider);
+    final RecipeFilter filter = ref.watch(recipeFilterProvider);
     final HearthColors colors = context.colors;
     final double gutter = MediaQuery.sizeOf(context).width >= 840
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
+
+    // The search bar is hidden only while the library is genuinely empty:
+    // once it has anything in it, a filter that matches nothing still needs
+    // the controls on screen to be undone.
+    final bool hasLibrary = (library.value ?? const <Recipe>[]).isNotEmpty;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -40,7 +49,103 @@ class RecipeLibraryScreen extends ConsumerWidget {
               _LibraryError(error: error, gutter: gutter),
           data: (List<Recipe> recipes) => recipes.isEmpty
               ? _EmptyLibrary(gutter: gutter)
-              : _RecipeList(recipes: recipes, gutter: gutter),
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
+                      child: Text('Recipes', style: context.text.recipeTitle),
+                    ),
+                    const SizedBox(height: HearthSpacing.md),
+                    if (hasLibrary) RecipeFilterBar(gutter: gutter),
+                    const SizedBox(height: HearthSpacing.md),
+                    Expanded(
+                      child: (shown.value ?? const <Recipe>[]).isEmpty
+                          ? _NoMatches(
+                              gutter: gutter,
+                              filter: filter,
+                              onClear: () => ref
+                                  .read(recipeFilterProvider.notifier)
+                                  .clearAll(),
+                            )
+                          : _RecipeList(
+                              recipes: shown.value ?? const <Recipe>[],
+                              gutter: gutter,
+                            ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What the library looks like when the filters exclude everything.
+///
+/// Distinct from the empty-library state, and it names the way out: a screen
+/// that just says "nothing here" while three chips are quietly lit is how
+/// people conclude their recipes are gone.
+class _NoMatches extends StatelessWidget {
+  const _NoMatches({
+    required this.gutter,
+    required this.filter,
+    required this.onClear,
+  });
+
+  final double gutter;
+  final RecipeFilter filter;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 380),
+        child: Padding(
+          padding: EdgeInsets.all(gutter),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                'No recipes match',
+                style: context.text.sectionHeader,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: HearthSpacing.sm),
+              Text(
+                filter.text.trim().isEmpty
+                    ? 'Nothing in the library fits these filters.'
+                    : 'Nothing matches "${filter.text.trim()}".',
+                style: context.text.body.copyWith(color: colors.textSecondary),
+                textAlign: TextAlign.center,
+              ),
+              // A calorie or protein chip excludes any recipe whose
+              // ingredients aren't all matched to foods — filtering on a
+              // number that is missing half the dish would be worse than
+              // showing nothing. Said out loud, because an empty screen
+              // otherwise reads as a bug.
+              if (filter.maxKcalPerServing != null ||
+                  filter.minProteinPerServing != null) ...<Widget>[
+                const SizedBox(height: HearthSpacing.sm),
+                Text(
+                  'Recipes whose ingredients are not all matched to foods have '
+                  'no nutrition to filter on, so they are left out of the '
+                  'calorie and protein filters.',
+                  style: context.text.metadata.copyWith(
+                    color: colors.textMuted,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+              const SizedBox(height: HearthSpacing.md),
+              FilledButton(
+                onPressed: onClear,
+                child: const Text('Clear search and filters'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -55,36 +160,34 @@ class _RecipeList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView.separated(
-    padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, gutter + 72),
-    itemCount: recipes.length + 1,
+    padding: EdgeInsets.fromLTRB(gutter, 0, gutter, gutter + 72),
+    itemCount: recipes.length,
     separatorBuilder: (BuildContext context, int index) =>
         const SizedBox(height: HearthSpacing.md),
-    itemBuilder: (BuildContext context, int index) {
-      if (index == 0) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
-          child: Text('Recipes', style: context.text.recipeTitle),
-        );
-      }
-      return RecipeCard(recipe: recipes[index - 1]);
-    },
+    itemBuilder: (BuildContext context, int index) =>
+        RecipeCard(recipe: recipes[index]),
   );
 }
 
 /// One recipe in the library list.
-class RecipeCard extends StatelessWidget {
+class RecipeCard extends ConsumerWidget {
   const RecipeCard({required this.recipe, super.key});
 
   final Recipe recipe;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final HearthColors colors = context.colors;
     final HearthTextStyles text = context.text;
+    final bool isFavorite =
+        (ref.watch(favoriteRecipeIdsProvider).value ?? const <String>{})
+            .contains(recipe.id);
 
     return Semantics(
       button: true,
-      label: '${recipe.title}. ${_summary(recipe)}',
+      label:
+          '${recipe.title}. ${_summary(recipe)}'
+          '${isFavorite ? '. Favourite' : ''}',
       excludeSemantics: true,
       child: Material(
         color: colors.surface,
@@ -97,26 +200,46 @@ class RecipeCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(HearthRadius.lg),
               border: Border.all(color: colors.outline),
             ),
-            padding: const EdgeInsets.all(HearthSpacing.lg),
-            child: Column(
+            padding: const EdgeInsets.fromLTRB(
+              HearthSpacing.lg,
+              HearthSpacing.lg,
+              HearthSpacing.sm,
+              HearthSpacing.lg,
+            ),
+            // The heart sits beside the whole text block rather than beside
+            // the title alone: a 44pt tap target inside the title row would
+            // set the row's height and open a gap above the summary line.
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(recipe.title, style: text.sectionHeader),
-                const SizedBox(height: HearthSpacing.xs),
-                Text(
-                  _summary(recipe),
-                  style: text.metadata.copyWith(color: colors.textMuted),
-                ),
-                if (recipe.tags.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: HearthSpacing.md),
-                  Wrap(
-                    spacing: HearthSpacing.sm,
-                    runSpacing: HearthSpacing.xs,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      for (final String tag in recipe.tags) _Tag(label: tag),
+                      Text(recipe.title, style: text.sectionHeader),
+                      const SizedBox(height: HearthSpacing.xs),
+                      Text(
+                        _summary(recipe),
+                        style: text.metadata.copyWith(color: colors.textMuted),
+                      ),
+                      if (recipe.tags.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: HearthSpacing.md),
+                        Wrap(
+                          spacing: HearthSpacing.sm,
+                          runSpacing: HearthSpacing.xs,
+                          children: <Widget>[
+                            for (final String tag in recipe.tags)
+                              _Tag(label: tag),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
-                ],
+                ),
+                // Favouriting from the list, not only from inside the recipe:
+                // the heart is worth nothing if reaching it costs two
+                // navigations.
+                _FavoriteButton(recipeId: recipe.id, compact: true),
               ],
             ),
           ),
@@ -246,4 +369,43 @@ class _LibraryError extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The heart. Shared by the library card and the recipe screen.
+class _FavoriteButton extends ConsumerWidget {
+  const _FavoriteButton({required this.recipeId, this.compact = false});
+
+  final String recipeId;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final HearthColors colors = context.colors;
+    final bool isFavorite =
+        (ref.watch(favoriteRecipeIdsProvider).value ?? const <String>{})
+            .contains(recipeId);
+
+    return IconButton(
+      // The filled-vs-outline shape carries the state, not the colour alone
+      // (spec §6.3), and the label says which action the tap performs.
+      icon: Icon(
+        isFavorite ? Icons.favorite : Icons.favorite_border,
+        color: isFavorite ? colors.accent : colors.textMuted,
+        size: compact ? 20 : 24,
+      ),
+      tooltip: isFavorite ? 'Remove from favourites' : 'Add to favourites',
+      onPressed: () =>
+          ref.read(collectionRepositoryProvider).toggleFavorite(recipeId),
+    );
+  }
+}
+
+/// The heart, for screens outside this file.
+class FavoriteButton extends StatelessWidget {
+  const FavoriteButton({required this.recipeId, super.key});
+
+  final String recipeId;
+
+  @override
+  Widget build(BuildContext context) => _FavoriteButton(recipeId: recipeId);
 }

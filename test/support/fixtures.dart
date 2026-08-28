@@ -65,11 +65,21 @@ Recipe aRecipe({
   List<RecipeSection>? sections,
   List<RecipeIngredient>? ingredients,
   List<RecipeStep>? steps,
+  List<String> tags = const <String>[],
+  String? cuisine,
+  Duration? prepTime,
+  Duration? cookTime,
+  bool isDeleted = false,
 }) => Recipe(
   id: id ?? _id('recipe'),
   householdId: householdId,
   title: title,
   servings: servings,
+  tags: tags,
+  cuisine: cuisine,
+  prepTime: prepTime,
+  cookTime: cookTime,
+  isDeleted: isDeleted,
   sections:
       sections ??
       <RecipeSection>[

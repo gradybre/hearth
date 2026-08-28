@@ -9,6 +9,8 @@ import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/recipe.dart';
+import 'collections_sheet.dart';
+import 'recipe_library_screen.dart';
 
 /// Reading a recipe (spec §5.2).
 ///
@@ -32,6 +34,12 @@ class RecipeDetailScreen extends ConsumerWidget {
         surfaceTintColor: Colors.transparent,
         title: const SizedBox.shrink(),
         actions: <Widget>[
+          FavoriteButton(recipeId: recipeId),
+          IconButton(
+            icon: const Icon(Icons.menu_book_outlined),
+            tooltip: 'Cookbooks',
+            onPressed: () => showCollectionsSheet(context, recipeId: recipeId),
+          ),
           TextButton(
             onPressed: () => context.push('/recipe/$recipeId/edit'),
             child: const Text('Edit'),

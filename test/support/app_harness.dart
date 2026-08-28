@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
+import 'package:hearth/data/local/collection_store.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/recipe.dart';
@@ -31,6 +32,8 @@ Future<HearthDatabase> pumpHearthApp(
   List<Recipe> recipes = const <Recipe>[],
   List<Food> foods = const <Food>[],
   List<MealPlanEntry> entries = const <MealPlanEntry>[],
+  Set<String> favorites = const <String>{},
+  List<CollectionSummary> collections = const <CollectionSummary>[],
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -60,6 +63,26 @@ Future<HearthDatabase> pumpHearthApp(
         recentLogsProvider.overrideWith((Ref ref) async => const <RecentLog>[]),
         weekEntriesProvider.overrideWith(
           (Ref ref) async => <DateTime, List<MealPlanEntry>>{},
+        ),
+        // Favourites and collections are sqlite-backed streams too, so they
+        // need the same treatment — without these the library screen sits on
+        // its spinner forever and the test times out rather than failing.
+        favoriteRecipeIdsProvider.overrideWith(
+          (Ref ref) => Stream<Set<String>>.value(favorites),
+        ),
+        collectionsProvider.overrideWith(
+          (Ref ref) => Stream<List<CollectionSummary>>.value(collections),
+        ),
+        recipeCollectionsProvider.overrideWith(
+          (Ref ref) =>
+              Stream<Map<String, Set<String>>>.value(<String, Set<String>>{
+                for (final CollectionSummary collection in collections)
+                  for (final String recipeId in collection.recipeIds)
+                    recipeId: <String>{
+                      for (final CollectionSummary c in collections)
+                        if (c.recipeIds.contains(recipeId)) c.id,
+                    },
+              }),
         ),
       ],
       child: const HearthApp(),
