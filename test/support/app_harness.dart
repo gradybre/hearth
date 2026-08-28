@@ -58,10 +58,24 @@ Future<HearthDatabase> pumpHearthApp(
           (Ref ref) => const Stream<void>.empty(),
         ),
         recentLogsProvider.overrideWith((Ref ref) async => const <RecentLog>[]),
+        weekEntriesProvider.overrideWith(
+          (Ref ref) async => <DateTime, List<MealPlanEntry>>{},
+        ),
       ],
       child: const HearthApp(),
     ),
   );
   await tester.pump();
   return db;
+}
+
+/// Pumps a few frames without settling.
+///
+/// `pumpAndSettle` cannot be used anywhere in this app: the loading spinners
+/// animate forever, so settling waits out the full timeout. A handful of timed
+/// pumps is enough for a provider to resolve and the tree to rebuild.
+Future<void> pumpFrames(WidgetTester tester, {int frames = 5}) async {
+  for (int i = 0; i < frames; i++) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
 }

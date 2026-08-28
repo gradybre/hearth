@@ -27,7 +27,6 @@ class DayScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final HearthColors colors = context.colors;
     final DateTime date = ref.watch(selectedDateProvider);
     final AsyncValue<List<MealPlanEntry>> entries = ref.watch(
       dayEntriesProvider,
@@ -48,40 +47,40 @@ class DayScreen extends ConsumerWidget {
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: SafeArea(
-        child: entries.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (Object e, StackTrace s) =>
-              Center(child: Text('The day could not be read.\n$e')),
-          data: (List<MealPlanEntry> raw) {
-            final List<ResolvedEntry> resolved = EntryResolver.resolveAll(
-              raw,
-              recipes: recipes,
-              foods: foods,
-            );
+    return entries.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (Object e, StackTrace s) =>
+          Center(child: Text('The day could not be read.\n$e')),
+      data: (List<MealPlanEntry> raw) {
+        final List<ResolvedEntry> resolved = EntryResolver.resolveAll(
+          raw,
+          recipes: recipes,
+          foods: foods,
+        );
 
-            return ListView(
-              padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, gutter * 3),
-              children: <Widget>[
-                _DayHeader(date: date),
-                const SizedBox(height: HearthSpacing.lg),
-                _RemainingCard(entries: resolved, targets: targets),
-                const SizedBox(height: HearthSpacing.xl),
-                for (final MealSlot slot in MealSlot.values) ...<Widget>[
-                  _SlotSection(
-                    slot: slot,
-                    entries: EntryResolver.inSlot(resolved, slot),
-                    date: date,
-                  ),
-                  const SizedBox(height: HearthSpacing.lg),
-                ],
-              ],
-            );
-          },
-        ),
-      ),
+        return ListView(
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            HearthSpacing.lg,
+            gutter,
+            gutter * 3,
+          ),
+          children: <Widget>[
+            _DayHeader(date: date),
+            const SizedBox(height: HearthSpacing.lg),
+            _RemainingCard(entries: resolved, targets: targets),
+            const SizedBox(height: HearthSpacing.xl),
+            for (final MealSlot slot in MealSlot.values) ...<Widget>[
+              _SlotSection(
+                slot: slot,
+                entries: EntryResolver.inSlot(resolved, slot),
+                date: date,
+              ),
+              const SizedBox(height: HearthSpacing.lg),
+            ],
+          ],
+        );
+      },
     );
   }
 }

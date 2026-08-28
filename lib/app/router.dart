@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../features/foods/food_editor_screen.dart';
 import '../features/foods/food_library_screen.dart';
 import '../features/placeholder_screen.dart';
-import '../features/plan/day_screen.dart';
+import '../features/plan/plan_screen.dart';
 import '../features/recipes/recipe_detail_screen.dart';
 import '../features/recipes/recipe_editor_screen.dart';
 import '../features/recipes/recipe_library_screen.dart';
@@ -105,7 +105,7 @@ class _ShellHost extends StatelessWidget {
         index: index,
         children: const <Widget>[
           RecipeLibraryScreen(),
-          DayScreen(),
+          PlanScreen(),
           PlaceholderScreen(
             title: 'Shopping',
             description:

@@ -193,3 +193,29 @@ final FutureProvider<List<RecentLog>> recentLogsProvider =
       ref.watch(planChangesProvider);
       return ref.watch(planRepositoryProvider).recentLogs();
     });
+
+/// Which planner view is showing: the day, or the week summary.
+///
+/// The day is the default because daily logging is the loop the app is judged
+/// on; the week is where you step back and look.
+enum PlanView { day, week }
+
+final NotifierProvider<PlanViewMode, PlanView> planViewProvider =
+    NotifierProvider<PlanViewMode, PlanView>(PlanViewMode.new);
+
+class PlanViewMode extends Notifier<PlanView> {
+  @override
+  PlanView build() => PlanView.day;
+
+  void show(PlanView view) => state = view;
+}
+
+/// Every entry in the selected day's week, keyed by day.
+final FutureProvider<Map<DateTime, List<MealPlanEntry>>> weekEntriesProvider =
+    FutureProvider<Map<DateTime, List<MealPlanEntry>>>((Ref ref) {
+      ref.watch(planChangesProvider);
+      final List<DateTime> days = weekOf(ref.watch(selectedDateProvider));
+      return ref
+          .watch(planRepositoryProvider)
+          .entriesBetween(days.first, days.last);
+    });
