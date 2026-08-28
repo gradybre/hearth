@@ -188,4 +188,18 @@ void main() {
       expect(reSaved.sections.single.id, original.sections.single.id);
     });
   });
+
+  group('step timers come across from the text (spec §5.2)', () {
+    test('a step that states a duration arrives with a timer', () {
+      // Otherwise timer_seconds is only ever set by hand and cook-along's
+      // timers go unused, which is the same as not having them.
+      final Recipe recipe = draft(
+        directions: '1. Season the ribs\n2. Cover and cook for 3 hr.',
+      ).toRecipe(idFactory: sequentialIds());
+
+      final List<RecipeStep> steps = recipe.allSteps;
+      expect(steps.first.hasTimer, isFalse);
+      expect(steps.last.timerSeconds, 10800);
+    });
+  });
 }

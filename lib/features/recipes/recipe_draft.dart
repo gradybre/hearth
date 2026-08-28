@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/parsing/direction_parser.dart';
 import '../../domain/parsing/ingredient_parser.dart';
+import '../../domain/parsing/step_timer_parser.dart';
 import '../../domain/text/text_normaliser.dart';
 
 /// Turns what the user typed into a [Recipe].
@@ -144,6 +145,10 @@ class RecipeDraft {
                 sectionId: sectionId,
                 stepNumber: step.number,
                 text: step.text,
+                // "Simmer for 20 minutes" is a timer the cook should not have
+                // to key in again — the number is already in the step, and
+                // cook-along's timers go unused if nothing ever sets this.
+                timerSeconds: StepTimerParser.parse(step.text),
               ),
           ],
         ),

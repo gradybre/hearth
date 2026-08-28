@@ -11,6 +11,7 @@ import '../../domain/format/quantity_format.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/recipes/recipe_scaler.dart';
 import 'collections_sheet.dart';
+import 'cook_along_screen.dart';
 import 'recipe_library_screen.dart';
 import 'scale_control.dart';
 
@@ -57,6 +58,25 @@ class RecipeDetailScreen extends ConsumerWidget {
             ? const Center(child: Text('That recipe no longer exists.'))
             : _RecipeBody(recipe: loaded),
       ),
+      floatingActionButton: recipe.value == null
+          ? null
+          : recipe.value!.allSteps.isEmpty
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  // The recipe is handed over by value: cook-along runs off a
+                  // snapshot, so a partner's mid-cook edit cannot move the
+                  // step under your hands (spec §5.2).
+                  builder: (BuildContext context) =>
+                      CookAlongScreen(recipe: recipe.value!),
+                ),
+              ),
+              backgroundColor: colors.accent,
+              foregroundColor: colors.onAccent,
+              icon: const Icon(Icons.soup_kitchen_outlined),
+              label: Text('Cook', style: context.text.label),
+            ),
     );
   }
 }

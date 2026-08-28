@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/adapters/kitchen_devices.dart';
+import '../data/adapters/platform_kitchen_devices.dart';
 import '../data/local/collection_store.dart';
 import '../data/local/food_store.dart';
 import '../data/local/hearth_database.dart';
@@ -343,3 +345,18 @@ Macros? _perServingIfComplete(Recipe recipe, Map<String, Food> foods) {
   final RecipeMacros macros = MacroCalculator.forRecipe(recipe, foods: foods);
   return macros.isIncomplete ? null : macros.perServing;
 }
+
+// ── Cook-along (spec §5.2) ───────────────────────────────────────────────────
+
+/// Keeps the screen awake while cooking.
+///
+/// A provider so a widget test can swap in the no-op and exercise cook mode
+/// without a platform channel.
+final Provider<ScreenKeeper> screenKeeperProvider = Provider<ScreenKeeper>(
+  (Ref ref) => PlatformScreenKeeper(),
+);
+
+/// Cook-timer alerts that outlive the app being backgrounded.
+final Provider<TimerAlerts> timerAlertsProvider = Provider<TimerAlerts>(
+  (Ref ref) => PlatformTimerAlerts(),
+);
