@@ -2,11 +2,15 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/adapters/image_picker_photos.dart';
 import '../data/adapters/kitchen_devices.dart';
 import '../data/adapters/photo_picker.dart';
 import '../data/adapters/platform_kitchen_devices.dart';
+import '../data/auth/auth_gateway.dart';
+import '../data/auth/local_auth_gateway.dart';
+import '../data/auth/supabase_auth_gateway.dart';
 import '../data/local/collection_store.dart';
 import '../data/local/cook_session_store.dart';
 import '../data/local/cook_timer_store.dart';
@@ -60,12 +64,14 @@ final Provider<PendingWriteStore> pendingWriteStoreProvider =
 
 /// The household whose library is on screen.
 ///
-/// Auth fills this in once accounts land; until then it is a fixed local id so
-/// the library works end to end on one device. It is deliberately a provider
-/// rather than a constant so that switch is a one-line override rather than a
-/// hunt through the feature code.
+/// Comes from the signed-in account. Falls back to the fixed local id while
+/// the account is still loading and in unconfigured builds — the same id the
+/// app used before accounts existed, so a device used offline keeps its
+/// library when it first signs in.
 final Provider<String> currentHouseholdIdProvider = Provider<String>(
-  (Ref ref) => 'local-household',
+  (Ref ref) =>
+      ref.watch(accountProvider).value?.householdId ??
+      LocalAuthGateway.account.householdId,
 );
 
 final Provider<RecipeRepository> recipeRepositoryProvider =
@@ -148,8 +154,12 @@ final FutureProvider<Map<String, String>> rememberedMatchesProvider =
 /// Plans, logs, and targets are user-scoped, not household-scoped: two people
 /// share a library but never a diary (spec §4). Auth fills this in; until then
 /// it is a fixed local id.
+/// The signed-in user. User-scoped data — plans, logs, targets, favourites —
+/// hangs off this (spec §8.2).
 final Provider<String> currentUserIdProvider = Provider<String>(
-  (Ref ref) => 'local-user',
+  (Ref ref) =>
+      ref.watch(accountProvider).value?.userId ??
+      LocalAuthGateway.account.userId,
 );
 
 final Provider<PlanStore> planStoreProvider = Provider<PlanStore>(
@@ -441,4 +451,24 @@ final StreamProvider<Map<String, String>> recipePhotoNamesProvider =
 final FutureProvider<Directory> recipePhotoDirectoryProvider =
     FutureProvider<Directory>(
       (Ref ref) => ref.watch(recipePhotoStoreProvider).photosDirectory(),
+    );
+
+// ── Accounts (spec §5.1, §8.3) ───────────────────────────────────────────────
+
+/// Whether this build came up with a Supabase connection.
+///
+/// Overridden at startup by [bootstrap]. False in tests and in any build with
+/// no `config/local.json`, which is a supported way to run — offline, alone.
+final Provider<bool> supabaseReadyProvider = Provider<bool>((Ref ref) => false);
+
+final Provider<AuthGateway> authGatewayProvider = Provider<AuthGateway>(
+  (Ref ref) => ref.watch(supabaseReadyProvider)
+      ? SupabaseAuthGateway(Supabase.instance.client)
+      : LocalAuthGateway(),
+);
+
+/// The signed-in account, or null when nobody is.
+final StreamProvider<HearthAccount?> accountProvider =
+    StreamProvider<HearthAccount?>(
+      (Ref ref) => ref.watch(authGatewayProvider).watchAccount(),
     );

@@ -30,9 +30,11 @@ void main() {
       await _pumpAt(tester, desktop);
       expect(find.byType(NavigationBar), findsNothing);
       // The sidebar is Hearth's own widget, so it is identified by the
-      // destinations it renders rather than by a Material type.
+      // destinations it renders rather than by a Material type. Scoped to its
+      // semantics, because a screen is entitled to a heading that happens to
+      // match a destination name — "Recipes" appears in both.
       for (final AppDestination d in foodDestinations) {
-        expect(find.text(d.label), findsOneWidget);
+        expect(find.bySemanticsLabel(d.semanticLabel), findsOneWidget);
       }
     });
 

@@ -48,34 +48,53 @@ class RecipeLibraryScreen extends ConsumerWidget {
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (Object error, StackTrace stack) =>
               _LibraryError(error: error, gutter: gutter),
-          data: (List<Recipe> recipes) => recipes.isEmpty
-              ? _EmptyLibrary(gutter: gutter)
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          data: (List<Recipe> recipes) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              // Outside the empty/non-empty branch on purpose. The household
+              // control used to live only in the populated case, which hid it
+              // from exactly the person who needs it — someone with an empty
+              // library, about to share a code.
+              Padding(
+                padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
+                child: Row(
                   children: <Widget>[
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
+                    Expanded(
                       child: Text('Recipes', style: context.text.recipeTitle),
                     ),
-                    const SizedBox(height: HearthSpacing.md),
-                    if (hasLibrary) RecipeFilterBar(gutter: gutter),
-                    const SizedBox(height: HearthSpacing.md),
-                    Expanded(
-                      child: (shown.value ?? const <Recipe>[]).isEmpty
-                          ? _NoMatches(
-                              gutter: gutter,
-                              filter: filter,
-                              onClear: () => ref
-                                  .read(recipeFilterProvider.notifier)
-                                  .clearAll(),
-                            )
-                          : _RecipeList(
-                              recipes: shown.value ?? const <Recipe>[],
-                              gutter: gutter,
-                            ),
+                    // The household lives behind the library rather than in a
+                    // settings pillar of its own: it is a thing you set up
+                    // once and then forget (spec §5.1).
+                    IconButton(
+                      icon: const Icon(Icons.people_outline),
+                      tooltip: 'Household',
+                      onPressed: () => context.push('/household'),
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(height: HearthSpacing.md),
+              if (hasLibrary) ...<Widget>[
+                RecipeFilterBar(gutter: gutter),
+                const SizedBox(height: HearthSpacing.md),
+              ],
+              Expanded(
+                child: recipes.isEmpty
+                    ? _EmptyLibrary(gutter: gutter)
+                    : (shown.value ?? const <Recipe>[]).isEmpty
+                    ? _NoMatches(
+                        gutter: gutter,
+                        filter: filter,
+                        onClear: () =>
+                            ref.read(recipeFilterProvider.notifier).clearAll(),
+                      )
+                    : _RecipeList(
+                        recipes: shown.value ?? const <Recipe>[],
+                        gutter: gutter,
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );

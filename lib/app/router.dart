@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/account/household_screen.dart';
 import '../features/foods/food_editor_screen.dart';
 import '../features/foods/food_library_screen.dart';
 import '../features/placeholder_screen.dart';
@@ -32,6 +33,11 @@ GoRouter buildRouter() => GoRouter(
   routes: <RouteBase>[
     // Listed before the section route: these have two or more segments, so
     // they can never be mistaken for a section.
+    GoRoute(
+      path: '/household',
+      builder: (BuildContext context, GoRouterState state) =>
+          const HouseholdScreen(),
+    ),
     GoRoute(
       path: '/recipe/new',
       builder: (BuildContext context, GoRouterState state) =>
