@@ -363,6 +363,148 @@ void main() {
     });
   });
 
+  group('meal-prep assignment (spec §5.6)', () {
+    test('one action places a recipe on several days', () async {
+      final List<DateTime> days = <DateTime>[
+        today,
+        today.add(const Duration(days: 1)),
+        today.add(const Duration(days: 2)),
+      ];
+
+      final List<MealPlanEntry> created = await repository.assignAcrossDays(
+        dates: days,
+        slot: MealSlot.dinner,
+        refType: PlanRefType.recipe,
+        refId: 'recipe-1',
+        servings: 1.5,
+      );
+
+      expect(created, hasLength(3));
+      for (final DateTime day in days) {
+        final MealPlanEntry entry = (await repository.entriesFor(day)).single;
+        expect(entry.slot, MealSlot.dinner);
+        expect(entry.servings, 1.5);
+      }
+    });
+
+    test('assigned entries are planned, not logged', () async {
+      // A batch you have cooked is not a batch you have eaten.
+      await repository.assignAcrossDays(
+        dates: <DateTime>[today],
+        slot: MealSlot.dinner,
+        refType: PlanRefType.recipe,
+        refId: 'recipe-1',
+        servings: 1,
+      );
+
+      final MealPlanEntry entry = (await repository.entriesFor(today)).single;
+      expect(entry.isLogged, isFalse);
+      expect(entry.macroSnapshot, isNull);
+    });
+  });
+
+  group('copy day (spec §5.6)', () {
+    Future<void> seedSource() async {
+      await repository.add(
+        date: today,
+        slot: MealSlot.breakfast,
+        refType: PlanRefType.food,
+        refId: 'food-1',
+        servings: 1,
+        loggedMacros: const Macros(kcal: 100),
+        label: 'Yogurt',
+      );
+      await repository.add(
+        date: today,
+        slot: MealSlot.dinner,
+        refType: PlanRefType.recipe,
+        refId: 'recipe-1',
+        servings: 2,
+      );
+    }
+
+    test('copies every entry onto each target day', () async {
+      await seedSource();
+      final DateTime tomorrow = today.add(const Duration(days: 1));
+      final DateTime dayAfter = today.add(const Duration(days: 2));
+
+      final int copied = await repository.copyDay(
+        from: today,
+        to: <DateTime>[tomorrow, dayAfter],
+      );
+
+      expect(copied, 4);
+      expect(await repository.entriesFor(tomorrow), hasLength(2));
+      expect(await repository.entriesFor(dayAfter), hasLength(2));
+    });
+
+    test('copies arrive planned even when the source was logged', () async {
+      // Copying Monday's dinner onto Thursday says you intend to eat it
+      // again, not that you already have — writing a snapshot would be
+      // inventing history (spec §4).
+      await seedSource();
+      final DateTime tomorrow = today.add(const Duration(days: 1));
+
+      await repository.copyDay(from: today, to: <DateTime>[tomorrow]);
+
+      final List<MealPlanEntry> copies = await repository.entriesFor(tomorrow);
+      expect(copies.every((MealPlanEntry e) => !e.isLogged), isTrue);
+      expect(
+        copies.every((MealPlanEntry e) => e.macroSnapshot == null),
+        isTrue,
+      );
+    });
+
+    test('portions and slots carry across', () async {
+      await seedSource();
+      final DateTime tomorrow = today.add(const Duration(days: 1));
+      await repository.copyDay(from: today, to: <DateTime>[tomorrow]);
+
+      final List<MealPlanEntry> copies = await repository.entriesFor(tomorrow);
+      final MealPlanEntry dinner = copies.firstWhere(
+        (MealPlanEntry e) => e.slot == MealSlot.dinner,
+      );
+      expect(dinner.servings, 2);
+      expect(dinner.refType, PlanRefType.recipe);
+    });
+
+    test('the source day is left alone', () async {
+      await seedSource();
+      await repository.copyDay(
+        from: today,
+        to: <DateTime>[today.add(const Duration(days: 1))],
+      );
+
+      final List<MealPlanEntry> source = await repository.entriesFor(today);
+      expect(source, hasLength(2));
+      expect(
+        source
+            .firstWhere((MealPlanEntry e) => e.slot == MealSlot.breakfast)
+            .isLogged,
+        isTrue,
+      );
+    });
+
+    test('copying a day onto itself does nothing', () async {
+      await seedSource();
+      final int copied = await repository.copyDay(
+        from: today,
+        to: <DateTime>[today],
+      );
+
+      expect(copied, 0);
+      expect(await repository.entriesFor(today), hasLength(2));
+    });
+
+    test('copying an empty day is a no-op', () async {
+      final int copied = await repository.copyDay(
+        from: today,
+        to: <DateTime>[today.add(const Duration(days: 1))],
+      );
+      expect(copied, 0);
+    });
+  });
+
   group('targets', () {
     const MacroTargets targets = MacroTargets(
       kcal: 2200,

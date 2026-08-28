@@ -13,6 +13,7 @@ import '../../domain/models/recipe.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/week.dart';
+import 'day_picker_sheet.dart';
 import 'entry_resolver.dart';
 import 'log_sheet.dart';
 import 'macro_targets_sheet.dart';
@@ -160,7 +161,47 @@ class _DayHeader extends ConsumerWidget {
           tooltip: 'Next day',
           icon: const Icon(Icons.chevron_right),
         ),
+        IconButton(
+          onPressed: () => _copyDay(context, ref, date),
+          tooltip: 'Copy this day to other days',
+          icon: const Icon(Icons.copy_all_outlined),
+        ),
       ],
+    );
+  }
+
+  /// Copies this day onto any number of others (spec §5.6).
+  ///
+  /// Single day, several days, and a repeating pattern are all the same
+  /// gesture here: choose the days you mean.
+  static Future<void> _copyDay(
+    BuildContext context,
+    WidgetRef ref,
+    DateTime from,
+  ) async {
+    final List<DateTime>? targets = await showDayPicker(
+      context,
+      title: 'Copy this day to',
+      actionLabel: 'Copy',
+      excluding: from,
+    );
+    if (targets == null || targets.isEmpty) return;
+
+    final int copied = await ref
+        .read(planRepositoryProvider)
+        .copyDay(from: from, to: targets);
+    ref.invalidate(dayEntriesProvider);
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          copied == 0
+              ? 'Nothing on this day to copy.'
+              : 'Copied $copied ${copied == 1 ? 'item' : 'items'} to '
+                    '${targets.length} ${targets.length == 1 ? 'day' : 'days'}.',
+        ),
+      ),
     );
   }
 }

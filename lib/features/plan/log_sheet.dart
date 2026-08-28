@@ -11,6 +11,7 @@ import '../../domain/models/recipe.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/recent_log.dart';
 import '../../domain/recipes/macro_calculator.dart';
+import 'day_picker_sheet.dart';
 import 'entry_resolver.dart';
 
 /// Adds something to a slot, or confirms something already planned.
@@ -174,6 +175,37 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     }
   }
 
+  /// Assigns this recipe or food across several days at once (spec §5.6's
+  /// meal-prep assignment).
+  ///
+  /// "This batch is my dinner Mon/Tue/Wed" is one decision, so it is one
+  /// action — not the same add repeated three times.
+  Future<void> _assignAcrossDays() async {
+    final List<DateTime>? days = await showDayPicker(
+      context,
+      title: 'Add to which days?',
+      actionLabel: 'Add to days',
+    );
+    if (days == null || days.isEmpty || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(planRepositoryProvider)
+          .assignAcrossDays(
+            dates: days,
+            slot: widget.slot,
+            refType: _recipe != null ? PlanRefType.recipe : PlanRefType.food,
+            refId: _recipe?.id ?? _food!.id,
+            servings: _servings,
+          );
+      ref.invalidate(dayEntriesProvider);
+      if (mounted) Navigator.of(context).pop();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _remove() async {
     setState(() => _busy = true);
     try {
@@ -260,6 +292,17 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
               onChanged: (double value) => setState(() => _servings = value),
             ),
             const SizedBox(height: HearthSpacing.lg),
+            if (!_isExisting) ...<Widget>[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _busy ? null : _assignAcrossDays,
+                  icon: const Icon(Icons.event_repeat_outlined, size: 18),
+                  label: const Text('Add to several days'),
+                ),
+              ),
+              const SizedBox(height: HearthSpacing.sm),
+            ],
             Row(
               children: <Widget>[
                 if (_isExisting)

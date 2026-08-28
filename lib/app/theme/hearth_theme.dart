@@ -57,10 +57,20 @@ abstract final class HearthTheme {
           backgroundColor: WidgetStateProperty.resolveWith((
             Set<WidgetState> states,
           ) {
+            // Disabled has to be visibly different: a primary action that
+            // paints full accent while doing nothing on tap is a lie on
+            // screen. It is never the only signal — Flutter also reports the
+            // button as disabled to a screen reader (spec §6.3).
+            if (states.contains(WidgetState.disabled)) return c.surfaceSunken;
             if (states.contains(WidgetState.pressed)) return c.accentPressed;
             return c.accent;
           }),
-          foregroundColor: WidgetStatePropertyAll<Color>(c.onAccent),
+          foregroundColor: WidgetStateProperty.resolveWith((
+            Set<WidgetState> states,
+          ) {
+            if (states.contains(WidgetState.disabled)) return c.textMuted;
+            return c.onAccent;
+          }),
           textStyle: WidgetStatePropertyAll<TextStyle>(
             HearthTypography.label(),
           ),

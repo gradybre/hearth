@@ -4,6 +4,7 @@ import '../../domain/models/macros.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/recent_log.dart';
+import '../../domain/planning/week.dart';
 import '../local/hearth_database.dart';
 import '../local/pending_write_store.dart';
 import '../local/plan_store.dart';
@@ -201,6 +202,65 @@ class PlanRepository {
         queuedAt: now,
       );
     });
+  }
+
+  /// Assigns one recipe or food to the same slot across several days at once
+  /// (spec §5.6's meal-prep assignment).
+  ///
+  /// One action, not one per day: "this batch is my dinner Mon/Tue/Wed" is a
+  /// single decision, and making the user repeat it three times is the kind of
+  /// tax the success bar is measured against. Entries are added as planned,
+  /// not logged — a batch you have cooked is not a batch you have eaten.
+  Future<List<MealPlanEntry>> assignAcrossDays({
+    required Iterable<DateTime> dates,
+    required MealSlot slot,
+    required PlanRefType refType,
+    required String refId,
+    required double servings,
+  }) async {
+    final List<MealPlanEntry> created = <MealPlanEntry>[];
+    for (final DateTime date in dates) {
+      created.add(
+        await add(
+          date: date,
+          slot: slot,
+          refType: refType,
+          refId: refId,
+          servings: servings,
+        ),
+      );
+    }
+    return created;
+  }
+
+  /// Copies everything on [from] onto each of [to] (spec §5.6's copy day).
+  ///
+  /// Copies arrive as PLANNED, never logged, however they started life:
+  /// copying Monday's dinner onto Thursday says you intend to eat it again,
+  /// not that you already have. Writing a snapshot here would be inventing
+  /// history (§4).
+  Future<int> copyDay({
+    required DateTime from,
+    required Iterable<DateTime> to,
+  }) async {
+    final List<MealPlanEntry> source = await entriesFor(from);
+    if (source.isEmpty) return 0;
+
+    int copied = 0;
+    for (final DateTime target in to) {
+      if (dayKey(target) == dayKey(from)) continue;
+      for (final MealPlanEntry entry in source) {
+        await add(
+          date: target,
+          slot: entry.slot,
+          refType: entry.refType,
+          refId: entry.refId,
+          servings: entry.servings,
+        );
+        copied++;
+      }
+    }
+    return copied;
   }
 
   /// Sets the macro targets for [date]'s week.

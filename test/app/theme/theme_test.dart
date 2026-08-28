@@ -144,4 +144,38 @@ void main() {
       },
     );
   });
+
+  // Regression: the FilledButton style resolved only `pressed`, so a disabled
+  // button painted full accent — a "Copy" button with nothing selected looked
+  // exactly like one ready to fire. Colour is not the only signal (Flutter
+  // marks the button disabled for a screen reader either way), but a primary
+  // action that looks live and does nothing is a lie on screen.
+  testWidgets('a disabled FilledButton does not paint like an enabled one', (
+    WidgetTester tester,
+  ) async {
+    Future<Color?> background({required bool enabled}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: HearthTheme.light(),
+          home: Scaffold(
+            body: FilledButton(
+              onPressed: enabled ? () {} : null,
+              child: const Text('Copy'),
+            ),
+          ),
+        ),
+      );
+      final ButtonStyle? style = tester
+          .widget<FilledButton>(find.byType(FilledButton))
+          .themeStyleOf(tester.element(find.byType(FilledButton)));
+      return style?.backgroundColor?.resolve(<WidgetState>{
+        if (!enabled) WidgetState.disabled,
+      });
+    }
+
+    expect(
+      await background(enabled: false),
+      isNot(await background(enabled: true)),
+    );
+  });
 }
