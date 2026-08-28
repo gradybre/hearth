@@ -5143,6 +5143,388 @@ class MacroTargetsCompanion extends UpdateCompanion<MacroTargetRow> {
   }
 }
 
+class $IngredientMatchesTable extends IngredientMatches
+    with TableInfo<$IngredientMatchesTable, IngredientMatchRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $IngredientMatchesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _householdIdMeta = const VerificationMeta(
+    'householdId',
+  );
+  @override
+  late final GeneratedColumn<String> householdId = GeneratedColumn<String>(
+    'household_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _ingredientStringMeta = const VerificationMeta(
+    'ingredientString',
+  );
+  @override
+  late final GeneratedColumn<String> ingredientString = GeneratedColumn<String>(
+    'ingredient_string',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _foodIdMeta = const VerificationMeta('foodId');
+  @override
+  late final GeneratedColumn<String> foodId = GeneratedColumn<String>(
+    'food_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES foods (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    householdId,
+    ingredientString,
+    foodId,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'ingredient_matches';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<IngredientMatchRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('household_id')) {
+      context.handle(
+        _householdIdMeta,
+        householdId.isAcceptableOrUnknown(
+          data['household_id']!,
+          _householdIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_householdIdMeta);
+    }
+    if (data.containsKey('ingredient_string')) {
+      context.handle(
+        _ingredientStringMeta,
+        ingredientString.isAcceptableOrUnknown(
+          data['ingredient_string']!,
+          _ingredientStringMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_ingredientStringMeta);
+    }
+    if (data.containsKey('food_id')) {
+      context.handle(
+        _foodIdMeta,
+        foodId.isAcceptableOrUnknown(data['food_id']!, _foodIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_foodIdMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {householdId, ingredientString},
+  ];
+  @override
+  IngredientMatchRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return IngredientMatchRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      householdId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}household_id'],
+      )!,
+      ingredientString: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ingredient_string'],
+      )!,
+      foodId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}food_id'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $IngredientMatchesTable createAlias(String alias) {
+    return $IngredientMatchesTable(attachedDatabase, alias);
+  }
+}
+
+class IngredientMatchRow extends DataClass
+    implements Insertable<IngredientMatchRow> {
+  final String id;
+  final String householdId;
+
+  /// The normalised ingredient string — the same key the density lookup and
+  /// consolidation use, so they all agree on what counts as "the same thing".
+  final String ingredientString;
+  final String foodId;
+  final DateTime updatedAt;
+  const IngredientMatchRow({
+    required this.id,
+    required this.householdId,
+    required this.ingredientString,
+    required this.foodId,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['household_id'] = Variable<String>(householdId);
+    map['ingredient_string'] = Variable<String>(ingredientString);
+    map['food_id'] = Variable<String>(foodId);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  IngredientMatchesCompanion toCompanion(bool nullToAbsent) {
+    return IngredientMatchesCompanion(
+      id: Value(id),
+      householdId: Value(householdId),
+      ingredientString: Value(ingredientString),
+      foodId: Value(foodId),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory IngredientMatchRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return IngredientMatchRow(
+      id: serializer.fromJson<String>(json['id']),
+      householdId: serializer.fromJson<String>(json['householdId']),
+      ingredientString: serializer.fromJson<String>(json['ingredientString']),
+      foodId: serializer.fromJson<String>(json['foodId']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'householdId': serializer.toJson<String>(householdId),
+      'ingredientString': serializer.toJson<String>(ingredientString),
+      'foodId': serializer.toJson<String>(foodId),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  IngredientMatchRow copyWith({
+    String? id,
+    String? householdId,
+    String? ingredientString,
+    String? foodId,
+    DateTime? updatedAt,
+  }) => IngredientMatchRow(
+    id: id ?? this.id,
+    householdId: householdId ?? this.householdId,
+    ingredientString: ingredientString ?? this.ingredientString,
+    foodId: foodId ?? this.foodId,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  IngredientMatchRow copyWithCompanion(IngredientMatchesCompanion data) {
+    return IngredientMatchRow(
+      id: data.id.present ? data.id.value : this.id,
+      householdId: data.householdId.present
+          ? data.householdId.value
+          : this.householdId,
+      ingredientString: data.ingredientString.present
+          ? data.ingredientString.value
+          : this.ingredientString,
+      foodId: data.foodId.present ? data.foodId.value : this.foodId,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('IngredientMatchRow(')
+          ..write('id: $id, ')
+          ..write('householdId: $householdId, ')
+          ..write('ingredientString: $ingredientString, ')
+          ..write('foodId: $foodId, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, householdId, ingredientString, foodId, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is IngredientMatchRow &&
+          other.id == this.id &&
+          other.householdId == this.householdId &&
+          other.ingredientString == this.ingredientString &&
+          other.foodId == this.foodId &&
+          other.updatedAt == this.updatedAt);
+}
+
+class IngredientMatchesCompanion extends UpdateCompanion<IngredientMatchRow> {
+  final Value<String> id;
+  final Value<String> householdId;
+  final Value<String> ingredientString;
+  final Value<String> foodId;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const IngredientMatchesCompanion({
+    this.id = const Value.absent(),
+    this.householdId = const Value.absent(),
+    this.ingredientString = const Value.absent(),
+    this.foodId = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  IngredientMatchesCompanion.insert({
+    required String id,
+    required String householdId,
+    required String ingredientString,
+    required String foodId,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       householdId = Value(householdId),
+       ingredientString = Value(ingredientString),
+       foodId = Value(foodId),
+       updatedAt = Value(updatedAt);
+  static Insertable<IngredientMatchRow> custom({
+    Expression<String>? id,
+    Expression<String>? householdId,
+    Expression<String>? ingredientString,
+    Expression<String>? foodId,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (householdId != null) 'household_id': householdId,
+      if (ingredientString != null) 'ingredient_string': ingredientString,
+      if (foodId != null) 'food_id': foodId,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  IngredientMatchesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? householdId,
+    Value<String>? ingredientString,
+    Value<String>? foodId,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return IngredientMatchesCompanion(
+      id: id ?? this.id,
+      householdId: householdId ?? this.householdId,
+      ingredientString: ingredientString ?? this.ingredientString,
+      foodId: foodId ?? this.foodId,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (householdId.present) {
+      map['household_id'] = Variable<String>(householdId.value);
+    }
+    if (ingredientString.present) {
+      map['ingredient_string'] = Variable<String>(ingredientString.value);
+    }
+    if (foodId.present) {
+      map['food_id'] = Variable<String>(foodId.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('IngredientMatchesCompanion(')
+          ..write('id: $id, ')
+          ..write('householdId: $householdId, ')
+          ..write('ingredientString: $ingredientString, ')
+          ..write('foodId: $foodId, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $PendingWritesTable extends PendingWrites
     with TableInfo<$PendingWritesTable, PendingWriteRow> {
   @override
@@ -5678,6 +6060,8 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
     this,
   );
   late final $MacroTargetsTable macroTargets = $MacroTargetsTable(this);
+  late final $IngredientMatchesTable ingredientMatches =
+      $IngredientMatchesTable(this);
   late final $PendingWritesTable pendingWrites = $PendingWritesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -5693,6 +6077,7 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
     mealPlanDays,
     mealPlanEntries,
     macroTargets,
+    ingredientMatches,
     pendingWrites,
   ];
   @override
@@ -5731,6 +6116,13 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('meal_plan_entries', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'foods',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('ingredient_matches', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -7585,6 +7977,27 @@ final class $$FoodsTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$IngredientMatchesTable, List<IngredientMatchRow>>
+  _ingredientMatchesRefsTable(_$HearthDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.ingredientMatches,
+        aliasName: 'foods__id__ingredient_matches__food_id',
+      );
+
+  $$IngredientMatchesTableProcessedTableManager get ingredientMatchesRefs {
+    final manager = $$IngredientMatchesTableTableManager(
+      $_db,
+      $_db.ingredientMatches,
+    ).filter((f) => f.foodId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _ingredientMatchesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$FoodsTableFilterComposer
@@ -7667,6 +8080,31 @@ class $$FoodsTableFilterComposer
           }) => $$FoodServingOptionsTableFilterComposer(
             $db: $db,
             $table: $db.foodServingOptions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> ingredientMatchesRefs(
+    Expression<bool> Function($$IngredientMatchesTableFilterComposer f) f,
+  ) {
+    final $$IngredientMatchesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.ingredientMatches,
+      getReferencedColumn: (t) => t.foodId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$IngredientMatchesTableFilterComposer(
+            $db: $db,
+            $table: $db.ingredientMatches,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -7815,6 +8253,32 @@ class $$FoodsTableAnnotationComposer
         );
     return f(composer);
   }
+
+  Expression<T> ingredientMatchesRefs<T extends Object>(
+    Expression<T> Function($$IngredientMatchesTableAnnotationComposer a) f,
+  ) {
+    final $$IngredientMatchesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.ingredientMatches,
+          getReferencedColumn: (t) => t.foodId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$IngredientMatchesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.ingredientMatches,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$FoodsTableTableManager
@@ -7830,7 +8294,10 @@ class $$FoodsTableTableManager
           $$FoodsTableUpdateCompanionBuilder,
           (FoodRow, $$FoodsTableReferences),
           FoodRow,
-          PrefetchHooks Function({bool foodServingOptionsRefs})
+          PrefetchHooks Function({
+            bool foodServingOptionsRefs,
+            bool ingredientMatchesRefs,
+          })
         > {
   $$FoodsTableTableManager(_$HearthDatabase db, $FoodsTable table)
     : super(
@@ -7905,37 +8372,66 @@ class $$FoodsTableTableManager
                     (e.readTable(table), $$FoodsTableReferences(db, table, e)),
               )
               .toList(),
-          prefetchHooksCallback: ({foodServingOptionsRefs = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [
-                if (foodServingOptionsRefs) db.foodServingOptions,
-              ],
-              addJoins: null,
-              getPrefetchedDataCallback: (items) async {
-                return [
-                  if (foodServingOptionsRefs)
-                    await $_getPrefetchedData<
-                      FoodRow,
-                      $FoodsTable,
-                      FoodServingOptionRow
-                    >(
-                      currentTable: table,
-                      referencedTable: $$FoodsTableReferences
-                          ._foodServingOptionsRefsTable(db),
-                      managerFromTypedResult: (p0) => $$FoodsTableReferences(
-                        db,
-                        table,
-                        p0,
-                      ).foodServingOptionsRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.foodId == item.id),
-                      typedResults: items,
-                    ),
-                ];
+          prefetchHooksCallback:
+              ({
+                foodServingOptionsRefs = false,
+                ingredientMatchesRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (foodServingOptionsRefs) db.foodServingOptions,
+                    if (ingredientMatchesRefs) db.ingredientMatches,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (foodServingOptionsRefs)
+                        await $_getPrefetchedData<
+                          FoodRow,
+                          $FoodsTable,
+                          FoodServingOptionRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$FoodsTableReferences
+                              ._foodServingOptionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$FoodsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).foodServingOptionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.foodId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (ingredientMatchesRefs)
+                        await $_getPrefetchedData<
+                          FoodRow,
+                          $FoodsTable,
+                          IngredientMatchRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$FoodsTableReferences
+                              ._ingredientMatchesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$FoodsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).ingredientMatchesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.foodId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -7952,7 +8448,10 @@ typedef $$FoodsTableProcessedTableManager =
       $$FoodsTableUpdateCompanionBuilder,
       (FoodRow, $$FoodsTableReferences),
       FoodRow,
-      PrefetchHooks Function({bool foodServingOptionsRefs})
+      PrefetchHooks Function({
+        bool foodServingOptionsRefs,
+        bool ingredientMatchesRefs,
+      })
     >;
 typedef $$FoodServingOptionsTableCreateCompanionBuilder =
     FoodServingOptionsCompanion Function({
@@ -9415,6 +9914,339 @@ typedef $$MacroTargetsTableProcessedTableManager =
       MacroTargetRow,
       PrefetchHooks Function()
     >;
+typedef $$IngredientMatchesTableCreateCompanionBuilder =
+    IngredientMatchesCompanion Function({
+      required String id,
+      required String householdId,
+      required String ingredientString,
+      required String foodId,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$IngredientMatchesTableUpdateCompanionBuilder =
+    IngredientMatchesCompanion Function({
+      Value<String> id,
+      Value<String> householdId,
+      Value<String> ingredientString,
+      Value<String> foodId,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+final class $$IngredientMatchesTableReferences
+    extends
+        BaseReferences<
+          _$HearthDatabase,
+          $IngredientMatchesTable,
+          IngredientMatchRow
+        > {
+  $$IngredientMatchesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $FoodsTable _foodIdTable(_$HearthDatabase db) =>
+      db.foods.createAlias('ingredient_matches__food_id__foods__id');
+
+  $$FoodsTableProcessedTableManager get foodId {
+    final $_column = $_itemColumn<String>('food_id')!;
+
+    final manager = $$FoodsTableTableManager(
+      $_db,
+      $_db.foods,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_foodIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$IngredientMatchesTableFilterComposer
+    extends Composer<_$HearthDatabase, $IngredientMatchesTable> {
+  $$IngredientMatchesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get householdId => $composableBuilder(
+    column: $table.householdId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ingredientString => $composableBuilder(
+    column: $table.ingredientString,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$FoodsTableFilterComposer get foodId {
+    final $$FoodsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.foodId,
+      referencedTable: $db.foods,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FoodsTableFilterComposer(
+            $db: $db,
+            $table: $db.foods,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$IngredientMatchesTableOrderingComposer
+    extends Composer<_$HearthDatabase, $IngredientMatchesTable> {
+  $$IngredientMatchesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get householdId => $composableBuilder(
+    column: $table.householdId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ingredientString => $composableBuilder(
+    column: $table.ingredientString,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$FoodsTableOrderingComposer get foodId {
+    final $$FoodsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.foodId,
+      referencedTable: $db.foods,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FoodsTableOrderingComposer(
+            $db: $db,
+            $table: $db.foods,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$IngredientMatchesTableAnnotationComposer
+    extends Composer<_$HearthDatabase, $IngredientMatchesTable> {
+  $$IngredientMatchesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get householdId => $composableBuilder(
+    column: $table.householdId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get ingredientString => $composableBuilder(
+    column: $table.ingredientString,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$FoodsTableAnnotationComposer get foodId {
+    final $$FoodsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.foodId,
+      referencedTable: $db.foods,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FoodsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.foods,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$IngredientMatchesTableTableManager
+    extends
+        RootTableManager<
+          _$HearthDatabase,
+          $IngredientMatchesTable,
+          IngredientMatchRow,
+          $$IngredientMatchesTableFilterComposer,
+          $$IngredientMatchesTableOrderingComposer,
+          $$IngredientMatchesTableAnnotationComposer,
+          $$IngredientMatchesTableCreateCompanionBuilder,
+          $$IngredientMatchesTableUpdateCompanionBuilder,
+          (IngredientMatchRow, $$IngredientMatchesTableReferences),
+          IngredientMatchRow,
+          PrefetchHooks Function({bool foodId})
+        > {
+  $$IngredientMatchesTableTableManager(
+    _$HearthDatabase db,
+    $IngredientMatchesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$IngredientMatchesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$IngredientMatchesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$IngredientMatchesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> householdId = const Value.absent(),
+                Value<String> ingredientString = const Value.absent(),
+                Value<String> foodId = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => IngredientMatchesCompanion(
+                id: id,
+                householdId: householdId,
+                ingredientString: ingredientString,
+                foodId: foodId,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String householdId,
+                required String ingredientString,
+                required String foodId,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => IngredientMatchesCompanion.insert(
+                id: id,
+                householdId: householdId,
+                ingredientString: ingredientString,
+                foodId: foodId,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$IngredientMatchesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({foodId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (foodId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.foodId,
+                        referencedTable: $$IngredientMatchesTableReferences
+                            ._foodIdTable(db),
+                        referencedColumn: $$IngredientMatchesTableReferences
+                            ._foodIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$IngredientMatchesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$HearthDatabase,
+      $IngredientMatchesTable,
+      IngredientMatchRow,
+      $$IngredientMatchesTableFilterComposer,
+      $$IngredientMatchesTableOrderingComposer,
+      $$IngredientMatchesTableAnnotationComposer,
+      $$IngredientMatchesTableCreateCompanionBuilder,
+      $$IngredientMatchesTableUpdateCompanionBuilder,
+      (IngredientMatchRow, $$IngredientMatchesTableReferences),
+      IngredientMatchRow,
+      PrefetchHooks Function({bool foodId})
+    >;
 typedef $$PendingWritesTableCreateCompanionBuilder =
     PendingWritesCompanion Function({
       Value<int> sequence,
@@ -9696,6 +10528,8 @@ class $HearthDatabaseManager {
       $$MealPlanEntriesTableTableManager(_db, _db.mealPlanEntries);
   $$MacroTargetsTableTableManager get macroTargets =>
       $$MacroTargetsTableTableManager(_db, _db.macroTargets);
+  $$IngredientMatchesTableTableManager get ingredientMatches =>
+      $$IngredientMatchesTableTableManager(_db, _db.ingredientMatches);
   $$PendingWritesTableTableManager get pendingWrites =>
       $$PendingWritesTableTableManager(_db, _db.pendingWrites);
 }

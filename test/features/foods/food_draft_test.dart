@@ -129,6 +129,24 @@ void main() {
       expect(reopened.servings.single.kcal, '119');
     });
 
+    test('a zero macro reopens as an empty field, not a literal zero', () {
+      // Regression: reopening showed "0" in every unset macro field, so
+      // typing "250" into it produced "0250".
+      final Food original = draft(
+        servings: const <ServingDraft>[ServingDraft(amount: '100')],
+      ).toFood(idFactory: sequentialIds());
+
+      final ServingDraft reopened = FoodDraft.fromFood(original)
+          .servings
+          .single;
+      expect(reopened.kcal, isEmpty);
+      expect(reopened.protein, isEmpty);
+      expect(reopened.carbs, isEmpty);
+      expect(reopened.fat, isEmpty);
+      // The amount is still shown: it is required and meaningful.
+      expect(reopened.amount, '100');
+    });
+
     test('a full round trip preserves the servings exactly', () {
       final Food original = draft(
         servings: const <ServingDraft>[

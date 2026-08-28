@@ -221,3 +221,29 @@ class PendingWrites extends Table {
   IntColumn get attempts => integer().withDefault(const Constant(0))();
   TextColumn get lastError => text().nullable()();
 }
+
+/// A remembered ingredient-string to food mapping (spec §5.3).
+///
+/// Correcting a match is remembered so the same string never has to be fixed
+/// twice: once "evoo" has been pointed at olive oil, every future recipe line
+/// saying "evoo" resolves on its own.
+@DataClassName('IngredientMatchRow')
+class IngredientMatches extends Table {
+  TextColumn get id => text()();
+  TextColumn get householdId => text()();
+
+  /// The normalised ingredient string — the same key the density lookup and
+  /// consolidation use, so they all agree on what counts as "the same thing".
+  TextColumn get ingredientString => text()();
+  TextColumn get foodId =>
+      text().references(Foods, #id, onDelete: KeyAction.cascade)();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+
+  @override
+  List<Set<Column<Object>>> get uniqueKeys => <Set<Column<Object>>>[
+    <Column<Object>>{householdId, ingredientString},
+  ];
+}

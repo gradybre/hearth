@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/local/food_store.dart';
 import '../data/local/hearth_database.dart';
+import '../data/local/ingredient_match_store.dart';
 import '../data/local/pending_write_store.dart';
 import '../data/local/recipe_store.dart';
 import '../data/repositories/food_repository.dart';
@@ -100,3 +101,20 @@ final foodByIdProvider = FutureProvider.family<Food?, String>((
   ref.watch(foodLibraryProvider);
   return ref.watch(foodRepositoryProvider).byId(id);
 });
+
+final Provider<IngredientMatchStore> ingredientMatchStoreProvider =
+    Provider<IngredientMatchStore>(
+      (Ref ref) => IngredientMatchStore(ref.watch(databaseProvider)),
+    );
+
+/// Every remembered ingredient-string to food mapping for this household,
+/// keyed by normalised string (spec §5.3).
+final FutureProvider<Map<String, String>> rememberedMatchesProvider =
+    FutureProvider<Map<String, String>>((Ref ref) {
+      // Re-read when the food library changes, so a deleted food stops being
+      // suggested.
+      ref.watch(foodLibraryProvider);
+      return ref
+          .watch(ingredientMatchStoreProvider)
+          .allFor(ref.watch(currentHouseholdIdProvider));
+    });

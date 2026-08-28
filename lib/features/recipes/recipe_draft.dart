@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/parsing/direction_parser.dart';
 import '../../domain/parsing/ingredient_parser.dart';
+import '../../domain/text/text_normaliser.dart';
 
 /// Turns what the user typed into a [Recipe].
 ///
@@ -28,6 +29,7 @@ class RecipeDraft {
     this.notes,
     this.existingId,
     this.existingSectionId,
+    this.matches = const <String, String>{},
   });
 
   final String title;
@@ -46,6 +48,13 @@ class RecipeDraft {
   /// Reusing the section id on edit keeps ingredient rows pointing at a
   /// section that still exists.
   final String? existingSectionId;
+
+  /// Normalised ingredient name to food id.
+  ///
+  /// Keyed by name rather than by row index so a match survives the user
+  /// editing the text above it — retyping a quantity should not silently drop
+  /// the food you attached.
+  final Map<String, String> matches;
 
   bool get isEditing => existingId != null;
 
@@ -69,6 +78,23 @@ class RecipeDraft {
   /// The parsed steps, for the live preview.
   ParsedDirections get parsedDirections =>
       DirectionParser.parse(directionsText);
+
+  /// The food attached to an ingredient line, if any.
+  String? foodIdFor(String ingredientName) =>
+      matches[normaliseKey(ingredientName)];
+
+  /// Attaches a food to every line with this name.
+  RecipeDraft withMatch(String ingredientName, String? foodId) {
+    final String key = normaliseKey(ingredientName);
+    if (key.isEmpty) return this;
+    final Map<String, String> next = <String, String>{...matches};
+    if (foodId == null) {
+      next.remove(key);
+    } else {
+      next[key] = foodId;
+    }
+    return _copyWithMatches(next);
+  }
 
   /// Builds the recipe to save.
   ///
@@ -106,6 +132,7 @@ class RecipeDraft {
                 quantity: ingredients[i].quantity,
                 rawText: ingredients[i].raw,
                 prepNote: ingredients[i].prepNote,
+                foodId: foodIdFor(ingredients[i].name),
                 isOptional: ingredients[i].isOptional,
                 sortOrder: i,
               ),
@@ -149,6 +176,11 @@ class RecipeDraft {
       notes: recipe.notes,
       existingId: recipe.id,
       existingSectionId: section?.id,
+      matches: <String, String>{
+        for (final RecipeIngredient ingredient in recipe.allIngredients)
+          if (ingredient.foodId != null)
+            normaliseKey(ingredient.name): ingredient.foodId!,
+      },
     );
   }
 
@@ -174,5 +206,21 @@ class RecipeDraft {
     notes: notes ?? this.notes,
     existingId: existingId,
     existingSectionId: existingSectionId,
+    matches: matches,
+  );
+
+  RecipeDraft _copyWithMatches(Map<String, String> next) => RecipeDraft(
+    title: title,
+    servings: servings,
+    ingredientsText: ingredientsText,
+    directionsText: directionsText,
+    prepMinutes: prepMinutes,
+    cookMinutes: cookMinutes,
+    cuisine: cuisine,
+    tags: tags,
+    notes: notes,
+    existingId: existingId,
+    existingSectionId: existingSectionId,
+    matches: next,
   );
 }

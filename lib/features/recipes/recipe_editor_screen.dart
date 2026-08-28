@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
@@ -7,9 +8,15 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
 import '../../domain/format/quantity_format.dart';
+import '../../domain/models/food.dart';
+import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/parsing/direction_parser.dart';
 import '../../domain/parsing/ingredient_parser.dart';
+import '../../domain/recipes/ingredient_matcher.dart';
+import '../../domain/recipes/macro_calculator.dart';
+import '../../domain/text/text_normaliser.dart';
+import '../foods/food_picker.dart';
 import 'recipe_draft.dart';
 
 /// Create or edit a recipe (spec §5.2).
@@ -47,6 +54,13 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   String? _existingSectionId;
   bool _showErrors = false;
 
+  /// Normalised ingredient name to food id, mirroring [RecipeDraft.matches].
+  Map<String, String> _matches = <String, String>{};
+
+  /// Remembered matches already applied, so auto-apply runs once per string
+  /// and never fights a user who has just unmatched something.
+  final Set<String> _autoApplied = <String>{};
+
   @override
   void dispose() {
     for (final TextEditingController controller in <TextEditingController>[
@@ -65,6 +79,99 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     super.dispose();
   }
 
+  /// The household's foods, keyed by id, for macro calculation and row labels.
+  Map<String, Food> _foods = <String, Food>{};
+
+  /// Applies remembered matches to any line that has none.
+  ///
+  /// Only remembered matches are applied silently — they are decisions this
+  /// household already made. A best guess is offered in the picker instead of
+  /// being assumed, because a wrong macro is worse than a missing one
+  /// (spec §5.3).
+  void _autoApplyRemembered(Map<String, String> remembered) {
+    if (remembered.isEmpty) return;
+    final Map<String, String> next = <String, String>{..._matches};
+    bool changed = false;
+
+    for (final ParsedIngredient ingredient in _draft.parsedIngredients) {
+      final String key = normaliseKey(ingredient.name);
+      if (key.isEmpty || next.containsKey(key)) continue;
+      if (_autoApplied.contains(key)) continue;
+
+      final MatchSuggestion? suggestion = IngredientMatcher.suggest(
+        ingredientName: ingredient.name,
+        library: _foods.values.toList(growable: false),
+        remembered: remembered,
+      );
+      if (suggestion == null || !suggestion.isTrusted) continue;
+
+      next[key] = suggestion.foodId;
+      _autoApplied.add(key);
+      changed = true;
+    }
+
+    if (changed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _matches = next);
+      });
+    }
+  }
+
+  Future<void> _matchIngredient(ParsedIngredient ingredient) async {
+    final String key = normaliseKey(ingredient.name);
+    final String? current = _matches[key];
+
+    // Offer the best guess as the pre-selected option so the common case is
+    // one tap rather than a search.
+    final MatchSuggestion? suggestion = current != null
+        ? null
+        : IngredientMatcher.suggest(
+            ingredientName: ingredient.name,
+            library: _foods.values.toList(growable: false),
+          );
+
+    final String? chosen = await showFoodPicker(
+      context,
+      ingredientName: ingredient.name,
+      currentFoodId: current ?? suggestion?.foodId,
+    );
+    if (chosen == null || !mounted) return;
+
+    setState(() {
+      final Map<String, String> next = <String, String>{..._matches};
+      if (chosen == clearFoodSentinel) {
+        next.remove(key);
+        _autoApplied.remove(key);
+      } else {
+        next[key] = chosen;
+        // A deliberate choice supersedes any auto-apply for this string.
+        _autoApplied.add(key);
+      }
+      _matches = next;
+    });
+
+    // Remember it, so the same correction is never made twice (spec §5.3).
+    if (chosen != clearFoodSentinel) {
+      await ref
+          .read(ingredientMatchStoreProvider)
+          .remember(
+            householdId: ref.read(currentHouseholdIdProvider),
+            ingredientString: ingredient.name,
+            foodId: chosen,
+            id: const Uuid().v4(),
+            updatedAt: DateTime.now(),
+          );
+    } else {
+      await ref
+          .read(ingredientMatchStoreProvider)
+          .forget(
+            householdId: ref.read(currentHouseholdIdProvider),
+            ingredientString: ingredient.name,
+          );
+    }
+    ref.invalidate(rememberedMatchesProvider);
+  }
+
   RecipeDraft get _draft => RecipeDraft(
     title: _title.text,
     servings: double.tryParse(_servings.text.trim()) ?? 0,
@@ -81,6 +188,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     notes: _notes.text,
     existingId: _existingId,
     existingSectionId: _existingSectionId,
+    matches: _matches,
   );
 
   void _hydrate(Recipe recipe) {
@@ -98,6 +206,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     _notes.text = draft.notes ?? '';
     _existingId = draft.existingId;
     _existingSectionId = draft.existingSectionId;
+    _matches = draft.matches;
     _loaded = true;
   }
 
@@ -121,6 +230,15 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     final bool editing = widget.recipeId != null;
+
+    _foods = <String, Food>{
+      for (final Food food
+          in ref.watch(foodLibraryProvider).value ?? const <Food>[])
+        food.id: food,
+    };
+    _autoApplyRemembered(
+      ref.watch(rememberedMatchesProvider).value ?? const <String, String>{},
+    );
 
     if (editing && !_loaded) {
       final AsyncValue<Recipe?> existing = ref.watch(
@@ -233,7 +351,14 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
             ),
             if (draft.parsedIngredients.isNotEmpty) ...<Widget>[
               const SizedBox(height: HearthSpacing.md),
-              _IngredientPreview(ingredients: draft.parsedIngredients),
+              _IngredientPreview(
+                ingredients: draft.parsedIngredients,
+                foods: _foods,
+                draft: draft,
+                onMatch: _matchIngredient,
+              ),
+              const SizedBox(height: HearthSpacing.md),
+              _LiveMacros(draft: draft, foods: _foods),
             ],
             const SizedBox(height: HearthSpacing.xl),
             _Field(
@@ -345,15 +470,24 @@ class _Field extends StatelessWidget {
   }
 }
 
-/// Shows what the parser made of each ingredient line.
+/// Shows what the parser made of each ingredient line, and which food it is
+/// matched to.
 ///
-/// The point is that a misread quantity is caught here, by eye, rather than
-/// silently corrupting a macro total later (spec §5.3's review principle,
-/// applied to typing as well as to import).
+/// Two review jobs in one place: a misread quantity is caught by eye, and an
+/// unmatched ingredient is visible as a gap rather than silently contributing
+/// nothing to the macros (spec §5.3's review principle, applied to typing).
 class _IngredientPreview extends StatelessWidget {
-  const _IngredientPreview({required this.ingredients});
+  const _IngredientPreview({
+    required this.ingredients,
+    required this.foods,
+    required this.draft,
+    required this.onMatch,
+  });
 
   final List<ParsedIngredient> ingredients;
+  final Map<String, Food> foods;
+  final RecipeDraft draft;
+  final ValueChanged<ParsedIngredient> onMatch;
 
   @override
   Widget build(BuildContext context) {
@@ -366,28 +500,73 @@ class _IngredientPreview extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           for (final ParsedIngredient ingredient in ingredients)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: HearthSpacing.xxs),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  SizedBox(
-                    width: 88,
-                    child: Text(
-                      ingredient.quantity == null
-                          ? '—'
-                          : QuantityFormat.formatAsAuthored(
-                              ingredient.quantity!,
-                            ),
-                      style: text.ingredient.copyWith(
-                        color: ingredient.quantity == null
-                            ? colors.textMuted
-                            : colors.textPrimary,
-                      ),
-                    ),
+            _IngredientRow(
+              ingredient: ingredient,
+              food: foods[draft.foodIdFor(ingredient.name)],
+              onMatch: () => onMatch(ingredient),
+              colors: colors,
+              text: text,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IngredientRow extends StatelessWidget {
+  const _IngredientRow({
+    required this.ingredient,
+    required this.food,
+    required this.onMatch,
+    required this.colors,
+    required this.text,
+  });
+
+  final ParsedIngredient ingredient;
+  final Food? food;
+  final VoidCallback onMatch;
+  final HearthColors colors;
+  final HearthTextStyles text;
+
+  @override
+  Widget build(BuildContext context) {
+    // Optional lines are excluded from macros on purpose, so they are not a
+    // gap and must not be nagged about (spec §5.2).
+    final bool needsMatch = food == null && !ingredient.isOptional;
+
+    return Semantics(
+      button: true,
+      label:
+          '${ingredient.quantity == null ? '' : '${QuantityFormat.formatAsAuthored(ingredient.quantity!)} '}'
+          '${ingredient.name}. '
+          '${food == null ? (ingredient.isOptional ? 'Optional, not counted.' : 'Not matched to a food.') : 'Matched to ${food!.name}.'}',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onMatch,
+        borderRadius: BorderRadius.circular(HearthRadius.sm),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: HearthSpacing.xs),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              SizedBox(
+                width: 88,
+                child: Text(
+                  ingredient.quantity == null
+                      ? '—'
+                      : QuantityFormat.formatAsAuthored(ingredient.quantity!),
+                  style: text.ingredient.copyWith(
+                    color: ingredient.quantity == null
+                        ? colors.textMuted
+                        : colors.textPrimary,
                   ),
-                  Expanded(
-                    child: Text.rich(
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text.rich(
                       TextSpan(
                         children: <InlineSpan>[
                           TextSpan(
@@ -411,6 +590,96 @@ class _IngredientPreview extends StatelessWidget {
                         ],
                       ),
                     ),
+                    const SizedBox(height: HearthSpacing.xxs),
+                    Row(
+                      children: <Widget>[
+                        Icon(
+                          food != null
+                              ? Icons.link
+                              : needsMatch
+                              ? Icons.link_off
+                              : Icons.remove,
+                          size: 13,
+                          color: food != null
+                              ? colors.accent
+                              : colors.textMuted,
+                        ),
+                        const SizedBox(width: HearthSpacing.xs),
+                        Flexible(
+                          child: Text(
+                            food != null
+                                ? food!.name
+                                : ingredient.isOptional
+                                ? 'not counted'
+                                : 'tap to match a food',
+                            style: text.metadata.copyWith(
+                              color: food != null
+                                  ? colors.textSecondary
+                                  : colors.textMuted,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Per-serving and whole-recipe macros, updating as ingredients change
+/// (spec §5.2's live nutrition).
+class _LiveMacros extends StatelessWidget {
+  const _LiveMacros({required this.draft, required this.foods});
+
+  final RecipeDraft draft;
+  final Map<String, Food> foods;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final HearthTextStyles text = context.text;
+
+    final Recipe provisional = draft.toRecipe(idFactory: () => 'preview');
+    final RecipeMacros macros = MacroCalculator.forRecipe(
+      provisional,
+      foods: foods,
+    );
+    final Macros perServing = macros.perServing;
+
+    return _PreviewCard(
+      title: 'Nutrition per serving',
+      // Missing data flags, never blocks (spec §5.3).
+      note: macros.isIncomplete
+          ? '${macros.incompleteIngredients.length} ingredient'
+                '${macros.incompleteIngredients.length == 1 ? '' : 's'} '
+                'not matched yet — not counted below.'
+          : null,
+      child: Row(
+        children: <Widget>[
+          for (final (String label, double value) in <(String, double)>[
+            ('kcal', perServing.kcal),
+            ('protein', perServing.proteinG),
+            ('carbs', perServing.carbG),
+            ('fat', perServing.fatG),
+          ])
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    value.round().toString(),
+                    style: text.ingredient.copyWith(fontSize: 20),
+                  ),
+                  Text(
+                    label,
+                    style: text.metadata.copyWith(color: colors.textMuted),
                   ),
                 ],
               ),

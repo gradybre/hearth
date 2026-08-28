@@ -126,10 +126,10 @@ class FoodDraft {
               (option.amount.preferredUnit ??
                       Units.canonicalFor(option.amount.kind))
                   .id,
-          kcal: _trimNumber(option.macros.kcal),
-          protein: _trimNumber(option.macros.proteinG),
-          carbs: _trimNumber(option.macros.carbG),
-          fat: _trimNumber(option.macros.fatG),
+          kcal: _macroText(option.macros.kcal),
+          protein: _macroText(option.macros.proteinG),
+          carbs: _macroText(option.macros.carbG),
+          fat: _macroText(option.macros.fatG),
         ),
     ],
   );
@@ -193,4 +193,12 @@ class FoodDraft {
 
   static String _trimNumber(double value) =>
       value == value.roundToDouble() ? value.round().toString() : '$value';
+
+  /// A zero macro reopens as an empty field, not a literal "0".
+  ///
+  /// Showing "0" made the field look filled in, and typing into it produced
+  /// "0250" rather than "250" — the digits landed beside a value the user
+  /// never entered. Empty also lets the hint do its job.
+  static String _macroText(double value) =>
+      value == 0 ? '' : _trimNumber(value);
 }

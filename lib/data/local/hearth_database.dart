@@ -25,6 +25,7 @@ part 'hearth_database.g.dart';
     MealPlanDays,
     MealPlanEntries,
     MacroTargets,
+    IngredientMatches,
     PendingWrites,
   ],
 )
@@ -35,10 +36,17 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
+    onUpgrade: (Migrator m, int from, int to) async {
+      // v2 adds remembered ingredient matches (spec §5.3). Nothing else
+      // changes, so the existing cache is kept rather than rebuilt.
+      if (from < 2) {
+        await m.createTable(ingredientMatches);
+      }
+    },
     beforeOpen: (OpeningDetails details) async {
       // Drift leaves foreign keys off by default; without this the cascade
       // deletes declared on the child tables silently do nothing.
