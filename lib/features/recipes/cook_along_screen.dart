@@ -56,74 +56,56 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
   @override
   void dispose() {
     _tick?.cancel();
-    // Both have to happen however the screen closes, including a back
-    // gesture: a phone left awake in a pocket is a flat battery by evening,
-    // and an alert for a timer nobody is watching is just noise.
+    // The screen is handed back however cook mode closes, including a back
+    // gesture — a phone left awake in a pocket is a flat battery by evening.
+    //
+    // The timers are deliberately NOT cancelled here. Leaving the recipe to
+    // glance at the planner must not throw away the braise you have had on for
+    // an hour; they live in [cookTimersProvider] and outlive this screen.
     _screen.release();
-    _alerts.cancelAll();
     super.dispose();
   }
 
   Future<void> _startTimer(RecipeStep step) async {
-    final DateTime now = DateTime.now();
-    final CookTimer timer = CookTimer(
-      id: const Uuid().v4(),
-      label: _shortLabel(step.text),
-      duration: Duration(seconds: step.timerSeconds!),
-      startedAt: now,
-      stepNumber: step.stepNumber,
-    );
-
-    setState(() => _session = _session.addTimer(timer));
-
-    final TimerAlerts alerts = _alerts;
-    // Asked at the stove, when the first timer starts — a permission prompt
-    // on first launch is noise the user cannot yet evaluate.
+    // Asked at the stove, when the first timer starts — a permission prompt on
+    // first launch is noise the user cannot yet evaluate.
     if (!_askedPermission) {
       _askedPermission = true;
-      await alerts.requestPermission();
+      await _alerts.requestPermission();
     }
-    await alerts.schedule(
-      id: timer.id,
-      title: timer.label,
-      body: 'Your ${_duration(timer.duration)} timer is up.',
-      at: timer.firesAt()!,
-    );
+
+    await ref
+        .read(cookTimersProvider.notifier)
+        .start(
+          CookTimer(
+            id: const Uuid().v4(),
+            label: _shortLabel(step.text),
+            duration: Duration(seconds: step.timerSeconds!),
+            startedAt: DateTime.now(),
+            stepNumber: step.stepNumber,
+          ),
+          recipeTitle: widget.recipe.title,
+        );
   }
 
-  Future<void> _dismissTimer(CookTimer timer) async {
-    setState(() => _session = _session.removeTimer(timer.id));
-    await _alerts.cancel(timer.id);
-  }
+  Future<void> _dismissTimer(CookTimer timer) =>
+      ref.read(cookTimersProvider.notifier).dismiss(timer.id);
 
-  Future<void> _togglePause(CookTimer timer) async {
-    final DateTime now = DateTime.now();
-    final CookTimer updated = timer.isPaused
-        ? timer.resumedAt(now)
-        : timer.pausedAt(now);
-    setState(() => _session = _session.replaceTimer(updated));
-
-    final TimerAlerts alerts = _alerts;
-    // The scheduled alert is rewritten, not left stale: a paused timer that
-    // still goes off is worse than no timer at all.
-    await alerts.cancel(timer.id);
-    final DateTime? fires = updated.firesAt();
-    if (fires != null) {
-      await alerts.schedule(
-        id: updated.id,
-        title: updated.label,
-        body: 'Your ${_duration(updated.duration)} timer is up.',
-        at: fires,
-      );
-    }
-  }
+  Future<void> _togglePause(CookTimer timer) =>
+      ref.read(cookTimersProvider.notifier).togglePause(timer);
 
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     final RecipeStep? step = _session.step;
     final DateTime now = DateTime.now();
-    final List<CookTimer> ringing = _session.ringingAt(now);
+    // Timers come from the app-wide store, not from the session: they are
+    // shared with the rest of the app and survive this screen closing.
+    final List<CookTimer> timers =
+        ref.watch(cookTimersProvider).value ?? const <CookTimer>[];
+    final List<CookTimer> ringing = _session
+        .copyWithTimers(timers)
+        .ringingAt(now);
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -178,9 +160,9 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                           : null,
                     ),
                   ),
-                  if (_session.timers.isNotEmpty)
+                  if (timers.isNotEmpty)
                     _TimerTray(
-                      timers: _session.timers,
+                      timers: timers,
                       now: now,
                       onPause: _togglePause,
                       onDismiss: _dismissTimer,
@@ -598,7 +580,11 @@ class _TimerTray extends StatelessWidget {
                   IconButton(
                     icon: Icon(timer.isPaused ? Icons.play_arrow : Icons.pause),
                     tooltip: timer.isPaused ? 'Resume timer' : 'Pause timer',
-                    onPressed: () => onPause(timer),
+                    // Pausing something already finished does nothing; the
+                    // only thing left to do with it is stop it.
+                    onPressed: !timer.isPaused && timer.isDoneAt(now)
+                        ? null
+                        : () => onPause(timer),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),

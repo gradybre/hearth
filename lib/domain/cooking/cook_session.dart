@@ -182,6 +182,13 @@ class CookSession {
             b.overdueBy(now).compareTo(a.overdueBy(now)),
       );
 
+  /// The same session reading a different set of timers.
+  ///
+  /// Timers are owned app-wide rather than by the session, because they outlive
+  /// the screen; this lets the session's ringing logic still be asked about
+  /// them without the session having to own them.
+  CookSession copyWithTimers(List<CookTimer> timers) => _copy(timers: timers);
+
   CookSession _copy({
     int? currentStep,
     Set<String>? checkedStepIds,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../features/recipes/timer_bar.dart';
 import '../theme/hearth_colors.dart';
 import '../theme/hearth_spacing.dart';
 import '../theme/hearth_theme.dart';
@@ -32,7 +33,16 @@ class AppShell extends StatelessWidget {
     return Scaffold(
       backgroundColor: context.colors.background,
       body: wide ? _wideLayout(context) : child,
-      bottomNavigationBar: wide ? null : _bottomTabs(context),
+      // The timer bar sits above the tabs rather than inside a screen: a
+      // running timer belongs to the app, not to the recipe you happen to be
+      // looking at (spec §5.2). It renders nothing when nothing is on.
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const CookTimerBar(),
+          if (!wide) _bottomTabs(context),
+        ],
+      ),
     );
   }
 

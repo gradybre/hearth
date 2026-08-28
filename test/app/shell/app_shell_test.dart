@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/app/providers.dart';
 import 'package:hearth/app/shell/app_shell.dart';
 import 'package:hearth/app/shell/destinations.dart';
 import 'package:hearth/app/theme/hearth_theme.dart';
 
 import '../../support/app_harness.dart';
+import '../../support/fake_kitchen.dart';
 
 Future<void> _pumpAt(WidgetTester tester, Size size) =>
     pumpHearthApp(tester, size: size);
@@ -96,12 +99,17 @@ void main() {
       final SemanticsHandle handle = tester.ensureSemantics();
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: HearthTheme.light(),
-          home: AppShell(
-            currentIndex: 0,
-            onDestinationSelected: (_) {},
-            child: const Center(child: Text('content')),
+        // The shell hosts the app-wide cook timer bar, so it needs a scope
+        // even pumped on its own.
+        ProviderScope(
+          overrides: [cookTimersProvider.overrideWith(FakeCookTimers.new)],
+          child: MaterialApp(
+            theme: HearthTheme.light(),
+            home: AppShell(
+              currentIndex: 0,
+              onDestinationSelected: (_) {},
+              child: const Center(child: Text('content')),
+            ),
           ),
         ),
       );

@@ -6440,6 +6440,504 @@ class IngredientMatchesCompanion extends UpdateCompanion<IngredientMatchRow> {
   }
 }
 
+class $CookTimersTable extends CookTimers
+    with TableInfo<$CookTimersTable, CookTimerRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CookTimersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _durationSecondsMeta = const VerificationMeta(
+    'durationSeconds',
+  );
+  @override
+  late final GeneratedColumn<int> durationSeconds = GeneratedColumn<int>(
+    'duration_seconds',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _startedAtMeta = const VerificationMeta(
+    'startedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> startedAt = GeneratedColumn<DateTime>(
+    'started_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stepNumberMeta = const VerificationMeta(
+    'stepNumber',
+  );
+  @override
+  late final GeneratedColumn<int> stepNumber = GeneratedColumn<int>(
+    'step_number',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _elapsedWhenPausedSecondsMeta =
+      const VerificationMeta('elapsedWhenPausedSeconds');
+  @override
+  late final GeneratedColumn<int> elapsedWhenPausedSeconds =
+      GeneratedColumn<int>(
+        'elapsed_when_paused_seconds',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _recipeTitleMeta = const VerificationMeta(
+    'recipeTitle',
+  );
+  @override
+  late final GeneratedColumn<String> recipeTitle = GeneratedColumn<String>(
+    'recipe_title',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    label,
+    durationSeconds,
+    startedAt,
+    stepNumber,
+    elapsedWhenPausedSeconds,
+    recipeTitle,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cook_timers';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CookTimerRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_labelMeta);
+    }
+    if (data.containsKey('duration_seconds')) {
+      context.handle(
+        _durationSecondsMeta,
+        durationSeconds.isAcceptableOrUnknown(
+          data['duration_seconds']!,
+          _durationSecondsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_durationSecondsMeta);
+    }
+    if (data.containsKey('started_at')) {
+      context.handle(
+        _startedAtMeta,
+        startedAt.isAcceptableOrUnknown(data['started_at']!, _startedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_startedAtMeta);
+    }
+    if (data.containsKey('step_number')) {
+      context.handle(
+        _stepNumberMeta,
+        stepNumber.isAcceptableOrUnknown(data['step_number']!, _stepNumberMeta),
+      );
+    }
+    if (data.containsKey('elapsed_when_paused_seconds')) {
+      context.handle(
+        _elapsedWhenPausedSecondsMeta,
+        elapsedWhenPausedSeconds.isAcceptableOrUnknown(
+          data['elapsed_when_paused_seconds']!,
+          _elapsedWhenPausedSecondsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('recipe_title')) {
+      context.handle(
+        _recipeTitleMeta,
+        recipeTitle.isAcceptableOrUnknown(
+          data['recipe_title']!,
+          _recipeTitleMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CookTimerRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CookTimerRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      )!,
+      durationSeconds: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}duration_seconds'],
+      )!,
+      startedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}started_at'],
+      )!,
+      stepNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}step_number'],
+      ),
+      elapsedWhenPausedSeconds: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}elapsed_when_paused_seconds'],
+      ),
+      recipeTitle: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recipe_title'],
+      ),
+    );
+  }
+
+  @override
+  $CookTimersTable createAlias(String alias) {
+    return $CookTimersTable(attachedDatabase, alias);
+  }
+}
+
+class CookTimerRow extends DataClass implements Insertable<CookTimerRow> {
+  final String id;
+  final String label;
+  final int durationSeconds;
+  final DateTime startedAt;
+  final int? stepNumber;
+
+  /// Elapsed seconds at the moment it was paused; null while running.
+  final int? elapsedWhenPausedSeconds;
+
+  /// What was being cooked, for a timer seen from outside cook mode.
+  final String? recipeTitle;
+  const CookTimerRow({
+    required this.id,
+    required this.label,
+    required this.durationSeconds,
+    required this.startedAt,
+    this.stepNumber,
+    this.elapsedWhenPausedSeconds,
+    this.recipeTitle,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['label'] = Variable<String>(label);
+    map['duration_seconds'] = Variable<int>(durationSeconds);
+    map['started_at'] = Variable<DateTime>(startedAt);
+    if (!nullToAbsent || stepNumber != null) {
+      map['step_number'] = Variable<int>(stepNumber);
+    }
+    if (!nullToAbsent || elapsedWhenPausedSeconds != null) {
+      map['elapsed_when_paused_seconds'] = Variable<int>(
+        elapsedWhenPausedSeconds,
+      );
+    }
+    if (!nullToAbsent || recipeTitle != null) {
+      map['recipe_title'] = Variable<String>(recipeTitle);
+    }
+    return map;
+  }
+
+  CookTimersCompanion toCompanion(bool nullToAbsent) {
+    return CookTimersCompanion(
+      id: Value(id),
+      label: Value(label),
+      durationSeconds: Value(durationSeconds),
+      startedAt: Value(startedAt),
+      stepNumber: stepNumber == null && nullToAbsent
+          ? const Value.absent()
+          : Value(stepNumber),
+      elapsedWhenPausedSeconds: elapsedWhenPausedSeconds == null && nullToAbsent
+          ? const Value.absent()
+          : Value(elapsedWhenPausedSeconds),
+      recipeTitle: recipeTitle == null && nullToAbsent
+          ? const Value.absent()
+          : Value(recipeTitle),
+    );
+  }
+
+  factory CookTimerRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CookTimerRow(
+      id: serializer.fromJson<String>(json['id']),
+      label: serializer.fromJson<String>(json['label']),
+      durationSeconds: serializer.fromJson<int>(json['durationSeconds']),
+      startedAt: serializer.fromJson<DateTime>(json['startedAt']),
+      stepNumber: serializer.fromJson<int?>(json['stepNumber']),
+      elapsedWhenPausedSeconds: serializer.fromJson<int?>(
+        json['elapsedWhenPausedSeconds'],
+      ),
+      recipeTitle: serializer.fromJson<String?>(json['recipeTitle']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'label': serializer.toJson<String>(label),
+      'durationSeconds': serializer.toJson<int>(durationSeconds),
+      'startedAt': serializer.toJson<DateTime>(startedAt),
+      'stepNumber': serializer.toJson<int?>(stepNumber),
+      'elapsedWhenPausedSeconds': serializer.toJson<int?>(
+        elapsedWhenPausedSeconds,
+      ),
+      'recipeTitle': serializer.toJson<String?>(recipeTitle),
+    };
+  }
+
+  CookTimerRow copyWith({
+    String? id,
+    String? label,
+    int? durationSeconds,
+    DateTime? startedAt,
+    Value<int?> stepNumber = const Value.absent(),
+    Value<int?> elapsedWhenPausedSeconds = const Value.absent(),
+    Value<String?> recipeTitle = const Value.absent(),
+  }) => CookTimerRow(
+    id: id ?? this.id,
+    label: label ?? this.label,
+    durationSeconds: durationSeconds ?? this.durationSeconds,
+    startedAt: startedAt ?? this.startedAt,
+    stepNumber: stepNumber.present ? stepNumber.value : this.stepNumber,
+    elapsedWhenPausedSeconds: elapsedWhenPausedSeconds.present
+        ? elapsedWhenPausedSeconds.value
+        : this.elapsedWhenPausedSeconds,
+    recipeTitle: recipeTitle.present ? recipeTitle.value : this.recipeTitle,
+  );
+  CookTimerRow copyWithCompanion(CookTimersCompanion data) {
+    return CookTimerRow(
+      id: data.id.present ? data.id.value : this.id,
+      label: data.label.present ? data.label.value : this.label,
+      durationSeconds: data.durationSeconds.present
+          ? data.durationSeconds.value
+          : this.durationSeconds,
+      startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
+      stepNumber: data.stepNumber.present
+          ? data.stepNumber.value
+          : this.stepNumber,
+      elapsedWhenPausedSeconds: data.elapsedWhenPausedSeconds.present
+          ? data.elapsedWhenPausedSeconds.value
+          : this.elapsedWhenPausedSeconds,
+      recipeTitle: data.recipeTitle.present
+          ? data.recipeTitle.value
+          : this.recipeTitle,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CookTimerRow(')
+          ..write('id: $id, ')
+          ..write('label: $label, ')
+          ..write('durationSeconds: $durationSeconds, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('stepNumber: $stepNumber, ')
+          ..write('elapsedWhenPausedSeconds: $elapsedWhenPausedSeconds, ')
+          ..write('recipeTitle: $recipeTitle')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    label,
+    durationSeconds,
+    startedAt,
+    stepNumber,
+    elapsedWhenPausedSeconds,
+    recipeTitle,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CookTimerRow &&
+          other.id == this.id &&
+          other.label == this.label &&
+          other.durationSeconds == this.durationSeconds &&
+          other.startedAt == this.startedAt &&
+          other.stepNumber == this.stepNumber &&
+          other.elapsedWhenPausedSeconds == this.elapsedWhenPausedSeconds &&
+          other.recipeTitle == this.recipeTitle);
+}
+
+class CookTimersCompanion extends UpdateCompanion<CookTimerRow> {
+  final Value<String> id;
+  final Value<String> label;
+  final Value<int> durationSeconds;
+  final Value<DateTime> startedAt;
+  final Value<int?> stepNumber;
+  final Value<int?> elapsedWhenPausedSeconds;
+  final Value<String?> recipeTitle;
+  final Value<int> rowid;
+  const CookTimersCompanion({
+    this.id = const Value.absent(),
+    this.label = const Value.absent(),
+    this.durationSeconds = const Value.absent(),
+    this.startedAt = const Value.absent(),
+    this.stepNumber = const Value.absent(),
+    this.elapsedWhenPausedSeconds = const Value.absent(),
+    this.recipeTitle = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CookTimersCompanion.insert({
+    required String id,
+    required String label,
+    required int durationSeconds,
+    required DateTime startedAt,
+    this.stepNumber = const Value.absent(),
+    this.elapsedWhenPausedSeconds = const Value.absent(),
+    this.recipeTitle = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       label = Value(label),
+       durationSeconds = Value(durationSeconds),
+       startedAt = Value(startedAt);
+  static Insertable<CookTimerRow> custom({
+    Expression<String>? id,
+    Expression<String>? label,
+    Expression<int>? durationSeconds,
+    Expression<DateTime>? startedAt,
+    Expression<int>? stepNumber,
+    Expression<int>? elapsedWhenPausedSeconds,
+    Expression<String>? recipeTitle,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (label != null) 'label': label,
+      if (durationSeconds != null) 'duration_seconds': durationSeconds,
+      if (startedAt != null) 'started_at': startedAt,
+      if (stepNumber != null) 'step_number': stepNumber,
+      if (elapsedWhenPausedSeconds != null)
+        'elapsed_when_paused_seconds': elapsedWhenPausedSeconds,
+      if (recipeTitle != null) 'recipe_title': recipeTitle,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CookTimersCompanion copyWith({
+    Value<String>? id,
+    Value<String>? label,
+    Value<int>? durationSeconds,
+    Value<DateTime>? startedAt,
+    Value<int?>? stepNumber,
+    Value<int?>? elapsedWhenPausedSeconds,
+    Value<String?>? recipeTitle,
+    Value<int>? rowid,
+  }) {
+    return CookTimersCompanion(
+      id: id ?? this.id,
+      label: label ?? this.label,
+      durationSeconds: durationSeconds ?? this.durationSeconds,
+      startedAt: startedAt ?? this.startedAt,
+      stepNumber: stepNumber ?? this.stepNumber,
+      elapsedWhenPausedSeconds:
+          elapsedWhenPausedSeconds ?? this.elapsedWhenPausedSeconds,
+      recipeTitle: recipeTitle ?? this.recipeTitle,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (durationSeconds.present) {
+      map['duration_seconds'] = Variable<int>(durationSeconds.value);
+    }
+    if (startedAt.present) {
+      map['started_at'] = Variable<DateTime>(startedAt.value);
+    }
+    if (stepNumber.present) {
+      map['step_number'] = Variable<int>(stepNumber.value);
+    }
+    if (elapsedWhenPausedSeconds.present) {
+      map['elapsed_when_paused_seconds'] = Variable<int>(
+        elapsedWhenPausedSeconds.value,
+      );
+    }
+    if (recipeTitle.present) {
+      map['recipe_title'] = Variable<String>(recipeTitle.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CookTimersCompanion(')
+          ..write('id: $id, ')
+          ..write('label: $label, ')
+          ..write('durationSeconds: $durationSeconds, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('stepNumber: $stepNumber, ')
+          ..write('elapsedWhenPausedSeconds: $elapsedWhenPausedSeconds, ')
+          ..write('recipeTitle: $recipeTitle, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $PendingWritesTable extends PendingWrites
     with TableInfo<$PendingWritesTable, PendingWriteRow> {
   @override
@@ -6983,6 +7481,7 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
   late final $MacroTargetsTable macroTargets = $MacroTargetsTable(this);
   late final $IngredientMatchesTable ingredientMatches =
       $IngredientMatchesTable(this);
+  late final $CookTimersTable cookTimers = $CookTimersTable(this);
   late final $PendingWritesTable pendingWrites = $PendingWritesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -7002,6 +7501,7 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
     mealPlanEntries,
     macroTargets,
     ingredientMatches,
+    cookTimers,
     pendingWrites,
   ];
   @override
@@ -12360,6 +12860,250 @@ typedef $$IngredientMatchesTableProcessedTableManager =
       IngredientMatchRow,
       PrefetchHooks Function({bool foodId})
     >;
+typedef $$CookTimersTableCreateCompanionBuilder = CookTimersCompanion Function({
+  required String id,
+  required String label,
+  required int durationSeconds,
+  required DateTime startedAt,
+  Value<int?> stepNumber,
+  Value<int?> elapsedWhenPausedSeconds,
+  Value<String?> recipeTitle,
+  Value<int> rowid,
+});
+typedef $$CookTimersTableUpdateCompanionBuilder = CookTimersCompanion Function({
+  Value<String> id,
+  Value<String> label,
+  Value<int> durationSeconds,
+  Value<DateTime> startedAt,
+  Value<int?> stepNumber,
+  Value<int?> elapsedWhenPausedSeconds,
+  Value<String?> recipeTitle,
+  Value<int> rowid,
+});
+
+class $$CookTimersTableFilterComposer
+    extends Composer<_$HearthDatabase, $CookTimersTable> {
+  $$CookTimersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get durationSeconds => $composableBuilder(
+    column: $table.durationSeconds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stepNumber => $composableBuilder(
+    column: $table.stepNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get elapsedWhenPausedSeconds => $composableBuilder(
+    column: $table.elapsedWhenPausedSeconds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get recipeTitle => $composableBuilder(
+    column: $table.recipeTitle,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CookTimersTableOrderingComposer
+    extends Composer<_$HearthDatabase, $CookTimersTable> {
+  $$CookTimersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get durationSeconds => $composableBuilder(
+    column: $table.durationSeconds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get stepNumber => $composableBuilder(
+    column: $table.stepNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get elapsedWhenPausedSeconds => $composableBuilder(
+    column: $table.elapsedWhenPausedSeconds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get recipeTitle => $composableBuilder(
+    column: $table.recipeTitle,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CookTimersTableAnnotationComposer
+    extends Composer<_$HearthDatabase, $CookTimersTable> {
+  $$CookTimersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<int> get durationSeconds => $composableBuilder(
+    column: $table.durationSeconds,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get startedAt =>
+      $composableBuilder(column: $table.startedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get stepNumber => $composableBuilder(
+    column: $table.stepNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get elapsedWhenPausedSeconds => $composableBuilder(
+    column: $table.elapsedWhenPausedSeconds,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get recipeTitle => $composableBuilder(
+    column: $table.recipeTitle,
+    builder: (column) => column,
+  );
+}
+
+class $$CookTimersTableTableManager
+    extends
+        RootTableManager<
+          _$HearthDatabase,
+          $CookTimersTable,
+          CookTimerRow,
+          $$CookTimersTableFilterComposer,
+          $$CookTimersTableOrderingComposer,
+          $$CookTimersTableAnnotationComposer,
+          $$CookTimersTableCreateCompanionBuilder,
+          $$CookTimersTableUpdateCompanionBuilder,
+          (
+            CookTimerRow,
+            BaseReferences<_$HearthDatabase, $CookTimersTable, CookTimerRow>,
+          ),
+          CookTimerRow,
+          PrefetchHooks Function()
+        > {
+  $$CookTimersTableTableManager(_$HearthDatabase db, $CookTimersTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CookTimersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CookTimersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CookTimersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> label = const Value.absent(),
+                Value<int> durationSeconds = const Value.absent(),
+                Value<DateTime> startedAt = const Value.absent(),
+                Value<int?> stepNumber = const Value.absent(),
+                Value<int?> elapsedWhenPausedSeconds = const Value.absent(),
+                Value<String?> recipeTitle = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CookTimersCompanion(
+                id: id,
+                label: label,
+                durationSeconds: durationSeconds,
+                startedAt: startedAt,
+                stepNumber: stepNumber,
+                elapsedWhenPausedSeconds: elapsedWhenPausedSeconds,
+                recipeTitle: recipeTitle,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String label,
+                required int durationSeconds,
+                required DateTime startedAt,
+                Value<int?> stepNumber = const Value.absent(),
+                Value<int?> elapsedWhenPausedSeconds = const Value.absent(),
+                Value<String?> recipeTitle = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CookTimersCompanion.insert(
+                id: id,
+                label: label,
+                durationSeconds: durationSeconds,
+                startedAt: startedAt,
+                stepNumber: stepNumber,
+                elapsedWhenPausedSeconds: elapsedWhenPausedSeconds,
+                recipeTitle: recipeTitle,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CookTimersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$HearthDatabase,
+      $CookTimersTable,
+      CookTimerRow,
+      $$CookTimersTableFilterComposer,
+      $$CookTimersTableOrderingComposer,
+      $$CookTimersTableAnnotationComposer,
+      $$CookTimersTableCreateCompanionBuilder,
+      $$CookTimersTableUpdateCompanionBuilder,
+      (
+        CookTimerRow,
+        BaseReferences<_$HearthDatabase, $CookTimersTable, CookTimerRow>,
+      ),
+      CookTimerRow,
+      PrefetchHooks Function()
+    >;
 typedef $$PendingWritesTableCreateCompanionBuilder =
     PendingWritesCompanion Function({
       Value<int> sequence,
@@ -12649,6 +13393,8 @@ class $HearthDatabaseManager {
       $$MacroTargetsTableTableManager(_db, _db.macroTargets);
   $$IngredientMatchesTableTableManager get ingredientMatches =>
       $$IngredientMatchesTableTableManager(_db, _db.ingredientMatches);
+  $$CookTimersTableTableManager get cookTimers =>
+      $$CookTimersTableTableManager(_db, _db.cookTimers);
   $$PendingWritesTableTableManager get pendingWrites =>
       $$PendingWritesTableTableManager(_db, _db.pendingWrites);
 }

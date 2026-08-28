@@ -14,6 +14,7 @@ import 'collections_sheet.dart';
 import 'cook_along_screen.dart';
 import 'recipe_library_screen.dart';
 import 'scale_control.dart';
+import 'timer_bar.dart';
 
 /// Reading a recipe (spec §5.2).
 ///
@@ -58,6 +59,10 @@ class RecipeDetailScreen extends ConsumerWidget {
             ? const Center(child: Text('That recipe no longer exists.'))
             : _RecipeBody(recipe: loaded),
       ),
+      // The recipe screen is pushed above the shell, so it does not get the
+      // shell's timer bar. Without this, opening a recipe mid-cook is the one
+      // place a running timer would drop out of sight.
+      bottomNavigationBar: const CookTimerBar(),
       floatingActionButton: recipe.value == null
           ? null
           : recipe.value!.allSteps.isEmpty

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/adapters/kitchen_devices.dart';
 import '../data/adapters/platform_kitchen_devices.dart';
 import '../data/local/collection_store.dart';
+import '../data/local/cook_timer_store.dart';
 import '../data/local/food_store.dart';
 import '../data/local/hearth_database.dart';
 import '../data/local/ingredient_match_store.dart';
@@ -13,6 +14,7 @@ import '../data/repositories/collection_repository.dart';
 import '../data/repositories/food_repository.dart';
 import '../data/repositories/plan_repository.dart';
 import '../data/repositories/recipe_repository.dart';
+import '../domain/cooking/cook_session.dart';
 import '../domain/models/food.dart';
 import '../domain/models/macros.dart';
 import '../domain/models/recipe.dart';
@@ -22,6 +24,7 @@ import '../domain/planning/recent_log.dart';
 import '../domain/planning/week.dart';
 import '../domain/recipes/macro_calculator.dart';
 import '../domain/recipes/recipe_query.dart';
+import 'cook_timers.dart';
 
 /// The app's object graph.
 ///
@@ -359,4 +362,16 @@ final Provider<ScreenKeeper> screenKeeperProvider = Provider<ScreenKeeper>(
 /// Cook-timer alerts that outlive the app being backgrounded.
 final Provider<TimerAlerts> timerAlertsProvider = Provider<TimerAlerts>(
   (Ref ref) => PlatformTimerAlerts(),
+);
+
+final Provider<CookTimerStore> cookTimerStoreProvider =
+    Provider<CookTimerStore>(
+      (Ref ref) => CookTimerStore(ref.watch(databaseProvider)),
+    );
+
+/// Running cook timers, app-wide and persisted — see [CookTimersNotifier] for
+/// why they do not live in the cook-along screen.
+final AsyncNotifierProvider<CookTimersNotifier, List<CookTimer>>
+cookTimersProvider = AsyncNotifierProvider<CookTimersNotifier, List<CookTimer>>(
+  CookTimersNotifier.new,
 );

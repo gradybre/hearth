@@ -292,3 +292,30 @@ class RecipeCollections extends Table {
     recipeId,
   };
 }
+
+/// A cook timer, kept across app launches (spec §5.2).
+///
+/// Local-only and never synced: a timer belongs to the pot on *this* stove, and
+/// pushing it to a partner's phone would be someone else's oven alarm going off
+/// in their pocket.
+///
+/// Stored as a start instant plus a duration rather than a remaining count, so
+/// the time left is derived on read. A stored countdown would be wrong by
+/// however long the app was closed — which, for a braise, is the whole point.
+@DataClassName('CookTimerRow')
+class CookTimers extends Table {
+  TextColumn get id => text()();
+  TextColumn get label => text()();
+  IntColumn get durationSeconds => integer()();
+  DateTimeColumn get startedAt => dateTime()();
+  IntColumn get stepNumber => integer().nullable()();
+
+  /// Elapsed seconds at the moment it was paused; null while running.
+  IntColumn get elapsedWhenPausedSeconds => integer().nullable()();
+
+  /// What was being cooked, for a timer seen from outside cook mode.
+  TextColumn get recipeTitle => text().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}

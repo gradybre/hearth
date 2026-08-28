@@ -3,55 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/app/theme/hearth_theme.dart';
-import 'package:hearth/data/adapters/kitchen_devices.dart';
+import 'package:hearth/domain/cooking/cook_session.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/units/unit.dart';
 import 'package:hearth/features/recipes/cook_along_screen.dart';
 
+import '../../support/fake_kitchen.dart';
 import '../../support/fixtures.dart';
-
-/// Records what cook mode asked of the platform.
-class FakeScreenKeeper implements ScreenKeeper {
-  int awake = 0;
-  int released = 0;
-
-  @override
-  Future<void> keepAwake() async => awake++;
-
-  @override
-  Future<void> release() async => released++;
-}
-
-class FakeTimerAlerts implements TimerAlerts {
-  final List<String> scheduled = <String>[];
-  final List<String> cancelled = <String>[];
-  final List<DateTime> firesAt = <DateTime>[];
-  int permissionRequests = 0;
-  int cancelAlls = 0;
-
-  @override
-  Future<bool> requestPermission() async {
-    permissionRequests++;
-    return true;
-  }
-
-  @override
-  Future<void> schedule({
-    required String id,
-    required String title,
-    required String body,
-    required DateTime at,
-  }) async {
-    scheduled.add(id);
-    firesAt.add(at);
-  }
-
-  @override
-  Future<void> cancel(String id) async => cancelled.add(id);
-
-  @override
-  Future<void> cancelAll() async => cancelAlls++;
-}
 
 Recipe aCookableRecipe() => aRecipe(
   title: 'Braised short ribs',
@@ -68,6 +26,7 @@ Recipe aCookableRecipe() => aRecipe(
 Future<(FakeScreenKeeper, FakeTimerAlerts)> pumpCookAlong(
   WidgetTester tester, {
   Recipe? recipe,
+  List<CookTimer> timers = const <CookTimer>[],
 }) async {
   final FakeScreenKeeper keeper = FakeScreenKeeper();
   final FakeTimerAlerts alerts = FakeTimerAlerts();
@@ -77,6 +36,7 @@ Future<(FakeScreenKeeper, FakeTimerAlerts)> pumpCookAlong(
       overrides: [
         screenKeeperProvider.overrideWithValue(keeper),
         timerAlertsProvider.overrideWithValue(alerts),
+        cookTimersProvider.overrideWith(() => FakeCookTimers(timers)),
       ],
       child: MaterialApp(
         theme: HearthTheme.light(),
@@ -103,17 +63,35 @@ void main() {
     ) async {
       // Including a back gesture: a phone left awake in a pocket is a flat
       // battery by evening.
-      final (FakeScreenKeeper keeper, FakeTimerAlerts alerts) =
-          await pumpCookAlong(tester);
+      final (FakeScreenKeeper keeper, _) = await pumpCookAlong(tester);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
 
       expect(keeper.released, 1);
+    });
+
+    testWidgets('but leaving cook mode does not cancel the timers', (
+      WidgetTester tester,
+    ) async {
+      // The braise keeps cooking whether or not you are looking at the recipe.
+      // Cancelling on the way out was the bug: back out to check the planner
+      // and an hour of cooking silently stopped being tracked.
+      final (_, FakeTimerAlerts alerts) = await pumpCookAlong(tester);
+      await tester.tap(find.text('Season the ribs generously'));
+      await tester.pump();
+      await tester.tap(find.text('Start 10 min timer'));
+      await tester.pump();
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+
+      expect(alerts.cancelAlls, 0);
+      expect(alerts.cancelled, isEmpty);
       expect(
-        alerts.cancelAlls,
-        1,
-        reason: 'an alert for a session nobody is in is just noise',
+        alerts.scheduled,
+        hasLength(1),
+        reason: 'the scheduled alert must still be standing',
       );
     });
   });
@@ -358,6 +336,34 @@ void main() {
       // point is that neither reads "Cover and cook for approx".
       expect(find.text('Cover and cook for approx. 3 hr.'), findsNWidgets(2));
       expect(find.text('Cover and cook for approx'), findsNothing);
+    });
+  });
+
+  group('a finished timer', () {
+    testWidgets('cannot be paused — only stopped', (WidgetTester tester) async {
+      // Seeded already overdue rather than pumped forward: the screen reads
+      // the real wall clock, which a widget test cannot move.
+      await pumpCookAlong(
+        tester,
+        timers: <CookTimer>[
+          CookTimer(
+            id: 'blanch',
+            label: 'Blanch',
+            duration: const Duration(seconds: 10),
+            startedAt: DateTime.now().subtract(const Duration(minutes: 1)),
+          ),
+        ],
+      );
+      await tester.pump();
+
+      final IconButton pause = tester.widget<IconButton>(
+        find.ancestor(
+          of: find.byIcon(Icons.pause),
+          matching: find.byType(IconButton),
+        ),
+      );
+      expect(pause.onPressed, isNull);
+      expect(find.byTooltip('Stop timer'), findsOneWidget);
     });
   });
 }

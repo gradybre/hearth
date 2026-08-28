@@ -5,11 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/data/local/collection_store.dart';
 import 'package:hearth/data/local/hearth_database.dart';
+import 'package:hearth/domain/cooking/cook_session.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/recent_log.dart';
 import 'package:hearth/main.dart';
+
+import 'fake_kitchen.dart';
 
 /// Pumps the real app for a widget test.
 ///
@@ -33,6 +36,7 @@ Future<HearthDatabase> pumpHearthApp(
   List<Food> foods = const <Food>[],
   List<MealPlanEntry> entries = const <MealPlanEntry>[],
   Set<String> favorites = const <String>{},
+  List<CookTimer> timers = const <CookTimer>[],
   List<CollectionSummary> collections = const <CollectionSummary>[],
 }) async {
   tester.view.physicalSize = size;
@@ -73,6 +77,8 @@ Future<HearthDatabase> pumpHearthApp(
         collectionsProvider.overrideWith(
           (Ref ref) => Stream<List<CollectionSummary>>.value(collections),
         ),
+        // The shell's timer bar watches this, and it is DB-backed.
+        cookTimersProvider.overrideWith(() => FakeCookTimers(timers)),
         recipeCollectionsProvider.overrideWith(
           (Ref ref) =>
               Stream<Map<String, Set<String>>>.value(<String, Set<String>>{

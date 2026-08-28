@@ -29,6 +29,7 @@ part 'hearth_database.g.dart';
     MealPlanEntries,
     MacroTargets,
     IngredientMatches,
+    CookTimers,
     PendingWrites,
   ],
 )
@@ -39,7 +40,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -55,6 +56,11 @@ class HearthDatabase extends _$HearthDatabase {
         await m.createTable(recipeFavorites);
         await m.createTable(collections);
         await m.createTable(recipeCollections);
+      }
+      // v4 keeps cook timers across launches (spec §5.2), so a braise started
+      // before the app was closed is still counting when it comes back.
+      if (from < 4) {
+        await m.createTable(cookTimers);
       }
     },
     beforeOpen: (OpeningDetails details) async {
