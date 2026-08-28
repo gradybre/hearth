@@ -30,6 +30,7 @@ part 'hearth_database.g.dart';
     MacroTargets,
     IngredientMatches,
     CookTimers,
+    Preferences,
     PendingWrites,
   ],
 )
@@ -40,7 +41,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -61,6 +62,10 @@ class HearthDatabase extends _$HearthDatabase {
       // before the app was closed is still counting when it comes back.
       if (from < 4) {
         await m.createTable(cookTimers);
+      }
+      // v5 remembers small device-local view choices (spec §5.2).
+      if (from < 5) {
+        await m.createTable(preferences);
       }
     },
     beforeOpen: (OpeningDetails details) async {

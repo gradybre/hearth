@@ -108,3 +108,22 @@ class FakeCookTimers extends CookTimersNotifier {
     state = AsyncValue<List<CookTimer>>.data(_timers);
   }
 }
+
+/// The cook-along view preference, held in memory.
+///
+/// Widget tests run under fake async and cannot drive sqlite; persistence is
+/// covered against a real database in preference_store_test.dart.
+class FakeCookStepView extends CookStepViewNotifier {
+  FakeCookStepView([this._showAll = false]);
+
+  bool _showAll;
+
+  @override
+  Future<bool> build() async => _showAll;
+
+  @override
+  Future<void> toggle() async {
+    _showAll = !_showAll;
+    state = AsyncValue<bool>.data(_showAll);
+  }
+}

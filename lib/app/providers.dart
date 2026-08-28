@@ -9,6 +9,7 @@ import '../data/local/hearth_database.dart';
 import '../data/local/ingredient_match_store.dart';
 import '../data/local/pending_write_store.dart';
 import '../data/local/plan_store.dart';
+import '../data/local/preference_store.dart';
 import '../data/local/recipe_store.dart';
 import '../data/repositories/collection_repository.dart';
 import '../data/repositories/food_repository.dart';
@@ -375,3 +376,30 @@ final AsyncNotifierProvider<CookTimersNotifier, List<CookTimer>>
 cookTimersProvider = AsyncNotifierProvider<CookTimersNotifier, List<CookTimer>>(
   CookTimersNotifier.new,
 );
+
+final Provider<PreferenceStore> preferenceStoreProvider =
+    Provider<PreferenceStore>(
+      (Ref ref) => PreferenceStore(ref.watch(databaseProvider)),
+    );
+
+/// Whether cook-along shows every step at once.
+///
+/// Remembered across launches: a cook who prefers the whole list should not
+/// have to say so every time they open a recipe.
+final AsyncNotifierProvider<CookStepViewNotifier, bool>
+cookShowAllStepsProvider = AsyncNotifierProvider<CookStepViewNotifier, bool>(
+  CookStepViewNotifier.new,
+);
+
+class CookStepViewNotifier extends AsyncNotifier<bool> {
+  PreferenceStore get _store => ref.read(preferenceStoreProvider);
+
+  @override
+  Future<bool> build() => _store.readFlag(PreferenceStore.cookShowAllSteps);
+
+  Future<void> toggle() async {
+    final bool wanted = !(state.value ?? false);
+    state = AsyncValue<bool>.data(wanted);
+    await _store.writeFlag(PreferenceStore.cookShowAllSteps, value: wanted);
+  }
+}

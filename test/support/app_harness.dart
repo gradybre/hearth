@@ -79,6 +79,7 @@ Future<HearthDatabase> pumpHearthApp(
         ),
         // The shell's timer bar watches this, and it is DB-backed.
         cookTimersProvider.overrideWith(() => FakeCookTimers(timers)),
+        cookShowAllStepsProvider.overrideWith(FakeCookStepView.new),
         recipeCollectionsProvider.overrideWith(
           (Ref ref) =>
               Stream<Map<String, Set<String>>>.value(<String, Set<String>>{

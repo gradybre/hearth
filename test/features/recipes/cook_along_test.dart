@@ -27,6 +27,7 @@ Future<(FakeScreenKeeper, FakeTimerAlerts)> pumpCookAlong(
   WidgetTester tester, {
   Recipe? recipe,
   List<CookTimer> timers = const <CookTimer>[],
+  bool showAllSteps = false,
 }) async {
   final FakeScreenKeeper keeper = FakeScreenKeeper();
   final FakeTimerAlerts alerts = FakeTimerAlerts();
@@ -37,6 +38,9 @@ Future<(FakeScreenKeeper, FakeTimerAlerts)> pumpCookAlong(
         screenKeeperProvider.overrideWithValue(keeper),
         timerAlertsProvider.overrideWithValue(alerts),
         cookTimersProvider.overrideWith(() => FakeCookTimers(timers)),
+        cookShowAllStepsProvider.overrideWith(
+          () => FakeCookStepView(showAllSteps),
+        ),
       ],
       child: MaterialApp(
         theme: HearthTheme.light(),
@@ -444,37 +448,52 @@ void main() {
       expect(find.widgetWithText(OutlinedButton, 'Back'), findsNothing);
     });
 
-    testWidgets('ticking a step off does not jump to it', (
+    testWidgets('tapping anywhere on a row ticks that step off', (
       WidgetTester tester,
     ) async {
-      // The check is its own target precisely so that scanning the list and
-      // marking something done are two different actions.
-      await pumpCookAlong(tester);
-      await showList(tester);
-
-      await tester.tap(find.byTooltip('Mark done').last);
-      await tester.pump();
-
-      expect(find.text('Step 1 of 3  ·  1 done'), findsOneWidget);
-      expect(
-        find.byTooltip('One step at a time'),
-        findsOneWidget,
-        reason: 'still in the list, not thrown back into the card',
-      );
-    });
-
-    testWidgets('tapping a step cooks from there', (WidgetTester tester) async {
       await pumpCookAlong(tester);
       await showList(tester);
 
       await tester.tap(find.textContaining('Serve over polenta'));
       await tester.pump();
 
-      expect(find.text('Step 3 of 3'), findsOneWidget);
+      expect(find.text('Step 1 of 3  ·  1 done'), findsOneWidget);
+    });
+
+    testWidgets('and tapping it again un-ticks it', (
+      WidgetTester tester,
+    ) async {
+      await pumpCookAlong(tester);
+      await showList(tester);
+
+      await tester.tap(find.textContaining('Serve over polenta'));
+      await tester.pump();
+      await tester.tap(find.textContaining('Serve over polenta'));
+      await tester.pump();
+
+      expect(find.text('Step 1 of 3'), findsOneWidget);
+    });
+
+    testWidgets('a row never navigates — the toggle is the only way across', (
+      WidgetTester tester,
+    ) async {
+      // A tap used to mean "check" on the circle and "go there" on the rest of
+      // the row, so what it did depended on where it landed.
+      await pumpCookAlong(tester);
+      await showList(tester);
+
+      await tester.tap(find.textContaining('Serve over polenta'));
+      await tester.pump();
+
       expect(
-        find.byTooltip('All steps'),
+        find.byTooltip('One step at a time'),
         findsOneWidget,
-        reason: 'the list is how you reach a step, not somewhere to stay',
+        reason: 'still in the list',
+      );
+      expect(
+        find.text('Step 1 of 3  ·  1 done'),
+        findsOneWidget,
+        reason: 'and still on the step it was on',
       );
     });
 
@@ -504,9 +523,10 @@ void main() {
         matchesSemantics(
           isSelected: true,
           hasSelectedState: true,
-          isButton: true,
+          hasCheckedState: true,
+          isChecked: false,
           hasTapAction: true,
-          label: 'Step 1. Season the ribs generously. Tap to cook from here.',
+          label: 'Step 1. Season the ribs generously. Current step.',
         ),
       );
       handle.dispose();
@@ -534,6 +554,19 @@ void main() {
       await tester.pump();
 
       expect(find.text('Step 2 of 3  ·  1 done'), findsOneWidget);
+    });
+  });
+
+  group('the view choice is remembered', () {
+    testWidgets('cook-along opens in whichever view was last used', (
+      WidgetTester tester,
+    ) async {
+      // A cook who wants the whole list should not have to say so every time
+      // they open a recipe.
+      await pumpCookAlong(tester, showAllSteps: true);
+
+      expect(find.textContaining('Sear until browned'), findsOneWidget);
+      expect(find.byTooltip('One step at a time'), findsOneWidget);
     });
   });
 }

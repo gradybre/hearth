@@ -319,3 +319,18 @@ class CookTimers extends Table {
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
+
+/// Small local preferences — how the app is set up on *this* device.
+///
+/// Key/value rather than a column per setting: these are device-local view
+/// choices, not household data, and adding one should not mean a migration.
+/// Nothing here is synced; which view you last used in cook-along is not a
+/// fact about the household.
+@DataClassName('PreferenceRow')
+class Preferences extends Table {
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{key};
+}

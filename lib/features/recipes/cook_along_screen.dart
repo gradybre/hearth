@@ -35,13 +35,6 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
   Timer? _tick;
   bool _askedPermission = false;
 
-  /// Whether every step is on screen at once, rather than one in focus.
-  ///
-  /// Two different jobs: the card is for cooking, the list is for scanning
-  /// ahead and seeing what is left. Session-local and not remembered — which
-  /// one you want depends on the moment, not on a preference.
-  bool _showAllSteps = false;
-
   // Read once in initState and held, not read from `ref` on the way out:
   // `ref` is unsafe once the widget is being unmounted, and dispose is exactly
   // where the screen has to be handed back. Eagerly, not `late` — a lazy field
@@ -104,6 +97,11 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
+    // Two different jobs: the card is for cooking, the list is for scanning
+    // ahead and seeing what is left. Remembered across launches — a cook who
+    // wants the whole list should not have to say so every time.
+    final bool showAllSteps =
+        ref.watch(cookShowAllStepsProvider).value ?? false;
     final RecipeStep? step = _session.step;
     final DateTime now = DateTime.now();
     // Timers come from the app-wide store, not from the session: they are
@@ -130,12 +128,16 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
               // A "1" in a box against a numbered list: the two icons say
               // one-at-a-time and all-of-them without a word. An empty
               // rectangle said nothing at all.
-              _showAllSteps
+              showAllSteps
                   ? Icons.looks_one_outlined
                   : Icons.format_list_numbered,
             ),
-            tooltip: _showAllSteps ? 'One step at a time' : 'All steps',
-            onPressed: () => setState(() => _showAllSteps = !_showAllSteps),
+            tooltip: showAllSteps ? 'One step at a time' : 'All steps',
+            // The only way between the two views. Rows used to double as a
+            // way back into the card, which made a tap mean two things
+            // depending on where it landed.
+            onPressed: () =>
+                ref.read(cookShowAllStepsProvider.notifier).toggle(),
           ),
           IconButton(
             icon: const Icon(Icons.list_alt_outlined),
@@ -167,20 +169,17 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                     ),
                   _Progress(session: _session),
                   Expanded(
-                    child: _showAllSteps
+                    child: showAllSteps
                         ? _StepList(
                             session: _session,
+                            // Anywhere on the row ticks the step off. Nothing
+                            // in the list navigates: the toggle above is the
+                            // only way between the two views, so a tap here
+                            // always means the same thing.
                             onCheck: (RecipeStep s) => setState(
                               () =>
                                   _session = _session.toggle(s, advance: false),
                             ),
-                            // Tapping a step takes you to it and drops back
-                            // into cooking — the list is how you get to the
-                            // step you want, not somewhere to stay.
-                            onOpen: (int index) => setState(() {
-                              _session = _session.goTo(index);
-                              _showAllSteps = false;
-                            }),
                             onStartTimer: _startTimer,
                           )
                         : _StepCard(
@@ -204,7 +203,7 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                       onDismiss: _dismissTimer,
                     ),
                   // Back and Next mean nothing when every step is on screen.
-                  if (!_showAllSteps)
+                  if (!showAllSteps)
                     _Controls(
                       session: _session,
                       onBack: () =>
@@ -303,13 +302,11 @@ class _StepList extends StatelessWidget {
   const _StepList({
     required this.session,
     required this.onCheck,
-    required this.onOpen,
     required this.onStartTimer,
   });
 
   final CookSession session;
   final ValueChanged<RecipeStep> onCheck;
-  final ValueChanged<int> onOpen;
   final ValueChanged<RecipeStep> onStartTimer;
 
   @override
@@ -328,7 +325,6 @@ class _StepList extends StatelessWidget {
         isChecked: session.isChecked(steps[index]),
         isCurrent: index == session.currentStep,
         onCheck: () => onCheck(steps[index]),
-        onOpen: () => onOpen(index),
         onStartTimer: steps[index].hasTimer
             ? () => onStartTimer(steps[index])
             : null,
@@ -343,7 +339,6 @@ class _StepListRow extends StatelessWidget {
     required this.isChecked,
     required this.isCurrent,
     required this.onCheck,
-    required this.onOpen,
     this.onStartTimer,
   });
 
@@ -351,7 +346,6 @@ class _StepListRow extends StatelessWidget {
   final bool isChecked;
   final bool isCurrent;
   final VoidCallback onCheck;
-  final VoidCallback onOpen;
   final VoidCallback? onStartTimer;
 
   @override
@@ -361,18 +355,20 @@ class _StepListRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
       child: Semantics(
-        button: true,
+        // A checkbox, not a button: the whole row does one thing, and that is
+        // what it should announce itself as.
+        checked: isChecked,
         selected: isCurrent,
         label:
-            'Step ${step.stepNumber}. ${step.text}. '
-            '${isChecked ? 'Done. ' : ''}Tap to cook from here.',
-        onTap: onOpen,
+            'Step ${step.stepNumber}. ${step.text}.'
+            '${isCurrent ? ' Current step.' : ''}',
+        onTap: onCheck,
         excludeSemantics: true,
         child: Material(
           color: isCurrent ? colors.surfaceSunken : colors.surface,
           borderRadius: BorderRadius.circular(HearthRadius.md),
           child: InkWell(
-            onTap: onOpen,
+            onTap: onCheck,
             borderRadius: BorderRadius.circular(HearthRadius.md),
             child: Container(
               decoration: BoxDecoration(
@@ -388,17 +384,20 @@ class _StepListRow extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  // Its own target, so ticking a step off does not mean
-                  // jumping to it first.
-                  IconButton(
-                    icon: Icon(
+                  // Shows the state; it is not its own target. The row is one
+                  // control, and a button inside it would swallow taps that
+                  // landed on the icon and pass the rest through.
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: HearthSpacing.sm,
+                      vertical: HearthSpacing.sm,
+                    ),
+                    child: Icon(
                       isChecked
                           ? Icons.check_circle
                           : Icons.radio_button_unchecked,
                       color: isChecked ? colors.accent : colors.textMuted,
                     ),
-                    tooltip: isChecked ? 'Not done yet' : 'Mark done',
-                    onPressed: onCheck,
                   ),
                   const SizedBox(width: HearthSpacing.xs),
                   Expanded(
