@@ -129,6 +129,11 @@ class RecipeSection {
   final List<RecipeIngredient> ingredients;
   final List<RecipeStep> steps;
 
+  /// This section's steps in reading order.
+  List<RecipeStep> get orderedSteps => <RecipeStep>[
+    ...steps,
+  ]..sort((RecipeStep a, RecipeStep b) => a.stepNumber.compareTo(b.stepNumber));
+
   bool get isDefault => name == Recipe.defaultSectionName;
 
   RecipeSection copyWith({
@@ -199,6 +204,14 @@ class Recipe {
     (null, final Duration c) => c,
     (final Duration p, final Duration c) => p + c,
   };
+
+  /// Whether this recipe is really grouped, or is one transparent default.
+  ///
+  /// A single unnamed "Main" is how every simple recipe is stored; it must
+  /// never render a header, or an ordinary recipe would look organised into
+  /// groups it never asked for (spec §5.2).
+  bool get isGrouped =>
+      sections.length > 1 || sections.any((RecipeSection s) => !s.isDefault);
 
   /// Sections in display order.
   List<RecipeSection> get orderedSections => <RecipeSection>[...sections]

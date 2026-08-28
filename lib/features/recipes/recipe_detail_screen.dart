@@ -145,26 +145,42 @@ class _RecipeBodyState extends State<_RecipeBody> {
             ),
           ],
           const SizedBox(height: HearthSpacing.xl),
-          for (final RecipeSection section
-              in recipe.orderedSections) ...<Widget>[
-            // A single default section is visually transparent: a simple
-            // recipe never has to know sections exist (spec §5.2).
-            if (!section.isDefault || recipe.sections.length > 1) ...<Widget>[
+          // A grouped recipe reads the way a cookbook writes one: each group
+          // carries its own ingredients *and* its own method, rather than a
+          // grouped shopping list followed by an undifferentiated wall of
+          // steps (spec §5.2).
+          //
+          // An ungrouped recipe is unchanged — ingredients, then Directions —
+          // because a single default section is visually transparent and must
+          // never make a simple recipe look organised.
+          if (recipe.isGrouped)
+            for (final RecipeSection section
+                in recipe.orderedSections) ...<Widget>[
               Text(section.name, style: text.sectionHeader),
               const SizedBox(height: HearthSpacing.md),
-            ],
-            for (final RecipeIngredient ingredient in section.ingredients)
+              for (final RecipeIngredient ingredient in section.ingredients)
+                _IngredientRow(ingredient: ingredient),
+              if (section.steps.isNotEmpty) ...<Widget>[
+                const SizedBox(height: HearthSpacing.md),
+                for (final RecipeStep step in section.orderedSteps)
+                  _StepRow(step: step),
+              ],
+              const SizedBox(height: HearthSpacing.xl),
+            ]
+          else ...<Widget>[
+            for (final RecipeIngredient ingredient in recipe.allIngredients)
               _IngredientRow(ingredient: ingredient),
+            if (recipe.allSteps.isNotEmpty) ...<Widget>[
+              const SizedBox(height: HearthSpacing.xl),
+              Text('Directions', style: text.sectionHeader),
+              const SizedBox(height: HearthSpacing.md),
+              for (final RecipeStep step in recipe.allSteps)
+                _StepRow(step: step),
+            ],
           ],
           if (scaled != null && scaled.hasWarnings) ...<Widget>[
             const SizedBox(height: HearthSpacing.lg),
             ScalingNotes(warnings: scaled.warnings),
-          ],
-          if (recipe.allSteps.isNotEmpty) ...<Widget>[
-            const SizedBox(height: HearthSpacing.xl),
-            Text('Directions', style: text.sectionHeader),
-            const SizedBox(height: HearthSpacing.md),
-            for (final RecipeStep step in recipe.allSteps) _StepRow(step: step),
           ],
         ],
       ),

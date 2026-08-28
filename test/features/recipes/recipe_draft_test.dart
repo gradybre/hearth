@@ -18,11 +18,15 @@ RecipeDraft draft({
   int? cookMinutes,
   String? cuisine,
   List<String> tags = const <String>[],
+  List<DraftSection>? sections,
 }) => RecipeDraft(
   title: title,
   servings: servings,
-  ingredientsText: ingredients,
-  directionsText: directions,
+  sections:
+      sections ??
+      <DraftSection>[
+        DraftSection(ingredientsText: ingredients, directionsText: directions),
+      ],
   prepMinutes: prepMinutes,
   cookMinutes: cookMinutes,
   cuisine: cuisine,
@@ -147,7 +151,7 @@ void main() {
       final RecipeDraft reopened = RecipeDraft.fromRecipe(original);
 
       expect(
-        reopened.ingredientsText,
+        reopened.sections.single.ingredientsText,
         '2 tbsp olive oil\n3 cloves garlic, minced',
       );
     });
@@ -156,7 +160,10 @@ void main() {
       final Recipe original = draft().toRecipe(idFactory: sequentialIds());
       final RecipeDraft reopened = RecipeDraft.fromRecipe(original);
 
-      expect(reopened.directionsText, startsWith('1. Season the ribs'));
+      expect(
+        reopened.sections.single.directionsText,
+        startsWith('1. Season the ribs'),
+      );
       // Re-parsing numbered text must not re-split it (the parser transcribes
       // existing structure), so a round trip is stable.
       expect(
@@ -200,6 +207,143 @@ void main() {
       final List<RecipeStep> steps = recipe.allSteps;
       expect(steps.first.hasTimer, isFalse);
       expect(steps.last.timerSeconds, 10800);
+    });
+  });
+
+  group('component groups (spec §5.2)', () {
+    RecipeDraft grouped() => draft(
+      sections: const <DraftSection>[
+        DraftSection(
+          name: 'Sauce',
+          ingredientsText: '1 cup passata\n2 tbsp olive oil',
+          directionsText: 'Simmer the passata\nSeason it',
+        ),
+        DraftSection(
+          name: 'Main',
+          ingredientsText: '500 g rigatoni',
+          directionsText: 'Boil the pasta\nToss it through',
+        ),
+      ],
+    );
+
+    test('each section keeps its own ingredients and steps', () {
+      final Recipe recipe = grouped().toRecipe(idFactory: sequentialIds());
+
+      expect(recipe.orderedSections.map((RecipeSection s) => s.name), <String>[
+        'Sauce',
+        'Main',
+      ]);
+      expect(recipe.orderedSections.first.ingredients, hasLength(2));
+      expect(recipe.orderedSections.last.ingredients, hasLength(1));
+    });
+
+    test('steps are numbered straight through, not restarted per group', () {
+      // A cook counting steps counts the whole method — "step 3" has to mean
+      // one thing.
+      final Recipe recipe = grouped().toRecipe(idFactory: sequentialIds());
+
+      expect(recipe.allSteps.map((RecipeStep s) => s.stepNumber), <int>[
+        1,
+        2,
+        3,
+        4,
+      ]);
+      expect(recipe.allSteps.last.text, 'Toss it through');
+    });
+
+    test('ingredients belong to the section they were typed in', () {
+      final Recipe recipe = grouped().toRecipe(idFactory: sequentialIds());
+      final RecipeSection sauce = recipe.orderedSections.first;
+
+      expect(
+        sauce.ingredients.every(
+          (RecipeIngredient i) => i.sectionId == sauce.id,
+        ),
+        isTrue,
+      );
+    });
+
+    test('the whole recipe still flattens for nutrition and shopping', () {
+      // Grouped is for cooking; flattened is what the macros are computed on.
+      final Recipe recipe = grouped().toRecipe(idFactory: sequentialIds());
+      expect(recipe.allIngredients, hasLength(3));
+    });
+
+    test('an untouched section left behind is dropped, not saved', () {
+      // "Add a section" tapped and thought better of should leave no trace.
+      final Recipe recipe = draft(
+        sections: const <DraftSection>[
+          DraftSection(ingredientsText: '2 tbsp olive oil'),
+          DraftSection(),
+        ],
+      ).toRecipe(idFactory: sequentialIds());
+
+      expect(recipe.sections, hasLength(1));
+    });
+
+    test('a recipe is never left with no sections at all', () {
+      final Recipe recipe = draft(
+        sections: const <DraftSection>[DraftSection()],
+      ).toRecipe(idFactory: sequentialIds());
+
+      expect(recipe.sections, hasLength(1));
+      expect(recipe.sections.single.name, Recipe.defaultSectionName);
+    });
+
+    test('an unnamed section stores as the transparent default', () {
+      final Recipe recipe = draft().toRecipe(idFactory: sequentialIds());
+      expect(recipe.sections.single.isDefault, isTrue);
+    });
+
+    test('a grouped recipe reopens grouped, with its names', () {
+      final Recipe saved = grouped().toRecipe(idFactory: sequentialIds());
+      final RecipeDraft reopened = RecipeDraft.fromRecipe(saved);
+
+      expect(reopened.sections.map((DraftSection s) => s.name), <String>[
+        'Sauce',
+        'Main',
+      ]);
+      expect(reopened.sections.first.ingredientsText, contains('passata'));
+      expect(reopened.hasSections, isTrue);
+    });
+
+    test('an ungrouped recipe reopens with no section name to explain', () {
+      // The user never typed "Main"; showing it back would be putting words
+      // in their mouth.
+      final Recipe saved = draft().toRecipe(idFactory: sequentialIds());
+      final RecipeDraft reopened = RecipeDraft.fromRecipe(saved);
+
+      expect(reopened.sections.single.name, isEmpty);
+      expect(reopened.hasSections, isFalse);
+    });
+
+    test('editing a grouped recipe reuses every section id', () {
+      // Otherwise the ingredient rows would point at sections that no longer
+      // exist.
+      final Recipe saved = grouped().toRecipe(idFactory: sequentialIds());
+      final Recipe resaved = RecipeDraft.fromRecipe(saved)
+          .toRecipe(idFactory: sequentialIds());
+
+      expect(
+        resaved.orderedSections.map((RecipeSection s) => s.id),
+        saved.orderedSections.map((RecipeSection s) => s.id),
+      );
+    });
+
+    test('reordering sections reorders the steps with them', () {
+      final RecipeDraft reordered = grouped().copyWith(
+        sections: grouped().sections.reversed.toList(),
+      );
+      final Recipe recipe = reordered.toRecipe(idFactory: sequentialIds());
+
+      expect(recipe.orderedSections.first.name, 'Main');
+      expect(recipe.allSteps.first.text, 'Boil the pasta');
+      expect(recipe.allSteps.map((RecipeStep s) => s.stepNumber), <int>[
+        1,
+        2,
+        3,
+        4,
+      ], reason: 'numbering follows the new order rather than the old one');
     });
   });
 }

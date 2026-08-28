@@ -44,14 +44,15 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   final TextEditingController _cook = TextEditingController();
   final TextEditingController _cuisine = TextEditingController();
   final TextEditingController _tags = TextEditingController();
-  final TextEditingController _ingredients = TextEditingController();
-  final TextEditingController _directions = TextEditingController();
   final TextEditingController _notes = TextEditingController();
+
+  /// One set of fields per section. A new recipe starts with a single unnamed
+  /// one, which renders with no section chrome at all (spec §5.2).
+  final List<_SectionFields> _sections = <_SectionFields>[_SectionFields()];
 
   bool _loaded = false;
   bool _saving = false;
   String? _existingId;
-  String? _existingSectionId;
   bool _showErrors = false;
 
   /// Normalised ingredient name to food id, mirroring [RecipeDraft.matches].
@@ -70,11 +71,12 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       _cook,
       _cuisine,
       _tags,
-      _ingredients,
-      _directions,
       _notes,
     ]) {
       controller.dispose();
+    }
+    for (final _SectionFields section in _sections) {
+      section.dispose();
     }
     super.dispose();
   }
@@ -175,8 +177,9 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   RecipeDraft get _draft => RecipeDraft(
     title: _title.text,
     servings: double.tryParse(_servings.text.trim()) ?? 0,
-    ingredientsText: _ingredients.text,
-    directionsText: _directions.text,
+    sections: <DraftSection>[
+      for (final _SectionFields section in _sections) section.toDraft(),
+    ],
     prepMinutes: int.tryParse(_prep.text.trim()),
     cookMinutes: int.tryParse(_cook.text.trim()),
     cuisine: _cuisine.text,
@@ -187,9 +190,30 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
         .toList(growable: false),
     notes: _notes.text,
     existingId: _existingId,
-    existingSectionId: _existingSectionId,
     matches: _matches,
   );
+
+  void _addSection() => setState(() {
+    // The first section gets a name too, so a grouped recipe does not read as
+    // "untitled group, then Sauce".
+    if (_sections.length == 1 && _sections.first.name.text.trim().isEmpty) {
+      _sections.first.name.text = Recipe.defaultSectionName;
+    }
+    _sections.add(_SectionFields());
+  });
+
+  void _removeSection(int index) => setState(() {
+    _sections.removeAt(index).dispose();
+    // Back to one section: the name goes with it, so the recipe returns to
+    // showing no section chrome at all.
+    if (_sections.length == 1 &&
+        _sections.first.name.text.trim() == Recipe.defaultSectionName) {
+      _sections.first.name.text = '';
+    }
+  });
+
+  void _moveSection(int from, int to) =>
+      setState(() => _sections.insert(to, _sections.removeAt(from)));
 
   void _hydrate(Recipe recipe) {
     final RecipeDraft draft = RecipeDraft.fromRecipe(recipe);
@@ -201,11 +225,14 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     _cook.text = draft.cookMinutes?.toString() ?? '';
     _cuisine.text = draft.cuisine ?? '';
     _tags.text = draft.tags.join(', ');
-    _ingredients.text = draft.ingredientsText;
-    _directions.text = draft.directionsText;
     _notes.text = draft.notes ?? '';
+    for (final _SectionFields section in _sections) {
+      section.dispose();
+    }
+    _sections
+      ..clear()
+      ..addAll(draft.sections.map(_SectionFields.from));
     _existingId = draft.existingId;
-    _existingSectionId = draft.existingSectionId;
     _matches = draft.matches;
     _loaded = true;
   }
@@ -341,37 +368,73 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
               ],
             ),
             const SizedBox(height: HearthSpacing.xl),
-            _Field(
-              controller: _ingredients,
-              label: 'Ingredients',
-              hint: '2 tbsp olive oil\n3 cloves garlic, minced\nsalt to taste',
-              minLines: 4,
-              maxLines: 12,
-              onChanged: _rebuild,
+            for (int i = 0; i < _sections.length; i++) ...<Widget>[
+              if (_sections.length > 1) ...<Widget>[
+                _SectionHeader(
+                  fields: _sections[i],
+                  index: i,
+                  count: _sections.length,
+                  onChanged: _rebuild,
+                  onMoveUp: i == 0 ? null : () => _moveSection(i, i - 1),
+                  onMoveDown: i == _sections.length - 1
+                      ? null
+                      : () => _moveSection(i, i + 1),
+                  onRemove: () => _removeSection(i),
+                ),
+                const SizedBox(height: HearthSpacing.md),
+              ],
+              _Field(
+                controller: _sections[i].ingredients,
+                label: 'Ingredients',
+                hint:
+                    '2 tbsp olive oil\n3 cloves garlic, minced\nsalt to taste',
+                minLines: 4,
+                maxLines: 12,
+                onChanged: _rebuild,
+              ),
+              if (RecipeDraft.parseIngredients(_sections[i].ingredients.text)
+                  .isNotEmpty) ...<Widget>[
+                const SizedBox(height: HearthSpacing.md),
+                _IngredientPreview(
+                  ingredients: RecipeDraft.parseIngredients(
+                    _sections[i].ingredients.text,
+                  ),
+                  foods: _foods,
+                  draft: draft,
+                  onMatch: _matchIngredient,
+                ),
+              ],
+              const SizedBox(height: HearthSpacing.lg),
+              _Field(
+                controller: _sections[i].directions,
+                label: 'Directions',
+                hint: 'Paste or type. Steps are numbered automatically.',
+                minLines: 4,
+                maxLines: 14,
+                onChanged: _rebuild,
+                textCapitalization: TextCapitalization.sentences,
+              ),
+              const SizedBox(height: HearthSpacing.xl),
+            ],
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _addSection,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add a section'),
+              ),
             ),
             if (draft.parsedIngredients.isNotEmpty) ...<Widget>[
-              const SizedBox(height: HearthSpacing.md),
-              _IngredientPreview(
-                ingredients: draft.parsedIngredients,
-                foods: _foods,
-                draft: draft,
-                onMatch: _matchIngredient,
-              ),
-              const SizedBox(height: HearthSpacing.md),
+              const SizedBox(height: HearthSpacing.lg),
+              // Whole-recipe, not per section: nutrition is about the dish,
+              // and a section's macros on their own are not a number anyone
+              // eats (spec §5.2's flatten-for-nutrition).
               _LiveMacros(draft: draft, foods: _foods),
             ],
-            const SizedBox(height: HearthSpacing.xl),
-            _Field(
-              controller: _directions,
-              label: 'Directions',
-              hint: 'Paste or type. Steps are numbered automatically.',
-              minLines: 4,
-              maxLines: 14,
-              onChanged: _rebuild,
-              textCapitalization: TextCapitalization.sentences,
-            ),
             if (draft.parsedDirections.steps.isNotEmpty) ...<Widget>[
-              const SizedBox(height: HearthSpacing.md),
+              const SizedBox(height: HearthSpacing.lg),
+              // Numbered straight through the recipe. A cook counting steps
+              // counts the whole method, not each group from one.
               _DirectionsPreview(directions: draft.parsedDirections),
             ],
             const SizedBox(height: HearthSpacing.xl),
@@ -783,4 +846,101 @@ class _PreviewCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The text fields backing one section.
+///
+/// Controllers rather than plain strings so the cursor survives a rebuild —
+/// rebuilding the whole editor on every keystroke is what the live preview
+/// costs, and re-seeding a field's text would jump the caret to the end.
+class _SectionFields {
+  _SectionFields({
+    String name = '',
+    String ingredients = '',
+    String directions = '',
+    this.existingId,
+  }) : name = TextEditingController(text: name),
+       ingredients = TextEditingController(text: ingredients),
+       directions = TextEditingController(text: directions);
+
+  factory _SectionFields.from(DraftSection section) => _SectionFields(
+    name: section.name,
+    ingredients: section.ingredientsText,
+    directions: section.directionsText,
+    existingId: section.existingId,
+  );
+
+  final TextEditingController name;
+  final TextEditingController ingredients;
+  final TextEditingController directions;
+  final String? existingId;
+
+  DraftSection toDraft() => DraftSection(
+    name: name.text,
+    ingredientsText: ingredients.text,
+    directionsText: directions.text,
+    existingId: existingId,
+  );
+
+  void dispose() {
+    name.dispose();
+    ingredients.dispose();
+    directions.dispose();
+  }
+}
+
+/// A section's name, with the controls to move or remove it.
+///
+/// Move up/down rather than a drag handle: the sections are full of text
+/// fields, where a long-press-to-drag fights the text selection gesture, and
+/// two buttons are reachable by a screen reader in a way a drag never is.
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.fields,
+    required this.index,
+    required this.count,
+    required this.onChanged,
+    required this.onRemove,
+    this.onMoveUp,
+    this.onMoveDown,
+  });
+
+  final _SectionFields fields;
+  final int index;
+  final int count;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onRemove;
+  final VoidCallback? onMoveUp;
+  final VoidCallback? onMoveDown;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.end,
+    children: <Widget>[
+      Expanded(
+        child: _Field(
+          controller: fields.name,
+          label: 'Section ${index + 1} of $count',
+          hint: 'Sauce',
+          onChanged: onChanged,
+          textCapitalization: TextCapitalization.words,
+        ),
+      ),
+      IconButton(
+        icon: const Icon(Icons.arrow_upward),
+        tooltip: 'Move section up',
+        onPressed: onMoveUp,
+      ),
+      IconButton(
+        icon: const Icon(Icons.arrow_downward),
+        tooltip: 'Move section down',
+        onPressed: onMoveDown,
+      ),
+      IconButton(
+        icon: const Icon(Icons.delete_outline),
+        tooltip: 'Remove section',
+        onPressed: onRemove,
+      ),
+    ],
+  );
 }
