@@ -133,6 +133,38 @@ void main() {
     });
   });
 
+  group('formatAsAuthored', () {
+    test('echoes the unit the value was written in', () {
+      // An editor preview exists to confirm a parse. Typing "1.5 kg" and
+      // being shown "3.3 lb" makes that harder, not easier.
+      final Quantity q = Quantity.of(1.5, Units.kilogram);
+      expect(QuantityFormat.formatAsAuthored(q), '1.5 kg');
+      expect(QuantityFormat.format(q), '3.3 lb');
+    });
+
+    test('keeps imperial units as authored too', () {
+      expect(
+        QuantityFormat.formatAsAuthored(Quantity.of(2, Units.tbsp)),
+        '2 tbsp',
+      );
+      expect(
+        QuantityFormat.formatAsAuthored(Quantity.of(0.5, Units.cup)),
+        '½ cup',
+      );
+    });
+
+    test('falls back to the reader preference with no authored unit', () {
+      const Quantity bare = Quantity.canonical(
+        canonicalAmount: 1000,
+        kind: UnitKind.mass,
+      );
+      expect(
+        QuantityFormat.formatAsAuthored(bare, system: UnitSystem.metric),
+        '1 kg',
+      );
+    });
+  });
+
   test('formatting never changes the stored value', () {
     final Quantity q = Quantity.of(124.9, Units.gram);
     QuantityFormat.format(q);

@@ -376,7 +376,9 @@ class _IngredientPreview extends StatelessWidget {
                     child: Text(
                       ingredient.quantity == null
                           ? '—'
-                          : QuantityFormat.format(ingredient.quantity!),
+                          : QuantityFormat.formatAsAuthored(
+                              ingredient.quantity!,
+                            ),
                       style: text.ingredient.copyWith(
                         color: ingredient.quantity == null
                             ? colors.textMuted

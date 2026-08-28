@@ -47,6 +47,24 @@ abstract final class QuantityFormat {
     return formatIn(quantity, unit);
   }
 
+  /// Formats [quantity] in the unit it was authored in, falling back to the
+  /// reader's preference when there is no authored unit.
+  ///
+  /// This is for surfaces that are showing the user their own input back —
+  /// an editor's parse preview, an import review screen. Converting there
+  /// would answer a question nobody asked: typing "1.5 kg" and being shown
+  /// "3.3 lb" makes it harder, not easier, to confirm the line parsed
+  /// correctly. Reading surfaces use [format] and honour the reader's system
+  /// (spec §4).
+  static String formatAsAuthored(
+    Quantity quantity, {
+    UnitSystem system = UnitSystem.imperial,
+  }) {
+    final Unit? authored = quantity.preferredUnit;
+    if (authored == null) return format(quantity, system: system);
+    return formatIn(quantity, authored);
+  }
+
   /// Formats [quantity] in a specific [unit].
   static String formatIn(Quantity quantity, Unit unit) {
     final double amount = quantity.amountIn(unit);
