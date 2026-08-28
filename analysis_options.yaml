@@ -18,11 +18,15 @@ analyzer:
 
 linter:
   rules:
-    - prefer_single_quotes
-    - always_declare_return_types
-    - avoid_print
-    - unawaited_futures
-    - prefer_const_constructors
-    - prefer_final_locals
-    - directives_ordering
-    - require_trailing_commas
+    prefer_single_quotes: true
+    always_declare_return_types: true
+    avoid_print: true
+    unawaited_futures: true
+    prefer_const_constructors: true
+    prefer_final_locals: true
+    directives_ordering: true
+    require_trailing_commas: true
+    # Off deliberately: Dart has no private named parameters, so a class with
+    # private fields and a named constructor — the common shape for injected
+    # dependencies — can never satisfy this rule.
+    prefer_initializing_formals: false

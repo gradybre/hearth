@@ -59,6 +59,7 @@ RecipeSection aSection({
 
 Recipe aRecipe({
   String? id,
+  String householdId = 'household-1',
   String title = 'Test recipe',
   double servings = 4,
   List<RecipeSection>? sections,
@@ -66,6 +67,7 @@ Recipe aRecipe({
   List<RecipeStep>? steps,
 }) => Recipe(
   id: id ?? _id('recipe'),
+  householdId: householdId,
   title: title,
   servings: servings,
   sections:
