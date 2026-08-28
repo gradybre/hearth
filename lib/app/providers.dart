@@ -13,6 +13,7 @@ import '../domain/models/food.dart';
 import '../domain/models/recipe.dart';
 import '../domain/planning/day_progress.dart';
 import '../domain/planning/meal_plan.dart';
+import '../domain/planning/recent_log.dart';
 import '../domain/planning/week.dart';
 
 /// The app's object graph.
@@ -184,4 +185,11 @@ final FutureProvider<MacroTargets?> dayTargetsProvider =
       return ref
           .watch(planRepositoryProvider)
           .targetsFor(ref.watch(selectedDateProvider));
+    });
+
+/// Things logged recently, for one-tap repeat (spec §5.6).
+final FutureProvider<List<RecentLog>> recentLogsProvider =
+    FutureProvider<List<RecentLog>>((Ref ref) {
+      ref.watch(planChangesProvider);
+      return ref.watch(planRepositoryProvider).recentLogs();
     });

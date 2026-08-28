@@ -7,6 +7,7 @@ import 'package:hearth/data/repositories/plan_repository.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/recent_log.dart';
 
 void main() {
   late HearthDatabase db;
@@ -237,6 +238,128 @@ void main() {
         (PendingWrite w) => w.entityId == entry.id,
       );
       expect(write.operation, WriteOperation.delete);
+    });
+  });
+
+  group('fast entry (spec §5.6)', () {
+    test('recents surface what was logged, newest first', () async {
+      await repository.add(
+        date: today,
+        slot: MealSlot.breakfast,
+        refType: PlanRefType.food,
+        refId: 'food-yogurt',
+        servings: 1,
+        loggedMacros: const Macros(kcal: 100),
+        label: 'Greek yogurt',
+      );
+      clock = clock.add(const Duration(hours: 1));
+      await repository.add(
+        date: today,
+        slot: MealSlot.lunch,
+        refType: PlanRefType.recipe,
+        refId: 'recipe-1',
+        servings: 2,
+        loggedMacros: const Macros(kcal: 400),
+        label: 'Short ribs',
+      );
+
+      final List<RecentLog> recents = await repository.recentLogs();
+      expect(recents.map((RecentLog r) => r.label), <String>[
+        'Short ribs',
+        'Greek yogurt',
+      ]);
+      expect(recents.first.servings, 2);
+    });
+
+    test('a planned entry never becomes a recent', () async {
+      await repository.add(
+        date: today,
+        slot: MealSlot.dinner,
+        refType: PlanRefType.recipe,
+        refId: 'recipe-1',
+        servings: 1,
+      );
+      expect(await repository.recentLogs(), isEmpty);
+    });
+
+    test('logging again reuses the last portion', () async {
+      await repository.add(
+        date: today,
+        slot: MealSlot.breakfast,
+        refType: PlanRefType.food,
+        refId: 'food-yogurt',
+        servings: 1.5,
+        loggedMacros: const Macros(kcal: 100),
+        label: 'Greek yogurt',
+      );
+
+      final RecentLog recent = (await repository.recentLogs()).single;
+      clock = clock.add(const Duration(days: 1));
+      final MealPlanEntry repeat = await repository.logAgain(
+        recent: recent,
+        date: today.add(const Duration(days: 1)),
+        slot: MealSlot.breakfast,
+        liveMacros: const Macros(kcal: 100),
+      );
+
+      expect(repeat.servings, 1.5);
+      expect(repeat.isLogged, isTrue);
+      expect(repeat.macroSnapshot!.macros.kcal, 150);
+    });
+
+    test(
+      'logging again records current macros, not the old snapshot',
+      () async {
+        // Repeating a meal should record what that food is today. If the food's
+        // calories were corrected since, the repeat must use the correction.
+        await repository.add(
+          date: today,
+          slot: MealSlot.breakfast,
+          refType: PlanRefType.food,
+          refId: 'food-yogurt',
+          servings: 1,
+          loggedMacros: const Macros(kcal: 100),
+          label: 'Greek yogurt',
+        );
+
+        final RecentLog recent = (await repository.recentLogs()).single;
+        clock = clock.add(const Duration(days: 1));
+        final MealPlanEntry repeat = await repository.logAgain(
+          recent: recent,
+          date: today.add(const Duration(days: 1)),
+          slot: MealSlot.breakfast,
+          liveMacros: const Macros(kcal: 130),
+        );
+
+        expect(repeat.macroSnapshot!.macros.kcal, 130);
+      },
+    );
+
+    test('the original log is untouched by the repeat', () async {
+      await repository.add(
+        date: today,
+        slot: MealSlot.breakfast,
+        refType: PlanRefType.food,
+        refId: 'food-yogurt',
+        servings: 1,
+        loggedMacros: const Macros(kcal: 100),
+        label: 'Greek yogurt',
+      );
+      final RecentLog recent = (await repository.recentLogs()).single;
+
+      clock = clock.add(const Duration(days: 1));
+      await repository.logAgain(
+        recent: recent,
+        date: today.add(const Duration(days: 1)),
+        slot: MealSlot.breakfast,
+        liveMacros: const Macros(kcal: 130),
+      );
+
+      // Yesterday still says what it always said (spec §4).
+      expect(
+        (await repository.entriesFor(today)).single.macroSnapshot!.macros.kcal,
+        100,
+      );
     });
   });
 

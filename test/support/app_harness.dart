@@ -7,6 +7,7 @@ import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/recent_log.dart';
 import 'package:hearth/main.dart';
 
 /// Pumps the real app for a widget test.
@@ -56,6 +57,7 @@ Future<HearthDatabase> pumpHearthApp(
         planChangesProvider.overrideWith(
           (Ref ref) => const Stream<void>.empty(),
         ),
+        recentLogsProvider.overrideWith((Ref ref) async => const <RecentLog>[]),
       ],
       child: const HearthApp(),
     ),

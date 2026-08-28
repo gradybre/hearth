@@ -9,6 +9,7 @@ import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/planning/meal_plan.dart';
+import '../../domain/planning/recent_log.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import 'entry_resolver.dart';
 
@@ -127,6 +128,46 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
             servings: _servings,
           );
       ref.invalidate(dayEntriesProvider);
+      if (mounted) Navigator.of(context).pop();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Logs a recent thing again in one tap, at the portion it was last logged
+  /// at (spec §5.6).
+  ///
+  /// Macros are recomputed from the current library rather than copied from
+  /// the old snapshot: repeating a meal should record what that food is now.
+  Future<void> _logAgain(
+    RecentLog recent, {
+    required Map<String, Food> foods,
+    required Map<String, Recipe> recipes,
+  }) async {
+    setState(() => _busy = true);
+    try {
+      final Macros perServing = switch (recent.refType) {
+        PlanRefType.recipe =>
+          recipes[recent.refId] == null
+              ? Macros.zero
+              : MacroCalculator.forRecipe(
+                  recipes[recent.refId]!,
+                  foods: foods,
+                ).perServing,
+        PlanRefType.food =>
+          foods[recent.refId]?.defaultServing?.macros ?? Macros.zero,
+      };
+
+      await ref
+          .read(planRepositoryProvider)
+          .logAgain(
+            recent: recent,
+            date: widget.date,
+            slot: widget.slot,
+            liveMacros: perServing,
+          );
+      ref.invalidate(dayEntriesProvider);
+      ref.invalidate(recentLogsProvider);
       if (mounted) Navigator.of(context).pop();
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -262,6 +303,12 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   ) {
     final HearthColors colors = context.colors;
     final String needle = _search.text.trim().toLowerCase();
+    // Recents are hidden once the user starts searching: they have told us
+    // what they are looking for, and a stale shortcut list would just be in
+    // the way.
+    final List<RecentLog> recents = needle.isEmpty
+        ? (ref.watch(recentLogsProvider).value ?? const <RecentLog>[])
+        : const <RecentLog>[];
 
     final List<Recipe> matchingRecipes = recipes.values
         .where(
@@ -321,6 +368,20 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
                       HearthSpacing.xl,
                     ),
                     children: <Widget>[
+                      if (recents.isNotEmpty) ...<Widget>[
+                        const _GroupLabel(text: 'Recent'),
+                        for (final RecentLog recent in recents)
+                          _RecentRow(
+                            recent: recent,
+                            onTap: _busy
+                                ? null
+                                : () => _logAgain(
+                                    recent,
+                                    foods: foods,
+                                    recipes: recipes,
+                                  ),
+                          ),
+                      ],
                       if (matchingRecipes.isNotEmpty)
                         const _GroupLabel(text: 'Recipes'),
                       for (final Recipe recipe in matchingRecipes)
@@ -462,6 +523,74 @@ class _PickRow extends StatelessWidget {
                     subtitle,
                     style: context.text.metadata.copyWith(
                       color: colors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A one-tap repeat of something logged recently.
+///
+/// The whole point is that this is a single tap: no picker, no portion
+/// dialog, no confirmation. The portion comes from last time, and it is
+/// editable afterwards from the day view like any other entry.
+class _RecentRow extends StatelessWidget {
+  const _RecentRow({required this.recent, required this.onTap});
+
+  final RecentLog recent;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final String portion = recent.servings == recent.servings.roundToDouble()
+        ? recent.servings.round().toString()
+        : recent.servings.toString();
+    final String detail = recent.servings == 1
+        ? 'log again · 1 serving'
+        : 'log again · $portion servings';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
+      child: Semantics(
+        button: true,
+        label: '${recent.label}. Log again, $detail.',
+        excludeSemantics: true,
+        child: Material(
+          color: colors.surfaceSunken,
+          borderRadius: BorderRadius.circular(HearthRadius.md),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(HearthRadius.md),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(HearthRadius.md),
+                border: Border.all(color: colors.outline),
+              ),
+              padding: const EdgeInsets.all(HearthSpacing.md),
+              child: Row(
+                children: <Widget>[
+                  Icon(Icons.replay, size: 18, color: colors.accent),
+                  const SizedBox(width: HearthSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(recent.label, style: context.text.ingredient),
+                        const SizedBox(height: HearthSpacing.xxs),
+                        Text(
+                          detail,
+                          style: context.text.metadata.copyWith(
+                            color: colors.textMuted,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],

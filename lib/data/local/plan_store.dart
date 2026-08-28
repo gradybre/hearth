@@ -116,6 +116,35 @@ class PlanStore {
     return byDay;
   }
 
+  /// The most recently logged entries, newest first.
+  ///
+  /// Reads a bounded window of rows rather than the whole history: recents
+  /// only needs the last handful, and this query sits on the logging path
+  /// where a wait is paid three times a day.
+  Future<List<MealPlanEntry>> recentlyLogged({
+    required String userId,
+    int scanLimit = 60,
+  }) async {
+    final List<MealPlanDayRow> days = await (_db.select(
+      _db.mealPlanDays,
+    )..where(($MealPlanDaysTable d) => d.userId.equals(userId))).get();
+    if (days.isEmpty) return const <MealPlanEntry>[];
+
+    final List<MealPlanEntryRow> rows =
+        await (_db.select(_db.mealPlanEntries)
+              ..where(
+                ($MealPlanEntriesTable e) =>
+                    e.dayId.isIn(days.map((MealPlanDayRow d) => d.id)) &
+                    e.isLogged.equals(true),
+              )
+              ..orderBy(<OrderClauseGenerator<$MealPlanEntriesTable>>[
+                ($MealPlanEntriesTable e) => OrderingTerm.desc(e.loggedAt),
+              ])
+              ..limit(scanLimit))
+            .get();
+    return rows.map(PlanMapper.entryToDomain).toList(growable: false);
+  }
+
   /// Watches every plan change, so an open day or week view refreshes itself.
   Stream<void> watchChanges() =>
       _db.select(_db.mealPlanEntries).watch().map((_) {});

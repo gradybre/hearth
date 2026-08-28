@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
+import '../../domain/planning/recent_log.dart';
 import '../local/hearth_database.dart';
 import '../local/pending_write_store.dart';
 import '../local/plan_store.dart';
@@ -48,6 +49,36 @@ class PlanRepository {
   ) => _store.entriesForRange(userId: _userId, from: from, to: to);
 
   Stream<void> watchChanges() => _store.watchChanges();
+
+  /// Things logged recently, collapsed to one row each, for fast entry
+  /// (spec §5.6).
+  Future<List<RecentLog>> recentLogs({int limit = 8}) async {
+    final List<MealPlanEntry> logged = await _store.recentlyLogged(
+      userId: _userId,
+    );
+    return RecentLogs.from(logged, limit: limit);
+  }
+
+  /// Logs something again with the portion it was last logged at — the
+  /// one-tap repeat.
+  Future<MealPlanEntry> logAgain({
+    required RecentLog recent,
+    required DateTime date,
+    required MealSlot slot,
+    required Macros liveMacros,
+    double? portion,
+  }) => add(
+    date: date,
+    slot: slot,
+    refType: recent.refType,
+    refId: recent.refId,
+    servings: portion ?? recent.servings,
+    // Macros are recomputed from the current library rather than copied from
+    // the old snapshot: repeating a meal should record what that food is
+    // today, not what it was when first logged.
+    loggedMacros: liveMacros,
+    label: recent.label,
+  );
 
   Future<MacroTargets?> targetsFor(DateTime date) =>
       _store.targetsFor(userId: _userId, date: date);
