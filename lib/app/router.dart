@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../features/foods/food_editor_screen.dart';
 import '../features/foods/food_library_screen.dart';
 import '../features/placeholder_screen.dart';
+import '../features/plan/day_screen.dart';
 import '../features/recipes/recipe_detail_screen.dart';
 import '../features/recipes/recipe_editor_screen.dart';
 import '../features/recipes/recipe_library_screen.dart';
@@ -104,12 +105,7 @@ class _ShellHost extends StatelessWidget {
         index: index,
         children: const <Widget>[
           RecipeLibraryScreen(),
-          PlaceholderScreen(
-            title: 'Plan',
-            description:
-                'The week grid, macro targets, and one-tap logging live here.',
-            phase: 'Phase 1 · Step 7',
-          ),
+          DayScreen(),
           PlaceholderScreen(
             title: 'Shopping',
             description:

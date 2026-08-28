@@ -4,11 +4,16 @@ import '../data/local/food_store.dart';
 import '../data/local/hearth_database.dart';
 import '../data/local/ingredient_match_store.dart';
 import '../data/local/pending_write_store.dart';
+import '../data/local/plan_store.dart';
 import '../data/local/recipe_store.dart';
 import '../data/repositories/food_repository.dart';
+import '../data/repositories/plan_repository.dart';
 import '../data/repositories/recipe_repository.dart';
 import '../domain/models/food.dart';
 import '../domain/models/recipe.dart';
+import '../domain/planning/day_progress.dart';
+import '../domain/planning/meal_plan.dart';
+import '../domain/planning/week.dart';
 
 /// The app's object graph.
 ///
@@ -117,4 +122,66 @@ final FutureProvider<Map<String, String>> rememberedMatchesProvider =
       return ref
           .watch(ingredientMatchStoreProvider)
           .allFor(ref.watch(currentHouseholdIdProvider));
+    });
+
+/// The person whose plan and logs are on screen.
+///
+/// Plans, logs, and targets are user-scoped, not household-scoped: two people
+/// share a library but never a diary (spec §4). Auth fills this in; until then
+/// it is a fixed local id.
+final Provider<String> currentUserIdProvider = Provider<String>(
+  (Ref ref) => 'local-user',
+);
+
+final Provider<PlanStore> planStoreProvider = Provider<PlanStore>(
+  (Ref ref) => PlanStore(ref.watch(databaseProvider)),
+);
+
+final Provider<PlanRepository> planRepositoryProvider =
+    Provider<PlanRepository>(
+      (Ref ref) => PlanRepository(
+        database: ref.watch(databaseProvider),
+        store: ref.watch(planStoreProvider),
+        queue: ref.watch(pendingWriteStoreProvider),
+        userId: ref.watch(currentUserIdProvider),
+      ),
+    );
+
+/// The day the planner is showing. Defaults to today.
+final NotifierProvider<SelectedDate, DateTime> selectedDateProvider =
+    NotifierProvider<SelectedDate, DateTime>(SelectedDate.new);
+
+class SelectedDate extends Notifier<DateTime> {
+  @override
+  DateTime build() => dayKey(DateTime.now());
+
+  void select(DateTime date) => state = dayKey(date);
+
+  void shiftDays(int days) =>
+      state = DateTime(state.year, state.month, state.day + days);
+
+  void today() => state = dayKey(DateTime.now());
+}
+
+/// Emits whenever the local plan changes, so day and week views refresh.
+final StreamProvider<void> planChangesProvider = StreamProvider<void>(
+  (Ref ref) => ref.watch(planRepositoryProvider).watchChanges(),
+);
+
+/// The entries on the selected day.
+final FutureProvider<List<MealPlanEntry>> dayEntriesProvider =
+    FutureProvider<List<MealPlanEntry>>((Ref ref) {
+      ref.watch(planChangesProvider);
+      return ref
+          .watch(planRepositoryProvider)
+          .entriesFor(ref.watch(selectedDateProvider));
+    });
+
+/// The macro targets covering the selected day's week, or null when unset.
+final FutureProvider<MacroTargets?> dayTargetsProvider =
+    FutureProvider<MacroTargets?>((Ref ref) {
+      ref.watch(planChangesProvider);
+      return ref
+          .watch(planRepositoryProvider)
+          .targetsFor(ref.watch(selectedDateProvider));
     });

@@ -6,6 +6,7 @@ import 'package:hearth/app/providers.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/recipe.dart';
+import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/main.dart';
 
 /// Pumps the real app for a widget test.
@@ -28,6 +29,7 @@ Future<HearthDatabase> pumpHearthApp(
   Size size = const Size(390, 844),
   List<Recipe> recipes = const <Recipe>[],
   List<Food> foods = const <Food>[],
+  List<MealPlanEntry> entries = const <MealPlanEntry>[],
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -47,6 +49,12 @@ Future<HearthDatabase> pumpHearthApp(
         ),
         foodLibraryProvider.overrideWith(
           (Ref ref) => Stream<List<Food>>.value(foods),
+        ),
+        // Same reasoning as the libraries: fake async cannot drive sqlite, so
+        // the planner's day is fed directly.
+        dayEntriesProvider.overrideWith((Ref ref) async => entries),
+        planChangesProvider.overrideWith(
+          (Ref ref) => const Stream<void>.empty(),
         ),
       ],
       child: const HearthApp(),
