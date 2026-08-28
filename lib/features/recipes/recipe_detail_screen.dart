@@ -13,6 +13,7 @@ import '../../domain/recipes/recipe_scaler.dart';
 import 'collections_sheet.dart';
 import 'cook_along_screen.dart';
 import 'recipe_library_screen.dart';
+import 'recipe_photo.dart';
 import 'scale_control.dart';
 import 'timer_bar.dart';
 
@@ -123,6 +124,12 @@ class _RecipeBodyState extends State<_RecipeBody> {
       child: ListView(
         padding: EdgeInsets.fromLTRB(gutter, 0, gutter, gutter * 2),
         children: <Widget>[
+          const SizedBox(height: HearthSpacing.sm),
+          RecipePhoto(
+            recipeId: original.id,
+            width: double.infinity,
+            height: 220,
+          ),
           Text(original.title, style: text.recipeTitle),
           const SizedBox(height: HearthSpacing.sm),
           Text(

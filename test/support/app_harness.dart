@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,6 +39,7 @@ Future<HearthDatabase> pumpHearthApp(
   List<MealPlanEntry> entries = const <MealPlanEntry>[],
   Set<String> favorites = const <String>{},
   List<CookTimer> timers = const <CookTimer>[],
+  Map<String, String> photos = const <String, String>{},
   List<CollectionSummary> collections = const <CollectionSummary>[],
 }) async {
   tester.view.physicalSize = size;
@@ -80,6 +83,14 @@ Future<HearthDatabase> pumpHearthApp(
         // The shell's timer bar watches this, and it is DB-backed.
         cookTimersProvider.overrideWith(() => FakeCookTimers(timers)),
         cookShowAllStepsProvider.overrideWith(FakeCookStepView.new),
+        // Photos are sqlite- and filesystem-backed, neither of which a widget
+        // test can drive under fake async.
+        recipePhotoNamesProvider.overrideWith(
+          (Ref ref) => Stream<Map<String, String>>.value(photos),
+        ),
+        recipePhotoDirectoryProvider.overrideWith(
+          (Ref ref) async => Directory.systemTemp,
+        ),
         recipeCollectionsProvider.overrideWith(
           (Ref ref) =>
               Stream<Map<String, Set<String>>>.value(<String, Set<String>>{

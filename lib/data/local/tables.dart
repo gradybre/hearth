@@ -353,3 +353,23 @@ class CookSessions extends Table {
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{recipeId};
 }
+
+/// A recipe's hero photo as it sits on *this* device (spec §5.2).
+///
+/// Its own table rather than a column on [Recipes]: that table is a sync
+/// cache, and a record arriving from the server would overwrite the row —
+/// taking a device-local file reference with it.
+///
+/// Only the file name is stored, never an absolute path. iOS moves an app's
+/// container between installs, so an absolute path is a promise the device
+/// stops keeping.
+@DataClassName('RecipePhotoRow')
+class RecipePhotos extends Table {
+  TextColumn get recipeId =>
+      text().references(Recipes, #id, onDelete: KeyAction.cascade)();
+  TextColumn get fileName => text()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{recipeId};
+}

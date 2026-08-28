@@ -18,6 +18,7 @@ import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/text/text_normaliser.dart';
 import '../foods/food_picker.dart';
 import 'recipe_draft.dart';
+import 'recipe_photo.dart';
 
 /// Create or edit a recipe (spec §5.2).
 ///
@@ -336,6 +337,10 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
               textCapitalization: TextCapitalization.sentences,
             ),
             const SizedBox(height: HearthSpacing.lg),
+            const SizedBox(height: HearthSpacing.lg),
+            // A photo needs a recipe to belong to, so it is offered only once
+            // there is one to attach it to (spec §5.2).
+            RecipePhotoField(recipeId: _existingId),
             Row(
               children: <Widget>[
                 Expanded(

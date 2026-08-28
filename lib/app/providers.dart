@@ -1,6 +1,11 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:io';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+
+import '../data/adapters/image_picker_photos.dart';
 import '../data/adapters/kitchen_devices.dart';
+import '../data/adapters/photo_picker.dart';
 import '../data/adapters/platform_kitchen_devices.dart';
 import '../data/local/collection_store.dart';
 import '../data/local/cook_session_store.dart';
@@ -11,6 +16,7 @@ import '../data/local/ingredient_match_store.dart';
 import '../data/local/pending_write_store.dart';
 import '../data/local/plan_store.dart';
 import '../data/local/preference_store.dart';
+import '../data/local/recipe_photo_store.dart';
 import '../data/local/recipe_store.dart';
 import '../data/repositories/collection_repository.dart';
 import '../data/repositories/food_repository.dart';
@@ -408,4 +414,31 @@ class CookStepViewNotifier extends AsyncNotifier<bool> {
 final Provider<CookSessionStore> cookSessionStoreProvider =
     Provider<CookSessionStore>(
       (Ref ref) => CookSessionStore(ref.watch(databaseProvider)),
+    );
+
+// ── Recipe photos (spec §5.2) ────────────────────────────────────────────────
+
+final Provider<PhotoPicker> photoPickerProvider = Provider<PhotoPicker>(
+  (Ref ref) => ImagePickerPhotos(),
+);
+
+final Provider<RecipePhotoStore> recipePhotoStoreProvider =
+    Provider<RecipePhotoStore>(
+      (Ref ref) => RecipePhotoStore(
+        ref.watch(databaseProvider),
+        directory: getApplicationSupportDirectory,
+      ),
+    );
+
+/// Every recipe's photo file name, so the library can show thumbnails without
+/// a query per card.
+final StreamProvider<Map<String, String>> recipePhotoNamesProvider =
+    StreamProvider<Map<String, String>>(
+      (Ref ref) => ref.watch(recipePhotoStoreProvider).watchAll(),
+    );
+
+/// The directory photos are resolved against.
+final FutureProvider<Directory> recipePhotoDirectoryProvider =
+    FutureProvider<Directory>(
+      (Ref ref) => ref.watch(recipePhotoStoreProvider).photosDirectory(),
     );

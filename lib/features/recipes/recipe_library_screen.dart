@@ -10,6 +10,7 @@ import '../../app/theme/hearth_typography.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/recipes/recipe_query.dart';
 import 'recipe_filter_bar.dart';
+import 'recipe_photo.dart';
 
 /// The household's recipe library (spec §5.2).
 ///
@@ -213,6 +214,15 @@ class RecipeCard extends ConsumerWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
+                if (hasRecipePhoto(ref, recipe.id)) ...<Widget>[
+                  RecipePhoto(
+                    recipeId: recipe.id,
+                    width: 64,
+                    height: 64,
+                    borderRadius: BorderRadius.circular(HearthRadius.md),
+                  ),
+                  const SizedBox(width: HearthSpacing.md),
+                ],
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
