@@ -14,12 +14,10 @@ Future<FakeAuthGateway> pumpHousehold(WidgetTester tester) async {
   );
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [
-        authGatewayProvider.overrideWithValue(auth),
-        accountProvider.overrideWith(
-          (Ref ref) => Stream<HearthAccount?>.value(FakeAuthGateway.anAccount),
-        ),
-      ],
+      // accountProvider is left wired to the gateway rather than stubbed, so
+      // a screen holding a stale account is visible here rather than only on
+      // a device.
+      overrides: [authGatewayProvider.overrideWithValue(auth)],
       child: MaterialApp(
         theme: HearthTheme.light(),
         home: const HouseholdScreen(),
@@ -141,6 +139,27 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(auth.signOuts, 1);
+    });
+  });
+
+  group('after joining', () {
+    testWidgets('the code shown is the new household, not the old one', (
+      WidgetTester tester,
+    ) async {
+      // Joining moves the user without touching their session, so nothing in
+      // auth fires. A screen left holding the old account goes on showing the
+      // previous household's code — and whoever types it lands somewhere else
+      // entirely.
+      await pumpHousehold(tester);
+      expect(find.text('QRSTUV23'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'WXYZ2345');
+      await tester.tap(find.widgetWithText(FilledButton, 'Join'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('WXYZ2345'), findsOneWidget);
+      expect(find.text('QRSTUV23'), findsNothing);
     });
   });
 }

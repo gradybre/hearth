@@ -461,11 +461,16 @@ final FutureProvider<Directory> recipePhotoDirectoryProvider =
 /// no `config/local.json`, which is a supported way to run — offline, alone.
 final Provider<bool> supabaseReadyProvider = Provider<bool>((Ref ref) => false);
 
-final Provider<AuthGateway> authGatewayProvider = Provider<AuthGateway>(
-  (Ref ref) => ref.watch(supabaseReadyProvider)
-      ? SupabaseAuthGateway(Supabase.instance.client)
-      : LocalAuthGateway(),
-);
+final Provider<AuthGateway> authGatewayProvider = Provider<AuthGateway>((
+  Ref ref,
+) {
+  if (!ref.watch(supabaseReadyProvider)) return LocalAuthGateway();
+  final SupabaseAuthGateway gateway = SupabaseAuthGateway(
+    Supabase.instance.client,
+  );
+  ref.onDispose(gateway.dispose);
+  return gateway;
+});
 
 /// The signed-in account, or null when nobody is.
 final StreamProvider<HearthAccount?> accountProvider =

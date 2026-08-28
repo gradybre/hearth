@@ -9,13 +9,45 @@ import 'auth_gateway.dart';
 /// Nothing here hashes a password or mints a token: Supabase does that, and
 /// rolling our own is the one thing §8.3 rules out by name.
 class SupabaseAuthGateway implements AuthGateway {
-  SupabaseAuthGateway(this._client);
+  SupabaseAuthGateway(this._client) {
+    _authChanges = _client.auth.onAuthStateChange.listen(
+      (AuthState _) => _refresh(),
+    );
+  }
 
   final SupabaseClient _client;
 
+  /// Pushed to whenever the account may have changed.
+  ///
+  /// Auth events are not the only thing that changes it: joining a household
+  /// moves the user without touching their session, and a screen still holding
+  /// the old account would go on showing the *previous* household's share
+  /// code — a code that now sends whoever types it somewhere else entirely.
+  final StreamController<HearthAccount?> _accounts =
+      StreamController<HearthAccount?>.broadcast();
+  late final StreamSubscription<AuthState> _authChanges;
+
   @override
-  Stream<HearthAccount?> watchAccount() => _client.auth.onAuthStateChange
-      .asyncMap((AuthState _) => currentAccount());
+  Stream<HearthAccount?> watchAccount() async* {
+    // The account as it stands, before waiting for anything to happen to it:
+    // a fresh listener must not sit on a spinner until the next auth event.
+    yield await currentAccount();
+    yield* _accounts.stream;
+  }
+
+  Future<void> _refresh() async {
+    if (_accounts.isClosed) return;
+    try {
+      _accounts.add(await currentAccount());
+    } on AuthFailure catch (error) {
+      _accounts.addError(error);
+    }
+  }
+
+  void dispose() {
+    _authChanges.cancel();
+    _accounts.close();
+  }
 
   @override
   Future<HearthAccount?> currentAccount() async {
@@ -85,6 +117,8 @@ class SupabaseAuthGateway implements AuthGateway {
     if (account == null) {
       throw const AuthFailure('You are no longer signed in.');
     }
+    // Tell everyone watching: the household changed without an auth event.
+    if (!_accounts.isClosed) _accounts.add(account);
     return account;
   }
 

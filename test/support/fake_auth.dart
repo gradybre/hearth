@@ -9,9 +9,7 @@ import 'package:hearth/data/auth/auth_gateway.dart';
 /// meets on a bad day and the ones no manual pass reliably reproduces.
 class FakeAuthGateway implements AuthGateway {
   FakeAuthGateway({this.requiresConfirmation = false, HearthAccount? signedIn})
-    : _account = signedIn {
-    _controller.add(_account);
-  }
+    : _account = signedIn;
 
   static const HearthAccount anAccount = HearthAccount(
     userId: 'user-1',
@@ -35,7 +33,11 @@ class FakeAuthGateway implements AuthGateway {
   int signOuts = 0;
 
   @override
-  Stream<HearthAccount?> watchAccount() => _controller.stream;
+  Stream<HearthAccount?> watchAccount() async* {
+    // Mirrors the real gateway: emit where things stand, then every change.
+    yield _account;
+    yield* _controller.stream;
+  }
 
   @override
   Future<HearthAccount?> currentAccount() async => _account;
