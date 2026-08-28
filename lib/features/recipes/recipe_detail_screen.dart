@@ -9,8 +9,10 @@ import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/recipe.dart';
+import '../../domain/recipes/recipe_scaler.dart';
 import 'collections_sheet.dart';
 import 'recipe_library_screen.dart';
+import 'scale_control.dart';
 
 /// Reading a recipe (spec §5.2).
 ///
@@ -59,10 +61,21 @@ class RecipeDetailScreen extends ConsumerWidget {
   }
 }
 
-class _RecipeBody extends StatelessWidget {
+class _RecipeBody extends StatefulWidget {
   const _RecipeBody({required this.recipe});
 
   final Recipe recipe;
+
+  @override
+  State<_RecipeBody> createState() => _RecipeBodyState();
+}
+
+class _RecipeBodyState extends State<_RecipeBody> {
+  double? _target;
+
+  /// Scaling is a way of *reading* the recipe, not an edit of it — nothing is
+  /// written, and reopening the recipe shows it as written (spec §5.2).
+  double get _targetServings => _target ?? widget.recipe.servings;
 
   @override
   Widget build(BuildContext context) {
@@ -72,21 +85,38 @@ class _RecipeBody extends StatelessWidget {
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
 
+    final Recipe original = widget.recipe;
+    // A recipe with no yield cannot be scaled to a yield, and the scaler says
+    // so by throwing. Offer the control only where it means something.
+    final bool scalable = original.servings > 0;
+    final ScaledRecipe? scaled = scalable
+        ? RecipeScaler.toServings(original, _targetServings)
+        : null;
+    final Recipe recipe = scaled?.recipe ?? original;
+
     return SafeArea(
       child: ListView(
         padding: EdgeInsets.fromLTRB(gutter, 0, gutter, gutter * 2),
         children: <Widget>[
-          Text(recipe.title, style: text.recipeTitle),
+          Text(original.title, style: text.recipeTitle),
           const SizedBox(height: HearthSpacing.sm),
           Text(
-            _summary(recipe),
+            _summary(original),
             style: text.metadata.copyWith(color: colors.textMuted),
           ),
-          if (recipe.notes != null) ...<Widget>[
+          if (original.notes != null) ...<Widget>[
             const SizedBox(height: HearthSpacing.lg),
             Text(
-              recipe.notes!,
+              original.notes!,
               style: text.body.copyWith(color: colors.textSecondary),
+            ),
+          ],
+          if (scalable) ...<Widget>[
+            const SizedBox(height: HearthSpacing.lg),
+            ScaleControl(
+              originalServings: original.servings,
+              targetServings: _targetServings,
+              onChanged: (double value) => setState(() => _target = value),
             ),
           ],
           const SizedBox(height: HearthSpacing.xl),
@@ -100,6 +130,10 @@ class _RecipeBody extends StatelessWidget {
             ],
             for (final RecipeIngredient ingredient in section.ingredients)
               _IngredientRow(ingredient: ingredient),
+          ],
+          if (scaled != null && scaled.hasWarnings) ...<Widget>[
+            const SizedBox(height: HearthSpacing.lg),
+            ScalingNotes(warnings: scaled.warnings),
           ],
           if (recipe.allSteps.isNotEmpty) ...<Widget>[
             const SizedBox(height: HearthSpacing.xl),

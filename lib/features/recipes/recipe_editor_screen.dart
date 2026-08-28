@@ -540,6 +540,7 @@ class _IngredientRow extends StatelessWidget {
           '${ingredient.quantity == null ? '' : '${QuantityFormat.formatAsAuthored(ingredient.quantity!)} '}'
           '${ingredient.name}. '
           '${food == null ? (ingredient.isOptional ? 'Optional, not counted.' : 'Not matched to a food.') : 'Matched to ${food!.name}.'}',
+      onTap: onMatch,
       excludeSemantics: true,
       child: InkWell(
         onTap: onMatch,

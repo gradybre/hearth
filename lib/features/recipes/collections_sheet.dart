@@ -201,6 +201,7 @@ class _CollectionRow extends StatelessWidget {
       child: Semantics(
         checked: selected,
         label: '${collection.name}, ${_count(collection.size)}',
+        onTap: onTap,
         excludeSemantics: true,
         child: Material(
           color: selected ? colors.surfaceSunken : colors.surface,

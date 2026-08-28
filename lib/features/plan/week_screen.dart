@@ -321,6 +321,7 @@ class _DayRow extends StatelessWidget {
       child: Semantics(
         button: true,
         selected: isSelected,
+        onTap: onTap,
         label:
             '${_weekdays[day.weekday - 1]} ${day.day}. '
             '${logged ? '${eaten.kcal.round()} calories logged' : 'nothing logged'}'

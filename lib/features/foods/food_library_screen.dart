@@ -142,6 +142,7 @@ class FoodCard extends StatelessWidget {
     return Semantics(
       button: true,
       label: '${food.name}. ${_summary(food)}',
+      onTap: () => context.push('/food/${food.id}'),
       excludeSemantics: true,
       child: Material(
         color: colors.surface,

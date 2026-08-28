@@ -188,6 +188,7 @@ class RecipeCard extends ConsumerWidget {
       label:
           '${recipe.title}. ${_summary(recipe)}'
           '${isFavorite ? '. Favourite' : ''}',
+      onTap: () => context.push('/recipe/${recipe.id}'),
       excludeSemantics: true,
       child: Material(
         color: colors.surface,

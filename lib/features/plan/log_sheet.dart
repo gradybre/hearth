@@ -544,6 +544,7 @@ class _PickRow extends StatelessWidget {
       child: Semantics(
         button: true,
         label: '$title. $subtitle',
+        onTap: onTap,
         excludeSemantics: true,
         child: Material(
           color: colors.surface,
@@ -604,6 +605,7 @@ class _RecentRow extends StatelessWidget {
       child: Semantics(
         button: true,
         label: '${recent.label}. Log again, $detail.',
+        onTap: onTap,
         excludeSemantics: true,
         child: Material(
           color: colors.surfaceSunken,

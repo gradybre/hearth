@@ -196,6 +196,7 @@ class _Chip extends StatelessWidget {
         button: true,
         selected: selected,
         label: label,
+        onTap: onTap,
         excludeSemantics: true,
         child: Material(
           color: selected ? colors.accent : colors.surface,

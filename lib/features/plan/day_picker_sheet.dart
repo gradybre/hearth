@@ -196,6 +196,7 @@ class _DayCheck extends StatelessWidget {
       child: Semantics(
         checked: selected,
         label: label,
+        onTap: () => onChanged(!selected),
         excludeSemantics: true,
         child: Material(
           color: selected ? colors.surfaceSunken : colors.surface,

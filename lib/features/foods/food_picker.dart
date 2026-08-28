@@ -190,6 +190,7 @@ class _FoodOption extends StatelessWidget {
           '${food.name}. '
           '${serving == null ? 'No serving size' : '${serving.macros.kcal.round()} calories per ${QuantityFormat.formatAsAuthored(serving.amount)}'}'
           '${selected ? '. Currently matched.' : ''}',
+      onTap: () => Navigator.of(context).pop(food.id),
       excludeSemantics: true,
       child: Material(
         color: selected ? colors.surfaceSunken : colors.surface,

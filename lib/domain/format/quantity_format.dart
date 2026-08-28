@@ -83,6 +83,13 @@ abstract final class QuantityFormat {
     return decimal ? _decimal(amount) : _fractional(amount);
   }
 
+  /// A bare count — servings, multipliers — with no unit attached.
+  ///
+  /// Fractional rather than decimal: "½×" and "1½" are how a cook reads a
+  /// half, and "0.5×" is how a spreadsheet does. Rounding lives here and
+  /// nowhere else, so a screen cannot invent its own.
+  static String count(double amount) => _fractional(amount);
+
   /// Weight: decimals, no fractions. Whole numbers above 10, one place below.
   static String _decimal(double amount) {
     if (amount.abs() >= 10) return amount.round().toString();

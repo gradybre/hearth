@@ -170,4 +170,17 @@ void main() {
     QuantityFormat.format(q);
     expect(q.canonicalAmount, 124.9);
   });
+
+  group('bare counts', () {
+    test('reads a half as a fraction, not a decimal', () {
+      // "0.5x" is spreadsheet language; a cook reads a half.
+      expect(QuantityFormat.count(0.5), '\u00bd');
+      expect(QuantityFormat.count(1.5), '1\u00bd');
+    });
+
+    test('leaves whole counts whole', () {
+      expect(QuantityFormat.count(6), '6');
+      expect(QuantityFormat.count(2), '2');
+    });
+  });
 }

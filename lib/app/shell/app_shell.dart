@@ -146,6 +146,7 @@ class _SidebarItem extends StatelessWidget {
       label: destination.semanticLabel,
       button: true,
       selected: selected,
+      onTap: onTap,
       excludeSemantics: true,
       child: Material(
         color: selected ? colors.surfaceSunken : Colors.transparent,
