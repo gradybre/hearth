@@ -127,8 +127,7 @@ void main() {
       await tester.tap(find.text('Mark done'));
       await tester.pump();
 
-      expect(find.text('Step 2 of 3'), findsOneWidget);
-      expect(find.text('1 done'), findsOneWidget);
+      expect(find.text('Step 2 of 3  ·  1 done'), findsOneWidget);
     });
 
     testWidgets('Back is unavailable on the first step', (
@@ -411,6 +410,130 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.byType(SingleChildScrollView), findsWidgets);
+    });
+  });
+
+  group('all-steps view', () {
+    Future<void> showList(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('All steps'));
+      await tester.pump();
+    }
+
+    testWidgets('shows every step at once, not just the one in focus', (
+      WidgetTester tester,
+    ) async {
+      await pumpCookAlong(tester);
+      expect(find.textContaining('Sear until browned'), findsNothing);
+
+      await showList(tester);
+
+      expect(find.textContaining('Season the ribs generously'), findsOneWidget);
+      expect(find.textContaining('Sear until browned'), findsOneWidget);
+      expect(find.textContaining('Serve over polenta'), findsOneWidget);
+    });
+
+    testWidgets('drops Back and Next, which mean nothing here', (
+      WidgetTester tester,
+    ) async {
+      await pumpCookAlong(tester);
+      expect(find.widgetWithText(OutlinedButton, 'Next'), findsOneWidget);
+
+      await showList(tester);
+
+      expect(find.widgetWithText(OutlinedButton, 'Next'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Back'), findsNothing);
+    });
+
+    testWidgets('ticking a step off does not jump to it', (
+      WidgetTester tester,
+    ) async {
+      // The check is its own target precisely so that scanning the list and
+      // marking something done are two different actions.
+      await pumpCookAlong(tester);
+      await showList(tester);
+
+      await tester.tap(find.byTooltip('Mark done').last);
+      await tester.pump();
+
+      expect(find.text('Step 1 of 3  ·  1 done'), findsOneWidget);
+      expect(
+        find.byTooltip('One step at a time'),
+        findsOneWidget,
+        reason: 'still in the list, not thrown back into the card',
+      );
+    });
+
+    testWidgets('tapping a step cooks from there', (WidgetTester tester) async {
+      await pumpCookAlong(tester);
+      await showList(tester);
+
+      await tester.tap(find.textContaining('Serve over polenta'));
+      await tester.pump();
+
+      expect(find.text('Step 3 of 3'), findsOneWidget);
+      expect(
+        find.byTooltip('All steps'),
+        findsOneWidget,
+        reason: 'the list is how you reach a step, not somewhere to stay',
+      );
+    });
+
+    testWidgets('a timer can be started without leaving the list', (
+      WidgetTester tester,
+    ) async {
+      final (_, FakeTimerAlerts alerts) = await pumpCookAlong(tester);
+      await showList(tester);
+
+      await tester.tap(find.text('Start 10 min timer'));
+      await tester.pump();
+
+      expect(alerts.scheduled, hasLength(1));
+    });
+
+    testWidgets('the step you are on is marked, and not by colour alone', (
+      WidgetTester tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpCookAlong(tester);
+      await showList(tester);
+
+      expect(
+        tester.getSemantics(
+          find.bySemanticsLabel(RegExp('Step 1. Season the ribs')),
+        ),
+        matchesSemantics(
+          isSelected: true,
+          hasSelectedState: true,
+          isButton: true,
+          hasTapAction: true,
+          label: 'Step 1. Season the ribs generously. Tap to cook from here.',
+        ),
+      );
+      handle.dispose();
+    });
+  });
+
+  group('the progress header', () {
+    testWidgets('is centred over the step', (WidgetTester tester) async {
+      await pumpCookAlong(tester);
+
+      final double headerCentre = tester.getCenter(find.text('Step 1 of 3')).dx;
+      final double screenCentre =
+          tester.getSize(find.byType(Scaffold)).width / 2;
+
+      expect((headerCentre - screenCentre).abs(), lessThan(2));
+    });
+
+    testWidgets('carries the done count on the same line', (
+      WidgetTester tester,
+    ) async {
+      await pumpCookAlong(tester);
+      expect(find.text('Step 1 of 3'), findsOneWidget);
+
+      await tester.tap(find.text('Mark done'));
+      await tester.pump();
+
+      expect(find.text('Step 2 of 3  ·  1 done'), findsOneWidget);
     });
   });
 }

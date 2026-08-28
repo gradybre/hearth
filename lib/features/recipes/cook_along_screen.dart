@@ -35,6 +35,13 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
   Timer? _tick;
   bool _askedPermission = false;
 
+  /// Whether every step is on screen at once, rather than one in focus.
+  ///
+  /// Two different jobs: the card is for cooking, the list is for scanning
+  /// ahead and seeing what is left. Session-local and not remembered — which
+  /// one you want depends on the moment, not on a preference.
+  bool _showAllSteps = false;
+
   // Read once in initState and held, not read from `ref` on the way out:
   // `ref` is unsafe once the widget is being unmounted, and dispose is exactly
   // where the screen has to be handed back. Eagerly, not `late` — a lazy field
@@ -119,6 +126,18 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
         title: Text(widget.recipe.title, style: context.text.label),
         actions: <Widget>[
           IconButton(
+            icon: Icon(
+              // A "1" in a box against a numbered list: the two icons say
+              // one-at-a-time and all-of-them without a word. An empty
+              // rectangle said nothing at all.
+              _showAllSteps
+                  ? Icons.looks_one_outlined
+                  : Icons.format_list_numbered,
+            ),
+            tooltip: _showAllSteps ? 'One step at a time' : 'All steps',
+            onPressed: () => setState(() => _showAllSteps = !_showAllSteps),
+          ),
+          IconButton(
             icon: const Icon(Icons.list_alt_outlined),
             tooltip: 'Ingredients',
             onPressed: () => _showIngredients(context),
@@ -148,17 +167,34 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                     ),
                   _Progress(session: _session),
                   Expanded(
-                    child: _StepCard(
-                      step: step,
-                      isChecked: _session.isChecked(step),
-                      onAdvance: () =>
-                          setState(() => _session = _session.next()),
-                      onCheck: () =>
-                          setState(() => _session = _session.toggle(step)),
-                      onStartTimer: step.hasTimer
-                          ? () => _startTimer(step)
-                          : null,
-                    ),
+                    child: _showAllSteps
+                        ? _StepList(
+                            session: _session,
+                            onCheck: (RecipeStep s) => setState(
+                              () =>
+                                  _session = _session.toggle(s, advance: false),
+                            ),
+                            // Tapping a step takes you to it and drops back
+                            // into cooking — the list is how you get to the
+                            // step you want, not somewhere to stay.
+                            onOpen: (int index) => setState(() {
+                              _session = _session.goTo(index);
+                              _showAllSteps = false;
+                            }),
+                            onStartTimer: _startTimer,
+                          )
+                        : _StepCard(
+                            step: step,
+                            isChecked: _session.isChecked(step),
+                            onAdvance: () =>
+                                setState(() => _session = _session.next()),
+                            onCheck: () => setState(
+                              () => _session = _session.toggle(step),
+                            ),
+                            onStartTimer: step.hasTimer
+                                ? () => _startTimer(step)
+                                : null,
+                          ),
                   ),
                   if (timers.isNotEmpty)
                     _TimerTray(
@@ -167,12 +203,14 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                       onPause: _togglePause,
                       onDismiss: _dismissTimer,
                     ),
-                  _Controls(
-                    session: _session,
-                    onBack: () =>
-                        setState(() => _session = _session.previous()),
-                    onNext: () => setState(() => _session = _session.next()),
-                  ),
+                  // Back and Next mean nothing when every step is on screen.
+                  if (!_showAllSteps)
+                    _Controls(
+                      session: _session,
+                      onBack: () =>
+                          setState(() => _session = _session.previous()),
+                      onNext: () => setState(() => _session = _session.next()),
+                    ),
                 ],
               ),
       ),
@@ -233,6 +271,14 @@ class _Progress extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
+    // Centred, and on one line with the count: the step below it is centred,
+    // and a lone label pinned to the left corner reads as though it belongs to
+    // a different screen.
+    final String label = session.checkedCount > 0
+        ? 'Step ${session.currentStep + 1} of ${session.stepCount}'
+              '  ·  ${session.checkedCount} done'
+        : 'Step ${session.currentStep + 1} of ${session.stepCount}';
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         HearthSpacing.lg,
@@ -240,19 +286,203 @@ class _Progress extends StatelessWidget {
         HearthSpacing.lg,
         0,
       ),
-      child: Row(
-        children: <Widget>[
-          Text(
-            'Step ${session.currentStep + 1} of ${session.stepCount}',
-            style: context.text.metadata.copyWith(color: colors.textMuted),
-          ),
-          const Spacer(),
-          if (session.checkedCount > 0)
-            Text(
-              '${session.checkedCount} done',
-              style: context.text.metadata.copyWith(color: colors.textMuted),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: context.text.metadata.copyWith(color: colors.textMuted),
+      ),
+    );
+  }
+}
+
+/// Every step at once (spec §5.2).
+///
+/// The card is for cooking; this is for scanning — what is coming, what is
+/// left, and getting straight to a step rather than tapping through to it.
+class _StepList extends StatelessWidget {
+  const _StepList({
+    required this.session,
+    required this.onCheck,
+    required this.onOpen,
+    required this.onStartTimer,
+  });
+
+  final CookSession session;
+  final ValueChanged<RecipeStep> onCheck;
+  final ValueChanged<int> onOpen;
+  final ValueChanged<RecipeStep> onStartTimer;
+
+  @override
+  Widget build(BuildContext context) {
+    final List<RecipeStep> steps = session.steps;
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(
+        HearthSpacing.lg,
+        HearthSpacing.md,
+        HearthSpacing.lg,
+        HearthSpacing.lg,
+      ),
+      itemCount: steps.length,
+      itemBuilder: (BuildContext context, int index) => _StepListRow(
+        step: steps[index],
+        isChecked: session.isChecked(steps[index]),
+        isCurrent: index == session.currentStep,
+        onCheck: () => onCheck(steps[index]),
+        onOpen: () => onOpen(index),
+        onStartTimer: steps[index].hasTimer
+            ? () => onStartTimer(steps[index])
+            : null,
+      ),
+    );
+  }
+}
+
+class _StepListRow extends StatelessWidget {
+  const _StepListRow({
+    required this.step,
+    required this.isChecked,
+    required this.isCurrent,
+    required this.onCheck,
+    required this.onOpen,
+    this.onStartTimer,
+  });
+
+  final RecipeStep step;
+  final bool isChecked;
+  final bool isCurrent;
+  final VoidCallback onCheck;
+  final VoidCallback onOpen;
+  final VoidCallback? onStartTimer;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
+      child: Semantics(
+        button: true,
+        selected: isCurrent,
+        label:
+            'Step ${step.stepNumber}. ${step.text}. '
+            '${isChecked ? 'Done. ' : ''}Tap to cook from here.',
+        onTap: onOpen,
+        excludeSemantics: true,
+        child: Material(
+          color: isCurrent ? colors.surfaceSunken : colors.surface,
+          borderRadius: BorderRadius.circular(HearthRadius.md),
+          child: InkWell(
+            onTap: onOpen,
+            borderRadius: BorderRadius.circular(HearthRadius.md),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(HearthRadius.md),
+                border: Border.all(
+                  // The step you are on carries a heavier edge as well as a
+                  // fill, so it is not marked by colour alone (spec §6.3).
+                  color: isCurrent ? colors.outlineStrong : colors.outline,
+                  width: isCurrent ? 2 : 1,
+                ),
+              ),
+              padding: const EdgeInsets.all(HearthSpacing.md),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  // Its own target, so ticking a step off does not mean
+                  // jumping to it first.
+                  IconButton(
+                    icon: Icon(
+                      isChecked
+                          ? Icons.check_circle
+                          : Icons.radio_button_unchecked,
+                      color: isChecked ? colors.accent : colors.textMuted,
+                    ),
+                    tooltip: isChecked ? 'Not done yet' : 'Mark done',
+                    onPressed: onCheck,
+                  ),
+                  const SizedBox(width: HearthSpacing.xs),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: HearthSpacing.sm),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            '${step.stepNumber}.  ${step.text}',
+                            style: context.text.ingredient.copyWith(
+                              fontSize: 17,
+                              height: 1.35,
+                              color: isChecked
+                                  ? colors.textMuted
+                                  : colors.textPrimary,
+                            ),
+                          ),
+                          if (onStartTimer != null) ...<Widget>[
+                            const SizedBox(height: HearthSpacing.sm),
+                            _TimerChip(
+                              label:
+                                  'Start '
+                                  '${_duration(Duration(seconds: step.timerSeconds!))} '
+                                  'timer',
+                              onPressed: onStartTimer!,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-        ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TimerChip extends StatelessWidget {
+  const _TimerChip({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Semantics(
+        button: true,
+        label: label,
+        onTap: onPressed,
+        excludeSemantics: true,
+        child: Material(
+          color: colors.background,
+          borderRadius: BorderRadius.circular(HearthRadius.md),
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(HearthRadius.md),
+            child: Container(
+              constraints: const BoxConstraints(
+                minHeight: HearthTouch.minTarget,
+              ),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(HearthRadius.md),
+                border: Border.all(color: colors.outline),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: HearthSpacing.md),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(Icons.timer_outlined, size: 18, color: colors.accent),
+                  const SizedBox(width: HearthSpacing.sm),
+                  Text(label, style: context.text.label),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
