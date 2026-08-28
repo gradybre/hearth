@@ -366,4 +366,51 @@ void main() {
       expect(find.byTooltip('Stop timer'), findsOneWidget);
     });
   });
+
+  group('the step in focus', () {
+    testWidgets('sits in the middle of the space it has', (
+      WidgetTester tester,
+    ) async {
+      await pumpCookAlong(tester);
+
+      final double stepCentre = tester
+          .getCenter(find.text('Season the ribs generously'))
+          .dy;
+      final double screenCentre =
+          tester.getSize(find.byType(Scaffold)).height / 2;
+
+      expect(
+        (stepCentre - screenCentre).abs(),
+        lessThan(120),
+        reason:
+            'the step should read as the subject of the screen, not as a '
+            'caption above a lot of empty space',
+      );
+    });
+
+    testWidgets('a long step scrolls rather than overflowing', (
+      WidgetTester tester,
+    ) async {
+      // Centring is exactly where this breaks: a centred child that cannot
+      // shrink overflows at both ends instead of scrolling.
+      await pumpCookAlong(
+        tester,
+        recipe: aRecipe(
+          steps: <RecipeStep>[
+            aStep(
+              'Season the ribs generously on every side, then leave them '
+              'uncovered in the fridge for at least an hour so the surface '
+              'dries out, which is what lets them take on a proper crust '
+              'when they hit the pan rather than steaming in their own '
+              'moisture and going grey.',
+              stepNumber: 1,
+            ),
+          ],
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(SingleChildScrollView), findsWidgets);
+    });
+  });
 }

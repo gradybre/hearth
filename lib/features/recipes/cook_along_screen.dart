@@ -293,30 +293,48 @@ class _StepCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        '${step.stepNumber}',
-                        style: context.text.recipeTitle.copyWith(
-                          color: colors.accent,
-                        ),
+                // The step sits in the middle of the space it has rather than
+                // pinned to the top: one step in focus reads as the subject of
+                // the screen, not as a caption above a lot of nothing.
+                //
+                // Center around the scroll view, not inside it — that way a
+                // short step is centred and a long one still scrolls from the
+                // top instead of being cropped at both ends.
+                child: Center(
+                  child: SingleChildScrollView(
+                    child: ConstrainedBox(
+                      // Caps the measure on a wide window. Centred text that
+                      // runs the full width of a desktop screen is a chore to
+                      // read back to the start of.
+                      constraints: const BoxConstraints(maxWidth: 560),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: <Widget>[
+                          Text(
+                            '${step.stepNumber}',
+                            textAlign: TextAlign.center,
+                            style: context.text.recipeTitle.copyWith(
+                              color: colors.accent,
+                            ),
+                          ),
+                          const SizedBox(height: HearthSpacing.md),
+                          Text(
+                            step.text,
+                            textAlign: TextAlign.center,
+                            // Kitchen-first legibility: read at arm's length
+                            // across a counter (spec §6.1).
+                            style: context.text.body.copyWith(
+                              fontSize: 26,
+                              height: 1.4,
+                              color: isChecked
+                                  ? colors.textMuted
+                                  : colors.textPrimary,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: HearthSpacing.md),
-                      Text(
-                        step.text,
-                        // Kitchen-first legibility: read at arm's length
-                        // across a counter (spec §6.1).
-                        style: context.text.body.copyWith(
-                          fontSize: 26,
-                          height: 1.4,
-                          color: isChecked
-                              ? colors.textMuted
-                              : colors.textPrimary,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
