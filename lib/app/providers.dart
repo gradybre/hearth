@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/adapters/kitchen_devices.dart';
 import '../data/adapters/platform_kitchen_devices.dart';
 import '../data/local/collection_store.dart';
+import '../data/local/cook_session_store.dart';
 import '../data/local/cook_timer_store.dart';
 import '../data/local/food_store.dart';
 import '../data/local/hearth_database.dart';
@@ -403,3 +404,8 @@ class CookStepViewNotifier extends AsyncNotifier<bool> {
     await _store.writeFlag(PreferenceStore.cookShowAllSteps, value: wanted);
   }
 }
+
+final Provider<CookSessionStore> cookSessionStoreProvider =
+    Provider<CookSessionStore>(
+      (Ref ref) => CookSessionStore(ref.watch(databaseProvider)),
+    );

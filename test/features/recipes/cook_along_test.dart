@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/app/theme/hearth_theme.dart';
+import 'package:hearth/data/local/cook_session_store.dart';
 import 'package:hearth/domain/cooking/cook_session.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/units/unit.dart';
 import 'package:hearth/features/recipes/cook_along_screen.dart';
 
+import '../../support/app_harness.dart';
 import '../../support/fake_kitchen.dart';
 import '../../support/fixtures.dart';
 
@@ -23,14 +25,18 @@ Recipe aCookableRecipe() => aRecipe(
   ],
 );
 
+late FakeCookSessionStore sessions;
+
 Future<(FakeScreenKeeper, FakeTimerAlerts)> pumpCookAlong(
   WidgetTester tester, {
   Recipe? recipe,
   List<CookTimer> timers = const <CookTimer>[],
   bool showAllSteps = false,
+  StoredCookProgress? saved,
 }) async {
   final FakeScreenKeeper keeper = FakeScreenKeeper();
   final FakeTimerAlerts alerts = FakeTimerAlerts();
+  sessions = FakeCookSessionStore(saved);
 
   await tester.pumpWidget(
     ProviderScope(
@@ -38,6 +44,7 @@ Future<(FakeScreenKeeper, FakeTimerAlerts)> pumpCookAlong(
         screenKeeperProvider.overrideWithValue(keeper),
         timerAlertsProvider.overrideWithValue(alerts),
         cookTimersProvider.overrideWith(() => FakeCookTimers(timers)),
+        cookSessionStoreProvider.overrideWithValue(sessions),
         cookShowAllStepsProvider.overrideWith(
           () => FakeCookStepView(showAllSteps),
         ),
@@ -567,6 +574,137 @@ void main() {
 
       expect(find.textContaining('Sear until browned'), findsOneWidget);
       expect(find.byTooltip('One step at a time'), findsOneWidget);
+    });
+  });
+
+  group('a cook keeps its place', () {
+    testWidgets('reopens on the step it was left on, still ticked', (
+      WidgetTester tester,
+    ) async {
+      // The ticked list records what has already happened at the stove. It
+      // cannot be reconstructed, so losing it to a back gesture means guessing
+      // at what you had already done.
+      final Recipe recipe = aCookableRecipe();
+      await pumpCookAlong(
+        tester,
+        recipe: recipe,
+        saved: StoredCookProgress(
+          currentStep: 1,
+          checkedStepIds: <String>{recipe.allSteps.first.id},
+        ),
+      );
+      await pumpFrames(tester);
+
+      expect(find.text('Step 2 of 3  ·  1 done'), findsOneWidget);
+    });
+
+    testWidgets('ticking a step writes it through at once', (
+      WidgetTester tester,
+    ) async {
+      // The moment worth saving is the one just before the phone is put down.
+      await pumpCookAlong(tester);
+      expect(sessions.saves, 0);
+
+      await tester.tap(find.text('Mark done'));
+      await tester.pump();
+
+      expect(sessions.saves, greaterThan(0));
+    });
+
+    testWidgets('a tick for a step that no longer exists is dropped', (
+      WidgetTester tester,
+    ) async {
+      // The recipe may have been edited since. A tick with no step to belong
+      // to would count towards "done" invisibly.
+      await pumpCookAlong(
+        tester,
+        saved: const StoredCookProgress(
+          currentStep: 0,
+          checkedStepIds: <String>{'a-step-that-was-deleted'},
+        ),
+      );
+      await pumpFrames(tester);
+
+      expect(find.text('Step 1 of 3'), findsOneWidget);
+    });
+
+    testWidgets('a step index past the end of an edited recipe is clamped', (
+      WidgetTester tester,
+    ) async {
+      await pumpCookAlong(
+        tester,
+        saved: const StoredCookProgress(
+          currentStep: 99,
+          checkedStepIds: <String>{},
+        ),
+      );
+      await pumpFrames(tester);
+
+      expect(find.text('Step 3 of 3'), findsOneWidget);
+    });
+  });
+
+  group('starting over', () {
+    testWidgets('is offered only once there is something to undo', (
+      WidgetTester tester,
+    ) async {
+      await pumpCookAlong(tester);
+
+      IconButton resetButton() => tester.widget<IconButton>(
+        find.ancestor(
+          of: find.byIcon(Icons.restart_alt),
+          matching: find.byType(IconButton),
+        ),
+      );
+      expect(resetButton().onPressed, isNull);
+
+      await tester.tap(find.text('Mark done'));
+      await tester.pump();
+
+      expect(resetButton().onPressed, isNotNull);
+    });
+
+    testWidgets('asks first, because it stops running timers', (
+      WidgetTester tester,
+    ) async {
+      final (_, FakeTimerAlerts alerts) = await pumpCookAlong(tester);
+      await tester.tap(find.text('Mark done'));
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.restart_alt));
+      await pumpFrames(tester, frames: 10);
+      expect(find.text('Start this recipe over?'), findsOneWidget);
+
+      await tester.tap(find.text('Cancel'));
+      await pumpFrames(tester, frames: 10);
+
+      expect(find.text('Step 2 of 3  ·  1 done'), findsOneWidget);
+      expect(alerts.cancelAlls, 0);
+    });
+
+    testWidgets('clears the ticks, the place, and every timer', (
+      WidgetTester tester,
+    ) async {
+      final (_, FakeTimerAlerts alerts) = await pumpCookAlong(tester);
+      await tester.tap(find.text('Season the ribs generously'));
+      await tester.pump();
+      await tester.tap(find.text('Start 10 min timer'));
+      await tester.pump();
+      await tester.tap(find.text('Mark done'));
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.restart_alt));
+      await pumpFrames(tester, frames: 10);
+      await tester.tap(find.text('Start over'));
+      await pumpFrames(tester, frames: 10);
+
+      expect(find.text('Step 1 of 3'), findsOneWidget);
+      expect(alerts.cancelAlls, 1);
+      expect(
+        sessions.clears,
+        1,
+        reason: 'the saved place has to go too, or it comes back on reopen',
+      );
     });
   });
 }

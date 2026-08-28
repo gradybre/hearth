@@ -31,6 +31,7 @@ part 'hearth_database.g.dart';
     IngredientMatches,
     CookTimers,
     Preferences,
+    CookSessions,
     PendingWrites,
   ],
 )
@@ -41,7 +42,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -66,6 +67,10 @@ class HearthDatabase extends _$HearthDatabase {
       // v5 remembers small device-local view choices (spec §5.2).
       if (from < 5) {
         await m.createTable(preferences);
+      }
+      // v6 keeps your place in a cook across launches (spec §5.2).
+      if (from < 6) {
+        await m.createTable(cookSessions);
       }
     },
     beforeOpen: (OpeningDetails details) async {

@@ -9,6 +9,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../data/adapters/kitchen_devices.dart';
+import '../../data/local/cook_session_store.dart';
 import '../../domain/cooking/cook_session.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/recipe.dart';
@@ -41,13 +42,16 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
   // would still be touched for the first time inside dispose.
   late final ScreenKeeper _screen;
   late final TimerAlerts _alerts;
+  late final CookSessionStore _sessions;
 
   @override
   void initState() {
     super.initState();
     _screen = ref.read(screenKeeperProvider);
     _alerts = ref.read(timerAlertsProvider);
+    _sessions = ref.read(cookSessionStoreProvider);
     _screen.keepAwake();
+    _restore();
     // One second is enough to move a countdown; the remaining time itself is
     // wall-clock, so a missed tick costs nothing but a late repaint.
     _tick = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
@@ -64,6 +68,81 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
     // an hour; they live in [cookTimersProvider] and outlive this screen.
     _screen.release();
     super.dispose();
+  }
+
+  /// Picks the cook back up where it was left.
+  ///
+  /// A ticked list is a record of what has already happened at the stove; it
+  /// cannot be reconstructed from anywhere else, so losing it to a stray back
+  /// gesture would mean guessing at what you had already done.
+  Future<void> _restore() async {
+    final StoredCookProgress? saved = await _sessions.read(
+      widget.recipe.id,
+      now: DateTime.now(),
+    );
+    if (saved == null || !mounted) return;
+    setState(() {
+      _session = CookSession(
+        recipe: widget.recipe,
+        // Clamped: the recipe may have been edited since, and a step index
+        // past the end would leave the screen with nothing to show.
+        currentStep: saved.currentStep.clamp(
+          0,
+          _session.steps.isEmpty ? 0 : _session.steps.length - 1,
+        ),
+        // Ticks for steps that no longer exist are dropped for the same
+        // reason — they would count towards "done" invisibly.
+        checkedStepIds: <String>{
+          for (final RecipeStep step in _session.steps)
+            if (saved.checkedStepIds.contains(step.id)) step.id,
+        },
+      );
+    });
+  }
+
+  /// Every change to where you are is written through immediately: the moment
+  /// worth saving is the one just before the phone is put down.
+  void _update(CookSession session) {
+    setState(() => _session = session);
+    _sessions.save(
+      recipeId: widget.recipe.id,
+      currentStep: session.currentStep,
+      checkedStepIds: session.checkedStepIds,
+      now: DateTime.now(),
+    );
+  }
+
+  /// Back to the top, with nothing ticked and nothing cooking.
+  Future<void> _reset() async {
+    await _sessions.clear(widget.recipe.id);
+    await ref.read(cookTimersProvider.notifier).dismissAll();
+    if (!mounted) return;
+    setState(() => _session = CookSession(recipe: widget.recipe));
+  }
+
+  Future<void> _confirmReset() async {
+    final bool confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (BuildContext context) => AlertDialog(
+            title: const Text('Start this recipe over?'),
+            content: const Text(
+              'Clears every tick and stops all running timers.',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Start over'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (confirmed) await _reset();
   }
 
   Future<void> _startTimer(RecipeStep step) async {
@@ -124,6 +203,19 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
         title: Text(widget.recipe.title, style: context.text.label),
         actions: <Widget>[
           IconButton(
+            icon: const Icon(Icons.restart_alt),
+            tooltip: 'Start over',
+            // Nothing to undo, nothing to offer: a live control that would
+            // pop a confirmation and then do nothing is just a trap.
+            onPressed:
+                _session.checkedCount == 0 &&
+                    _session.currentStep == 0 &&
+                    (ref.watch(cookTimersProvider).value ?? const <CookTimer>[])
+                        .isEmpty
+                ? null
+                : _confirmReset,
+          ),
+          IconButton(
             icon: Icon(
               // A "1" in a box against a numbered list: the two icons say
               // one-at-a-time and all-of-them without a word. An empty
@@ -176,20 +268,15 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                             // in the list navigates: the toggle above is the
                             // only way between the two views, so a tap here
                             // always means the same thing.
-                            onCheck: (RecipeStep s) => setState(
-                              () =>
-                                  _session = _session.toggle(s, advance: false),
-                            ),
+                            onCheck: (RecipeStep s) =>
+                                _update(_session.toggle(s, advance: false)),
                             onStartTimer: _startTimer,
                           )
                         : _StepCard(
                             step: step,
                             isChecked: _session.isChecked(step),
-                            onAdvance: () =>
-                                setState(() => _session = _session.next()),
-                            onCheck: () => setState(
-                              () => _session = _session.toggle(step),
-                            ),
+                            onAdvance: () => _update(_session.next()),
+                            onCheck: () => _update(_session.toggle(step)),
                             onStartTimer: step.hasTimer
                                 ? () => _startTimer(step)
                                 : null,
@@ -206,9 +293,8 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                   if (!showAllSteps)
                     _Controls(
                       session: _session,
-                      onBack: () =>
-                          setState(() => _session = _session.previous()),
-                      onNext: () => setState(() => _session = _session.next()),
+                      onBack: () => _update(_session.previous()),
+                      onNext: () => _update(_session.next()),
                     ),
                 ],
               ),

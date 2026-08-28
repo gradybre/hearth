@@ -7146,6 +7146,335 @@ class PreferencesCompanion extends UpdateCompanion<PreferenceRow> {
   }
 }
 
+class $CookSessionsTable extends CookSessions
+    with TableInfo<$CookSessionsTable, CookSessionRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CookSessionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _recipeIdMeta = const VerificationMeta(
+    'recipeId',
+  );
+  @override
+  late final GeneratedColumn<String> recipeId = GeneratedColumn<String>(
+    'recipe_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _currentStepMeta = const VerificationMeta(
+    'currentStep',
+  );
+  @override
+  late final GeneratedColumn<int> currentStep = GeneratedColumn<int>(
+    'current_step',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _checkedStepIdsMeta = const VerificationMeta(
+    'checkedStepIds',
+  );
+  @override
+  late final GeneratedColumn<String> checkedStepIds = GeneratedColumn<String>(
+    'checked_step_ids',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    recipeId,
+    currentStep,
+    checkedStepIds,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cook_sessions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CookSessionRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('recipe_id')) {
+      context.handle(
+        _recipeIdMeta,
+        recipeId.isAcceptableOrUnknown(data['recipe_id']!, _recipeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_recipeIdMeta);
+    }
+    if (data.containsKey('current_step')) {
+      context.handle(
+        _currentStepMeta,
+        currentStep.isAcceptableOrUnknown(
+          data['current_step']!,
+          _currentStepMeta,
+        ),
+      );
+    }
+    if (data.containsKey('checked_step_ids')) {
+      context.handle(
+        _checkedStepIdsMeta,
+        checkedStepIds.isAcceptableOrUnknown(
+          data['checked_step_ids']!,
+          _checkedStepIdsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {recipeId};
+  @override
+  CookSessionRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CookSessionRow(
+      recipeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recipe_id'],
+      )!,
+      currentStep: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}current_step'],
+      )!,
+      checkedStepIds: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}checked_step_ids'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CookSessionsTable createAlias(String alias) {
+    return $CookSessionsTable(attachedDatabase, alias);
+  }
+}
+
+class CookSessionRow extends DataClass implements Insertable<CookSessionRow> {
+  final String recipeId;
+  final int currentStep;
+
+  /// The ids of the steps ticked off, as a JSON array.
+  final String checkedStepIds;
+  final DateTime updatedAt;
+  const CookSessionRow({
+    required this.recipeId,
+    required this.currentStep,
+    required this.checkedStepIds,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['recipe_id'] = Variable<String>(recipeId);
+    map['current_step'] = Variable<int>(currentStep);
+    map['checked_step_ids'] = Variable<String>(checkedStepIds);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  CookSessionsCompanion toCompanion(bool nullToAbsent) {
+    return CookSessionsCompanion(
+      recipeId: Value(recipeId),
+      currentStep: Value(currentStep),
+      checkedStepIds: Value(checkedStepIds),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory CookSessionRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CookSessionRow(
+      recipeId: serializer.fromJson<String>(json['recipeId']),
+      currentStep: serializer.fromJson<int>(json['currentStep']),
+      checkedStepIds: serializer.fromJson<String>(json['checkedStepIds']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'recipeId': serializer.toJson<String>(recipeId),
+      'currentStep': serializer.toJson<int>(currentStep),
+      'checkedStepIds': serializer.toJson<String>(checkedStepIds),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  CookSessionRow copyWith({
+    String? recipeId,
+    int? currentStep,
+    String? checkedStepIds,
+    DateTime? updatedAt,
+  }) => CookSessionRow(
+    recipeId: recipeId ?? this.recipeId,
+    currentStep: currentStep ?? this.currentStep,
+    checkedStepIds: checkedStepIds ?? this.checkedStepIds,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  CookSessionRow copyWithCompanion(CookSessionsCompanion data) {
+    return CookSessionRow(
+      recipeId: data.recipeId.present ? data.recipeId.value : this.recipeId,
+      currentStep: data.currentStep.present
+          ? data.currentStep.value
+          : this.currentStep,
+      checkedStepIds: data.checkedStepIds.present
+          ? data.checkedStepIds.value
+          : this.checkedStepIds,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CookSessionRow(')
+          ..write('recipeId: $recipeId, ')
+          ..write('currentStep: $currentStep, ')
+          ..write('checkedStepIds: $checkedStepIds, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(recipeId, currentStep, checkedStepIds, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CookSessionRow &&
+          other.recipeId == this.recipeId &&
+          other.currentStep == this.currentStep &&
+          other.checkedStepIds == this.checkedStepIds &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CookSessionsCompanion extends UpdateCompanion<CookSessionRow> {
+  final Value<String> recipeId;
+  final Value<int> currentStep;
+  final Value<String> checkedStepIds;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const CookSessionsCompanion({
+    this.recipeId = const Value.absent(),
+    this.currentStep = const Value.absent(),
+    this.checkedStepIds = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CookSessionsCompanion.insert({
+    required String recipeId,
+    this.currentStep = const Value.absent(),
+    this.checkedStepIds = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : recipeId = Value(recipeId),
+       updatedAt = Value(updatedAt);
+  static Insertable<CookSessionRow> custom({
+    Expression<String>? recipeId,
+    Expression<int>? currentStep,
+    Expression<String>? checkedStepIds,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (recipeId != null) 'recipe_id': recipeId,
+      if (currentStep != null) 'current_step': currentStep,
+      if (checkedStepIds != null) 'checked_step_ids': checkedStepIds,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CookSessionsCompanion copyWith({
+    Value<String>? recipeId,
+    Value<int>? currentStep,
+    Value<String>? checkedStepIds,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return CookSessionsCompanion(
+      recipeId: recipeId ?? this.recipeId,
+      currentStep: currentStep ?? this.currentStep,
+      checkedStepIds: checkedStepIds ?? this.checkedStepIds,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (recipeId.present) {
+      map['recipe_id'] = Variable<String>(recipeId.value);
+    }
+    if (currentStep.present) {
+      map['current_step'] = Variable<int>(currentStep.value);
+    }
+    if (checkedStepIds.present) {
+      map['checked_step_ids'] = Variable<String>(checkedStepIds.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CookSessionsCompanion(')
+          ..write('recipeId: $recipeId, ')
+          ..write('currentStep: $currentStep, ')
+          ..write('checkedStepIds: $checkedStepIds, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $PendingWritesTable extends PendingWrites
     with TableInfo<$PendingWritesTable, PendingWriteRow> {
   @override
@@ -7691,6 +8020,7 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
       $IngredientMatchesTable(this);
   late final $CookTimersTable cookTimers = $CookTimersTable(this);
   late final $PreferencesTable preferences = $PreferencesTable(this);
+  late final $CookSessionsTable cookSessions = $CookSessionsTable(this);
   late final $PendingWritesTable pendingWrites = $PendingWritesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -7712,6 +8042,7 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
     ingredientMatches,
     cookTimers,
     preferences,
+    cookSessions,
     pendingWrites,
   ];
   @override
@@ -13452,6 +13783,195 @@ typedef $$PreferencesTableProcessedTableManager =
       PreferenceRow,
       PrefetchHooks Function()
     >;
+typedef $$CookSessionsTableCreateCompanionBuilder =
+    CookSessionsCompanion Function({
+      required String recipeId,
+      Value<int> currentStep,
+      Value<String> checkedStepIds,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$CookSessionsTableUpdateCompanionBuilder =
+    CookSessionsCompanion Function({
+      Value<String> recipeId,
+      Value<int> currentStep,
+      Value<String> checkedStepIds,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$CookSessionsTableFilterComposer
+    extends Composer<_$HearthDatabase, $CookSessionsTable> {
+  $$CookSessionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get recipeId => $composableBuilder(
+    column: $table.recipeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get currentStep => $composableBuilder(
+    column: $table.currentStep,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get checkedStepIds => $composableBuilder(
+    column: $table.checkedStepIds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CookSessionsTableOrderingComposer
+    extends Composer<_$HearthDatabase, $CookSessionsTable> {
+  $$CookSessionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get recipeId => $composableBuilder(
+    column: $table.recipeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get currentStep => $composableBuilder(
+    column: $table.currentStep,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get checkedStepIds => $composableBuilder(
+    column: $table.checkedStepIds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CookSessionsTableAnnotationComposer
+    extends Composer<_$HearthDatabase, $CookSessionsTable> {
+  $$CookSessionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get recipeId =>
+      $composableBuilder(column: $table.recipeId, builder: (column) => column);
+
+  GeneratedColumn<int> get currentStep => $composableBuilder(
+    column: $table.currentStep,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get checkedStepIds => $composableBuilder(
+    column: $table.checkedStepIds,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$CookSessionsTableTableManager
+    extends
+        RootTableManager<
+          _$HearthDatabase,
+          $CookSessionsTable,
+          CookSessionRow,
+          $$CookSessionsTableFilterComposer,
+          $$CookSessionsTableOrderingComposer,
+          $$CookSessionsTableAnnotationComposer,
+          $$CookSessionsTableCreateCompanionBuilder,
+          $$CookSessionsTableUpdateCompanionBuilder,
+          (
+            CookSessionRow,
+            BaseReferences<
+              _$HearthDatabase,
+              $CookSessionsTable,
+              CookSessionRow
+            >,
+          ),
+          CookSessionRow,
+          PrefetchHooks Function()
+        > {
+  $$CookSessionsTableTableManager(_$HearthDatabase db, $CookSessionsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CookSessionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CookSessionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CookSessionsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> recipeId = const Value.absent(),
+                Value<int> currentStep = const Value.absent(),
+                Value<String> checkedStepIds = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CookSessionsCompanion(
+                recipeId: recipeId,
+                currentStep: currentStep,
+                checkedStepIds: checkedStepIds,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String recipeId,
+                Value<int> currentStep = const Value.absent(),
+                Value<String> checkedStepIds = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CookSessionsCompanion.insert(
+                recipeId: recipeId,
+                currentStep: currentStep,
+                checkedStepIds: checkedStepIds,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CookSessionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$HearthDatabase,
+      $CookSessionsTable,
+      CookSessionRow,
+      $$CookSessionsTableFilterComposer,
+      $$CookSessionsTableOrderingComposer,
+      $$CookSessionsTableAnnotationComposer,
+      $$CookSessionsTableCreateCompanionBuilder,
+      $$CookSessionsTableUpdateCompanionBuilder,
+      (
+        CookSessionRow,
+        BaseReferences<_$HearthDatabase, $CookSessionsTable, CookSessionRow>,
+      ),
+      CookSessionRow,
+      PrefetchHooks Function()
+    >;
 typedef $$PendingWritesTableCreateCompanionBuilder =
     PendingWritesCompanion Function({
       Value<int> sequence,
@@ -13745,6 +14265,8 @@ class $HearthDatabaseManager {
       $$CookTimersTableTableManager(_db, _db.cookTimers);
   $$PreferencesTableTableManager get preferences =>
       $$PreferencesTableTableManager(_db, _db.preferences);
+  $$CookSessionsTableTableManager get cookSessions =>
+      $$CookSessionsTableTableManager(_db, _db.cookSessions);
   $$PendingWritesTableTableManager get pendingWrites =>
       $$PendingWritesTableTableManager(_db, _db.pendingWrites);
 }

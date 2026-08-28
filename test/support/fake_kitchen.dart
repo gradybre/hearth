@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hearth/app/cook_timers.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/data/adapters/kitchen_devices.dart';
+import 'package:hearth/data/local/cook_session_store.dart';
 import 'package:hearth/domain/cooking/cook_session.dart';
 
 /// Records what cook mode asked of the platform.
@@ -85,6 +86,13 @@ class FakeCookTimers extends CookTimersNotifier {
   }
 
   @override
+  Future<void> dismissAll() async {
+    _timers = const <CookTimer>[];
+    await ref.read(timerAlertsProvider).cancelAll();
+    state = const AsyncValue<List<CookTimer>>.data(<CookTimer>[]);
+  }
+
+  @override
   Future<void> togglePause(CookTimer timer) async {
     final DateTime now = DateTime.now();
     final CookTimer updated = timer.isPaused
@@ -125,5 +133,43 @@ class FakeCookStepView extends CookStepViewNotifier {
   Future<void> toggle() async {
     _showAll = !_showAll;
     state = AsyncValue<bool>.data(_showAll);
+  }
+}
+
+/// The cook-session store, held in memory.
+///
+/// Widget tests run under fake async and cannot drive sqlite; the real store is
+/// covered in cook_session_store_test.dart.
+class FakeCookSessionStore implements CookSessionStore {
+  FakeCookSessionStore([StoredCookProgress? saved]) : _saved = saved;
+
+  StoredCookProgress? _saved;
+  int clears = 0;
+  int saves = 0;
+
+  @override
+  Future<StoredCookProgress?> read(
+    String recipeId, {
+    required DateTime now,
+  }) async => _saved;
+
+  @override
+  Future<void> save({
+    required String recipeId,
+    required int currentStep,
+    required Set<String> checkedStepIds,
+    required DateTime now,
+  }) async {
+    saves++;
+    _saved = StoredCookProgress(
+      currentStep: currentStep,
+      checkedStepIds: checkedStepIds,
+    );
+  }
+
+  @override
+  Future<void> clear(String recipeId) async {
+    clears++;
+    _saved = null;
   }
 }

@@ -334,3 +334,22 @@ class Preferences extends Table {
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{key};
 }
+
+/// Where you are in cooking a particular recipe (spec §5.2).
+///
+/// Keyed by recipe, so opening a different one does not inherit another's
+/// ticks. Local-only and never synced: this is where *you* are standing in the
+/// method, not a fact about the household — a partner's phone showing your
+/// half-ticked list would be a lie about their own cooking.
+@DataClassName('CookSessionRow')
+class CookSessions extends Table {
+  TextColumn get recipeId => text()();
+  IntColumn get currentStep => integer().withDefault(const Constant(0))();
+
+  /// The ids of the steps ticked off, as a JSON array.
+  TextColumn get checkedStepIds => text().withDefault(const Constant('[]'))();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{recipeId};
+}
