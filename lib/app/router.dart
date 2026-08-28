@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/placeholder_screen.dart';
-import '../features/recipes/type_specimen_screen.dart';
+import '../features/recipes/recipe_detail_screen.dart';
+import '../features/recipes/recipe_editor_screen.dart';
+import '../features/recipes/recipe_library_screen.dart';
 import 'shell/app_shell.dart';
 import 'shell/destinations.dart';
 
@@ -19,11 +21,31 @@ import 'shell/destinations.dart';
 /// same page key, so Flutter reuses one [AppShell] element and the
 /// [IndexedStack] keeps all four sections alive.
 ///
-/// Detail screens (recipe view, cook-along) push onto the root navigator as
-/// full-screen routes rather than into a per-section stack.
+/// Detail screens push onto the root navigator as full-screen routes rather
+/// than into a per-section stack — which also keeps the shell out of the way
+/// while reading a recipe with messy hands.
 GoRouter buildRouter() => GoRouter(
   initialLocation: foodDestinations.first.path,
   routes: <RouteBase>[
+    // Listed before the section route: these have two or more segments, so
+    // they can never be mistaken for a section.
+    GoRoute(
+      path: '/recipe/new',
+      builder: (BuildContext context, GoRouterState state) =>
+          const RecipeEditorScreen(),
+    ),
+    GoRoute(
+      path: '/recipe/:id',
+      builder: (BuildContext context, GoRouterState state) =>
+          RecipeDetailScreen(recipeId: state.pathParameters['id']!),
+      routes: <RouteBase>[
+        GoRoute(
+          path: 'edit',
+          builder: (BuildContext context, GoRouterState state) =>
+              RecipeEditorScreen(recipeId: state.pathParameters['id']),
+        ),
+      ],
+    ),
     GoRoute(
       path: '/:section',
       redirect: (BuildContext context, GoRouterState state) {
@@ -69,7 +91,7 @@ class _ShellHost extends StatelessWidget {
       child: IndexedStack(
         index: index,
         children: const <Widget>[
-          TypeSpecimenScreen(),
+          RecipeLibraryScreen(),
           PlaceholderScreen(
             title: 'Plan',
             description:

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/a11y/accessibility.dart';
 import 'package:hearth/app/theme/hearth_theme.dart';
-import 'package:hearth/features/recipes/type_specimen_screen.dart';
+
+import '../../support/type_specimen.dart';
 
 Future<void> _pumpAtScale(
   WidgetTester tester,

@@ -3,23 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/shell/app_shell.dart';
 import 'package:hearth/app/shell/destinations.dart';
 import 'package:hearth/app/theme/hearth_theme.dart';
-import 'package:hearth/main.dart';
 
-Future<void> _pumpAt(WidgetTester tester, Size size) async {
-  tester.view.physicalSize = size;
-  tester.view.devicePixelRatio = 1.0;
-  addTearDown(tester.view.reset);
-  await tester.pumpWidget(const ProviderScopeApp());
-  await tester.pumpAndSettle();
-}
+import '../../support/app_harness.dart';
 
-/// Wraps the real app so the tests exercise the shipped widget tree.
-class ProviderScopeApp extends StatelessWidget {
-  const ProviderScopeApp({super.key});
-
-  @override
-  Widget build(BuildContext context) => const HearthApp();
-}
+Future<void> _pumpAt(WidgetTester tester, Size size) =>
+    pumpHearthApp(tester, size: size);
 
 void main() {
   const Size phone = Size(390, 844);
@@ -73,13 +61,14 @@ void main() {
       WidgetTester tester,
     ) async {
       await _pumpAt(tester, phone);
-      // Recipes is the landing section.
-      expect(find.text('Braised Short Ribs'), findsOneWidget);
+      // Recipes is the landing section; an empty library is what a new
+      // household actually sees (spec §5.8).
+      expect(find.text('Your library is empty'), findsOneWidget);
 
       await tester.tap(find.text('Shopping').last);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.text('Braised Short Ribs'), findsNothing);
+      expect(find.text('Your library is empty'), findsNothing);
       expect(find.textContaining('grouped by store'), findsOneWidget);
     });
 
@@ -88,11 +77,11 @@ void main() {
     ) async {
       await _pumpAt(tester, phone);
       await tester.tap(find.text('Plan').last);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 50));
       await tester.tap(find.text('Recipes').last);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.text('Braised Short Ribs'), findsOneWidget);
+      expect(find.text('Your library is empty'), findsOneWidget);
     });
   });
 
@@ -116,7 +105,7 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 50));
 
       for (final AppDestination d in foodDestinations) {
         expect(

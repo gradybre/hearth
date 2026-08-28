@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 
-import '../../app/a11y/accessibility.dart';
-import '../../app/theme/hearth_colors.dart';
-import '../../app/theme/hearth_spacing.dart';
-import '../../app/theme/hearth_theme.dart';
-import '../../app/theme/hearth_typography.dart';
-import '../../domain/parsing/direction_parser.dart';
+import 'package:hearth/app/a11y/accessibility.dart';
+import 'package:hearth/app/theme/hearth_colors.dart';
+import 'package:hearth/app/theme/hearth_spacing.dart';
+import 'package:hearth/app/theme/hearth_theme.dart';
+import 'package:hearth/app/theme/hearth_typography.dart';
+import 'package:hearth/domain/parsing/direction_parser.dart';
 
-/// A temporary screen showing the real type and colour tokens on realistic
-/// content, so the design language can be judged in context rather than on a
-/// spec sheet.
+/// A test fixture exercising the real type and colour tokens on realistic
+/// content.
 ///
-/// This is scaffolding for the theme decision, not the Recipes feature. It is
-/// replaced by the real recipe library in Step 5.
+/// It began as scaffolding for judging the type in context and now lives in
+/// the test tree, where it is the surface for the dynamic-type and reflow
+/// tests until the real macro dashboard lands with the planner. It is
+/// deliberately not part of the shipped app.
 class TypeSpecimenScreen extends StatelessWidget {
   const TypeSpecimenScreen({super.key});
 
