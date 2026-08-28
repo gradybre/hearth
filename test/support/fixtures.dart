@@ -128,3 +128,31 @@ Food aFoodPer100g(
     ),
   ],
 );
+
+/// Small copy helpers so a food test can vary one field without restating the
+/// whole constructor. Kept in the test tree rather than on the domain model,
+/// which has no need for them.
+extension FoodTestCopies on Food {
+  Food withHousehold(String? id) => _copy(householdId: id);
+  Food withBrand(String brand) => _copy(brand: brand);
+  Food withBarcode(String barcode) => _copy(barcode: barcode);
+
+  Food _copy({Object? householdId = _unset, String? brand, String? barcode}) =>
+      Food(
+        id: id,
+        name: name,
+        servingOptions: servingOptions,
+        source: source,
+        householdId: householdId == _unset
+            ? this.householdId
+            : householdId as String?,
+        brand: brand ?? this.brand,
+        storeTag: storeTag,
+        barcode: barcode ?? this.barcode,
+        gramsPerMillilitre: gramsPerMillilitre,
+        macrosOverridden: macrosOverridden,
+        isDeleted: isDeleted,
+      );
+}
+
+const Object _unset = Object();

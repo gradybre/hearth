@@ -1,9 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/local/food_store.dart';
 import '../data/local/hearth_database.dart';
 import '../data/local/pending_write_store.dart';
 import '../data/local/recipe_store.dart';
+import '../data/repositories/food_repository.dart';
 import '../data/repositories/recipe_repository.dart';
+import '../domain/models/food.dart';
 import '../domain/models/recipe.dart';
 
 /// The app's object graph.
@@ -66,4 +69,34 @@ final recipeByIdProvider = FutureProvider.family<Recipe?, String>((
   // Re-read when the library changes so an edit shows up here too.
   ref.watch(recipeLibraryProvider);
   return ref.watch(recipeRepositoryProvider).byId(id);
+});
+
+final Provider<FoodStore> foodStoreProvider = Provider<FoodStore>(
+  (Ref ref) => FoodStore(ref.watch(databaseProvider)),
+);
+
+final Provider<FoodRepository> foodRepositoryProvider =
+    Provider<FoodRepository>(
+      (Ref ref) => FoodRepository(
+        database: ref.watch(databaseProvider),
+        store: ref.watch(foodStoreProvider),
+        queue: ref.watch(pendingWriteStoreProvider),
+        householdId: ref.watch(currentHouseholdIdProvider),
+      ),
+    );
+
+/// The household's foods plus the global catalogue, re-emitted on any local
+/// change.
+final StreamProvider<List<Food>> foodLibraryProvider =
+    StreamProvider<List<Food>>(
+      (Ref ref) => ref.watch(foodRepositoryProvider).watchAll(),
+    );
+
+/// One food by id, including soft-deleted ones so a past log still resolves.
+final foodByIdProvider = FutureProvider.family<Food?, String>((
+  Ref ref,
+  String id,
+) async {
+  ref.watch(foodLibraryProvider);
+  return ref.watch(foodRepositoryProvider).byId(id);
 });

@@ -1,0 +1,490 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../app/providers.dart';
+import '../../app/theme/hearth_colors.dart';
+import '../../app/theme/hearth_spacing.dart';
+import '../../app/theme/hearth_theme.dart';
+import '../../data/repositories/food_repository.dart';
+import '../../domain/models/food.dart';
+import '../../domain/units/unit.dart';
+import 'food_draft.dart';
+
+/// Create or edit a food by hand (spec §5.5).
+///
+/// Until Phase 2 brings barcode lookup, this is the only way a food enters the
+/// library — and §12 names food-data coverage as the biggest threat to the
+/// success bar, so this screen has to be quick rather than thorough.
+class FoodEditorScreen extends ConsumerStatefulWidget {
+  const FoodEditorScreen({this.foodId, super.key});
+
+  final String? foodId;
+
+  @override
+  ConsumerState<FoodEditorScreen> createState() => _FoodEditorScreenState();
+}
+
+class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
+  FoodDraft _draft = FoodDraft.blank();
+  bool _loaded = false;
+  bool _saving = false;
+  bool _showErrors = false;
+
+  /// Units offered for a serving size. Deliberately short: these cover how
+  /// packets and recipes actually describe a portion.
+  static final List<Unit> _servingUnits = <Unit>[
+    Units.gram,
+    Units.kilogram,
+    Units.ounce,
+    Units.pound,
+    Units.millilitre,
+    Units.litre,
+    Units.tsp,
+    Units.tbsp,
+    Units.cup,
+    Units.flOz,
+    Units.item,
+    Units.slice,
+  ];
+
+  Future<void> _save() async {
+    if (!_draft.isValid) {
+      setState(() => _showErrors = true);
+      return;
+    }
+
+    final Food food = _draft.toFood();
+    final FoodRepository repository = ref.read(foodRepositoryProvider);
+
+    // Spec §5.5: a likely duplicate is a soft warning with a merge option,
+    // never a block — two genuinely different foods can share a name.
+    final List<Food> duplicates = await repository.likelyDuplicatesOf(food);
+    if (duplicates.isNotEmpty && mounted) {
+      final bool? proceed = await _confirmDuplicate(duplicates);
+      if (proceed != true) return;
+    }
+
+    if (!mounted) return;
+    setState(() => _saving = true);
+    try {
+      await repository.save(food);
+      if (mounted) Navigator.of(context).pop();
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<bool?> _confirmDuplicate(List<Food> duplicates) {
+    final HearthColors colors = context.colors;
+    return showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        backgroundColor: colors.surfaceElevated,
+        title: Text(
+          'Already in your library?',
+          style: context.text.sectionHeader,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              duplicates.length == 1
+                  ? 'This looks like a food you already have:'
+                  : 'This looks like foods you already have:',
+              style: context.text.body,
+            ),
+            const SizedBox(height: HearthSpacing.sm),
+            for (final Food duplicate in duplicates.take(3))
+              Text(
+                duplicate.brand == null
+                    ? '· ${duplicate.name}'
+                    : '· ${duplicate.name} (${duplicate.brand})',
+                style: context.text.body.copyWith(color: colors.textSecondary),
+              ),
+            const SizedBox(height: HearthSpacing.md),
+            Text(
+              'You can still save it — two things can share a name.',
+              style: context.text.metadata.copyWith(color: colors.textMuted),
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Go back'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Save anyway'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool editing = widget.foodId != null;
+
+    if (editing && !_loaded) {
+      final AsyncValue<Food?> existing = ref.watch(
+        foodByIdProvider(widget.foodId!),
+      );
+      return existing.when(
+        loading: () =>
+            const Scaffold(body: Center(child: CircularProgressIndicator())),
+        error: (Object e, StackTrace s) => Scaffold(
+          body: Center(child: Text('Could not open that food.\n$e')),
+        ),
+        data: (Food? food) {
+          if (food == null) {
+            return const Scaffold(
+              body: Center(child: Text('That food no longer exists.')),
+            );
+          }
+          _draft = FoodDraft.fromFood(food);
+          _loaded = true;
+          return _form(context);
+        },
+      );
+    }
+
+    return _form(context);
+  }
+
+  Widget _form(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final double gutter = MediaQuery.sizeOf(context).width >= 840
+        ? HearthSpacing.gutterExpanded
+        : HearthSpacing.gutterCompact;
+
+    return Scaffold(
+      backgroundColor: colors.background,
+      appBar: AppBar(
+        backgroundColor: colors.surface,
+        surfaceTintColor: Colors.transparent,
+        title: Text(
+          widget.foodId == null ? 'New food' : 'Edit food',
+          style: context.text.sectionHeader,
+        ),
+        leading: TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        leadingWidth: 88,
+        actions: <Widget>[
+          Padding(
+            padding: const EdgeInsets.only(right: HearthSpacing.sm),
+            child: FilledButton(
+              onPressed: _saving ? null : _save,
+              child: Text(_saving ? 'Saving…' : 'Save'),
+            ),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: EdgeInsets.all(gutter),
+          children: <Widget>[
+            _TextField(
+              label: 'Name',
+              value: _draft.name,
+              hint: 'Greek yogurt',
+              errorText: _showErrors ? _draft.nameError : null,
+              textCapitalization: TextCapitalization.sentences,
+              onChanged: (String v) =>
+                  setState(() => _draft = _draft.copyWith(name: v)),
+            ),
+            const SizedBox(height: HearthSpacing.lg),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: _TextField(
+                    label: 'Brand',
+                    value: _draft.brand,
+                    textCapitalization: TextCapitalization.words,
+                    onChanged: (String v) =>
+                        setState(() => _draft = _draft.copyWith(brand: v)),
+                  ),
+                ),
+                const SizedBox(width: HearthSpacing.md),
+                Expanded(
+                  child: _TextField(
+                    label: 'Store',
+                    value: _draft.storeTag,
+                    hint: 'Costco',
+                    textCapitalization: TextCapitalization.words,
+                    onChanged: (String v) =>
+                        setState(() => _draft = _draft.copyWith(storeTag: v)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: HearthSpacing.xl),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: <Widget>[
+                Text('Serving sizes', style: context.text.sectionHeader),
+                TextButton.icon(
+                  onPressed: () => setState(
+                    () => _draft = _draft.copyWith(
+                      servings: <ServingDraft>[
+                        ..._draft.servings,
+                        const ServingDraft(),
+                      ],
+                    ),
+                  ),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add'),
+                ),
+              ],
+            ),
+            if (_showErrors && _draft.servingsError != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
+                child: Text(
+                  _draft.servingsError!,
+                  style: context.text.metadata.copyWith(color: colors.error),
+                ),
+              ),
+            const SizedBox(height: HearthSpacing.sm),
+            for (int i = 0; i < _draft.servings.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: HearthSpacing.md),
+                child: _ServingRow(
+                  serving: _draft.servings[i],
+                  units: _servingUnits,
+                  canRemove: _draft.servings.length > 1,
+                  onChanged: (ServingDraft updated) => setState(() {
+                    final List<ServingDraft> next = <ServingDraft>[
+                      ..._draft.servings,
+                    ];
+                    next[i] = updated;
+                    _draft = _draft.copyWith(servings: next);
+                  }),
+                  onRemove: () => setState(() {
+                    final List<ServingDraft> next = <ServingDraft>[
+                      ..._draft.servings,
+                    ]..removeAt(i);
+                    _draft = _draft.copyWith(servings: next);
+                  }),
+                ),
+              ),
+            const SizedBox(height: HearthSpacing.xxl),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ServingRow extends StatelessWidget {
+  const _ServingRow({
+    required this.serving,
+    required this.units,
+    required this.canRemove,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  final ServingDraft serving;
+  final List<Unit> units;
+  final bool canRemove;
+  final ValueChanged<ServingDraft> onChanged;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(HearthRadius.md),
+        border: Border.all(color: colors.outline),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(HearthSpacing.md),
+        child: Column(
+          children: <Widget>[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
+                Expanded(
+                  flex: 2,
+                  child: _TextField(
+                    label: 'Amount',
+                    value: serving.amount,
+                    keyboardType: TextInputType.number,
+                    onChanged: (String v) =>
+                        onChanged(serving.copyWith(amount: v)),
+                  ),
+                ),
+                const SizedBox(width: HearthSpacing.md),
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'Unit',
+                        style: context.text.metadata.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: HearthSpacing.xs),
+                      DropdownButtonFormField<String>(
+                        initialValue: serving.unitId,
+                        isExpanded: true,
+                        style: context.text.body.copyWith(
+                          color: colors.textPrimary,
+                        ),
+                        dropdownColor: colors.surfaceElevated,
+                        items: <DropdownMenuItem<String>>[
+                          for (final Unit unit in units)
+                            DropdownMenuItem<String>(
+                              value: unit.id,
+                              child: Text(
+                                unit.label.isEmpty ? 'item' : unit.label,
+                              ),
+                            ),
+                        ],
+                        onChanged: (String? value) {
+                          if (value == null) return;
+                          onChanged(serving.copyWith(unitId: value));
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                if (canRemove)
+                  IconButton(
+                    onPressed: onRemove,
+                    tooltip: 'Remove this serving size',
+                    icon: Icon(Icons.close, color: colors.textMuted),
+                  ),
+              ],
+            ),
+            const SizedBox(height: HearthSpacing.md),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: _TextField(
+                    label: 'kcal',
+                    value: serving.kcal,
+                    keyboardType: TextInputType.number,
+                    onChanged: (String v) =>
+                        onChanged(serving.copyWith(kcal: v)),
+                  ),
+                ),
+                const SizedBox(width: HearthSpacing.sm),
+                Expanded(
+                  child: _TextField(
+                    label: 'Protein',
+                    value: serving.protein,
+                    keyboardType: TextInputType.number,
+                    onChanged: (String v) =>
+                        onChanged(serving.copyWith(protein: v)),
+                  ),
+                ),
+                const SizedBox(width: HearthSpacing.sm),
+                Expanded(
+                  child: _TextField(
+                    label: 'Carbs',
+                    value: serving.carbs,
+                    keyboardType: TextInputType.number,
+                    onChanged: (String v) =>
+                        onChanged(serving.copyWith(carbs: v)),
+                  ),
+                ),
+                const SizedBox(width: HearthSpacing.sm),
+                Expanded(
+                  child: _TextField(
+                    label: 'Fat',
+                    value: serving.fat,
+                    keyboardType: TextInputType.number,
+                    onChanged: (String v) =>
+                        onChanged(serving.copyWith(fat: v)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A labelled field driven by a value rather than a controller, so the parent
+/// can hold the draft as immutable state.
+class _TextField extends StatefulWidget {
+  const _TextField({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.hint,
+    this.errorText,
+    this.keyboardType,
+    this.textCapitalization = TextCapitalization.none,
+  });
+
+  final String label;
+  final String value;
+  final String? hint;
+  final String? errorText;
+  final TextInputType? keyboardType;
+  final TextCapitalization textCapitalization;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_TextField> createState() => _TextFieldState();
+}
+
+class _TextFieldState extends State<_TextField> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.value,
+  );
+
+  @override
+  void didUpdateWidget(_TextField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Only adopt an external change; never fight the user's cursor.
+    if (widget.value != _controller.text) {
+      _controller.text = widget.value;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          widget.label,
+          style: context.text.metadata.copyWith(color: colors.textSecondary),
+        ),
+        const SizedBox(height: HearthSpacing.xs),
+        TextField(
+          controller: _controller,
+          onChanged: widget.onChanged,
+          keyboardType: widget.keyboardType,
+          textCapitalization: widget.textCapitalization,
+          style: context.text.body,
+          decoration: InputDecoration(
+            hintText: widget.hint,
+            errorText: widget.errorText,
+          ),
+        ),
+      ],
+    );
+  }
+}

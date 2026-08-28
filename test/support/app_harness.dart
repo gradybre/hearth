@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/data/local/hearth_database.dart';
+import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/main.dart';
 
@@ -14,9 +15,9 @@ import 'package:hearth/main.dart';
 ///  * [databaseProvider] gets an in-memory database. Without it a widget test
 ///    would open the on-disk database the app itself uses, so tests would
 ///    share state with each other and with the developer's own library.
-///  * [recipeLibraryProvider] is fed a plain stream of [recipes]. Widget tests
-///    run under fake async, which cannot drive real sqlite I/O, so a
-///    DB-backed stream would never emit — leaving the loading spinner on
+///  * [recipeLibraryProvider] and [foodLibraryProvider] are fed plain streams.
+///    Widget tests run under fake async, which cannot drive real sqlite I/O,
+///    so a DB-backed stream would never emit — leaving the loading spinner on
 ///    screen and its animation timer pending at teardown. Feeding the data
 ///    directly keeps these tests about the UI, deterministic, and fast.
 ///
@@ -26,6 +27,7 @@ Future<HearthDatabase> pumpHearthApp(
   WidgetTester tester, {
   Size size = const Size(390, 844),
   List<Recipe> recipes = const <Recipe>[],
+  List<Food> foods = const <Food>[],
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -42,6 +44,9 @@ Future<HearthDatabase> pumpHearthApp(
         databaseProvider.overrideWithValue(db),
         recipeLibraryProvider.overrideWith(
           (Ref ref) => Stream<List<Recipe>>.value(recipes),
+        ),
+        foodLibraryProvider.overrideWith(
+          (Ref ref) => Stream<List<Food>>.value(foods),
         ),
       ],
       child: const HearthApp(),

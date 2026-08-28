@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/foods/food_editor_screen.dart';
+import '../features/foods/food_library_screen.dart';
 import '../features/placeholder_screen.dart';
 import '../features/recipes/recipe_detail_screen.dart';
 import '../features/recipes/recipe_editor_screen.dart';
@@ -45,6 +47,16 @@ GoRouter buildRouter() => GoRouter(
               RecipeEditorScreen(recipeId: state.pathParameters['id']),
         ),
       ],
+    ),
+    GoRoute(
+      path: '/food/new',
+      builder: (BuildContext context, GoRouterState state) =>
+          const FoodEditorScreen(),
+    ),
+    GoRoute(
+      path: '/food/:id',
+      builder: (BuildContext context, GoRouterState state) =>
+          FoodEditorScreen(foodId: state.pathParameters['id']),
     ),
     GoRoute(
       path: '/:section',
@@ -105,13 +117,7 @@ class _ShellHost extends StatelessWidget {
                 'editable before any export.',
             phase: 'Phase 4',
           ),
-          PlaceholderScreen(
-            title: 'Foods',
-            description:
-                'Your household food library. Manual entry first; barcode '
-                'scanning arrives in Phase 2.',
-            phase: 'Phase 1 · Step 6',
-          ),
+          FoodLibraryScreen(),
         ],
       ),
     );
