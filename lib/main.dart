@@ -39,17 +39,22 @@ class _HearthAppState extends ConsumerState<HearthApp> {
     // locked door.
     if (!ref.watch(supabaseReadyProvider)) return _routed();
 
-    return ref
-        .watch(accountProvider)
-        .when(
-          loading: () => _plain(const _Waiting()),
-          // A failure here is a session that could not be resolved, so the
-          // way forward is to sign in again rather than to sit on a spinner.
-          error: (Object error, StackTrace stack) =>
-              _plain(const SignInScreen()),
-          data: (HearthAccount? account) =>
-              account == null ? _plain(const SignInScreen()) : _routed(),
-        );
+    // Watched, not merely created: the controller registers its triggers in
+    // build, so nothing would ever drain the queue if no one listened.
+    ref.watch(syncControllerProvider);
+
+    final AsyncValue<HearthAccount?> account = ref.watch(accountProvider);
+
+    // Only ever spinner before the first answer. Once the account is known,
+    // a re-emission must not swap the sign-in screen out for a spinner and
+    // back: that destroys its State, taking the typed email and the error
+    // message with it — so a failed sign-in would silently wipe the form
+    // instead of saying what went wrong.
+    if (account.isLoading && !account.hasValue) return _plain(const _Waiting());
+
+    // An error here is a session that could not be resolved, so the way
+    // forward is to sign in again rather than to sit on a spinner.
+    return account.value == null ? _plain(const SignInScreen()) : _routed();
   }
 
   Widget _routed() => MaterialApp.router(

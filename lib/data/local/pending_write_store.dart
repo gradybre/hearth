@@ -129,6 +129,16 @@ class PendingWriteStore {
     return rows.length;
   }
 
+  /// How many writes are waiting, re-emitted as the queue changes.
+  ///
+  /// Doubles as the signal that something was written locally, which is what
+  /// prompts a sync — there is no separate "something changed" event to
+  /// listen for, and inventing one would be a second thing to keep in step.
+  Stream<int> watchCount() => _db
+      .select(_db.pendingWrites)
+      .watch()
+      .map((List<PendingWriteRow> rows) => rows.length);
+
   /// Removes a write that reached the server.
   Future<void> markSynced(int sequence) async {
     await (_db.delete(

@@ -22,10 +22,13 @@ import '../data/local/plan_store.dart';
 import '../data/local/preference_store.dart';
 import '../data/local/recipe_photo_store.dart';
 import '../data/local/recipe_store.dart';
+import '../data/remote/remote_gateway.dart';
+import '../data/remote/supabase_remote_gateway.dart';
 import '../data/repositories/collection_repository.dart';
 import '../data/repositories/food_repository.dart';
 import '../data/repositories/plan_repository.dart';
 import '../data/repositories/recipe_repository.dart';
+import '../data/sync/sync_engine.dart';
 import '../domain/cooking/cook_session.dart';
 import '../domain/models/food.dart';
 import '../domain/models/macros.dart';
@@ -37,6 +40,7 @@ import '../domain/planning/week.dart';
 import '../domain/recipes/macro_calculator.dart';
 import '../domain/recipes/recipe_query.dart';
 import 'cook_timers.dart';
+import 'sync_controller.dart';
 
 /// The app's object graph.
 ///
@@ -477,3 +481,31 @@ final StreamProvider<HearthAccount?> accountProvider =
     StreamProvider<HearthAccount?>(
       (Ref ref) => ref.watch(authGatewayProvider).watchAccount(),
     );
+
+// ── Sync (spec §7.1) ─────────────────────────────────────────────────────────
+
+final Provider<RemoteGateway?> remoteGatewayProvider = Provider<RemoteGateway?>(
+  (Ref ref) => ref.watch(supabaseReadyProvider)
+      ? SupabaseRemoteGateway(Supabase.instance.client)
+      : null,
+);
+
+final Provider<SyncEngine> syncEngineProvider = Provider<SyncEngine>((Ref ref) {
+  final RemoteGateway? gateway = ref.watch(remoteGatewayProvider);
+  if (gateway == null) {
+    throw StateError('Sync needs a configured Supabase connection.');
+  }
+  return SyncEngine(
+    queue: ref.watch(pendingWriteStoreProvider),
+    gateway: gateway,
+  );
+});
+
+/// How many writes are waiting to go up. Also the signal that something was
+/// written locally, which is one of the things that triggers a sync.
+final StreamProvider<int> pendingWriteCountProvider = StreamProvider<int>(
+  (Ref ref) => ref.watch(pendingWriteStoreProvider).watchCount(),
+);
+
+final NotifierProvider<SyncController, SyncStatus> syncControllerProvider =
+    NotifierProvider<SyncController, SyncStatus>(SyncController.new);
