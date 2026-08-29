@@ -17,6 +17,8 @@ import '../../domain/recipes/ingredient_matcher.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/text/text_normaliser.dart';
 import '../foods/food_picker.dart';
+import 'match_review_controller.dart';
+import 'match_review_screen.dart';
 import 'recipe_draft.dart';
 import 'recipe_photo.dart';
 
@@ -118,6 +120,57 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
         if (mounted) setState(() => _matches = next);
       });
     }
+  }
+
+  /// Ingredients in section [i] with no food attached and no reason to skip.
+  List<ParsedIngredient> _unmatchedIn(int i, RecipeDraft draft) =>
+      <ParsedIngredient>[
+        for (final ParsedIngredient ingredient in RecipeDraft.parseIngredients(
+          _sections[i].ingredients.text,
+        ))
+          // Optional lines are excluded from macros on purpose (§5.2): not a
+          // gap, so not something to go looking for.
+          if (!ingredient.isOptional &&
+              ingredient.name.trim().isNotEmpty &&
+              draft.foodIdFor(ingredient.name) == null)
+            ingredient,
+      ];
+
+  /// Searches every unmatched line, then hands the results to the review
+  /// screen before any of it counts (spec §5.3).
+  Future<void> _findMatches(List<ParsedIngredient> unmatched) async {
+    ref.read(matchReviewProvider.notifier).reset();
+    final Map<String, String>? applied = await showMatchReview(
+      context,
+      ingredients: unmatched,
+    );
+    if (applied == null || applied.isEmpty || !mounted) return;
+
+    setState(() {
+      final Map<String, String> next = <String, String>{..._matches};
+      for (final MapEntry<String, String> entry in applied.entries) {
+        final String key = normaliseKey(entry.key);
+        next[key] = entry.value;
+        _autoApplied.add(key);
+      }
+      _matches = next;
+    });
+
+    // Remembered like any other correction, so the same ingredient string is
+    // never looked up twice (spec §5.3).
+    final String household = ref.read(currentHouseholdIdProvider);
+    for (final MapEntry<String, String> entry in applied.entries) {
+      await ref
+          .read(ingredientMatchStoreProvider)
+          .remember(
+            householdId: household,
+            ingredientString: entry.key,
+            foodId: entry.value,
+            id: const Uuid().v4(),
+            updatedAt: DateTime.now(),
+          );
+    }
+    ref.invalidate(rememberedMatchesProvider);
   }
 
   Future<void> _matchIngredient(ParsedIngredient ingredient) async {
@@ -408,6 +461,25 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
                   draft: draft,
                   onMatch: _matchIngredient,
                 ),
+                if (_unmatchedIn(i, draft) case final List<ParsedIngredient> u
+                    when u.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: HearthSpacing.sm),
+                  // Offered, not automatic. A dozen searches fired while
+                  // someone is still typing their ingredients would be work
+                  // nobody asked for, against services free to rate-limit us.
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => _findMatches(u),
+                      icon: const Icon(Icons.travel_explore, size: 18),
+                      label: Text(
+                        u.length == 1
+                            ? 'Find nutrition for 1 ingredient'
+                            : 'Find nutrition for ${u.length} ingredients',
+                      ),
+                    ),
+                  ),
+                ],
               ],
               const SizedBox(height: HearthSpacing.lg),
               _Field(

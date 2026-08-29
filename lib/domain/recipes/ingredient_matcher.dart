@@ -146,3 +146,174 @@ abstract final class IngredientMatcher {
     return used;
   }
 }
+
+/// A food offered by some source, with how much that source trusts it.
+///
+/// Domain-side stand-in for a nutrition-source result, so the matching logic
+/// stays pure Dart and testable without a network or an adapter in sight.
+@immutable
+class MatchCandidate {
+  const MatchCandidate({required this.food, required this.confidence});
+
+  final Food food;
+
+  /// 0..1, as the source reported it.
+  final double confidence;
+}
+
+/// A best guess at which candidate an ingredient line meant.
+@immutable
+class CandidateGuess {
+  const CandidateGuess({
+    required this.food,
+    required this.score,
+    required this.isAmbiguous,
+  });
+
+  final Food food;
+
+  /// 0..1. How well the name actually matched, before confidence is folded in.
+  final double score;
+
+  /// True when the runner-up was nearly as good.
+  ///
+  /// Spec §5.3 asks for genuinely ambiguous matches to be flagged rather than
+  /// quietly resolved. "Cheddar cheese" against four supermarket cheddars has
+  /// no right answer the app can know — but it does know that it doesn't know,
+  /// and saying so is what keeps a wrong macro from being silently adopted.
+  final bool isAmbiguous;
+}
+
+/// Picking a food for an ingredient from what the outside world offered.
+///
+/// Separate from [IngredientMatcher.suggest] on purpose. That resolves against
+/// the household's own library, where a hit is something the user has already
+/// vouched for. This ranks strangers' data, so nothing it produces is ever
+/// applied without being seen (spec §5.3).
+abstract final class CandidateMatcher {
+  /// How close the runner-up may be before the winner is called ambiguous.
+  static const double _ambiguityMargin = 0.08;
+
+  /// Words shorter than this are not required to appear.
+  ///
+  /// They are articles and prepositions — "of", "la", "in" — that carry no
+  /// meaning a food name is obliged to repeat. Note that this is *not* a
+  /// stemmer: "bay leaf" will not find "Bay leaves", and that gap is left to
+  /// the user's one tap rather than papered over with guesswork that would
+  /// also match "leafy greens".
+  static const int _minimumTokenLength = 3;
+
+  /// The best candidate for [ingredientName], or null when none is close
+  /// enough to be worth offering.
+  ///
+  /// [candidates] arrive in source-priority order and that order breaks exact
+  /// ties, so the household's own sources keep precedence over a stranger's.
+  static CandidateGuess? best({
+    required String ingredientName,
+    required List<MatchCandidate> candidates,
+  }) {
+    final List<String> wanted = _tokens(ingredientName);
+    if (wanted.isEmpty || candidates.isEmpty) return null;
+
+    double bestScore = 0;
+    double runnerUpScore = 0;
+    Food? winner;
+    Food? runnerUp;
+
+    for (final MatchCandidate candidate in candidates) {
+      final double score = _score(wanted, candidate);
+      if (score > bestScore) {
+        runnerUpScore = bestScore;
+        runnerUp = winner;
+        bestScore = score;
+        winner = candidate.food;
+      } else if (score > runnerUpScore) {
+        runnerUpScore = score;
+        runnerUp = candidate.food;
+      }
+    }
+
+    // Below half the words matched it is a coin flip wearing a suggestion's
+    // clothes, and a wrong macro is worse than a missing one.
+    if (winner == null || bestScore < 0.5) return null;
+
+    final bool tooClose = bestScore - runnerUpScore < _ambiguityMargin;
+
+    return CandidateGuess(
+      food: winner,
+      score: bestScore,
+      // A tie only matters if it changes the answer. Every supermarket's
+      // cheddar is 393 kcal per 100 g, so which one is picked costs the user
+      // nothing — and flagging every near-tie made the flag mean nothing,
+      // which is the same as not having one.
+      isAmbiguous: tooClose && !_macrosAgree(winner, runnerUp),
+    );
+  }
+
+  /// How far two foods' energy may differ before the choice between them
+  /// matters.
+  static const double _macroTolerance = 0.1;
+
+  /// Whether two candidates would give materially the same numbers.
+  ///
+  /// Compared per canonical unit so a food described per 100 g and one
+  /// described per ounce are still comparable. Anything that cannot be
+  /// compared — no servings, no energy — counts as disagreement: nothing to
+  /// compare is nothing to be reassured by.
+  static bool _macrosAgree(Food a, Food? b) {
+    if (b == null) return false;
+
+    final double? left = _kcalPerCanonicalUnit(a);
+    final double? right = _kcalPerCanonicalUnit(b);
+    if (left == null || right == null) return false;
+
+    final double larger = left > right ? left : right;
+    if (larger == 0) return false;
+
+    return (left - right).abs() / larger <= _macroTolerance;
+  }
+
+  static double? _kcalPerCanonicalUnit(Food food) {
+    final ServingOption? serving = food.defaultServing;
+    if (serving == null) return null;
+
+    final double amount = serving.amount.canonicalAmount;
+    if (amount == 0) return null;
+
+    final double kcal = serving.macros.kcal;
+    return kcal == 0 ? null : kcal / amount;
+  }
+
+  static double _score(List<String> wanted, MatchCandidate candidate) {
+    final String name = normaliseKey(candidate.food.name);
+    if (name.isEmpty) return 0;
+
+    final String haystack = normaliseKey(
+      '${candidate.food.name} ${candidate.food.brand ?? ''}',
+    );
+
+    final int hits = wanted.where(haystack.contains).length;
+    if (hits == 0) return 0;
+
+    // Every word has to land somewhere. A partial hit is how "cheese" ends up
+    // matched to "cheese and onion crisps".
+    final double coverage = hits / wanted.length;
+    if (coverage < 1) return coverage * 0.5;
+
+    // All words present. Now prefer the plainest candidate: an ingredient line
+    // says "cheddar cheese", and the food closest to just those words is a
+    // better answer than one that buries them in a product name.
+    final int extra = (name.split(' ').length - wanted.length).clamp(0, 20);
+    final double plainness = 1 / (1 + extra * 0.25);
+
+    // An exact name is the one case worth calling certain.
+    final double exactness = name == wanted.join(' ') ? 1 : plainness;
+
+    return 0.6 + 0.4 * exactness * candidate.confidence.clamp(0, 1);
+  }
+
+  static List<String> _tokens(String value) => <String>[
+    for (final String word in normaliseKey(value).split(' '))
+      if (word.length >= _minimumTokenLength) word,
+  ];
+}
