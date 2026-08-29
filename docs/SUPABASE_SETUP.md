@@ -77,6 +77,16 @@ Under **Authentication → Sign In / Providers → Email**:
 - [ ] **Minimum password length** — 12, matching `supabase/config.toml`.
 - [ ] **Password requirements** — lowercase, uppercase, and digits.
 
+Under **Authentication → URL Configuration**:
+
+- [ ] **Site URL** — this is where a confirmation email sends someone *after*
+      verifying. It defaults to `http://localhost:3000`, which is nothing: the
+      account is confirmed and the browser then shows a connection error, which
+      reads exactly like a broken app to whoever just signed up.
+
+      Interim: set it to any page that loads. The real answer is a deep link
+      back into Hearth, recorded in the gaps below.
+
 Under **Authentication → Attack Protection**:
 
 - [ ] **Leaked password protection** — on. This is the HaveIBeenPwned check
@@ -122,6 +132,23 @@ lands in a commit: say so immediately and rotate it.
 
 ### 6. Push the schema
 
+The two projects, created 2026-08-29. These are identifiers, not secrets: the
+ref is the project's hostname and is embedded in every client request. The keys
+and the database password are not here and never will be.
+
+| Project | Ref | Used for |
+|---|---|---|
+| `hearth` | `iizsdbvohyhwbukrwilf` | The real one |
+| `hearth-test` | `rhyomdiihpiigynzeshu` | The live integration suite (§9.3) |
+
+Switching between them — and between either and the local stack — is one
+command:
+
+```bash
+supabase link --project-ref iizsdbvohyhwbukrwilf   # or the test ref
+```
+
+
 ```bash
 supabase link --project-ref <your-project-ref>
 supabase db push
@@ -135,6 +162,22 @@ supabase db push
   initialised anywhere in `lib/`; `Env` reads the config and guards it, and
   that is all. Finishing this checklist today changes nothing visible in the
   app until accounts land.
+- **The email confirmation link does not come back to the app.** Supabase
+  verifies the address and then redirects to the Site URL, so the last thing a
+  new user sees is a web page rather than Hearth. The fix is a deep link — a
+  `hearth://` URL scheme registered in the iOS and macOS targets, added to
+  **Authentication → URL Configuration → Redirect URLs**, and handled by
+  `supabase_flutter`, which listens for auth callbacks already. Belongs with
+  **§10 phase 5 (household sharing polish)**, and should land *before* a second
+  person is invited: the first-run experience is the whole of what they see.
+
+- **A share code cannot be rotated.** `households.share_code` is generated once
+  and there is no way to issue a new one, so a code that leaks — read aloud,
+  screenshotted, pasted into a chat — lets anyone with an account join that
+  household and read and edit the shared library forever. §5.1 does not call
+  for rotation, but it is the obvious companion to unlinking, which is also
+  unbuilt. Phase 5, with unlink.
+
 - **Data written before first sign-in is not adopted.** An unconfigured build
   writes under a fixed `local-household` id; signing in switches to a real one,
   and those rows stay behind on disk rather than moving across. Only affects a
