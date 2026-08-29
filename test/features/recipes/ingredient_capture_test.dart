@@ -78,13 +78,20 @@ void main() {
   testWidgets('an ingredient offers scanning instead of a trip to Foods', (
     WidgetTester tester,
   ) async {
-    await openIngredientPicker(tester);
+    // A library that has foods, none of which is olive oil.
+    await openIngredientPicker(
+      tester,
+      foods: <Food>[aFood('Butter', id: 'food-butter')],
+    );
 
     expect(find.text('Match "olive oil"'), findsOneWidget);
     expect(find.byIcon(Icons.qr_code_scanner), findsWidgets);
     // The old copy sent the user away to add the food and come back. The
     // packet is already in their hand.
     expect(find.textContaining('come back and match it'), findsNothing);
+    // And the message is about the library, not about the world — results
+    // from Open Food Facts and USDA may be listed right underneath it.
+    expect(find.textContaining('None of your foods match'), findsOneWidget);
   });
 
   testWidgets('scanning a food already in the library matches the line', (

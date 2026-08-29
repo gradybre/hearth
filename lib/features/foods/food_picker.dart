@@ -347,9 +347,11 @@ class _NoFoods extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
+          // Only ever about the household's own foods: results from further
+          // afield may well be listed directly underneath this.
           Text(
             hasAny
-                ? 'No food matches that search.'
+                ? 'None of your foods match.'
                 : 'Your food library is empty.',
             style: context.text.body,
             textAlign: TextAlign.center,
