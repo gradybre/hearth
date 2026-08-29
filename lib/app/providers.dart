@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../data/adapters/edge_function_recipe_ai.dart';
 import '../data/adapters/image_picker_photos.dart';
 import '../data/adapters/kitchen_devices.dart';
 import '../data/adapters/library_nutrition_source.dart';
@@ -13,6 +14,7 @@ import '../data/adapters/nutrition_source.dart';
 import '../data/adapters/open_food_facts_source.dart';
 import '../data/adapters/photo_picker.dart';
 import '../data/adapters/platform_kitchen_devices.dart';
+import '../data/adapters/recipe_ai.dart';
 import '../data/adapters/usda_nutrition_source.dart';
 import '../data/auth/auth_gateway.dart';
 import '../data/auth/local_auth_gateway.dart';
@@ -568,6 +570,17 @@ final Provider<bool> cameraScanningAvailableProvider = Provider<bool>(
     TargetPlatform.macOS => true,
     _ => false,
   },
+);
+
+/// Recipe import and generation (spec §5.3, §5.4).
+///
+/// Null when there is no backend to reach: the Claude API key lives in an Edge
+/// Function, so an unconfigured build has no way to import or generate and the
+/// screens say so rather than failing at the moment of use.
+final Provider<RecipeAiSource?> recipeAiProvider = Provider<RecipeAiSource?>(
+  (Ref ref) => ref.watch(supabaseReadyProvider)
+      ? EdgeFunctionRecipeAi(Supabase.instance.client)
+      : null,
 );
 
 final Provider<NutritionLookup> nutritionLookupProvider =
