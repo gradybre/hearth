@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../local/hearth_database.dart';
+import '../remote/supabase_remote_gateway.dart';
 
 /// Writes records that arrived from the server straight into the local cache.
 ///
@@ -20,9 +21,13 @@ class RemoteRows {
   // ── Timestamped records, resolved by last-write-wins ──────────────────────
 
   Future<DateTime?> updatedAtFor(String table, String id) async {
+    // Most tables are keyed by id; the food profile is one row per user and
+    // keyed that way on both sides. Asking for `id` there would be a query
+    // against a column that does not exist.
+    final String key = SupabaseRemoteGateway.keyColumns[table] ?? 'id';
     final List<QueryRow> rows = await _db
         .customSelect(
-          'select updated_at from $table where id = ?',
+          'select updated_at from $table where $key = ?',
           variables: <Variable<Object>>[Variable<String>(id)],
         )
         .get();
@@ -78,6 +83,30 @@ class RemoteRows {
           updatedAt: _time(json['updated_at']),
         ),
       );
+
+  Future<void> applyFoodProfile(Map<String, Object?> json) => _db
+      .into(_db.foodProfiles)
+      .insertOnConflictUpdate(
+        FoodProfileRow(
+          userId: '${json['user_id']}',
+          caloriesPerMealTarget: _double(json['calories_per_meal_target']),
+          proteinTargetG: _double(json['protein_target_g']),
+          allergies: _joinList(json['allergies']),
+          dislikes: _joinList(json['dislikes']),
+          dietaryPreferences: _joinList(json['dietary_preferences']),
+          preferredMealTypes: _joinList(json['preferred_meal_types']),
+          updatedAt: _time(json['updated_at']),
+        ),
+      );
+
+  /// A Postgres text[] arrives as a list; stored newline-joined to match
+  /// [FoodProfileStore].
+  static String _joinList(Object? value) => value is List<Object?>
+      ? <String>[
+          for (final Object? item in value)
+            if ('$item'.trim().isNotEmpty) '$item'.trim(),
+        ].join('\n')
+      : '';
 
   Future<void> applyCollection(Map<String, Object?> json) => _db
       .into(_db.collections)

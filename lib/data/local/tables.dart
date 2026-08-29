@@ -323,6 +323,32 @@ class CookTimers extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
 
+/// The user's own food profile (spec §4, §5.4).
+///
+/// One row per user — the generator wants "the profile", not a history of it,
+/// and the server enforces that with user_id as the primary key. Private per
+/// user (§8.2): a partner's dislikes are not the household's business.
+///
+/// The list columns are stored as newline-joined text rather than a relation.
+/// They are short, always read whole, and never queried across — a join table
+/// would buy nothing and cost a migration.
+@DataClassName('FoodProfileRow')
+class FoodProfiles extends Table {
+  TextColumn get userId => text()();
+  RealColumn get caloriesPerMealTarget => real().nullable()();
+  RealColumn get proteinTargetG => real().nullable()();
+  TextColumn get preferredMealTypes =>
+      text().withDefault(const Constant<String>(''))();
+  TextColumn get dietaryPreferences =>
+      text().withDefault(const Constant<String>(''))();
+  TextColumn get dislikes => text().withDefault(const Constant<String>(''))();
+  TextColumn get allergies => text().withDefault(const Constant<String>(''))();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{userId};
+}
+
 /// Small local preferences — how the app is set up on *this* device.
 ///
 /// Key/value rather than a column per setting: these are device-local view

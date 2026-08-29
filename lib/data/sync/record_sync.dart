@@ -50,6 +50,7 @@ class RecordSync {
           (table: 'meal_plan_entries', apply: _rows.applyEntry),
           (table: 'macro_targets', apply: _rows.applyTargets),
           (table: 'collections', apply: _rows.applyCollection),
+          (table: 'food_profiles', apply: _rows.applyFoodProfile),
         ]) {
       final PullResult result = await _pullTable(spec.table, spec.apply);
       applied += result.applied;

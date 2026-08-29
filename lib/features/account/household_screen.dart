@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
 import '../../app/sync_controller.dart';
@@ -105,6 +106,56 @@ class _HouseholdScreenState extends ConsumerState<HouseholdScreen> {
               Text(account.email, style: context.text.body),
               const SizedBox(height: HearthSpacing.xl),
             ],
+            // The profile is per-user and private, which is exactly why it
+            // sits on this screen rather than anywhere shared (§8.2).
+            Semantics(
+              button: true,
+              label:
+                  'Your food profile. What Hearth reads when it writes you '
+                  'a recipe.',
+              onTap: () => context.push('/profile'),
+              excludeSemantics: true,
+              child: Material(
+                color: colors.surface,
+                borderRadius: BorderRadius.circular(HearthRadius.md),
+                child: InkWell(
+                  onTap: () => context.push('/profile'),
+                  borderRadius: BorderRadius.circular(HearthRadius.md),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(HearthRadius.md),
+                      border: Border.all(color: colors.outline),
+                    ),
+                    padding: const EdgeInsets.all(HearthSpacing.md),
+                    child: Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                'Your food profile',
+                                style: context.text.ingredient,
+                              ),
+                              const SizedBox(height: HearthSpacing.xxs),
+                              Text(
+                                'Allergies, dislikes, how you like to eat. '
+                                'Private to you.',
+                                style: context.text.metadata.copyWith(
+                                  color: colors.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.chevron_right, color: colors.textMuted),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: HearthSpacing.xl),
             Text('Cook together', style: context.text.sectionHeader),
             const SizedBox(height: HearthSpacing.sm),
             Text(

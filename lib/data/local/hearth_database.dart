@@ -30,6 +30,7 @@ part 'hearth_database.g.dart';
     MacroTargets,
     IngredientMatches,
     CookTimers,
+    FoodProfiles,
     Preferences,
     CookSessions,
     RecipePhotos,
@@ -43,7 +44,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -76,6 +77,11 @@ class HearthDatabase extends _$HearthDatabase {
       // v7 remembers a recipe's hero photo on this device (spec §5.2).
       if (from < 7) {
         await m.createTable(recipePhotos);
+      }
+      // v9 caches the food profile, so the generator can read allergies and
+      // dislikes offline and without a round trip (spec §5.4).
+      if (from < 9) {
+        await m.createTable(foodProfiles);
       }
       // v8 ties a timer to its step, so a step can only ever have one.
       if (from < 8) {

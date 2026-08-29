@@ -6987,6 +6987,552 @@ class CookTimersCompanion extends UpdateCompanion<CookTimerRow> {
   }
 }
 
+class $FoodProfilesTable extends FoodProfiles
+    with TableInfo<$FoodProfilesTable, FoodProfileRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FoodProfilesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _caloriesPerMealTargetMeta =
+      const VerificationMeta('caloriesPerMealTarget');
+  @override
+  late final GeneratedColumn<double> caloriesPerMealTarget =
+      GeneratedColumn<double>(
+        'calories_per_meal_target',
+        aliasedName,
+        true,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _proteinTargetGMeta = const VerificationMeta(
+    'proteinTargetG',
+  );
+  @override
+  late final GeneratedColumn<double> proteinTargetG = GeneratedColumn<double>(
+    'protein_target_g',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _preferredMealTypesMeta =
+      const VerificationMeta('preferredMealTypes');
+  @override
+  late final GeneratedColumn<String> preferredMealTypes =
+      GeneratedColumn<String>(
+        'preferred_meal_types',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant<String>(''),
+      );
+  static const VerificationMeta _dietaryPreferencesMeta =
+      const VerificationMeta('dietaryPreferences');
+  @override
+  late final GeneratedColumn<String> dietaryPreferences =
+      GeneratedColumn<String>(
+        'dietary_preferences',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant<String>(''),
+      );
+  static const VerificationMeta _dislikesMeta = const VerificationMeta(
+    'dislikes',
+  );
+  @override
+  late final GeneratedColumn<String> dislikes = GeneratedColumn<String>(
+    'dislikes',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant<String>(''),
+  );
+  static const VerificationMeta _allergiesMeta = const VerificationMeta(
+    'allergies',
+  );
+  @override
+  late final GeneratedColumn<String> allergies = GeneratedColumn<String>(
+    'allergies',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant<String>(''),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    userId,
+    caloriesPerMealTarget,
+    proteinTargetG,
+    preferredMealTypes,
+    dietaryPreferences,
+    dislikes,
+    allergies,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'food_profiles';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FoodProfileRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('calories_per_meal_target')) {
+      context.handle(
+        _caloriesPerMealTargetMeta,
+        caloriesPerMealTarget.isAcceptableOrUnknown(
+          data['calories_per_meal_target']!,
+          _caloriesPerMealTargetMeta,
+        ),
+      );
+    }
+    if (data.containsKey('protein_target_g')) {
+      context.handle(
+        _proteinTargetGMeta,
+        proteinTargetG.isAcceptableOrUnknown(
+          data['protein_target_g']!,
+          _proteinTargetGMeta,
+        ),
+      );
+    }
+    if (data.containsKey('preferred_meal_types')) {
+      context.handle(
+        _preferredMealTypesMeta,
+        preferredMealTypes.isAcceptableOrUnknown(
+          data['preferred_meal_types']!,
+          _preferredMealTypesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dietary_preferences')) {
+      context.handle(
+        _dietaryPreferencesMeta,
+        dietaryPreferences.isAcceptableOrUnknown(
+          data['dietary_preferences']!,
+          _dietaryPreferencesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dislikes')) {
+      context.handle(
+        _dislikesMeta,
+        dislikes.isAcceptableOrUnknown(data['dislikes']!, _dislikesMeta),
+      );
+    }
+    if (data.containsKey('allergies')) {
+      context.handle(
+        _allergiesMeta,
+        allergies.isAcceptableOrUnknown(data['allergies']!, _allergiesMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {userId};
+  @override
+  FoodProfileRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FoodProfileRow(
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      )!,
+      caloriesPerMealTarget: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}calories_per_meal_target'],
+      ),
+      proteinTargetG: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}protein_target_g'],
+      ),
+      preferredMealTypes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}preferred_meal_types'],
+      )!,
+      dietaryPreferences: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}dietary_preferences'],
+      )!,
+      dislikes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}dislikes'],
+      )!,
+      allergies: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}allergies'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $FoodProfilesTable createAlias(String alias) {
+    return $FoodProfilesTable(attachedDatabase, alias);
+  }
+}
+
+class FoodProfileRow extends DataClass implements Insertable<FoodProfileRow> {
+  final String userId;
+  final double? caloriesPerMealTarget;
+  final double? proteinTargetG;
+  final String preferredMealTypes;
+  final String dietaryPreferences;
+  final String dislikes;
+  final String allergies;
+  final DateTime updatedAt;
+  const FoodProfileRow({
+    required this.userId,
+    this.caloriesPerMealTarget,
+    this.proteinTargetG,
+    required this.preferredMealTypes,
+    required this.dietaryPreferences,
+    required this.dislikes,
+    required this.allergies,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['user_id'] = Variable<String>(userId);
+    if (!nullToAbsent || caloriesPerMealTarget != null) {
+      map['calories_per_meal_target'] = Variable<double>(caloriesPerMealTarget);
+    }
+    if (!nullToAbsent || proteinTargetG != null) {
+      map['protein_target_g'] = Variable<double>(proteinTargetG);
+    }
+    map['preferred_meal_types'] = Variable<String>(preferredMealTypes);
+    map['dietary_preferences'] = Variable<String>(dietaryPreferences);
+    map['dislikes'] = Variable<String>(dislikes);
+    map['allergies'] = Variable<String>(allergies);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  FoodProfilesCompanion toCompanion(bool nullToAbsent) {
+    return FoodProfilesCompanion(
+      userId: Value(userId),
+      caloriesPerMealTarget: caloriesPerMealTarget == null && nullToAbsent
+          ? const Value.absent()
+          : Value(caloriesPerMealTarget),
+      proteinTargetG: proteinTargetG == null && nullToAbsent
+          ? const Value.absent()
+          : Value(proteinTargetG),
+      preferredMealTypes: Value(preferredMealTypes),
+      dietaryPreferences: Value(dietaryPreferences),
+      dislikes: Value(dislikes),
+      allergies: Value(allergies),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory FoodProfileRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FoodProfileRow(
+      userId: serializer.fromJson<String>(json['userId']),
+      caloriesPerMealTarget: serializer.fromJson<double?>(
+        json['caloriesPerMealTarget'],
+      ),
+      proteinTargetG: serializer.fromJson<double?>(json['proteinTargetG']),
+      preferredMealTypes: serializer.fromJson<String>(
+        json['preferredMealTypes'],
+      ),
+      dietaryPreferences: serializer.fromJson<String>(
+        json['dietaryPreferences'],
+      ),
+      dislikes: serializer.fromJson<String>(json['dislikes']),
+      allergies: serializer.fromJson<String>(json['allergies']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'userId': serializer.toJson<String>(userId),
+      'caloriesPerMealTarget': serializer.toJson<double?>(
+        caloriesPerMealTarget,
+      ),
+      'proteinTargetG': serializer.toJson<double?>(proteinTargetG),
+      'preferredMealTypes': serializer.toJson<String>(preferredMealTypes),
+      'dietaryPreferences': serializer.toJson<String>(dietaryPreferences),
+      'dislikes': serializer.toJson<String>(dislikes),
+      'allergies': serializer.toJson<String>(allergies),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  FoodProfileRow copyWith({
+    String? userId,
+    Value<double?> caloriesPerMealTarget = const Value.absent(),
+    Value<double?> proteinTargetG = const Value.absent(),
+    String? preferredMealTypes,
+    String? dietaryPreferences,
+    String? dislikes,
+    String? allergies,
+    DateTime? updatedAt,
+  }) => FoodProfileRow(
+    userId: userId ?? this.userId,
+    caloriesPerMealTarget: caloriesPerMealTarget.present
+        ? caloriesPerMealTarget.value
+        : this.caloriesPerMealTarget,
+    proteinTargetG: proteinTargetG.present
+        ? proteinTargetG.value
+        : this.proteinTargetG,
+    preferredMealTypes: preferredMealTypes ?? this.preferredMealTypes,
+    dietaryPreferences: dietaryPreferences ?? this.dietaryPreferences,
+    dislikes: dislikes ?? this.dislikes,
+    allergies: allergies ?? this.allergies,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  FoodProfileRow copyWithCompanion(FoodProfilesCompanion data) {
+    return FoodProfileRow(
+      userId: data.userId.present ? data.userId.value : this.userId,
+      caloriesPerMealTarget: data.caloriesPerMealTarget.present
+          ? data.caloriesPerMealTarget.value
+          : this.caloriesPerMealTarget,
+      proteinTargetG: data.proteinTargetG.present
+          ? data.proteinTargetG.value
+          : this.proteinTargetG,
+      preferredMealTypes: data.preferredMealTypes.present
+          ? data.preferredMealTypes.value
+          : this.preferredMealTypes,
+      dietaryPreferences: data.dietaryPreferences.present
+          ? data.dietaryPreferences.value
+          : this.dietaryPreferences,
+      dislikes: data.dislikes.present ? data.dislikes.value : this.dislikes,
+      allergies: data.allergies.present ? data.allergies.value : this.allergies,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FoodProfileRow(')
+          ..write('userId: $userId, ')
+          ..write('caloriesPerMealTarget: $caloriesPerMealTarget, ')
+          ..write('proteinTargetG: $proteinTargetG, ')
+          ..write('preferredMealTypes: $preferredMealTypes, ')
+          ..write('dietaryPreferences: $dietaryPreferences, ')
+          ..write('dislikes: $dislikes, ')
+          ..write('allergies: $allergies, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    userId,
+    caloriesPerMealTarget,
+    proteinTargetG,
+    preferredMealTypes,
+    dietaryPreferences,
+    dislikes,
+    allergies,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FoodProfileRow &&
+          other.userId == this.userId &&
+          other.caloriesPerMealTarget == this.caloriesPerMealTarget &&
+          other.proteinTargetG == this.proteinTargetG &&
+          other.preferredMealTypes == this.preferredMealTypes &&
+          other.dietaryPreferences == this.dietaryPreferences &&
+          other.dislikes == this.dislikes &&
+          other.allergies == this.allergies &&
+          other.updatedAt == this.updatedAt);
+}
+
+class FoodProfilesCompanion extends UpdateCompanion<FoodProfileRow> {
+  final Value<String> userId;
+  final Value<double?> caloriesPerMealTarget;
+  final Value<double?> proteinTargetG;
+  final Value<String> preferredMealTypes;
+  final Value<String> dietaryPreferences;
+  final Value<String> dislikes;
+  final Value<String> allergies;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const FoodProfilesCompanion({
+    this.userId = const Value.absent(),
+    this.caloriesPerMealTarget = const Value.absent(),
+    this.proteinTargetG = const Value.absent(),
+    this.preferredMealTypes = const Value.absent(),
+    this.dietaryPreferences = const Value.absent(),
+    this.dislikes = const Value.absent(),
+    this.allergies = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FoodProfilesCompanion.insert({
+    required String userId,
+    this.caloriesPerMealTarget = const Value.absent(),
+    this.proteinTargetG = const Value.absent(),
+    this.preferredMealTypes = const Value.absent(),
+    this.dietaryPreferences = const Value.absent(),
+    this.dislikes = const Value.absent(),
+    this.allergies = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : userId = Value(userId),
+       updatedAt = Value(updatedAt);
+  static Insertable<FoodProfileRow> custom({
+    Expression<String>? userId,
+    Expression<double>? caloriesPerMealTarget,
+    Expression<double>? proteinTargetG,
+    Expression<String>? preferredMealTypes,
+    Expression<String>? dietaryPreferences,
+    Expression<String>? dislikes,
+    Expression<String>? allergies,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (userId != null) 'user_id': userId,
+      if (caloriesPerMealTarget != null)
+        'calories_per_meal_target': caloriesPerMealTarget,
+      if (proteinTargetG != null) 'protein_target_g': proteinTargetG,
+      if (preferredMealTypes != null)
+        'preferred_meal_types': preferredMealTypes,
+      if (dietaryPreferences != null) 'dietary_preferences': dietaryPreferences,
+      if (dislikes != null) 'dislikes': dislikes,
+      if (allergies != null) 'allergies': allergies,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FoodProfilesCompanion copyWith({
+    Value<String>? userId,
+    Value<double?>? caloriesPerMealTarget,
+    Value<double?>? proteinTargetG,
+    Value<String>? preferredMealTypes,
+    Value<String>? dietaryPreferences,
+    Value<String>? dislikes,
+    Value<String>? allergies,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return FoodProfilesCompanion(
+      userId: userId ?? this.userId,
+      caloriesPerMealTarget:
+          caloriesPerMealTarget ?? this.caloriesPerMealTarget,
+      proteinTargetG: proteinTargetG ?? this.proteinTargetG,
+      preferredMealTypes: preferredMealTypes ?? this.preferredMealTypes,
+      dietaryPreferences: dietaryPreferences ?? this.dietaryPreferences,
+      dislikes: dislikes ?? this.dislikes,
+      allergies: allergies ?? this.allergies,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (caloriesPerMealTarget.present) {
+      map['calories_per_meal_target'] = Variable<double>(
+        caloriesPerMealTarget.value,
+      );
+    }
+    if (proteinTargetG.present) {
+      map['protein_target_g'] = Variable<double>(proteinTargetG.value);
+    }
+    if (preferredMealTypes.present) {
+      map['preferred_meal_types'] = Variable<String>(preferredMealTypes.value);
+    }
+    if (dietaryPreferences.present) {
+      map['dietary_preferences'] = Variable<String>(dietaryPreferences.value);
+    }
+    if (dislikes.present) {
+      map['dislikes'] = Variable<String>(dislikes.value);
+    }
+    if (allergies.present) {
+      map['allergies'] = Variable<String>(allergies.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FoodProfilesCompanion(')
+          ..write('userId: $userId, ')
+          ..write('caloriesPerMealTarget: $caloriesPerMealTarget, ')
+          ..write('proteinTargetG: $proteinTargetG, ')
+          ..write('preferredMealTypes: $preferredMealTypes, ')
+          ..write('dietaryPreferences: $dietaryPreferences, ')
+          ..write('dislikes: $dislikes, ')
+          ..write('allergies: $allergies, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $PreferencesTable extends Preferences
     with TableInfo<$PreferencesTable, PreferenceRow> {
   @override
@@ -8340,6 +8886,7 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
   late final $IngredientMatchesTable ingredientMatches =
       $IngredientMatchesTable(this);
   late final $CookTimersTable cookTimers = $CookTimersTable(this);
+  late final $FoodProfilesTable foodProfiles = $FoodProfilesTable(this);
   late final $PreferencesTable preferences = $PreferencesTable(this);
   late final $CookSessionsTable cookSessions = $CookSessionsTable(this);
   late final $RecipePhotosTable recipePhotos = $RecipePhotosTable(this);
@@ -8363,6 +8910,7 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
     macroTargets,
     ingredientMatches,
     cookTimers,
+    foodProfiles,
     preferences,
     cookSessions,
     recipePhotos,
@@ -14087,6 +14635,275 @@ typedef $$CookTimersTableProcessedTableManager =
       CookTimerRow,
       PrefetchHooks Function()
     >;
+typedef $$FoodProfilesTableCreateCompanionBuilder =
+    FoodProfilesCompanion Function({
+      required String userId,
+      Value<double?> caloriesPerMealTarget,
+      Value<double?> proteinTargetG,
+      Value<String> preferredMealTypes,
+      Value<String> dietaryPreferences,
+      Value<String> dislikes,
+      Value<String> allergies,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$FoodProfilesTableUpdateCompanionBuilder =
+    FoodProfilesCompanion Function({
+      Value<String> userId,
+      Value<double?> caloriesPerMealTarget,
+      Value<double?> proteinTargetG,
+      Value<String> preferredMealTypes,
+      Value<String> dietaryPreferences,
+      Value<String> dislikes,
+      Value<String> allergies,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$FoodProfilesTableFilterComposer
+    extends Composer<_$HearthDatabase, $FoodProfilesTable> {
+  $$FoodProfilesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get caloriesPerMealTarget => $composableBuilder(
+    column: $table.caloriesPerMealTarget,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get proteinTargetG => $composableBuilder(
+    column: $table.proteinTargetG,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get preferredMealTypes => $composableBuilder(
+    column: $table.preferredMealTypes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get dietaryPreferences => $composableBuilder(
+    column: $table.dietaryPreferences,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get dislikes => $composableBuilder(
+    column: $table.dislikes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get allergies => $composableBuilder(
+    column: $table.allergies,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$FoodProfilesTableOrderingComposer
+    extends Composer<_$HearthDatabase, $FoodProfilesTable> {
+  $$FoodProfilesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get caloriesPerMealTarget => $composableBuilder(
+    column: $table.caloriesPerMealTarget,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get proteinTargetG => $composableBuilder(
+    column: $table.proteinTargetG,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get preferredMealTypes => $composableBuilder(
+    column: $table.preferredMealTypes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get dietaryPreferences => $composableBuilder(
+    column: $table.dietaryPreferences,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get dislikes => $composableBuilder(
+    column: $table.dislikes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get allergies => $composableBuilder(
+    column: $table.allergies,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$FoodProfilesTableAnnotationComposer
+    extends Composer<_$HearthDatabase, $FoodProfilesTable> {
+  $$FoodProfilesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<double> get caloriesPerMealTarget => $composableBuilder(
+    column: $table.caloriesPerMealTarget,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get proteinTargetG => $composableBuilder(
+    column: $table.proteinTargetG,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get preferredMealTypes => $composableBuilder(
+    column: $table.preferredMealTypes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get dietaryPreferences => $composableBuilder(
+    column: $table.dietaryPreferences,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get dislikes =>
+      $composableBuilder(column: $table.dislikes, builder: (column) => column);
+
+  GeneratedColumn<String> get allergies =>
+      $composableBuilder(column: $table.allergies, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$FoodProfilesTableTableManager
+    extends
+        RootTableManager<
+          _$HearthDatabase,
+          $FoodProfilesTable,
+          FoodProfileRow,
+          $$FoodProfilesTableFilterComposer,
+          $$FoodProfilesTableOrderingComposer,
+          $$FoodProfilesTableAnnotationComposer,
+          $$FoodProfilesTableCreateCompanionBuilder,
+          $$FoodProfilesTableUpdateCompanionBuilder,
+          (
+            FoodProfileRow,
+            BaseReferences<
+              _$HearthDatabase,
+              $FoodProfilesTable,
+              FoodProfileRow
+            >,
+          ),
+          FoodProfileRow,
+          PrefetchHooks Function()
+        > {
+  $$FoodProfilesTableTableManager(_$HearthDatabase db, $FoodProfilesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FoodProfilesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FoodProfilesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FoodProfilesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> userId = const Value.absent(),
+                Value<double?> caloriesPerMealTarget = const Value.absent(),
+                Value<double?> proteinTargetG = const Value.absent(),
+                Value<String> preferredMealTypes = const Value.absent(),
+                Value<String> dietaryPreferences = const Value.absent(),
+                Value<String> dislikes = const Value.absent(),
+                Value<String> allergies = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FoodProfilesCompanion(
+                userId: userId,
+                caloriesPerMealTarget: caloriesPerMealTarget,
+                proteinTargetG: proteinTargetG,
+                preferredMealTypes: preferredMealTypes,
+                dietaryPreferences: dietaryPreferences,
+                dislikes: dislikes,
+                allergies: allergies,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String userId,
+                Value<double?> caloriesPerMealTarget = const Value.absent(),
+                Value<double?> proteinTargetG = const Value.absent(),
+                Value<String> preferredMealTypes = const Value.absent(),
+                Value<String> dietaryPreferences = const Value.absent(),
+                Value<String> dislikes = const Value.absent(),
+                Value<String> allergies = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => FoodProfilesCompanion.insert(
+                userId: userId,
+                caloriesPerMealTarget: caloriesPerMealTarget,
+                proteinTargetG: proteinTargetG,
+                preferredMealTypes: preferredMealTypes,
+                dietaryPreferences: dietaryPreferences,
+                dislikes: dislikes,
+                allergies: allergies,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$FoodProfilesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$HearthDatabase,
+      $FoodProfilesTable,
+      FoodProfileRow,
+      $$FoodProfilesTableFilterComposer,
+      $$FoodProfilesTableOrderingComposer,
+      $$FoodProfilesTableAnnotationComposer,
+      $$FoodProfilesTableCreateCompanionBuilder,
+      $$FoodProfilesTableUpdateCompanionBuilder,
+      (
+        FoodProfileRow,
+        BaseReferences<_$HearthDatabase, $FoodProfilesTable, FoodProfileRow>,
+      ),
+      FoodProfileRow,
+      PrefetchHooks Function()
+    >;
 typedef $$PreferencesTableCreateCompanionBuilder =
     PreferencesCompanion Function({
       required String key,
@@ -14983,6 +15800,8 @@ class $HearthDatabaseManager {
       $$IngredientMatchesTableTableManager(_db, _db.ingredientMatches);
   $$CookTimersTableTableManager get cookTimers =>
       $$CookTimersTableTableManager(_db, _db.cookTimers);
+  $$FoodProfilesTableTableManager get foodProfiles =>
+      $$FoodProfilesTableTableManager(_db, _db.foodProfiles);
   $$PreferencesTableTableManager get preferences =>
       $$PreferencesTableTableManager(_db, _db.preferences);
   $$CookSessionsTableTableManager get cookSessions =>

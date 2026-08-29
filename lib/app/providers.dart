@@ -22,6 +22,7 @@ import '../data/auth/supabase_auth_gateway.dart';
 import '../data/local/collection_store.dart';
 import '../data/local/cook_session_store.dart';
 import '../data/local/cook_timer_store.dart';
+import '../data/local/food_profile_store.dart';
 import '../data/local/food_store.dart';
 import '../data/local/hearth_database.dart';
 import '../data/local/ingredient_match_store.dart';
@@ -33,6 +34,7 @@ import '../data/local/recipe_store.dart';
 import '../data/remote/remote_gateway.dart';
 import '../data/remote/supabase_remote_gateway.dart';
 import '../data/repositories/collection_repository.dart';
+import '../data/repositories/food_profile_repository.dart';
 import '../data/repositories/food_repository.dart';
 import '../data/repositories/plan_repository.dart';
 import '../data/repositories/recipe_repository.dart';
@@ -42,6 +44,7 @@ import '../data/sync/remote_rows.dart';
 import '../data/sync/sync_engine.dart';
 import '../domain/cooking/cook_session.dart';
 import '../domain/models/food.dart';
+import '../domain/models/food_profile.dart';
 import '../domain/models/macros.dart';
 import '../domain/models/recipe.dart';
 import '../domain/planning/day_progress.dart';
@@ -120,6 +123,27 @@ final recipeByIdProvider = FutureProvider.family<Recipe?, String>((
 final Provider<FoodStore> foodStoreProvider = Provider<FoodStore>(
   (Ref ref) => FoodStore(ref.watch(databaseProvider)),
 );
+
+final Provider<FoodProfileStore> foodProfileStoreProvider =
+    Provider<FoodProfileStore>(
+      (Ref ref) => FoodProfileStore(ref.watch(databaseProvider)),
+    );
+
+final Provider<FoodProfileRepository> foodProfileRepositoryProvider =
+    Provider<FoodProfileRepository>(
+      (Ref ref) => FoodProfileRepository(
+        database: ref.watch(databaseProvider),
+        store: ref.watch(foodProfileStoreProvider),
+        queue: ref.watch(pendingWriteStoreProvider),
+        userId: ref.watch(currentUserIdProvider),
+      ),
+    );
+
+/// The user's own food profile, never null (spec §5.8 makes it skippable).
+final StreamProvider<FoodProfile> foodProfileProvider =
+    StreamProvider<FoodProfile>(
+      (Ref ref) => ref.watch(foodProfileRepositoryProvider).watchMine(),
+    );
 
 final Provider<FoodRepository> foodRepositoryProvider =
     Provider<FoodRepository>(

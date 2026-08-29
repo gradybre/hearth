@@ -36,6 +36,16 @@ class SupabaseRemoteGateway implements RemoteGateway {
     'recipe_collections': <String>['collection_id', 'recipe_id'],
   };
 
+  /// What identifies a row on the way *in*, when it is not `id`.
+  ///
+  /// The food profile is one row per user and the server keys it that way, so
+  /// there is no separate id to read. Getting this wrong is quiet: every
+  /// record would arrive with the id "null", collide with the last one, and
+  /// last-write-wins would compare a row against itself.
+  static const Map<String, String> keyColumns = <String, String>{
+    'food_profiles': 'user_id',
+  };
+
   /// The functions that return whole aggregates for the pull half.
   static const Map<String, ({String function, String parameter})>
   pullFunctions = <String, ({String function, String parameter})>{
@@ -119,7 +129,7 @@ class SupabaseRemoteGateway implements RemoteGateway {
       return <RemoteRecord>[
         for (final Map<String, dynamic> row in rows)
           RemoteRecord(
-            id: '${row['id']}',
+            id: '${row[keyColumns[entityTable] ?? 'id']}',
             updatedAt:
                 DateTime.tryParse('${row['updated_at']}')?.toUtc() ??
                 DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),

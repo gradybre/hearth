@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/account/food_profile_screen.dart';
 import '../features/account/household_screen.dart';
 import '../features/foods/barcode_scan_screen.dart';
 import '../features/foods/food_draft.dart';
@@ -41,6 +42,11 @@ GoRouter buildRouter() => GoRouter(
       path: '/household',
       builder: (BuildContext context, GoRouterState state) =>
           const HouseholdScreen(),
+    ),
+    GoRoute(
+      path: '/profile',
+      builder: (BuildContext context, GoRouterState state) =>
+          const FoodProfileScreen(),
     ),
     GoRoute(
       path: '/recipe/import',
