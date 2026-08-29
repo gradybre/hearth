@@ -9,6 +9,8 @@ import '../../app/theme/hearth_theme.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/text/text_normaliser.dart';
+import 'external_food_results.dart';
+import 'food_search_controller.dart';
 
 /// Picks a food for an ingredient line (spec §5.3's match review, in its
 /// Phase 1 manual form).
@@ -49,12 +51,26 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
   );
 
   @override
+  void initState() {
+    super.initState();
+    // The sheet opens pre-filled with the ingredient's own name, so the
+    // outward search should run on it too — the common reason a food is
+    // missing locally is that nobody has added it yet.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(foodSearchProvider.notifier).search(widget.ingredientName);
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _search.dispose();
     super.dispose();
   }
 
-  /// Hands the scanned food straight back as this line's match.
+  /// Hands a food — scanned or searched for — straight back as this line's
+  /// match.
   void _useScanned(String foodId) {
     if (!mounted) return;
     Navigator.of(context).pop(foodId);
@@ -126,7 +142,12 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
                               child: TextField(
                                 controller: _search,
                                 autofocus: false,
-                                onChanged: (_) => setState(() {}),
+                                onChanged: (String value) {
+                                  ref
+                                      .read(foodSearchProvider.notifier)
+                                      .search(value);
+                                  setState(() {});
+                                },
                                 style: context.text.body,
                                 decoration: InputDecoration(
                                   hintText: 'Search your foods',
@@ -157,13 +178,25 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
                       data: (List<Food> foods) {
                         final List<Food> visible = _filter(foods);
                         if (visible.isEmpty) {
-                          return _NoFoods(
-                            hasAny: foods.isNotEmpty,
-                            ingredientName: widget.ingredientName,
-                            onScanned: _useScanned,
+                          return ListView(
+                            controller: controller,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: HearthSpacing.lg,
+                            ),
+                            children: <Widget>[
+                              _NoFoods(
+                                hasAny: foods.isNotEmpty,
+                                ingredientName: widget.ingredientName,
+                                onScanned: _useScanned,
+                              ),
+                              ExternalFoodResults(
+                                query: _search.text,
+                                onSaved: _useScanned,
+                              ),
+                            ],
                           );
                         }
-                        return ListView.separated(
+                        return ListView(
                           controller: controller,
                           padding: const EdgeInsets.fromLTRB(
                             HearthSpacing.lg,
@@ -171,15 +204,22 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
                             HearthSpacing.lg,
                             HearthSpacing.xl,
                           ),
-                          itemCount: visible.length,
-                          separatorBuilder: (BuildContext context, int index) =>
-                              const SizedBox(height: HearthSpacing.sm),
-                          itemBuilder: (BuildContext context, int index) =>
+                          children: <Widget>[
+                            for (final Food food in visible) ...<Widget>[
                               _FoodOption(
-                                food: visible[index],
-                                selected:
-                                    visible[index].id == widget.currentFoodId,
+                                food: food,
+                                selected: food.id == widget.currentFoodId,
                               ),
+                              const SizedBox(height: HearthSpacing.sm),
+                            ],
+                            // A food found out there is saved first, then used
+                            // as this line's match — same review as any other
+                            // route into the library (CLAUDE.md rule 4).
+                            ExternalFoodResults(
+                              query: _search.text,
+                              onSaved: _useScanned,
+                            ),
+                          ],
                         );
                       },
                     ),

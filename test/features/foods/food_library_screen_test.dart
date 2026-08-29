@@ -101,7 +101,7 @@ void main() {
       await tester.enterText(find.byType(TextField).first, 'rutabaga');
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.textContaining('Nothing matches'), findsOneWidget);
+      expect(find.textContaining('None of your foods match'), findsOneWidget);
       expect(find.text('Add it as a new food'), findsOneWidget);
     });
 

@@ -1,4 +1,5 @@
 import '../../domain/models/food.dart';
+import '../../domain/text/text_normaliser.dart';
 import 'barcode_scanner.dart';
 import 'nutrition_source.dart';
 
@@ -39,27 +40,83 @@ class NutritionLookup {
 
   /// Search results from every source, the household's own first.
   ///
-  /// Duplicates are collapsed by barcode: the same product from two sources is
-  /// one thing to the person looking at it, and the earlier source — the more
-  /// trusted one — is the one kept.
+  /// Every source is asked at once and each gets a guaranteed share of the
+  /// results. Taking them strictly in order looked right and was not: Open
+  /// Food Facts returns a full page for almost any word, so it filled the
+  /// whole quota and USDA — much the better source for unbranded staples —
+  /// was never reached at all. A search for "cheddar cheese" came back with
+  /// bottled water and no cheese.
+  ///
+  /// Priority still decides ties: shares are filled in order, leftover slots
+  /// go to the earlier sources, and duplicates collapse onto the first
+  /// source that offered them.
   Future<List<NutritionMatch>> search(String query, {int limit = 20}) async {
-    final List<NutritionMatch> found = <NutritionMatch>[];
-    final Set<String> seenBarcodes = <String>{};
+    if (sources.isEmpty || limit <= 0) return const <NutritionMatch>[];
 
-    for (final NutritionSource source in sources) {
-      if (found.length >= limit) break;
-      for (final NutritionMatch match in await source.search(
-        query,
-        limit: limit,
-      )) {
+    // Concurrently, because these are independent network calls and asking
+    // them in turn makes the user wait for the sum of every timeout.
+    final List<List<NutritionMatch>> perSource = await Future.wait(
+      <Future<List<NutritionMatch>>>[
+        for (final NutritionSource source in sources)
+          source.search(query, limit: limit),
+      ],
+    );
+
+    final List<List<NutritionMatch>> relevant = <List<NutritionMatch>>[
+      for (final List<NutritionMatch> matches in perSource)
+        <NutritionMatch>[
+          for (final NutritionMatch match in matches)
+            if (_isRelevant(match, query)) match,
+        ],
+    ];
+
+    final int share = (limit / sources.length).ceil();
+    final Set<String> seenBarcodes = <String>{};
+    final List<NutritionMatch> found = <NutritionMatch>[];
+
+    void take(int sourceIndex, int upTo) {
+      for (final NutritionMatch match in relevant[sourceIndex]) {
+        if (found.length >= limit || upTo <= 0) return;
+        if (found.contains(match)) continue;
         final String? barcode = match.food.barcode;
         if (barcode != null && !seenBarcodes.add(barcode)) continue;
         found.add(match);
-        if (found.length >= limit) break;
+        upTo--;
       }
     }
 
+    for (int i = 0; i < sources.length; i++) {
+      take(i, share);
+    }
+    // Slack from sources that had little or nothing goes to the trusted ones.
+    for (int i = 0; i < sources.length && found.length < limit; i++) {
+      take(i, limit);
+    }
+
     return found;
+  }
+
+  /// Whether a result has anything to do with what was asked for.
+  ///
+  /// Open Food Facts matches loosely enough to answer "cheddar cheese" with
+  /// mineral water. A result the user cannot recognise as what they searched
+  /// for is not a lead they have to weigh — it is work they have to do to
+  /// ignore it, and enough of it reads as the search being broken.
+  ///
+  /// Words shorter than four characters are not used to filter: "oat" would
+  /// throw away "Oatly" for want of a word boundary, and dropping a real
+  /// answer is the worse mistake.
+  static bool _isRelevant(NutritionMatch match, String query) {
+    final List<String> terms = <String>[
+      for (final String word in normaliseKey(query).split(' '))
+        if (word.length >= 4) word,
+    ];
+    if (terms.isEmpty) return true;
+
+    final String haystack = normaliseKey(
+      '${match.food.name} ${match.food.brand ?? ''}',
+    );
+    return terms.any(haystack.contains);
   }
 }
 

@@ -51,6 +51,8 @@ NutritionMatch match(Food food, {double confidence = 1}) =>
     NutritionMatch(food: food, source: food.source, confidence: confidence);
 
 void main() {
+  searchTests();
+
   group('the chain stops at the first answer', () {
     test('the library wins, and nothing else is even asked', () async {
       // A food this household has already corrected must outrank a
@@ -204,6 +206,125 @@ void main() {
         match(aFood(id: 'off:5', name: 'Baked beans')),
       );
       expect(result.needsReview, isFalse);
+    });
+  });
+}
+
+/// Search across the chain, and the two ways it went wrong in the wild.
+///
+/// Searching "cheddar cheese" against the real sources returned bottled water
+/// from Open Food Facts and nothing at all from USDA — which has excellent
+/// cheese data. Both failures were in the chain, not the sources.
+void searchTests() {
+  Food named(String name, {String? brand, String id = 'x'}) => Food(
+    id: id,
+    name: name,
+    brand: brand,
+    source: FoodSource.openFoodFacts,
+    servingOptions: <ServingOption>[
+      ServingOption(
+        id: '$id:100g',
+        label: '100 g',
+        amount: Quantity.of(100, Units.gram),
+        macros: const Macros(kcal: 100),
+      ),
+    ],
+  );
+
+  group('search across the chain', () {
+    test('one source cannot starve the others', () async {
+      // Open Food Facts returns a full page for almost anything, which filled
+      // the whole result quota and meant USDA — the better source for
+      // unbranded staples — was never reached.
+      final StubSource off = StubSource(
+        'Open Food Facts',
+        results: <NutritionMatch>[
+          for (int i = 0; i < 20; i++)
+            match(named('cheddar cheese $i', id: 'off-$i')),
+        ],
+      );
+      final StubSource usda = StubSource(
+        'USDA',
+        results: <NutritionMatch>[
+          match(named('Cheddar cheese, sharp', id: 'usda-1')),
+        ],
+      );
+
+      final List<NutritionMatch> found = await NutritionLookup(
+        <NutritionSource>[off, usda],
+      ).search('cheddar cheese');
+
+      expect(
+        found.map((NutritionMatch m) => m.food.id),
+        contains('usda-1'),
+        reason: 'USDA must be reachable however much Open Food Facts returns',
+      );
+    });
+
+    test('the earlier source still leads', () async {
+      final StubSource off = StubSource(
+        'Open Food Facts',
+        results: <NutritionMatch>[match(named('cheddar', id: 'off-1'))],
+      );
+      final StubSource usda = StubSource(
+        'USDA',
+        results: <NutritionMatch>[match(named('cheddar', id: 'usda-1'))],
+      );
+
+      final List<NutritionMatch> found = await NutritionLookup(
+        <NutritionSource>[off, usda],
+      ).search('cheddar');
+
+      expect(found.first.food.id, 'off-1');
+    });
+
+    test('a result that has nothing to do with the query is dropped', () async {
+      // These are real answers Open Food Facts gave for "cheddar cheese".
+      // Showing them costs the user the work of ignoring them, and makes the
+      // search look broken when it is merely loose.
+      final StubSource off = StubSource(
+        'Open Food Facts',
+        results: <NutritionMatch>[
+          match(named('Cheddar', brand: 'Cathedral City', id: 'keep-1')),
+          match(named('Eau minérale naturelle', brand: 'sidi ali', id: 'x-1')),
+          match(named('Fromage Blanc Nature', id: 'x-2')),
+        ],
+      );
+
+      final List<NutritionMatch> found = await NutritionLookup(
+        <NutritionSource>[off],
+      ).search('cheddar cheese');
+
+      expect(found.map((NutritionMatch m) => m.food.id), <String>['keep-1']);
+    });
+
+    test('a brand match counts as relevant', () async {
+      final StubSource off = StubSource(
+        'Open Food Facts',
+        results: <NutritionMatch>[
+          match(named('Mature slices', brand: 'Cathedral City', id: 'b-1')),
+        ],
+      );
+
+      final List<NutritionMatch> found = await NutritionLookup(
+        <NutritionSource>[off],
+      ).search('cathedral city');
+
+      expect(found, hasLength(1));
+    });
+
+    test('a short query is not used to filter', () async {
+      // "oat" would throw away "Oatly" for want of a word boundary.
+      final StubSource off = StubSource(
+        'Open Food Facts',
+        results: <NutritionMatch>[match(named('Oatly Barista', id: 'o-1'))],
+      );
+
+      final List<NutritionMatch> found = await NutritionLookup(
+        <NutritionSource>[off],
+      ).search('oat');
+
+      expect(found, hasLength(1));
     });
   });
 }

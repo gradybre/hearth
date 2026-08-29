@@ -10,13 +10,16 @@ import '../../app/theme/hearth_typography.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/text/text_normaliser.dart';
+import 'external_food_results.dart';
+import 'food_search_controller.dart';
 
 /// The household food library (spec §5.5).
 ///
-/// Until barcode lookup arrives in Phase 2, everything here was entered by
-/// hand. Search filters the already-loaded list rather than round-tripping the
+/// Search filters the already-loaded list rather than round-tripping the
 /// database, because finding a food is on the daily logging path and every
-/// extra tap or wait is paid three times a day.
+/// extra tap or wait is paid three times a day. Open Food Facts and USDA are
+/// searched too, but underneath and on their own schedule — the local list
+/// must never wait on a network call to appear.
 class FoodLibraryScreen extends ConsumerStatefulWidget {
   const FoodLibraryScreen({super.key});
 
@@ -100,7 +103,12 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
                   padding: EdgeInsets.all(gutter),
                   child: TextField(
                     controller: _search,
-                    onChanged: (_) => setState(() {}),
+                    // The library filters as you type; the wider search waits
+                    // for a pause and lands underneath when it arrives.
+                    onChanged: (String value) {
+                      ref.read(foodSearchProvider.notifier).search(value);
+                      setState(() {});
+                    },
                     style: context.text.body,
                     decoration: InputDecoration(
                       hintText: 'Search foods',
@@ -112,6 +120,7 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
                               tooltip: 'Clear search',
                               onPressed: () {
                                 _search.clear();
+                                ref.read(foodSearchProvider.notifier).clear();
                                 setState(() {});
                               },
                             ),
@@ -119,23 +128,29 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
                   ),
                 ),
                 Expanded(
-                  child: foods.isEmpty
-                      ? _EmptyFoods(gutter: gutter)
-                      : visible.isEmpty
-                      ? _NoMatches(query: _search.text, gutter: gutter)
-                      : ListView.separated(
-                          padding: EdgeInsets.fromLTRB(
-                            gutter,
-                            0,
-                            gutter,
-                            gutter + 72,
-                          ),
-                          itemCount: visible.length,
-                          separatorBuilder: (BuildContext context, int index) =>
-                              const SizedBox(height: HearthSpacing.sm),
-                          itemBuilder: (BuildContext context, int index) =>
-                              FoodCard(food: visible[index]),
-                        ),
+                  // One scroll view for both: what the household has, then
+                  // what the wider sources turned up. An empty library is no
+                  // longer a dead end — the search still reaches outward.
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(
+                      gutter,
+                      0,
+                      gutter,
+                      gutter + 72,
+                    ),
+                    children: <Widget>[
+                      if (foods.isEmpty && _search.text.isEmpty)
+                        _EmptyFoods(gutter: gutter)
+                      else if (visible.isEmpty)
+                        _NoMatches(query: _search.text, gutter: gutter)
+                      else
+                        for (final Food food in visible) ...<Widget>[
+                          FoodCard(food: food),
+                          const SizedBox(height: HearthSpacing.sm),
+                        ],
+                      ExternalFoodResults(query: _search.text, onSaved: null),
+                    ],
+                  ),
                 ),
               ],
             );
@@ -270,8 +285,11 @@ class _NoMatches extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
+            // "Nothing matches" while five results sit underneath reads as a
+            // broken screen. This message is only ever about the household's
+            // own foods, so it says so.
             Text(
-              'Nothing matches "$query"',
+              'None of your foods match "$query"',
               style: context.text.body,
               textAlign: TextAlign.center,
             ),
