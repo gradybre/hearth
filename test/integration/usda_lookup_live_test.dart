@@ -9,6 +9,8 @@ import 'package:hearth/data/adapters/usda_nutrition_source.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../support/live_config.dart';
+
 /// The USDA Edge Function, against the deployed one (spec §9.4).
 ///
 /// A contract test in the strict sense: it checks that what the function
@@ -18,10 +20,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 ///
 /// Run with: HEARTH_LIVE=1 flutter test --tags live test/integration
 void main() {
-  final ({String url, String key})? config = _hostedConfig();
-  final String? skip = config == null
-      ? 'needs config/hosted.json with a publishable key'
-      : null;
+  final ({String url, String key})? config = liveConfig();
+  final String? skip = liveSkipReason();
 
   late UsdaNutritionSource usda;
 
@@ -68,27 +68,4 @@ void main() {
   test('an empty query never reaches the function', () async {
     expect(await usda.search('   '), isEmpty);
   }, skip: skip);
-}
-
-/// The hosted project's URL and publishable key, or null when not set up.
-///
-/// Read from the gitignored config, never from the repo. The USDA key itself
-/// is not here and never passes through the client — that is the whole reason
-/// the function exists.
-({String url, String key})? _hostedConfig() {
-  if (Platform.environment['HEARTH_LIVE'] != '1') return null;
-
-  final File file = File('config/hosted.json');
-  if (!file.existsSync()) return null;
-
-  final String text = file.readAsStringSync();
-  final String? url = RegExp('"SUPABASE_URL"\\s*:\\s*"([^"]+)"')
-      .firstMatch(text)
-      ?.group(1);
-  final String? key = RegExp('"SUPABASE_PUBLISHABLE_KEY"\\s*:\\s*"([^"]+)"')
-      .firstMatch(text)
-      ?.group(1);
-
-  if (url == null || key == null || key.isEmpty) return null;
-  return (url: url, key: key);
 }

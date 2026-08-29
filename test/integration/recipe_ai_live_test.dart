@@ -10,6 +10,8 @@ import 'package:hearth/features/recipes/ai_recipe_mapper.dart';
 import 'package:hearth/features/recipes/recipe_draft.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../support/live_config.dart';
+
 /// The recipe-ai Edge Function, against the deployed one (spec §9.4).
 ///
 /// A contract test: what the function promises to return is what this adapter
@@ -21,10 +23,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 ///
 ///   HEARTH_LIVE=1 flutter test --tags live test/integration
 void main() {
-  final ({String url, String key})? config = _hostedConfig();
-  final String? skip = config == null
-      ? 'needs HEARTH_LIVE=1 and config/hosted.json'
-      : null;
+  final ({String url, String key})? config = liveConfig();
+  final String? skip = liveSkipReason();
 
   late EdgeFunctionRecipeAi ai;
 
@@ -104,27 +104,4 @@ void main() {
       ),
     );
   }, skip: skip);
-}
-
-/// The hosted project's URL and publishable key, or null when not set up.
-///
-/// Read from the gitignored config, never from the repo. The Claude key is not
-/// here and never passes through the client — that is the whole reason the
-/// function exists.
-({String url, String key})? _hostedConfig() {
-  if (Platform.environment['HEARTH_LIVE'] != '1') return null;
-
-  final File file = File('config/hosted.json');
-  if (!file.existsSync()) return null;
-
-  final String text = file.readAsStringSync();
-  final String? url = RegExp('"SUPABASE_URL"\\s*:\\s*"([^"]+)"')
-      .firstMatch(text)
-      ?.group(1);
-  final String? key = RegExp('"SUPABASE_PUBLISHABLE_KEY"\\s*:\\s*"([^"]+)"')
-      .firstMatch(text)
-      ?.group(1);
-
-  if (url == null || key == null || key.isEmpty) return null;
-  return (url: url, key: key);
 }

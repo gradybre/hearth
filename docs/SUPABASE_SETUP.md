@@ -146,13 +146,29 @@ command:
 
 ```bash
 supabase link --project-ref iizsdbvohyhwbukrwilf   # or the test ref
-```
-
-
-```bash
-supabase link --project-ref <your-project-ref>
 supabase db push
 ```
+
+Both projects carry the full schema, and both have `usda-lookup` and
+`recipe-ai` deployed.
+
+### The live suite runs against `hearth-test`, not the real one
+
+`test/support/live_config.dart` reads `config/hosted-test.json`, so
+`HEARTH_LIVE=1 flutter test --tags live test/integration` never touches real
+recipes or logs. Its publishable key is already in that file.
+
+**One thing still outstanding, and it is yours** — the Edge Functions on
+`hearth-test` have no secrets, so the two function suites will fail there with
+"…is not set on this project" until you run:
+
+```bash
+supabase secrets set USDA_FDC_API_KEY=... --project-ref rhyomdiihpiigynzeshu
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-... --project-ref rhyomdiihpiigynzeshu
+```
+
+The sync suites (`round_trip_live_test`, `library_sync_live_test`) use the
+local stack via `config/local.json` and need none of this.
 
 ---
 
