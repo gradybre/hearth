@@ -65,6 +65,12 @@ class FakeCookTimers extends CookTimersNotifier {
 
   @override
   Future<void> start(CookTimer timer, {String? recipeTitle}) async {
+    // Mirrors the real notifier: one timer per step.
+    final String? stepId = timer.stepId;
+    if (stepId != null &&
+        _timers.any((CookTimer existing) => existing.stepId == stepId)) {
+      return;
+    }
     _timers = <CookTimer>[..._timers, timer];
     final DateTime? fires = timer.firesAt();
     if (fires != null) {

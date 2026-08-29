@@ -6497,6 +6497,15 @@ class $CookTimersTable extends CookTimers
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _stepIdMeta = const VerificationMeta('stepId');
+  @override
+  late final GeneratedColumn<String> stepId = GeneratedColumn<String>(
+    'step_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _elapsedWhenPausedSecondsMeta =
       const VerificationMeta('elapsedWhenPausedSeconds');
   @override
@@ -6526,6 +6535,7 @@ class $CookTimersTable extends CookTimers
     durationSeconds,
     startedAt,
     stepNumber,
+    stepId,
     elapsedWhenPausedSeconds,
     recipeTitle,
   ];
@@ -6579,6 +6589,12 @@ class $CookTimersTable extends CookTimers
         stepNumber.isAcceptableOrUnknown(data['step_number']!, _stepNumberMeta),
       );
     }
+    if (data.containsKey('step_id')) {
+      context.handle(
+        _stepIdMeta,
+        stepId.isAcceptableOrUnknown(data['step_id']!, _stepIdMeta),
+      );
+    }
     if (data.containsKey('elapsed_when_paused_seconds')) {
       context.handle(
         _elapsedWhenPausedSecondsMeta,
@@ -6626,6 +6642,10 @@ class $CookTimersTable extends CookTimers
         DriftSqlType.int,
         data['${effectivePrefix}step_number'],
       ),
+      stepId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}step_id'],
+      ),
       elapsedWhenPausedSeconds: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}elapsed_when_paused_seconds'],
@@ -6650,6 +6670,9 @@ class CookTimerRow extends DataClass implements Insertable<CookTimerRow> {
   final DateTime startedAt;
   final int? stepNumber;
 
+  /// The step this timer belongs to — one timer per step, not one per tap.
+  final String? stepId;
+
   /// Elapsed seconds at the moment it was paused; null while running.
   final int? elapsedWhenPausedSeconds;
 
@@ -6661,6 +6684,7 @@ class CookTimerRow extends DataClass implements Insertable<CookTimerRow> {
     required this.durationSeconds,
     required this.startedAt,
     this.stepNumber,
+    this.stepId,
     this.elapsedWhenPausedSeconds,
     this.recipeTitle,
   });
@@ -6673,6 +6697,9 @@ class CookTimerRow extends DataClass implements Insertable<CookTimerRow> {
     map['started_at'] = Variable<DateTime>(startedAt);
     if (!nullToAbsent || stepNumber != null) {
       map['step_number'] = Variable<int>(stepNumber);
+    }
+    if (!nullToAbsent || stepId != null) {
+      map['step_id'] = Variable<String>(stepId);
     }
     if (!nullToAbsent || elapsedWhenPausedSeconds != null) {
       map['elapsed_when_paused_seconds'] = Variable<int>(
@@ -6694,6 +6721,9 @@ class CookTimerRow extends DataClass implements Insertable<CookTimerRow> {
       stepNumber: stepNumber == null && nullToAbsent
           ? const Value.absent()
           : Value(stepNumber),
+      stepId: stepId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(stepId),
       elapsedWhenPausedSeconds: elapsedWhenPausedSeconds == null && nullToAbsent
           ? const Value.absent()
           : Value(elapsedWhenPausedSeconds),
@@ -6714,6 +6744,7 @@ class CookTimerRow extends DataClass implements Insertable<CookTimerRow> {
       durationSeconds: serializer.fromJson<int>(json['durationSeconds']),
       startedAt: serializer.fromJson<DateTime>(json['startedAt']),
       stepNumber: serializer.fromJson<int?>(json['stepNumber']),
+      stepId: serializer.fromJson<String?>(json['stepId']),
       elapsedWhenPausedSeconds: serializer.fromJson<int?>(
         json['elapsedWhenPausedSeconds'],
       ),
@@ -6729,6 +6760,7 @@ class CookTimerRow extends DataClass implements Insertable<CookTimerRow> {
       'durationSeconds': serializer.toJson<int>(durationSeconds),
       'startedAt': serializer.toJson<DateTime>(startedAt),
       'stepNumber': serializer.toJson<int?>(stepNumber),
+      'stepId': serializer.toJson<String?>(stepId),
       'elapsedWhenPausedSeconds': serializer.toJson<int?>(
         elapsedWhenPausedSeconds,
       ),
@@ -6742,6 +6774,7 @@ class CookTimerRow extends DataClass implements Insertable<CookTimerRow> {
     int? durationSeconds,
     DateTime? startedAt,
     Value<int?> stepNumber = const Value.absent(),
+    Value<String?> stepId = const Value.absent(),
     Value<int?> elapsedWhenPausedSeconds = const Value.absent(),
     Value<String?> recipeTitle = const Value.absent(),
   }) => CookTimerRow(
@@ -6750,6 +6783,7 @@ class CookTimerRow extends DataClass implements Insertable<CookTimerRow> {
     durationSeconds: durationSeconds ?? this.durationSeconds,
     startedAt: startedAt ?? this.startedAt,
     stepNumber: stepNumber.present ? stepNumber.value : this.stepNumber,
+    stepId: stepId.present ? stepId.value : this.stepId,
     elapsedWhenPausedSeconds: elapsedWhenPausedSeconds.present
         ? elapsedWhenPausedSeconds.value
         : this.elapsedWhenPausedSeconds,
@@ -6766,6 +6800,7 @@ class CookTimerRow extends DataClass implements Insertable<CookTimerRow> {
       stepNumber: data.stepNumber.present
           ? data.stepNumber.value
           : this.stepNumber,
+      stepId: data.stepId.present ? data.stepId.value : this.stepId,
       elapsedWhenPausedSeconds: data.elapsedWhenPausedSeconds.present
           ? data.elapsedWhenPausedSeconds.value
           : this.elapsedWhenPausedSeconds,
@@ -6783,6 +6818,7 @@ class CookTimerRow extends DataClass implements Insertable<CookTimerRow> {
           ..write('durationSeconds: $durationSeconds, ')
           ..write('startedAt: $startedAt, ')
           ..write('stepNumber: $stepNumber, ')
+          ..write('stepId: $stepId, ')
           ..write('elapsedWhenPausedSeconds: $elapsedWhenPausedSeconds, ')
           ..write('recipeTitle: $recipeTitle')
           ..write(')'))
@@ -6796,6 +6832,7 @@ class CookTimerRow extends DataClass implements Insertable<CookTimerRow> {
     durationSeconds,
     startedAt,
     stepNumber,
+    stepId,
     elapsedWhenPausedSeconds,
     recipeTitle,
   );
@@ -6808,6 +6845,7 @@ class CookTimerRow extends DataClass implements Insertable<CookTimerRow> {
           other.durationSeconds == this.durationSeconds &&
           other.startedAt == this.startedAt &&
           other.stepNumber == this.stepNumber &&
+          other.stepId == this.stepId &&
           other.elapsedWhenPausedSeconds == this.elapsedWhenPausedSeconds &&
           other.recipeTitle == this.recipeTitle);
 }
@@ -6818,6 +6856,7 @@ class CookTimersCompanion extends UpdateCompanion<CookTimerRow> {
   final Value<int> durationSeconds;
   final Value<DateTime> startedAt;
   final Value<int?> stepNumber;
+  final Value<String?> stepId;
   final Value<int?> elapsedWhenPausedSeconds;
   final Value<String?> recipeTitle;
   final Value<int> rowid;
@@ -6827,6 +6866,7 @@ class CookTimersCompanion extends UpdateCompanion<CookTimerRow> {
     this.durationSeconds = const Value.absent(),
     this.startedAt = const Value.absent(),
     this.stepNumber = const Value.absent(),
+    this.stepId = const Value.absent(),
     this.elapsedWhenPausedSeconds = const Value.absent(),
     this.recipeTitle = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -6837,6 +6877,7 @@ class CookTimersCompanion extends UpdateCompanion<CookTimerRow> {
     required int durationSeconds,
     required DateTime startedAt,
     this.stepNumber = const Value.absent(),
+    this.stepId = const Value.absent(),
     this.elapsedWhenPausedSeconds = const Value.absent(),
     this.recipeTitle = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -6850,6 +6891,7 @@ class CookTimersCompanion extends UpdateCompanion<CookTimerRow> {
     Expression<int>? durationSeconds,
     Expression<DateTime>? startedAt,
     Expression<int>? stepNumber,
+    Expression<String>? stepId,
     Expression<int>? elapsedWhenPausedSeconds,
     Expression<String>? recipeTitle,
     Expression<int>? rowid,
@@ -6860,6 +6902,7 @@ class CookTimersCompanion extends UpdateCompanion<CookTimerRow> {
       if (durationSeconds != null) 'duration_seconds': durationSeconds,
       if (startedAt != null) 'started_at': startedAt,
       if (stepNumber != null) 'step_number': stepNumber,
+      if (stepId != null) 'step_id': stepId,
       if (elapsedWhenPausedSeconds != null)
         'elapsed_when_paused_seconds': elapsedWhenPausedSeconds,
       if (recipeTitle != null) 'recipe_title': recipeTitle,
@@ -6873,6 +6916,7 @@ class CookTimersCompanion extends UpdateCompanion<CookTimerRow> {
     Value<int>? durationSeconds,
     Value<DateTime>? startedAt,
     Value<int?>? stepNumber,
+    Value<String?>? stepId,
     Value<int?>? elapsedWhenPausedSeconds,
     Value<String?>? recipeTitle,
     Value<int>? rowid,
@@ -6883,6 +6927,7 @@ class CookTimersCompanion extends UpdateCompanion<CookTimerRow> {
       durationSeconds: durationSeconds ?? this.durationSeconds,
       startedAt: startedAt ?? this.startedAt,
       stepNumber: stepNumber ?? this.stepNumber,
+      stepId: stepId ?? this.stepId,
       elapsedWhenPausedSeconds:
           elapsedWhenPausedSeconds ?? this.elapsedWhenPausedSeconds,
       recipeTitle: recipeTitle ?? this.recipeTitle,
@@ -6908,6 +6953,9 @@ class CookTimersCompanion extends UpdateCompanion<CookTimerRow> {
     if (stepNumber.present) {
       map['step_number'] = Variable<int>(stepNumber.value);
     }
+    if (stepId.present) {
+      map['step_id'] = Variable<String>(stepId.value);
+    }
     if (elapsedWhenPausedSeconds.present) {
       map['elapsed_when_paused_seconds'] = Variable<int>(
         elapsedWhenPausedSeconds.value,
@@ -6930,6 +6978,7 @@ class CookTimersCompanion extends UpdateCompanion<CookTimerRow> {
           ..write('durationSeconds: $durationSeconds, ')
           ..write('startedAt: $startedAt, ')
           ..write('stepNumber: $stepNumber, ')
+          ..write('stepId: $stepId, ')
           ..write('elapsedWhenPausedSeconds: $elapsedWhenPausedSeconds, ')
           ..write('recipeTitle: $recipeTitle, ')
           ..write('rowid: $rowid')
@@ -13781,6 +13830,7 @@ typedef $$CookTimersTableCreateCompanionBuilder = CookTimersCompanion Function({
   required int durationSeconds,
   required DateTime startedAt,
   Value<int?> stepNumber,
+  Value<String?> stepId,
   Value<int?> elapsedWhenPausedSeconds,
   Value<String?> recipeTitle,
   Value<int> rowid,
@@ -13791,6 +13841,7 @@ typedef $$CookTimersTableUpdateCompanionBuilder = CookTimersCompanion Function({
   Value<int> durationSeconds,
   Value<DateTime> startedAt,
   Value<int?> stepNumber,
+  Value<String?> stepId,
   Value<int?> elapsedWhenPausedSeconds,
   Value<String?> recipeTitle,
   Value<int> rowid,
@@ -13827,6 +13878,11 @@ class $$CookTimersTableFilterComposer
 
   ColumnFilters<int> get stepNumber => $composableBuilder(
     column: $table.stepNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get stepId => $composableBuilder(
+    column: $table.stepId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13875,6 +13931,11 @@ class $$CookTimersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get stepId => $composableBuilder(
+    column: $table.stepId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get elapsedWhenPausedSeconds => $composableBuilder(
     column: $table.elapsedWhenPausedSeconds,
     builder: (column) => ColumnOrderings(column),
@@ -13913,6 +13974,9 @@ class $$CookTimersTableAnnotationComposer
     column: $table.stepNumber,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get stepId =>
+      $composableBuilder(column: $table.stepId, builder: (column) => column);
 
   GeneratedColumn<int> get elapsedWhenPausedSeconds => $composableBuilder(
     column: $table.elapsedWhenPausedSeconds,
@@ -13961,6 +14025,7 @@ class $$CookTimersTableTableManager
                 Value<int> durationSeconds = const Value.absent(),
                 Value<DateTime> startedAt = const Value.absent(),
                 Value<int?> stepNumber = const Value.absent(),
+                Value<String?> stepId = const Value.absent(),
                 Value<int?> elapsedWhenPausedSeconds = const Value.absent(),
                 Value<String?> recipeTitle = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -13970,6 +14035,7 @@ class $$CookTimersTableTableManager
                 durationSeconds: durationSeconds,
                 startedAt: startedAt,
                 stepNumber: stepNumber,
+                stepId: stepId,
                 elapsedWhenPausedSeconds: elapsedWhenPausedSeconds,
                 recipeTitle: recipeTitle,
                 rowid: rowid,
@@ -13981,6 +14047,7 @@ class $$CookTimersTableTableManager
                 required int durationSeconds,
                 required DateTime startedAt,
                 Value<int?> stepNumber = const Value.absent(),
+                Value<String?> stepId = const Value.absent(),
                 Value<int?> elapsedWhenPausedSeconds = const Value.absent(),
                 Value<String?> recipeTitle = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -13990,6 +14057,7 @@ class $$CookTimersTableTableManager
                 durationSeconds: durationSeconds,
                 startedAt: startedAt,
                 stepNumber: stepNumber,
+                stepId: stepId,
                 elapsedWhenPausedSeconds: elapsedWhenPausedSeconds,
                 recipeTitle: recipeTitle,
                 rowid: rowid,

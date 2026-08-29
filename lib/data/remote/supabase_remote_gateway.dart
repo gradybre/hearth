@@ -36,6 +36,13 @@ class SupabaseRemoteGateway implements RemoteGateway {
     'recipe_collections': <String>['collection_id', 'recipe_id'],
   };
 
+  /// The functions that return whole aggregates for the pull half.
+  static const Map<String, ({String function, String parameter})>
+  pullFunctions = <String, ({String function, String parameter})>{
+    'recipes': (function: 'changed_recipes', parameter: 'p_since'),
+    'foods': (function: 'changed_foods', parameter: 'p_since'),
+  };
+
   final SupabaseClient _client;
 
   @override
@@ -118,6 +125,61 @@ class SupabaseRemoteGateway implements RemoteGateway {
                 DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
             payload: row,
           ),
+      ];
+    } on SocketException catch (error) {
+      throw RemoteUnavailable(error.message);
+    } on TimeoutException catch (error) {
+      throw RemoteUnavailable('$error');
+    }
+  }
+
+  @override
+  Future<List<RemoteRecord>> fetchChangedAggregates({
+    required String entityTable,
+    DateTime? since,
+  }) async {
+    final ({String function, String parameter})? aggregate =
+        pullFunctions[entityTable];
+    if (aggregate == null) {
+      throw ArgumentError.value(
+        entityTable,
+        'entityTable',
+        'has no aggregate pull function',
+      );
+    }
+
+    try {
+      // Deliberately untyped. Asking for a generic here makes the call site
+      // depend on exactly how the driver decodes a `setof jsonb`, and getting
+      // that wrong fails as an empty result rather than an error — a sync that
+      // reports success and brings nothing down.
+      final Object? response = await _client.rpc<Object?>(
+        aggregate.function,
+        params: <String, Object?>{
+          aggregate.parameter: since?.toUtc().toIso8601String(),
+        },
+      );
+
+      if (response is! List) {
+        throw StateError(
+          '${aggregate.function} returned ${response.runtimeType}, '
+          'not a list of records.',
+        );
+      }
+
+      return <RemoteRecord>[
+        for (final Object? row in response)
+          if (row is Map)
+            RemoteRecord(
+              id: '${row['id']}',
+              updatedAt:
+                  DateTime.tryParse('${row['updated_at']}')?.toUtc() ??
+                  DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+              payload: <String, Object?>{
+                for (final MapEntry<Object?, Object?> entry in row.entries)
+                  '${entry.key}': entry.value,
+              },
+            ),
       ];
     } on SocketException catch (error) {
       throw RemoteUnavailable(error.message);

@@ -13,6 +13,14 @@ import '../../support/app_harness.dart';
 import '../../support/fake_kitchen.dart';
 import '../../support/fixtures.dart';
 
+/// Two steps that each carry a timer, for the cases about several at once.
+Recipe twoTimerRecipe() => aRecipe(
+  steps: <RecipeStep>[
+    aStep('Boil the rice', stepNumber: 1, timerSeconds: 120),
+    aStep('Braise the beef', stepNumber: 2, timerSeconds: 600),
+  ],
+);
+
 Recipe aCookableRecipe() => aRecipe(
   title: 'Braised short ribs',
   ingredients: <RecipeIngredient>[
@@ -187,25 +195,33 @@ void main() {
     testWidgets('permission is asked once, at the stove', (
       WidgetTester tester,
     ) async {
-      final (_, FakeTimerAlerts alerts) = await pumpCookAlong(tester);
-      await tester.tap(find.text('Season the ribs generously'));
-      await tester.pump();
+      final (_, FakeTimerAlerts alerts) = await pumpCookAlong(
+        tester,
+        recipe: twoTimerRecipe(),
+      );
 
-      await tester.tap(find.text('Start 10 min timer'));
+      await tester.tap(find.text('Start 2 min timer'));
+      await tester.pump();
+      await tester.tap(find.text('Boil the rice').first);
       await tester.pump();
       await tester.tap(find.text('Start 10 min timer'));
       await tester.pump();
 
       expect(alerts.scheduled, hasLength(2));
-      expect(alerts.permissionRequests, 1);
+      expect(
+        alerts.permissionRequests,
+        1,
+        reason: 'asked at the first timer, not at every one',
+      );
     });
 
     testWidgets('several run side by side', (WidgetTester tester) async {
-      await pumpCookAlong(tester);
-      await tester.tap(find.text('Season the ribs generously'));
-      await tester.pump();
+      // Sauce and pasta at once — the case the spec calls out by name.
+      await pumpCookAlong(tester, recipe: twoTimerRecipe());
 
-      await tester.tap(find.text('Start 10 min timer'));
+      await tester.tap(find.text('Start 2 min timer'));
+      await tester.pump();
+      await tester.tap(find.text('Boil the rice').first);
       await tester.pump();
       await tester.tap(find.text('Start 10 min timer'));
       await tester.pump();
@@ -238,10 +254,13 @@ void main() {
     testWidgets('stopping one cancels its alert and leaves the rest', (
       WidgetTester tester,
     ) async {
-      final (_, FakeTimerAlerts alerts) = await pumpCookAlong(tester);
-      await tester.tap(find.text('Season the ribs generously'));
+      final (_, FakeTimerAlerts alerts) = await pumpCookAlong(
+        tester,
+        recipe: twoTimerRecipe(),
+      );
+      await tester.tap(find.text('Start 2 min timer'));
       await tester.pump();
-      await tester.tap(find.text('Start 10 min timer'));
+      await tester.tap(find.text('Boil the rice').first);
       await tester.pump();
       await tester.tap(find.text('Start 10 min timer'));
       await tester.pump();
@@ -705,6 +724,84 @@ void main() {
         1,
         reason: 'the saved place has to go too, or it comes back on reopen',
       );
+    });
+  });
+
+  group('one timer per step', () {
+    testWidgets('tapping start twice does not stack two timers', (
+      WidgetTester tester,
+    ) async {
+      // Three identical timers going off a second apart is noise, and
+      // dismissing two of them mid-cook is exactly the fiddling this screen
+      // exists to avoid.
+      final (_, FakeTimerAlerts alerts) = await pumpCookAlong(tester);
+      await tester.tap(find.text('Season the ribs generously'));
+      await tester.pump();
+
+      await tester.tap(find.text('Start 10 min timer'));
+      await tester.pump();
+
+      expect(alerts.scheduled, hasLength(1));
+      expect(
+        find.text('Start 10 min timer'),
+        findsNothing,
+        reason: 'the control that would start a second one should be gone',
+      );
+    });
+
+    testWidgets('the running countdown replaces the start control', (
+      WidgetTester tester,
+    ) async {
+      await pumpCookAlong(tester);
+      await tester.tap(find.text('Season the ribs generously'));
+      await tester.pump();
+      await tester.tap(find.text('Start 10 min timer'));
+      await tester.pump();
+
+      expect(find.textContaining('left'), findsWidgets);
+    });
+
+    testWidgets('a different step still gets its own timer', (
+      WidgetTester tester,
+    ) async {
+      // Two minutes for the rice and ten for the braise must both be
+      // possible; only a second timer on the *same* pot is refused.
+      final (_, FakeTimerAlerts alerts) = await pumpCookAlong(
+        tester,
+        recipe: aRecipe(
+          steps: <RecipeStep>[
+            aStep('Boil the rice', stepNumber: 1, timerSeconds: 120),
+            aStep('Braise the beef', stepNumber: 2, timerSeconds: 600),
+          ],
+        ),
+      );
+
+      await tester.tap(find.text('Start 2 min timer'));
+      await tester.pump();
+      // `.first` is the step card; the timer tray now shows the same text as
+      // its label.
+      await tester.tap(find.text('Boil the rice').first);
+      await tester.pump();
+      await tester.tap(find.text('Start 10 min timer'));
+      await tester.pump();
+
+      expect(alerts.scheduled, hasLength(2));
+    });
+
+    testWidgets('the list view stops offering a step its second timer', (
+      WidgetTester tester,
+    ) async {
+      final (_, FakeTimerAlerts alerts) = await pumpCookAlong(
+        tester,
+        showAllSteps: true,
+      );
+
+      await tester.tap(find.text('Start 10 min timer'));
+      await tester.pump();
+
+      expect(alerts.scheduled, hasLength(1));
+      expect(find.text('Start 10 min timer'), findsNothing);
+      expect(find.text('Timer running'), findsOneWidget);
     });
   });
 }

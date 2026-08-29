@@ -15,11 +15,13 @@ void main() {
     Duration duration = const Duration(minutes: 10),
     DateTime? startedAt,
     Duration? pausedAfter,
+    String? stepId = 'step-2',
   }) => CookTimer(
     id: id,
     label: 'Simmer the sauce',
     duration: duration,
     startedAt: startedAt ?? t0,
+    stepId: stepId,
     stepNumber: 2,
     elapsedWhenPaused: pausedAfter,
   );
@@ -156,6 +158,24 @@ void main() {
       await store.delete('sauce');
 
       expect((await store.all(now: t0)).single.id, 'pasta');
+    });
+  });
+
+  group('a timer belongs to its step', () {
+    test('the step it came from survives the round trip', () async {
+      // The step *number* would not do: it shifts when a recipe is edited, so
+      // two timers could collide or a step could quietly acquire a second.
+      await store.upsert(aTimer(stepId: 'step-7'));
+
+      expect((await store.all(now: t0)).single.stepId, 'step-7');
+    });
+
+    test('a timer with no step is still stored', () async {
+      // Nothing creates one today, but the column is nullable and a null must
+      // not read back as the string "null".
+      await store.upsert(aTimer(stepId: null));
+
+      expect((await store.all(now: t0)).single.stepId, isNull);
     });
   });
 }

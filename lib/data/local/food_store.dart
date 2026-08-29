@@ -15,6 +15,14 @@ class FoodStore {
 
   final HearthDatabase _db;
 
+  /// When this device last changed the food, for last-write-wins.
+  Future<DateTime?> updatedAtFor(String id) async {
+    final FoodRow? row = await (_db.select(
+      _db.foods,
+    )..where(($FoodsTable f) => f.id.equals(id))).getSingleOrNull();
+    return row?.updatedAt;
+  }
+
   Future<Food?> byId(String id) async {
     final FoodRow? row = await (_db.select(
       _db.foods,

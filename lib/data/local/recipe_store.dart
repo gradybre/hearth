@@ -16,6 +16,16 @@ class RecipeStore {
 
   final HearthDatabase _db;
 
+  /// When this device last changed the recipe, for last-write-wins.
+  ///
+  /// Null when the recipe is unknown here, which a pull reads as "take it".
+  Future<DateTime?> updatedAtFor(String id) async {
+    final RecipeRow? row = await (_db.select(
+      _db.recipes,
+    )..where(($RecipesTable r) => r.id.equals(id))).getSingleOrNull();
+    return row?.updatedAt;
+  }
+
   /// One recipe with everything hanging off it, or null when unknown.
   Future<Recipe?> byId(String id) async {
     final RecipeRow? row = await (_db.select(

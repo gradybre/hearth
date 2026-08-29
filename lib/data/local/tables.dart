@@ -310,6 +310,9 @@ class CookTimers extends Table {
   DateTimeColumn get startedAt => dateTime()();
   IntColumn get stepNumber => integer().nullable()();
 
+  /// The step this timer belongs to — one timer per step, not one per tap.
+  TextColumn get stepId => text().nullable()();
+
   /// Elapsed seconds at the moment it was paused; null while running.
   IntColumn get elapsedWhenPausedSeconds => integer().nullable()();
 

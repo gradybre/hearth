@@ -35,6 +35,19 @@ class FakeGateway implements RemoteGateway {
     if (offline) throw const RemoteUnavailable('no connection');
     return changed;
   }
+
+  /// What the last pull asked for, so a test can check the watermark is used.
+  DateTime? askedSince;
+
+  @override
+  Future<List<RemoteRecord>> fetchChangedAggregates({
+    required String entityTable,
+    DateTime? since,
+  }) async {
+    askedSince = since;
+    if (offline) throw const RemoteUnavailable('no connection');
+    return changed;
+  }
 }
 
 void main() {

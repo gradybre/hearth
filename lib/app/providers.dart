@@ -28,6 +28,7 @@ import '../data/repositories/collection_repository.dart';
 import '../data/repositories/food_repository.dart';
 import '../data/repositories/plan_repository.dart';
 import '../data/repositories/recipe_repository.dart';
+import '../data/sync/library_sync.dart';
 import '../data/sync/sync_engine.dart';
 import '../domain/cooking/cook_session.dart';
 import '../domain/models/food.dart';
@@ -509,3 +510,13 @@ final StreamProvider<int> pendingWriteCountProvider = StreamProvider<int>(
 
 final NotifierProvider<SyncController, SyncStatus> syncControllerProvider =
     NotifierProvider<SyncController, SyncStatus>(SyncController.new);
+
+final Provider<LibrarySync> librarySyncProvider = Provider<LibrarySync>(
+  (Ref ref) => LibrarySync(
+    engine: ref.watch(syncEngineProvider),
+    recipes: ref.watch(recipeStoreProvider),
+    foods: ref.watch(foodStoreProvider),
+    queue: ref.watch(pendingWriteStoreProvider),
+    preferences: ref.watch(preferenceStoreProvider),
+  ),
+);

@@ -31,16 +31,27 @@ class SupabaseAuthGateway implements AuthGateway {
   Stream<HearthAccount?> watchAccount() async* {
     // The account as it stands, before waiting for anything to happen to it:
     // a fresh listener must not sit on a spinner until the next auth event.
-    yield await currentAccount();
+    yield await _accountOrSignOut();
     yield* _accounts.stream;
   }
 
   Future<void> _refresh() async {
     if (_accounts.isClosed) return;
+    _accounts.add(await _accountOrSignOut());
+  }
+
+  /// The account, or null after clearing a session that cannot be used.
+  ///
+  /// A stored session whose profile cannot be read is not a transient error to
+  /// sit on — the account has been deleted, or the project it belonged to is
+  /// gone. Signing out puts the user somewhere they can act; leaving the
+  /// session in place leaves them on a spinner with nothing to do.
+  Future<HearthAccount?> _accountOrSignOut() async {
     try {
-      _accounts.add(await currentAccount());
-    } on AuthFailure catch (error) {
-      _accounts.addError(error);
+      return await currentAccount();
+    } on Object {
+      await _client.auth.signOut();
+      return null;
     }
   }
 

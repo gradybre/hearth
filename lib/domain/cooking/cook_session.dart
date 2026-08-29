@@ -16,6 +16,7 @@ class CookTimer {
     required this.label,
     required this.duration,
     required this.startedAt,
+    this.stepId,
     this.stepNumber,
     this.elapsedWhenPaused,
   });
@@ -27,6 +28,14 @@ class CookTimer {
 
   final Duration duration;
   final DateTime startedAt;
+
+  /// The step this timer belongs to, and the thing that makes it unique.
+  ///
+  /// A step gets one timer, not one per tap. The step *number* would not do:
+  /// it shifts when the recipe is edited, so two timers could collide or the
+  /// same step could quietly acquire a second one.
+  final String? stepId;
+
   final int? stepNumber;
 
   /// How much had elapsed when it was paused; null while running.
@@ -64,6 +73,7 @@ class CookTimer {
           label: label,
           duration: duration,
           startedAt: now.subtract(elapsedWhenPaused!),
+          stepId: stepId,
           stepNumber: stepNumber,
         )
       : this;
@@ -76,6 +86,7 @@ class CookTimer {
     label: label,
     duration: duration,
     startedAt: startedAt,
+    stepId: stepId,
     stepNumber: stepNumber,
     elapsedWhenPaused: elapsedWhenPaused ?? this.elapsedWhenPaused,
   );

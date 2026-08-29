@@ -13,6 +13,7 @@ import '../../data/local/cook_session_store.dart';
 import '../../domain/cooking/cook_session.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/recipe.dart';
+import 'timer_bar.dart';
 
 /// Cooking a recipe, step by step (spec §5.2).
 ///
@@ -161,6 +162,7 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
             label: _shortLabel(step.text),
             duration: Duration(seconds: step.timerSeconds!),
             startedAt: DateTime.now(),
+            stepId: step.id,
             stepNumber: step.stepNumber,
           ),
           recipeTitle: widget.recipe.title,
@@ -190,6 +192,12 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
     final List<CookTimer> ringing = _session
         .copyWithTimers(timers)
         .ringingAt(now);
+    // One timer per step, so the controls can show the countdown in place
+    // rather than offering to start a second one.
+    final Map<String, CookTimer> timerByStep = <String, CookTimer>{
+      for (final CookTimer timer in timers)
+        if (timer.stepId != null) timer.stepId!: timer,
+    };
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -264,6 +272,7 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                     child: showAllSteps
                         ? _StepList(
                             session: _session,
+                            timerByStep: timerByStep,
                             // Anywhere on the row ticks the step off. Nothing
                             // in the list navigates: the toggle above is the
                             // only way between the two views, so a tap here
@@ -277,6 +286,8 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                             isChecked: _session.isChecked(step),
                             onAdvance: () => _update(_session.next()),
                             onCheck: () => _update(_session.toggle(step)),
+                            runningTimer: timerByStep[step.id],
+                            now: now,
                             onStartTimer: step.hasTimer
                                 ? () => _startTimer(step)
                                 : null,
@@ -338,16 +349,6 @@ String _duration(Duration d) {
   return '$minutes:${seconds.toString().padLeft(2, '0')}';
 }
 
-/// A countdown. Hours are broken out once there are any: "179:57" is not a
-/// number anyone can read as most of three hours.
-String _countdown(Duration d) {
-  final int hours = d.inHours;
-  final String minutes = d.inMinutes.remainder(60).toString();
-  final String seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-  if (hours == 0) return '$minutes:$seconds';
-  return '$hours:${minutes.padLeft(2, '0')}:$seconds';
-}
-
 class _Progress extends StatelessWidget {
   const _Progress({required this.session});
 
@@ -387,11 +388,13 @@ class _Progress extends StatelessWidget {
 class _StepList extends StatelessWidget {
   const _StepList({
     required this.session,
+    required this.timerByStep,
     required this.onCheck,
     required this.onStartTimer,
   });
 
   final CookSession session;
+  final Map<String, CookTimer> timerByStep;
   final ValueChanged<RecipeStep> onCheck;
   final ValueChanged<RecipeStep> onStartTimer;
 
@@ -410,6 +413,7 @@ class _StepList extends StatelessWidget {
         step: steps[index],
         isChecked: session.isChecked(steps[index]),
         isCurrent: index == session.currentStep,
+        isTimerRunning: timerByStep.containsKey(steps[index].id),
         onCheck: () => onCheck(steps[index]),
         onStartTimer: steps[index].hasTimer
             ? () => onStartTimer(steps[index])
@@ -424,6 +428,7 @@ class _StepListRow extends StatelessWidget {
     required this.step,
     required this.isChecked,
     required this.isCurrent,
+    required this.isTimerRunning,
     required this.onCheck,
     this.onStartTimer,
   });
@@ -431,6 +436,10 @@ class _StepListRow extends StatelessWidget {
   final RecipeStep step;
   final bool isChecked;
   final bool isCurrent;
+
+  /// This step already has a timer going, so it is not offered another.
+  final bool isTimerRunning;
+
   final VoidCallback onCheck;
   final VoidCallback? onStartTimer;
 
@@ -502,7 +511,8 @@ class _StepListRow extends StatelessWidget {
                                   : colors.textPrimary,
                             ),
                           ),
-                          if (onStartTimer != null) ...<Widget>[
+                          if (onStartTimer != null &&
+                              !isTimerRunning) ...<Widget>[
                             const SizedBox(height: HearthSpacing.sm),
                             _TimerChip(
                               label:
@@ -510,6 +520,14 @@ class _StepListRow extends StatelessWidget {
                                   '${_duration(Duration(seconds: step.timerSeconds!))} '
                                   'timer',
                               onPressed: onStartTimer!,
+                            ),
+                          ] else if (isTimerRunning) ...<Widget>[
+                            const SizedBox(height: HearthSpacing.sm),
+                            Text(
+                              'Timer running',
+                              style: context.text.metadata.copyWith(
+                                color: context.colors.accent,
+                              ),
                             ),
                           ],
                         ],
@@ -579,6 +597,8 @@ class _StepCard extends StatelessWidget {
     required this.isChecked,
     required this.onAdvance,
     required this.onCheck,
+    required this.now,
+    this.runningTimer,
     this.onStartTimer,
   });
 
@@ -586,6 +606,11 @@ class _StepCard extends StatelessWidget {
   final bool isChecked;
   final VoidCallback onAdvance;
   final VoidCallback onCheck;
+  final DateTime now;
+
+  /// The timer already running for this step, if any.
+  final CookTimer? runningTimer;
+
   final VoidCallback? onStartTimer;
 
   @override
@@ -655,13 +680,19 @@ class _StepCard extends StatelessWidget {
               ),
               if (onStartTimer != null) ...<Widget>[
                 const SizedBox(height: HearthSpacing.md),
-                _BigButton(
-                  label:
-                      'Start ${_duration(Duration(seconds: step.timerSeconds!))} timer',
-                  icon: Icons.timer_outlined,
-                  filled: false,
-                  onPressed: onStartTimer!,
-                ),
+                if (runningTimer == null)
+                  _BigButton(
+                    label:
+                        'Start ${_duration(Duration(seconds: step.timerSeconds!))} timer',
+                    icon: Icons.timer_outlined,
+                    filled: false,
+                    onPressed: onStartTimer!,
+                  )
+                else
+                  // Shows the countdown rather than offering to start again.
+                  // The control that would stack a second timer on the same
+                  // pot simply is not there.
+                  _RunningTimerLabel(timer: runningTimer!, now: now),
               ],
               const SizedBox(height: HearthSpacing.md),
               _BigButton(
@@ -833,7 +864,7 @@ class _RingingBanner extends StatelessWidget {
                   // knows whether it was thirty seconds or ten minutes.
                   if (over.inSeconds >= 30)
                     Text(
-                      '${_countdown(over)} ago',
+                      '${countdown(over)} ago',
                       style: context.text.metadata.copyWith(
                         color: colors.onAccent,
                       ),
@@ -907,7 +938,7 @@ class _TimerTray extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    _countdown(timer.remainingAt(now)),
+                    countdown(timer.remainingAt(now)),
                     style: context.text.ingredient.copyWith(fontSize: 18),
                   ),
                   IconButton(
@@ -1017,6 +1048,55 @@ class _IngredientSheet extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The countdown for a step that already has a timer going.
+///
+/// Deliberately not a button. The control that would start a second timer on
+/// the same pot is replaced rather than disabled, because a disabled button
+/// still reads as "this is the thing to press".
+class _RunningTimerLabel extends StatelessWidget {
+  const _RunningTimerLabel({required this.timer, required this.now});
+
+  final CookTimer timer;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final bool done = !timer.isPaused && timer.isDoneAt(now);
+
+    return Semantics(
+      liveRegion: true,
+      label: done
+          ? 'Timer is up'
+          : 'Timer running, ${spokenDuration(timer.remainingAt(now))} left',
+      excludeSemantics: true,
+      child: Container(
+        height: HearthTouch.kitchenTarget,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: colors.surfaceSunken,
+          borderRadius: BorderRadius.circular(HearthRadius.md),
+          border: Border.all(color: colors.outline),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Icon(
+              done ? Icons.notifications_active : Icons.timer_outlined,
+              color: colors.accent,
+            ),
+            const SizedBox(width: HearthSpacing.sm),
+            Text(
+              done ? 'Time is up' : '${countdown(timer.remainingAt(now))} left',
+              style: context.text.label.copyWith(fontSize: 18),
+            ),
+          ],
         ),
       ),
     );

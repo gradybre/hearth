@@ -122,6 +122,18 @@ class PendingWriteStore {
     ];
   }
 
+  /// Whether this record has a local change that has not reached the server.
+  ///
+  /// A pull must never overwrite one: the server's copy predates the local
+  /// change by definition, so accepting it would discard something the user
+  /// did offline before it was ever sent.
+  Future<bool> hasPendingFor(String entityId) async {
+    final List<PendingWriteRow> rows = await (_db.select(
+      _db.pendingWrites,
+    )..where(($PendingWritesTable t) => t.entityId.equals(entityId))).get();
+    return rows.isNotEmpty;
+  }
+
   Future<int> count() async {
     final List<PendingWriteRow> rows = await _db
         .select(_db.pendingWrites)

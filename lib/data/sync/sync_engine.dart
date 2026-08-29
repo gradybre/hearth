@@ -3,6 +3,24 @@ import 'package:meta/meta.dart';
 import '../local/pending_write_store.dart';
 import '../remote/remote_gateway.dart';
 
+/// What one pull achieved.
+@immutable
+class PullResult {
+  const PullResult({
+    required this.applied,
+    required this.skipped,
+    this.stoppedBecauseOffline = false,
+  });
+
+  final int applied;
+
+  /// Records the server sent that were not applied — because the local copy
+  /// was newer, or because it had an unsent local change.
+  final int skipped;
+
+  final bool stoppedBecauseOffline;
+}
+
 /// What one sync attempt achieved.
 @immutable
 class SyncResult {
@@ -78,6 +96,50 @@ class SyncEngine {
       stillQueued: await _queue.count(),
       stoppedBecauseOffline: offline,
     );
+  }
+
+  /// Brings down everything that changed since [since] and applies it.
+  ///
+  /// Push runs first, always: sending what this device did before accepting
+  /// what another device did means a local change can never be silently
+  /// overwritten by a server copy that predates it.
+  Future<PullResult> pullAggregates({
+    required String entityTable,
+    required DateTime? since,
+    required Future<DateTime?> Function(String id) localUpdatedAt,
+    required Future<bool> Function(String id) hasPendingWrite,
+    required Future<void> Function(RemoteRecord record) apply,
+  }) async {
+    final List<RemoteRecord> records;
+    try {
+      records = await _gateway.fetchChangedAggregates(
+        entityTable: entityTable,
+        since: since,
+      );
+    } on RemoteUnavailable {
+      return const PullResult(
+        applied: 0,
+        skipped: 0,
+        stoppedBecauseOffline: true,
+      );
+    }
+
+    int applied = 0;
+    int skipped = 0;
+    for (final RemoteRecord record in records) {
+      final bool accept = shouldAcceptRemote(
+        remoteUpdatedAt: record.updatedAt,
+        localUpdatedAt: await localUpdatedAt(record.id),
+        hasPendingLocalWrite: await hasPendingWrite(record.id),
+      );
+      if (!accept) {
+        skipped++;
+        continue;
+      }
+      await apply(record);
+      applied++;
+    }
+    return PullResult(applied: applied, skipped: skipped);
   }
 
   /// Decides whether an incoming remote record should replace the local copy.

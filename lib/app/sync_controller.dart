@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/auth/auth_gateway.dart';
+
 import '../data/sync/sync_engine.dart';
 import 'providers.dart';
 
@@ -16,6 +18,12 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
   Timer? _debounce;
   bool _running = false;
 
+  /// Whether anyone is signed in, tracked from the account listener rather
+  /// than read back from the provider: reading it here answered null even
+  /// just after a sign-in, and a sync that quietly does nothing is worse than
+  /// one that fails loudly.
+  bool _signedIn = false;
+
   @override
   SyncStatus build() {
     if (!ref.watch(supabaseReadyProvider)) return const SyncStatus.idle();
@@ -28,10 +36,18 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
 
     // Signing in, or out: a fresh session means the queue may belong to
     // someone who can now actually push it.
-    ref.listen(accountProvider, (_, _) => syncSoon());
+    ref.listen(accountProvider, (_, AsyncValue<HearthAccount?> next) {
+      _signedIn = next.value != null;
+      if (_signedIn) syncSoon();
+    });
 
     // Any local write. Debounced, because a recipe save queues several rows
     // and each one would otherwise start its own run.
+    //
+    // Nothing here may invalidate this provider: it is a Drift stream that
+    // already re-emits when the queue changes, and refreshing it by hand
+    // would retrigger this very listener — a sync loop that never stops and
+    // never notices, because each run looks perfectly ordinary on its own.
     ref.listen(pendingWriteCountProvider, (_, _) => syncSoon());
 
     return const SyncStatus.idle();
@@ -50,16 +66,33 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
 
   Future<void> sync() async {
     if (_running || !ref.read(supabaseReadyProvider)) return;
+
+    // Nothing to sync as nobody. Worse than pointless: RLS answers a
+    // signed-out pull with an empty result rather than an error, which looks
+    // exactly like "the server has nothing new" — so the watermark would move
+    // forward over records this device had never seen, and they would never
+    // be asked for again.
+    if (!_signedIn) return;
     _running = true;
     state = const SyncStatus.syncing();
     try {
+      // Push before pull, always. Sending what this device did before
+      // accepting what another device did means a local change can never be
+      // silently overwritten by a server copy that predates it.
       final SyncResult result = await ref.read(syncEngineProvider).push();
-      state = SyncStatus.done(result);
-    } on Exception catch (error) {
+      final PullResult pulled = await ref.read(librarySyncProvider).pull();
+      // ignore: avoid_print
+      print(
+        'HEARTH sync: pushed ${result.pushed}, pulled ${pulled.applied}, '
+        'skipped ${pulled.skipped}, offline ${pulled.stoppedBecauseOffline}',
+      );
+      state = SyncStatus.done(result, pulled: pulled);
+    } on Object catch (error, stack) {
+      // ignore: avoid_print
+      print('HEARTH sync FAILED: $error\n$stack');
       state = SyncStatus.failed('$error');
     } finally {
       _running = false;
-      ref.invalidate(pendingWriteCountProvider);
     }
   }
 }
@@ -67,12 +100,26 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
 /// What the last sync did, for anything that wants to say so.
 @immutable
 class SyncStatus {
-  const SyncStatus.idle() : result = null, error = null, isSyncing = false;
-  const SyncStatus.syncing() : result = null, error = null, isSyncing = true;
-  const SyncStatus.done(this.result) : error = null, isSyncing = false;
-  const SyncStatus.failed(this.error) : result = null, isSyncing = false;
+  const SyncStatus.idle()
+    : result = null,
+      pulled = null,
+      error = null,
+      isSyncing = false;
+  const SyncStatus.syncing()
+    : result = null,
+      pulled = null,
+      error = null,
+      isSyncing = true;
+  const SyncStatus.done(this.result, {this.pulled})
+    : error = null,
+      isSyncing = false;
+  const SyncStatus.failed(this.error)
+    : result = null,
+      pulled = null,
+      isSyncing = false;
 
   final SyncResult? result;
+  final PullResult? pulled;
   final String? error;
   final bool isSyncing;
 

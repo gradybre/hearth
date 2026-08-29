@@ -50,4 +50,15 @@ abstract interface class RemoteGateway {
     required String entityTable,
     DateTime? since,
   });
+
+  /// Whole aggregates — a recipe with its sections, ingredients and steps —
+  /// in the same shape they are pushed in.
+  ///
+  /// Separate from [fetchChanged] because fetching the four recipe tables
+  /// independently could hand back a recipe with ingredients from one moment
+  /// and steps from another.
+  Future<List<RemoteRecord>> fetchChangedAggregates({
+    required String entityTable,
+    DateTime? since,
+  });
 }

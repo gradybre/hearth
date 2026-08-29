@@ -43,7 +43,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -76,6 +76,10 @@ class HearthDatabase extends _$HearthDatabase {
       // v7 remembers a recipe's hero photo on this device (spec §5.2).
       if (from < 7) {
         await m.createTable(recipePhotos);
+      }
+      // v8 ties a timer to its step, so a step can only ever have one.
+      if (from < 8) {
+        await m.addColumn(cookTimers, cookTimers.stepId);
       }
     },
     beforeOpen: (OpeningDetails details) async {

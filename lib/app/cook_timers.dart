@@ -24,9 +24,26 @@ class CookTimersNotifier extends AsyncNotifier<List<CookTimer>> {
   @override
   Future<List<CookTimer>> build() => _store.all(now: DateTime.now());
 
+  /// The timer already running for a step, if there is one.
+  CookTimer? forStep(String stepId) {
+    for (final CookTimer timer in state.value ?? const <CookTimer>[]) {
+      if (timer.stepId == stepId) return timer;
+    }
+    return null;
+  }
+
   /// Starts a timer and schedules the alert that will reach a cook who has put
   /// the phone down and walked away.
+  ///
+  /// One timer per step. Tapping the control again does nothing rather than
+  /// stacking a second countdown on the same pot — three identical timers all
+  /// going off a second apart is noise, and dismissing two of them while
+  /// cooking is exactly the sort of fiddling this screen exists to avoid.
+  /// Two *different* steps still each get their own.
   Future<void> start(CookTimer timer, {String? recipeTitle}) async {
+    final String? stepId = timer.stepId;
+    if (stepId != null && forStep(stepId) != null) return;
+
     await _store.upsert(timer, recipeTitle: recipeTitle);
     await _reload();
 

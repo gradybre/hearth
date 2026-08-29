@@ -65,6 +65,7 @@ class CookTimerStore {
           durationSeconds: timer.duration.inSeconds,
           startedAt: timer.startedAt,
           stepNumber: timer.stepNumber,
+          stepId: timer.stepId,
           elapsedWhenPausedSeconds: timer.elapsedWhenPaused?.inSeconds,
           recipeTitle: recipeTitle,
         ),
@@ -82,6 +83,7 @@ class CookTimerStore {
     duration: Duration(seconds: row.durationSeconds),
     startedAt: row.startedAt,
     stepNumber: row.stepNumber,
+    stepId: row.stepId,
     elapsedWhenPaused: row.elapsedWhenPausedSeconds == null
         ? null
         : Duration(seconds: row.elapsedWhenPausedSeconds!),
