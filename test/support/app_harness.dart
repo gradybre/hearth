@@ -14,6 +14,7 @@ import 'package:hearth/data/local/food_store.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/domain/cooking/cook_session.dart';
 import 'package:hearth/domain/models/food.dart';
+import 'package:hearth/domain/models/food_profile.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/recent_log.dart';
@@ -50,6 +51,7 @@ Future<HearthDatabase> pumpHearthApp(
   List<NutritionSource> nutritionSources = const <NutritionSource>[],
   RecipeAiSource? recipeAi,
   PhotoPicker? photoPicker,
+  FoodProfile? foodProfile,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -84,6 +86,14 @@ Future<HearthDatabase> pumpHearthApp(
         // neither belongs in a widget test, and null is also the honest state
         // of a build with no backend configured.
         recipeAiProvider.overrideWithValue(recipeAi),
+        // Another sqlite-backed stream, and the same reasoning as the rest:
+        // fake async cannot drive real I/O, so a live subscription would
+        // never emit and would still be open at teardown.
+        foodProfileProvider.overrideWith(
+          (Ref ref) => Stream<FoodProfile>.value(
+            foodProfile ?? FoodProfile.empty('test-user'),
+          ),
+        ),
         if (photoPicker != null)
           photoPickerProvider.overrideWithValue(photoPicker),
         recipeLibraryProvider.overrideWith(

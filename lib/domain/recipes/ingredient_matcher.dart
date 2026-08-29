@@ -182,6 +182,17 @@ class CandidateGuess {
   /// no right answer the app can know — but it does know that it doesn't know,
   /// and saying so is what keeps a wrong macro from being silently adopted.
   final bool isAmbiguous;
+
+  /// Good enough to apply without asking.
+  ///
+  /// Being the only candidate is not the same as being right. "1 red bell
+  /// pepper" once matched "RED BELL PEPPER VEGGIE CHIPS" and was applied by
+  /// default, because with nothing else close there was nothing to be
+  /// ambiguous against — and a mediocre match nobody was asked about is
+  /// exactly the silent wrong macro the review screen exists to prevent.
+  ///
+  /// Everything else is still offered; it just arrives unticked.
+  bool get isConfident => !isAmbiguous && score >= CandidateMatcher.confident;
 }
 
 /// Picking a food for an ingredient from what the outside world offered.
@@ -193,6 +204,12 @@ class CandidateGuess {
 abstract final class CandidateMatcher {
   /// How close the runner-up may be before the winner is called ambiguous.
   static const double _ambiguityMargin = 0.08;
+
+  /// The score above which a match is applied without asking.
+  ///
+  /// Sits above what a name buried in extra words can reach, and below an
+  /// exact name from a source that trusts itself.
+  static const double confident = 0.85;
 
   /// Words shorter than this are not required to appear.
   ///

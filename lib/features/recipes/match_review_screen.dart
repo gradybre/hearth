@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../data/adapters/recipe_ai.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
+import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/parsing/ingredient_parser.dart';
 import '../../domain/recipes/macro_calculator.dart';
+import '../../domain/units/quantity.dart';
+import '../../domain/units/unit.dart';
 import '../foods/food_draft.dart';
 import 'match_review_controller.dart';
 
@@ -25,17 +30,25 @@ import 'match_review_controller.dart';
 Future<Map<String, String>?> showMatchReview(
   BuildContext context, {
   required List<ParsedIngredient> ingredients,
+  List<AiEstimate> estimates = const <AiEstimate>[],
 }) => Navigator.of(context).push<Map<String, String>>(
   MaterialPageRoute<Map<String, String>>(
     builder: (BuildContext context) =>
-        _MatchReviewScreen(ingredients: ingredients),
+        _MatchReviewScreen(ingredients: ingredients, estimates: estimates),
   ),
 );
 
 class _MatchReviewScreen extends ConsumerStatefulWidget {
-  const _MatchReviewScreen({required this.ingredients});
+  const _MatchReviewScreen({
+    required this.ingredients,
+    this.estimates = const <AiEstimate>[],
+  });
 
   final List<ParsedIngredient> ingredients;
+
+  /// The model's own numbers, for lines the real chain cannot match
+  /// (spec §5.4).
+  final List<AiEstimate> estimates;
 
   @override
   ConsumerState<_MatchReviewScreen> createState() => _MatchReviewScreenState();
@@ -49,7 +62,9 @@ class _MatchReviewScreenState extends ConsumerState<_MatchReviewScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        ref.read(matchReviewProvider.notifier).findMatches(widget.ingredients);
+        ref
+            .read(matchReviewProvider.notifier)
+            .findMatches(widget.ingredients, estimates: widget.estimates);
       }
     });
   }
@@ -65,7 +80,9 @@ class _MatchReviewScreenState extends ConsumerState<_MatchReviewScreen> {
     try {
       final Map<String, String> matches = <String, String>{};
       for (final IngredientMatchRow row in ready.accepted) {
-        final Food food = FoodDraft.fromLookup(row.food!).toFood();
+        final Food food = row.food != null
+            ? FoodDraft.fromLookup(row.food!).toFood()
+            : _foodFromEstimate(row);
         await ref.read(foodRepositoryProvider).save(food);
         matches[row.ingredient.name] = food.id;
       }
@@ -73,6 +90,39 @@ class _MatchReviewScreenState extends ConsumerState<_MatchReviewScreen> {
     } finally {
       if (mounted) setState(() => _applying = false);
     }
+  }
+
+  /// A food built from the model's own arithmetic, and labelled as such.
+  ///
+  /// [FoodSource.aiEstimate] is not decoration: it is what makes every later
+  /// view of this food say "AI estimate", so a number nobody verified can
+  /// never quietly pass for one that was (spec §5.4).
+  ///
+  /// The serving is the ingredient line itself, because that is what was
+  /// estimated — "2 tbsp olive oil", not olive oil per 100 g.
+  Food _foodFromEstimate(IngredientMatchRow row) {
+    final AiEstimate estimate = row.estimate!;
+    final Quantity amount =
+        row.ingredient.quantity ?? Quantity.of(1, Units.item);
+
+    return Food(
+      id: const Uuid().v4(),
+      name: row.ingredient.name,
+      source: FoodSource.aiEstimate,
+      servingOptions: <ServingOption>[
+        ServingOption(
+          id: const Uuid().v4(),
+          label: QuantityFormat.formatAsAuthored(amount),
+          amount: amount,
+          macros: Macros(
+            kcal: estimate.kcal,
+            proteinG: estimate.proteinG,
+            carbG: estimate.carbG,
+            fatG: estimate.fatG,
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -271,7 +321,9 @@ class _MatchRow extends StatelessWidget {
     final Food? food = row.food;
 
     if (food == null) {
-      return _NoMatchRow(ingredient: row.ingredient.name);
+      return row.estimate == null
+          ? _NoMatchRow(ingredient: row.ingredient.name)
+          : _EstimateRow(row: row, onChanged: onChanged);
     }
 
     final String macros = _macrosLine(context);
@@ -425,6 +477,108 @@ class _NoMatchRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A line only the model has a number for (spec §5.4).
+///
+/// Offered because a rough number that admits to being rough beats a silent
+/// zero — but unticked, described as a guess, and saved with a source that
+/// makes every later view of it say so. It is the weakest thing on this
+/// screen and is dressed accordingly.
+class _EstimateRow extends StatelessWidget {
+  const _EstimateRow({required this.row, required this.onChanged});
+
+  final IngredientMatchRow row;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final AiEstimate estimate = row.estimate!;
+
+    return Semantics(
+      checked: row.accepted,
+      label:
+          '${row.ingredient.name}. Nothing found in a real database. '
+          'Hearth\'s own estimate is ${estimate.kcal.round()} calories. '
+          'Not verified.',
+      onTap: () => onChanged(!row.accepted),
+      excludeSemantics: true,
+      child: Material(
+        color: row.accepted ? colors.surface : colors.surfaceSunken,
+        borderRadius: BorderRadius.circular(HearthRadius.md),
+        child: InkWell(
+          onTap: () => onChanged(!row.accepted),
+          borderRadius: BorderRadius.circular(HearthRadius.md),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(HearthRadius.md),
+              border: Border.all(
+                color: row.accepted ? colors.outlineStrong : colors.outline,
+              ),
+            ),
+            padding: const EdgeInsets.all(HearthSpacing.md),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Icon(
+                  row.accepted
+                      ? Icons.check_box
+                      : Icons.check_box_outline_blank,
+                  size: 20,
+                  color: row.accepted ? colors.accent : colors.textMuted,
+                ),
+                const SizedBox(width: HearthSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        row.ingredient.raw.trim().isEmpty
+                            ? row.ingredient.name
+                            : row.ingredient.raw.trim(),
+                        style: context.text.ingredient,
+                      ),
+                      const SizedBox(height: HearthSpacing.xxs),
+                      Text(
+                        'Nothing found in a real database · '
+                        'about ${estimate.kcal.round()} kcal',
+                        style: context.text.metadata.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: HearthSpacing.xs),
+                      Row(
+                        children: <Widget>[
+                          // Never colour alone (§6.3), and the words say what
+                          // the badge will say later.
+                          Icon(
+                            Icons.auto_awesome_outlined,
+                            size: 14,
+                            color: colors.error,
+                          ),
+                          const SizedBox(width: HearthSpacing.xxs),
+                          Expanded(
+                            child: Text(
+                              'Hearth\'s own guess — saved as an estimate, '
+                              'never as fact',
+                              style: context.text.metadata.copyWith(
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

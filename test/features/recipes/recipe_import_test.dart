@@ -94,7 +94,7 @@ Future<void> openImport(
   PhotoPicker? picker,
 }) async {
   await pumpHearthApp(tester, recipeAi: ai, photoPicker: picker);
-  await tester.tap(find.byIcon(Icons.auto_awesome_outlined));
+  await tester.tap(find.byIcon(Icons.document_scanner_outlined));
   await pumpFrames(tester);
 }
 
@@ -104,7 +104,9 @@ void main() {
   ) async {
     await pumpHearthApp(tester);
 
-    expect(find.byIcon(Icons.auto_awesome_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.document_scanner_outlined), findsOneWidget);
+    // And beside it, having Hearth write one (§5.4).
+    expect(find.byIcon(Icons.auto_awesome), findsOneWidget);
     expect(find.text('New recipe'), findsOneWidget);
   });
 

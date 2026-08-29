@@ -149,6 +149,18 @@ class EdgeFunctionRecipeAi implements RecipeAiSource {
                 note: _text(item['note']),
               ),
       ],
+      estimates: <AiEstimate>[
+        if (envelope['estimates'] case final List<Object?> estimates)
+          for (final Object? item in estimates)
+            if (item is Map && _text(item['ingredient']).isNotEmpty)
+              AiEstimate(
+                ingredient: _text(item['ingredient']),
+                kcal: _number(item['kcal']) ?? 0,
+                proteinG: _number(item['protein_g']) ?? 0,
+                carbG: _number(item['carb_g']) ?? 0,
+                fatG: _number(item['fat_g']) ?? 0,
+              ),
+      ],
       reply: _textOrNull(envelope['reply']),
     );
   }

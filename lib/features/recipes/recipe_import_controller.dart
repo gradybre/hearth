@@ -12,10 +12,18 @@ import 'recipe_draft.dart';
 /// pointed at on the review screen, and the review screen is the editor.
 @immutable
 class RecipeImportResult {
-  const RecipeImportResult({required this.draft, required this.uncertain});
+  const RecipeImportResult({
+    required this.draft,
+    required this.uncertain,
+    this.estimates = const <AiEstimate>[],
+  });
 
   final RecipeDraft draft;
   final List<AiUncertainty> uncertain;
+
+  /// The model's own numbers, carried only so the match review can offer them
+  /// where real data cannot be found (spec §5.4). Empty for an import.
+  final List<AiEstimate> estimates;
 }
 
 /// What the import is doing, and what it has to work with (spec §5.3).

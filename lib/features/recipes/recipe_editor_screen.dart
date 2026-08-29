@@ -153,6 +153,9 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     final Map<String, String>? applied = await showMatchReview(
       context,
       ingredients: unmatched,
+      // Only a generated recipe carries these, and only the lines the real
+      // chain cannot match will ever see them (spec §5.4).
+      estimates: widget.imported?.estimates ?? const <AiEstimate>[],
     );
     if (applied == null || applied.isEmpty || !mounted) return;
 

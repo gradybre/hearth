@@ -35,6 +35,33 @@ class AiSection {
   final String directionsText;
 }
 
+/// The model's own guess at what one ingredient line contributes (spec §5.4).
+///
+/// A last resort, and never trusted on its own. Generated recipes have their
+/// ingredients run through the real OFF → USDA chain at save time; these are
+/// used only for the lines that chain cannot match, and are labelled as
+/// estimates when they are. A rough number that admits to being rough is
+/// worth more than a silent zero.
+@immutable
+class AiEstimate {
+  const AiEstimate({
+    required this.ingredient,
+    required this.kcal,
+    this.proteinG = 0,
+    this.carbG = 0,
+    this.fatG = 0,
+  });
+
+  /// The ingredient line as the model wrote it, which is how it is matched
+  /// back to a row on the review screen.
+  final String ingredient;
+
+  final double kcal;
+  final double proteinG;
+  final double carbG;
+  final double fatG;
+}
+
 /// A recipe the model produced, before anyone has looked at it.
 @immutable
 class AiRecipe {
@@ -47,6 +74,7 @@ class AiRecipe {
     this.cuisine,
     this.tags = const <String>[],
     this.uncertain = const <AiUncertainty>[],
+    this.estimates = const <AiEstimate>[],
     this.reply,
   });
 
@@ -60,6 +88,10 @@ class AiRecipe {
 
   /// Fields worth checking before saving (spec §5.3).
   final List<AiUncertainty> uncertain;
+
+  /// Per-ingredient fallbacks, used only where real data cannot be found
+  /// (spec §5.4). Empty for an extraction.
+  final List<AiEstimate> estimates;
 
   /// What to say back in the chat. Null when extracting (spec §5.4).
   final String? reply;

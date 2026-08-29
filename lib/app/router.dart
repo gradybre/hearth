@@ -9,6 +9,7 @@ import '../features/foods/food_editor_screen.dart';
 import '../features/foods/food_library_screen.dart';
 import '../features/placeholder_screen.dart';
 import '../features/plan/plan_screen.dart';
+import '../features/recipes/recipe_chat_screen.dart';
 import '../features/recipes/recipe_detail_screen.dart';
 import '../features/recipes/recipe_editor_screen.dart';
 import '../features/recipes/recipe_import_controller.dart';
@@ -47,6 +48,11 @@ GoRouter buildRouter() => GoRouter(
       path: '/profile',
       builder: (BuildContext context, GoRouterState state) =>
           const FoodProfileScreen(),
+    ),
+    GoRoute(
+      path: '/recipe/write',
+      builder: (BuildContext context, GoRouterState state) =>
+          const RecipeChatScreen(),
     ),
     GoRoute(
       path: '/recipe/import',

@@ -44,12 +44,21 @@ class RecipeLibraryScreen extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: <Widget>[
           FloatingActionButton.small(
+            heroTag: 'recipe-write',
+            onPressed: () => context.push('/recipe/write'),
+            backgroundColor: colors.surfaceElevated,
+            foregroundColor: colors.textPrimary,
+            tooltip: 'Have Hearth write one',
+            child: const Icon(Icons.auto_awesome),
+          ),
+          const SizedBox(height: HearthSpacing.sm),
+          FloatingActionButton.small(
             heroTag: 'recipe-import',
             onPressed: () => context.push('/recipe/import'),
             backgroundColor: colors.surfaceElevated,
             foregroundColor: colors.textPrimary,
             tooltip: 'Import from a picture or a link',
-            child: const Icon(Icons.auto_awesome_outlined),
+            child: const Icon(Icons.document_scanner_outlined),
           ),
           const SizedBox(height: HearthSpacing.sm),
           FloatingActionButton.extended(

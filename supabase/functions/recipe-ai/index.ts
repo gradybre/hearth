@@ -93,6 +93,29 @@ const RECIPE_TOOL = {
           'Generation only: what to say back in the chat, one or two ' +
           'sentences. Omit when extracting.',
       },
+      estimates: {
+        type: 'array',
+        description:
+          'Generation only, and a LAST RESORT. For each ingredient line, ' +
+          'your rough estimate of what that line contributes AS WRITTEN. ' +
+          'The app looks every ingredient up in real nutrition databases and ' +
+          'uses these only for the ones it cannot find, labelled as ' +
+          'estimates. Omit entirely when extracting.',
+        items: {
+          type: 'object',
+          properties: {
+            ingredient: {
+              type: 'string',
+              description: 'The ingredient line, exactly as you wrote it.',
+            },
+            kcal: { type: 'number' },
+            protein_g: { type: 'number' },
+            carb_g: { type: 'number' },
+            fat_g: { type: 'number' },
+          },
+          required: ['ingredient', 'kcal'],
+        },
+      },
     },
     required: ['title', 'sections'],
   },
@@ -125,12 +148,21 @@ Respect the user's food profile absolutely. An allergy is a hard constraint, not
 a preference. Dislikes should be avoided unless the user overrides them in the
 conversation.
 
-When the user asks for a change, return the whole revised recipe rather than a
-diff, and say what you changed in reply.
+Always fill in reply — it is the only thing the user reads in the chat, and a
+recipe that arrives without a word about it looks like a machine answered.
 
-Do not state calories or macros anywhere. The app computes them from real
-nutrition data, and a number from you would either be ignored or, worse,
-believed.`;
+When the user asks for a change, return the whole revised recipe rather than a
+diff, and say in reply what you actually changed. That sentence is the whole
+value of a refinement: without it they have to diff two recipes by eye.
+
+Do not put calories or macros in the recipe text. The app computes those from
+real nutrition databases, and a number written into a step would be believed
+without ever being checked.
+
+Do fill in estimates: one entry per ingredient line, for what that line
+contributes as written. These are a fallback the app uses only for ingredients
+it cannot find in a real database, and it labels them as estimates when it
+does. A rough number that is honest about being rough beats a silent zero.`;
 
 interface Uncertain {
   field: string;
@@ -375,6 +407,17 @@ function shape(input: Record<string, unknown>): Record<string, unknown> {
         directions_text: text(s?.directions_text),
       })),
     },
+    estimates: Array.isArray(input.estimates)
+      ? (input.estimates as Record<string, unknown>[])
+        .filter((e) => text(e?.ingredient).length > 0)
+        .map((e) => ({
+          ingredient: text(e.ingredient),
+          kcal: number(e.kcal) ?? 0,
+          protein_g: number(e.protein_g) ?? 0,
+          carb_g: number(e.carb_g) ?? 0,
+          fat_g: number(e.fat_g) ?? 0,
+        }))
+      : [],
     uncertain: Array.isArray(input.uncertain)
       ? (input.uncertain as Uncertain[])
         .filter((u) => u?.field || u?.note)

@@ -120,6 +120,41 @@ void main() {
     expect(guess!.isAmbiguous, isTrue);
   });
 
+  group('confident enough to apply without asking', () {
+    test('an exact name is', () {
+      expect(
+        bestFor('cornstarch', <MatchCandidate>[
+          candidate('CORNSTARCH'),
+        ])!.isConfident,
+        isTrue,
+      );
+    });
+
+    test('a lone candidate buried in extra words is not', () {
+      // "1 red bell pepper" matched "RED BELL PEPPER VEGGIE CHIPS" in real
+      // use, and was ticked by default because nothing else was close enough
+      // to make it ambiguous. Being the only candidate is not the same as
+      // being right, and a mediocre match nobody was asked about is exactly
+      // the silent wrong macro this screen exists to prevent.
+      final CandidateGuess guess = bestFor('red bell pepper', <MatchCandidate>[
+        candidate('RED BELL PEPPER VEGGIE CHIPS, RED BELL PEPPER'),
+      ])!;
+
+      expect(guess, isNotNull, reason: 'still worth offering');
+      expect(guess.isConfident, isFalse, reason: 'but not without asking');
+    });
+
+    test('an ambiguous winner never is, however well it scored', () {
+      final CandidateGuess guess = bestFor('coconut milk', <MatchCandidate>[
+        candidate('Coconut milk', brand: 'A', kcalPer100g: 230),
+        candidate('Coconut milk', brand: 'B', kcalPer100g: 20),
+      ])!;
+
+      expect(guess.isAmbiguous, isTrue);
+      expect(guess.isConfident, isFalse);
+    });
+  });
+
   test('a clear winner is not flagged as ambiguous', () {
     final CandidateGuess? guess = bestFor('olive oil', <MatchCandidate>[
       candidate('Olive oil'),
