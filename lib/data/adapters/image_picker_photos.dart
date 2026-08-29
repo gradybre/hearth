@@ -39,6 +39,26 @@ class ImagePickerPhotos implements PhotoPicker {
     return PickedPhoto(bytes: bytes, extension: _extensionOf(file.name));
   }
 
+  @override
+  Future<List<PickedPhoto>> pickMultiple({int max = 3}) async {
+    final List<XFile> files = await _picker.pickMultiImage(
+      maxWidth: maxEdge,
+      maxHeight: maxEdge,
+      imageQuality: quality,
+      limit: max,
+    );
+
+    // Capped again here: `limit` is a hint the platform pickers are free to
+    // ignore, and the pages of one recipe are the first few chosen.
+    return <PickedPhoto>[
+      for (final XFile file in files.take(max))
+        PickedPhoto(
+          bytes: await file.readAsBytes(),
+          extension: _extensionOf(file.name),
+        ),
+    ];
+  }
+
   /// Falls back to jpg rather than guessing from the bytes: the extension only
   /// names the file, and every viewer here decodes by content anyway.
   static String _extensionOf(String name) {

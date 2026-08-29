@@ -7,6 +7,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
+import '../../data/adapters/recipe_ai.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
@@ -20,6 +21,7 @@ import '../foods/food_picker.dart';
 import 'match_review_controller.dart';
 import 'match_review_screen.dart';
 import 'recipe_draft.dart';
+import 'recipe_import_controller.dart';
 import 'recipe_photo.dart';
 
 /// Create or edit a recipe (spec §5.2).
@@ -31,10 +33,18 @@ import 'recipe_photo.dart';
 /// The parse is always shown back before saving, so a misread quantity is
 /// caught by eye rather than discovered later in a macro total.
 class RecipeEditorScreen extends ConsumerStatefulWidget {
-  const RecipeEditorScreen({this.recipeId, super.key});
+  const RecipeEditorScreen({this.recipeId, this.imported, super.key});
 
   /// Null when creating.
   final String? recipeId;
+
+  /// A recipe that arrived from an import or a generation (spec §5.3, §5.4).
+  ///
+  /// This screen is that review — the same way the food editor is the review
+  /// for a barcode scan. It arrives filled in and entirely editable, and
+  /// anything the model was unsure of is pointed at rather than left for the
+  /// user to find.
+  final RecipeImportResult? imported;
 
   @override
   ConsumerState<RecipeEditorScreen> createState() => _RecipeEditorScreenState();
@@ -269,8 +279,16 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   void _moveSection(int from, int to) =>
       setState(() => _sections.insert(to, _sections.removeAt(from)));
 
-  void _hydrate(Recipe recipe) {
-    final RecipeDraft draft = RecipeDraft.fromRecipe(recipe);
+  @override
+  void initState() {
+    super.initState();
+    final RecipeImportResult? imported = widget.imported;
+    if (imported != null) _fill(imported.draft);
+  }
+
+  void _hydrate(Recipe recipe) => _fill(RecipeDraft.fromRecipe(recipe));
+
+  void _fill(RecipeDraft draft) {
     _title.text = draft.title;
     _servings.text = draft.servings == draft.servings.roundToDouble()
         ? draft.servings.round().toString()
@@ -358,10 +376,11 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       appBar: AppBar(
         backgroundColor: colors.surface,
         surfaceTintColor: Colors.transparent,
-        title: Text(
-          widget.recipeId == null ? 'New recipe' : 'Edit recipe',
-          style: text.sectionHeader,
-        ),
+        title: Text(switch ((widget.recipeId, widget.imported)) {
+          (final String? id, _) when id != null => 'Edit recipe',
+          (_, final RecipeImportResult? i) when i != null => 'Check and save',
+          _ => 'New recipe',
+        }, style: text.sectionHeader),
         leading: TextButton(
           onPressed: _saving ? null : () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
@@ -381,6 +400,11 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
         child: ListView(
           padding: EdgeInsets.all(gutter),
           children: <Widget>[
+            if (widget.imported?.uncertain case final List<AiUncertainty> notes
+                when notes.isNotEmpty) ...<Widget>[
+              _UncertainNotes(notes: notes),
+              const SizedBox(height: HearthSpacing.lg),
+            ],
             _Field(
               controller: _title,
               label: 'Title',
@@ -1020,4 +1044,61 @@ class _SectionHeader extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// What the reader could not make out (spec §5.3).
+///
+/// Named rather than merely counted. "Check the recipe" makes the user re-read
+/// all of it; "the salt could be 1/2 tsp or 12 tsp" sends them to one field.
+/// Everything is editable either way — this only says where to look first.
+class _UncertainNotes extends StatelessWidget {
+  const _UncertainNotes({required this.notes});
+
+  final List<AiUncertainty> notes;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surfaceSunken,
+        borderRadius: BorderRadius.circular(HearthRadius.md),
+        border: Border.all(color: colors.outline),
+      ),
+      padding: const EdgeInsets.all(HearthSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              // Never colour alone (§6.3): an icon and a sentence, not a tint.
+              Icon(
+                Icons.visibility_outlined,
+                size: 18,
+                color: colors.textSecondary,
+              ),
+              const SizedBox(width: HearthSpacing.sm),
+              Expanded(
+                child: Text(
+                  notes.length == 1
+                      ? 'One thing worth checking'
+                      : '${notes.length} things worth checking',
+                  style: context.text.sectionHeader,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: HearthSpacing.sm),
+          for (final AiUncertainty note in notes)
+            Padding(
+              padding: const EdgeInsets.only(bottom: HearthSpacing.xxs),
+              child: Text(
+                note.field.isEmpty ? note.note : '${note.field} — ${note.note}',
+                style: context.text.body.copyWith(color: colors.textSecondary),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

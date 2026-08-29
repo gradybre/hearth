@@ -30,4 +30,12 @@ abstract interface class PhotoPicker {
 
   /// Null when the user backed out without choosing.
   Future<PickedPhoto?> pick(PhotoOrigin origin);
+
+  /// Several photos at once, for importing a recipe that spans screens
+  /// (spec §5.3).
+  ///
+  /// A MacrosFirst recipe is often two or three screenshots of one thing, and
+  /// making the user import them one at a time would produce three recipes
+  /// instead of one. Empty when they backed out.
+  Future<List<PickedPhoto>> pickMultiple({int max = 3});
 }

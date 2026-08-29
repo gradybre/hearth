@@ -10,6 +10,8 @@ import '../features/placeholder_screen.dart';
 import '../features/plan/plan_screen.dart';
 import '../features/recipes/recipe_detail_screen.dart';
 import '../features/recipes/recipe_editor_screen.dart';
+import '../features/recipes/recipe_import_controller.dart';
+import '../features/recipes/recipe_import_screen.dart';
 import '../features/recipes/recipe_library_screen.dart';
 import 'shell/app_shell.dart';
 import 'shell/destinations.dart';
@@ -41,9 +43,20 @@ GoRouter buildRouter() => GoRouter(
           const HouseholdScreen(),
     ),
     GoRoute(
+      path: '/recipe/import',
+      builder: (BuildContext context, GoRouterState state) =>
+          const RecipeImportScreen(),
+    ),
+    GoRoute(
       path: '/recipe/new',
       builder: (BuildContext context, GoRouterState state) =>
-          const RecipeEditorScreen(),
+          RecipeEditorScreen(
+            // An import pushes here with the recipe already read — the review
+            // step before anything is written (CLAUDE.md rule 4).
+            imported: state.extra is RecipeImportResult
+                ? state.extra! as RecipeImportResult
+                : null,
+          ),
     ),
     GoRoute(
       path: '/recipe/:id',

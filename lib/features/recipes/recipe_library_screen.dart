@@ -36,12 +36,31 @@ class RecipeLibraryScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: colors.background,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/recipe/new'),
-        backgroundColor: colors.accent,
-        foregroundColor: colors.onAccent,
-        icon: const Icon(Icons.add),
-        label: Text('New recipe', style: context.text.label),
+      // Import sits beside typing rather than replacing it: a recipe out of
+      // your own head is still the common case, and importing is the one that
+      // moves a library across (spec §5.3).
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: <Widget>[
+          FloatingActionButton.small(
+            heroTag: 'recipe-import',
+            onPressed: () => context.push('/recipe/import'),
+            backgroundColor: colors.surfaceElevated,
+            foregroundColor: colors.textPrimary,
+            tooltip: 'Import from a picture or a link',
+            child: const Icon(Icons.auto_awesome_outlined),
+          ),
+          const SizedBox(height: HearthSpacing.sm),
+          FloatingActionButton.extended(
+            heroTag: 'recipe-new',
+            onPressed: () => context.push('/recipe/new'),
+            backgroundColor: colors.accent,
+            foregroundColor: colors.onAccent,
+            icon: const Icon(Icons.add),
+            label: Text('New recipe', style: context.text.label),
+          ),
+        ],
       ),
       body: SafeArea(
         child: library.when(

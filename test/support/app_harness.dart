@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/data/adapters/nutrition_lookup.dart';
 import 'package:hearth/data/adapters/nutrition_source.dart';
+import 'package:hearth/data/adapters/photo_picker.dart';
+import 'package:hearth/data/adapters/recipe_ai.dart';
 import 'package:hearth/data/local/collection_store.dart';
 import 'package:hearth/data/local/food_store.dart';
 import 'package:hearth/data/local/hearth_database.dart';
@@ -46,6 +48,8 @@ Future<HearthDatabase> pumpHearthApp(
   List<CollectionSummary> collections = const <CollectionSummary>[],
   bool cameraAvailable = false,
   List<NutritionSource> nutritionSources = const <NutritionSource>[],
+  RecipeAiSource? recipeAi,
+  PhotoPicker? photoPicker,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -76,6 +80,12 @@ Future<HearthDatabase> pumpHearthApp(
         nutritionLookupProvider.overrideWithValue(
           NutritionLookup(nutritionSources),
         ),
+        // Import and generation reach a paid API through an Edge Function;
+        // neither belongs in a widget test, and null is also the honest state
+        // of a build with no backend configured.
+        recipeAiProvider.overrideWithValue(recipeAi),
+        if (photoPicker != null)
+          photoPickerProvider.overrideWithValue(photoPicker),
         recipeLibraryProvider.overrideWith(
           (Ref ref) => Stream<List<Recipe>>.value(recipes),
         ),
