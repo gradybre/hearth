@@ -80,16 +80,25 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
       // accepting what another device did means a local change can never be
       // silently overwritten by a server copy that predates it.
       final SyncResult result = await ref.read(syncEngineProvider).push();
-      final PullResult pulled = await ref.read(librarySyncProvider).pull();
-      // ignore: avoid_print
-      print(
-        'HEARTH sync: pushed ${result.pushed}, pulled ${pulled.applied}, '
-        'skipped ${pulled.skipped}, offline ${pulled.stoppedBecauseOffline}',
+
+      // The library first — recipes and foods are what a meal plan entry
+      // points at, and an entry whose recipe has not arrived yet shows as a
+      // gap until the next run.
+      final PullResult library = await ref.read(librarySyncProvider).pull();
+      final PullResult records = await ref.read(recordSyncProvider).pull();
+
+      state = SyncStatus.done(
+        result,
+        pulled: PullResult(
+          applied: library.applied + records.applied,
+          skipped: library.skipped + records.skipped,
+          stoppedBecauseOffline:
+              library.stoppedBecauseOffline || records.stoppedBecauseOffline,
+        ),
       );
-      state = SyncStatus.done(result, pulled: pulled);
-    } on Object catch (error, stack) {
-      // ignore: avoid_print
-      print('HEARTH sync FAILED: $error\n$stack');
+    } on Object catch (error) {
+      // Object, not Exception: a type error from a malformed payload is an
+      // Error, and letting it escape would lose the sync silently.
       state = SyncStatus.failed('$error');
     } finally {
       _running = false;

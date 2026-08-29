@@ -29,6 +29,8 @@ import '../data/repositories/food_repository.dart';
 import '../data/repositories/plan_repository.dart';
 import '../data/repositories/recipe_repository.dart';
 import '../data/sync/library_sync.dart';
+import '../data/sync/record_sync.dart';
+import '../data/sync/remote_rows.dart';
 import '../data/sync/sync_engine.dart';
 import '../domain/cooking/cook_session.dart';
 import '../domain/models/food.dart';
@@ -518,5 +520,19 @@ final Provider<LibrarySync> librarySyncProvider = Provider<LibrarySync>(
     foods: ref.watch(foodStoreProvider),
     queue: ref.watch(pendingWriteStoreProvider),
     preferences: ref.watch(preferenceStoreProvider),
+  ),
+);
+
+final Provider<RemoteRows> remoteRowsProvider = Provider<RemoteRows>(
+  (Ref ref) => RemoteRows(ref.watch(databaseProvider)),
+);
+
+final Provider<RecordSync> recordSyncProvider = Provider<RecordSync>(
+  (Ref ref) => RecordSync(
+    engine: ref.watch(syncEngineProvider),
+    rows: ref.watch(remoteRowsProvider),
+    queue: ref.watch(pendingWriteStoreProvider),
+    preferences: ref.watch(preferenceStoreProvider),
+    userId: () => ref.read(currentUserIdProvider),
   ),
 );

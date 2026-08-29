@@ -3,10 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../app/sync_controller.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../data/auth/auth_gateway.dart';
+import '../../data/sync/sync_engine.dart';
 
 /// The household: who you are, who can join, and how to leave (spec §5.1).
 class HouseholdScreen extends ConsumerStatefulWidget {
@@ -150,6 +152,8 @@ class _HouseholdScreenState extends ConsumerState<HouseholdScreen> {
                 child: Text(_busy ? 'Just a moment…' : 'Join'),
               ),
             ),
+            const SizedBox(height: HearthSpacing.xl),
+            const _SyncPanel(),
             const SizedBox(height: HearthSpacing.xxl),
             TextButton.icon(
               onPressed: _signOut,
@@ -239,5 +243,83 @@ class _Message extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// What sync last did, and a way to ask it again.
+///
+/// A sync that fails quietly is a sync nobody fixes: writes queue up, a
+/// partner's recipes never arrive, and the only symptom is an app that seems
+/// slightly out of date. Saying so plainly is the difference between a bug
+/// someone reports and one they live with.
+class _SyncPanel extends ConsumerWidget {
+  const _SyncPanel();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final HearthColors colors = context.colors;
+    final SyncStatus status = ref.watch(syncControllerProvider);
+    final int queued = ref.watch(pendingWriteCountProvider).value ?? 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text('Syncing', style: context.text.sectionHeader),
+        const SizedBox(height: HearthSpacing.sm),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Icon(
+              status.hasProblem
+                  ? Icons.error_outline
+                  : status.isSyncing
+                  ? Icons.sync
+                  : Icons.cloud_done_outlined,
+              size: 18,
+              color: status.hasProblem ? colors.error : colors.textSecondary,
+            ),
+            const SizedBox(width: HearthSpacing.sm),
+            Expanded(
+              child: Text(
+                _describe(status, queued),
+                style: context.text.body.copyWith(color: colors.textSecondary),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: HearthSpacing.sm),
+        TextButton.icon(
+          onPressed: status.isSyncing
+              ? null
+              : () => ref.read(syncControllerProvider.notifier).sync(),
+          icon: const Icon(Icons.sync, size: 18),
+          label: const Text('Sync now'),
+        ),
+      ],
+    );
+  }
+
+  static String _describe(SyncStatus status, int queued) {
+    if (status.isSyncing) return 'Syncing…';
+    if (status.error != null) return 'Last sync failed: ${status.error}';
+
+    final SyncResult? result = status.result;
+    if (result == null) {
+      return queued == 0
+          ? 'Nothing waiting to send.'
+          : '$queued waiting to send.';
+    }
+    if (result.stoppedBecauseOffline) {
+      return '$queued waiting — no connection just now.';
+    }
+    if (result.failed > 0) {
+      return '${result.failed} could not be sent. They are still saved here.';
+    }
+
+    final int pulled = status.pulled?.applied ?? 0;
+    return pulled == 0
+        ? 'Everything is up to date.'
+        : 'Up to date — brought down $pulled '
+              '${pulled == 1 ? 'change' : 'changes'}.';
   }
 }

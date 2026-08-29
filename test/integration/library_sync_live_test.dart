@@ -12,6 +12,8 @@ import 'package:hearth/data/local/preference_store.dart';
 import 'package:hearth/data/local/recipe_store.dart';
 import 'package:hearth/data/remote/supabase_remote_gateway.dart';
 import 'package:hearth/data/sync/library_sync.dart';
+import 'package:hearth/data/sync/record_sync.dart';
+import 'package:hearth/data/sync/remote_rows.dart';
 import 'package:hearth/data/sync/sync_engine.dart';
 import 'package:hearth/domain/models/recipe.dart';
 // Via supabase_flutter, which re-exports the client: depending on `supabase`
@@ -33,6 +35,7 @@ void main() {
   late SupabaseClient client;
   late HearthDatabase db;
   late LibrarySync sync;
+  late RecordSync records;
   late RecipeStore recipes;
 
   setUpAll(() async {
@@ -49,8 +52,19 @@ void main() {
     db = HearthDatabase.forTesting(NativeDatabase.memory());
     recipes = RecipeStore(db);
     final PendingWriteStore queue = PendingWriteStore(db);
+    final SyncEngine engine = SyncEngine(
+      queue: queue,
+      gateway: SupabaseRemoteGateway(client),
+    );
+    records = RecordSync(
+      engine: engine,
+      rows: RemoteRows(db),
+      queue: queue,
+      preferences: PreferenceStore(db),
+      userId: () => client.auth.currentUser?.id ?? '',
+    );
     sync = LibrarySync(
-      engine: SyncEngine(queue: queue, gateway: SupabaseRemoteGateway(client)),
+      engine: engine,
       recipes: recipes,
       foods: FoodStore(db),
       queue: queue,
@@ -92,6 +106,34 @@ void main() {
     expect(paella!.title, "Partner's paella");
     expect(paella.allIngredients, hasLength(2));
     expect(paella.allSteps.single.timerSeconds, 120);
+
+    await client.auth.signOut();
+  }, skip: key == null ? 'supabase not running' : null);
+
+  test('a logged meal comes down with its snapshot intact', () async {
+    await client.auth.signInWithPassword(
+      email: 'pull@hearth.test',
+      password: 'HearthPull2026a',
+    );
+
+    final PullResult result = await records.pull();
+
+    expect(result.applied, greaterThan(0));
+
+    final List<MealPlanEntryRow> entries = await db
+        .select(db.mealPlanEntries)
+        .get();
+    expect(entries, hasLength(1));
+    expect(entries.single.isLogged, isTrue);
+    expect(entries.single.servings, 1.5);
+    expect(
+      entries.single.macroSnapshot,
+      contains('812.5'),
+      reason: 'the frozen snapshot must arrive verbatim (spec §4)',
+    );
+
+    final List<MacroTargetRow> targets = await db.select(db.macroTargets).get();
+    expect(targets.single.kcal, 2400);
 
     await client.auth.signOut();
   }, skip: key == null ? 'supabase not running' : null);

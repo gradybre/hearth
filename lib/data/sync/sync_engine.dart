@@ -142,6 +142,50 @@ class SyncEngine {
     return PullResult(applied: applied, skipped: skipped);
   }
 
+  /// The flat-table equivalent of [pullAggregates].
+  Future<PullResult> pullRecords({
+    required String entityTable,
+    required DateTime? since,
+    required Future<DateTime?> Function(String id) localUpdatedAt,
+    required Future<bool> Function(String id) hasPendingWrite,
+    required Future<void> Function(RemoteRecord record) apply,
+  }) async {
+    final List<RemoteRecord> records;
+    try {
+      records = await _gateway.fetchChanged(
+        entityTable: entityTable,
+        since: since,
+      );
+    } on RemoteUnavailable {
+      return const PullResult(
+        applied: 0,
+        skipped: 0,
+        stoppedBecauseOffline: true,
+      );
+    }
+
+    int applied = 0;
+    int skipped = 0;
+    for (final RemoteRecord record in records) {
+      final bool accept = shouldAcceptRemote(
+        remoteUpdatedAt: record.updatedAt,
+        localUpdatedAt: await localUpdatedAt(record.id),
+        hasPendingLocalWrite: await hasPendingWrite(record.id),
+      );
+      if (!accept) {
+        skipped++;
+        continue;
+      }
+      await apply(record);
+      applied++;
+    }
+    return PullResult(applied: applied, skipped: skipped);
+  }
+
+  /// Every row of a table, for the ones with no timestamp to filter on.
+  Future<List<RemoteRecord>> fetchAll(String entityTable) =>
+      _gateway.fetchChanged(entityTable: entityTable);
+
   /// Decides whether an incoming remote record should replace the local copy.
   ///
   /// Whole-record last-write-wins: the newer `updatedAt` wins outright. A tie

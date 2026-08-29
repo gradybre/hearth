@@ -9,6 +9,13 @@ import 'package:hearth/features/account/household_screen.dart';
 import '../../support/fake_auth.dart';
 
 Future<FakeAuthGateway> pumpHousehold(WidgetTester tester) async {
+  // Tall enough for the whole screen: it is a ListView, so anything below the
+  // fold is simply not built, and a finder cannot scroll to what does not
+  // exist.
+  tester.view.physicalSize = const Size(500, 1400);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+
   final FakeAuthGateway auth = FakeAuthGateway(
     signedIn: FakeAuthGateway.anAccount,
   );
@@ -17,7 +24,15 @@ Future<FakeAuthGateway> pumpHousehold(WidgetTester tester) async {
       // accountProvider is left wired to the gateway rather than stubbed, so
       // a screen holding a stale account is visible here rather than only on
       // a device.
-      overrides: [authGatewayProvider.overrideWithValue(auth)],
+      overrides: [
+        authGatewayProvider.overrideWithValue(auth),
+        // The sync panel lives on this screen; neither of these should reach
+        // a database or a clock in a widget test.
+        syncControllerProvider.overrideWith(FakeSyncController.new),
+        pendingWriteCountProvider.overrideWith(
+          (Ref ref) => Stream<int>.value(0),
+        ),
+      ],
       child: MaterialApp(
         theme: HearthTheme.light(),
         home: const HouseholdScreen(),

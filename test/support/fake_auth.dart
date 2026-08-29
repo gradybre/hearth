@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:hearth/app/sync_controller.dart';
 import 'package:hearth/data/auth/auth_gateway.dart';
 
 /// An in-memory accounts backend.
@@ -97,4 +98,20 @@ class FakeAuthGateway implements AuthGateway {
       throw failure;
     }
   }
+}
+
+/// A sync controller that never touches a network or a clock.
+///
+/// The real one registers lifecycle observers and a debounce timer; a widget
+/// test that leaves either running fails at teardown, and neither has anything
+/// to do with the screen under test.
+class FakeSyncController extends SyncController {
+  @override
+  SyncStatus build() => const SyncStatus.idle();
+
+  @override
+  void syncSoon() {}
+
+  @override
+  Future<void> sync() async {}
 }
