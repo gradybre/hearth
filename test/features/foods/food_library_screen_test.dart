@@ -45,12 +45,24 @@ Future<void> openFoods(
 
 void main() {
   group('empty library', () {
-    testWidgets('says so, and explains what is coming later', (
+    testWidgets('says so, and points at both ways in', (
       WidgetTester tester,
     ) async {
       await openFoods(tester);
       expect(find.text('No foods yet'), findsOneWidget);
-      expect(find.textContaining('Barcode scanning'), findsOneWidget);
+      expect(find.textContaining('Scan a packet'), findsOneWidget);
+    });
+
+    testWidgets('offers scanning ahead of typing a food in by hand', (
+      WidgetTester tester,
+    ) async {
+      await openFoods(tester);
+
+      // Scanning is the faster path for anything with a packet, and §5.5 puts
+      // manual entry behind it rather than in front.
+      expect(find.text('Scan'), findsOneWidget);
+      expect(find.byIcon(Icons.qr_code_scanner), findsOneWidget);
+      expect(find.byIcon(Icons.add), findsOneWidget);
     });
   });
 

@@ -1,7 +1,11 @@
 import 'package:hearth/domain/models/food.dart';
+import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/units/unit.dart';
 import 'package:hearth/features/foods/food_draft.dart';
 import 'package:test/test.dart';
+import 'package:uuid/uuid.dart';
+
+import '../../support/fixtures.dart';
 
 String Function() sequentialIds() {
   int next = 0;
@@ -19,6 +23,8 @@ FoodDraft draft({String name = 'Greek yogurt', List<ServingDraft>? servings}) =>
     );
 
 void main() {
+  fromLookupTests();
+
   group('validation', () {
     test('a name is required', () {
       expect(draft(name: '  ').nameError, isNotNull);
@@ -179,5 +185,107 @@ void main() {
     expect(blank.servings.single.unitId, 'g');
     expect(blank.servings.single.amount, '100');
     expect(blank.isValid, isFalse, reason: 'it still needs a name');
+  });
+}
+
+void fromLookupTests() {
+  group('FoodDraft.fromLookup', () {
+    Food offMatch() => aFood(
+      'Digestive biscuits',
+      id: 'off:5000157024671',
+      brand: 'McVitie',
+      barcode: '5000157024671',
+      source: FoodSource.openFoodFacts,
+      servingOptions: <ServingOption>[
+        aServing(
+          id: 'off:5000157024671:100g',
+          amount: 100,
+          unit: Units.gram,
+          macros: const Macros(kcal: 478, proteinG: 6.4),
+        ),
+      ],
+    );
+
+    test('keeps what the food is', () {
+      final FoodDraft draft = FoodDraft.fromLookup(offMatch());
+
+      expect(draft.name, 'Digestive biscuits');
+      expect(draft.brand, 'McVitie');
+      expect(draft.barcode, '5000157024671');
+      expect(draft.source, FoodSource.openFoodFacts);
+      expect(draft.servings.single.kcal, '478');
+    });
+
+    test('rounds the arithmetic the source scaled for us', () {
+      // A source quotes per 100 g and scales to its own serving, so a 207 g
+      // portion arrives as 9.729 g of protein. Saving spurious precision is
+      // harmless; showing it on a review screen is not — it reads as a
+      // measurement rather than a division, and it is what the user is being
+      // asked to check.
+      final FoodDraft draft = FoodDraft.fromLookup(
+        aFood(
+          'Beanz',
+          servingOptions: <ServingOption>[
+            aServing(
+              id: 'off:1:serving',
+              amount: 207,
+              unit: Units.gram,
+              macros: const Macros(
+                kcal: 163.53,
+                proteinG: 9.729,
+                carbG: 26.703,
+                fatG: 0.414,
+              ),
+            ),
+          ],
+        ),
+      );
+
+      final ServingDraft serving = draft.servings.single;
+      expect(serving.kcal, '164');
+      expect(serving.protein, '9.7');
+      expect(serving.carbs, '26.7');
+      expect(serving.fat, '0.4');
+    });
+
+    test('a food already in the library is never rounded behind the user', () {
+      // Rounding on reopen would edit stored macros on the next save, which is
+      // a silent change to data the user did not touch.
+      final FoodDraft draft = FoodDraft.fromFood(
+        aFood(
+          'Beanz',
+          servingOptions: <ServingOption>[
+            aServing(
+              id: 'serving-1',
+              amount: 207,
+              unit: Units.gram,
+              macros: const Macros(kcal: 163.53, proteinG: 9.729),
+            ),
+          ],
+        ),
+      );
+
+      expect(draft.servings.single.kcal, '163.53');
+      expect(draft.servings.single.protein, '9.729');
+    });
+
+    test('drops the source\'s own ids so the save is a new food', () {
+      final FoodDraft draft = FoodDraft.fromLookup(offMatch());
+
+      // "off:5000157024671" is Open Food Facts' identity for the product, not
+      // this library's. Carrying it through would put a non-uuid where the
+      // server types a uuid: the row saves locally, then is rejected on its
+      // first sync, long after the user believed it was safe.
+      expect(draft.existingId, isNull);
+      expect(draft.servings.single.id, isNull);
+
+      final Food saved = draft.toFood();
+      expect(saved.id, isNot(startsWith('off:')));
+      expect(Uuid.isValidUUID(fromString: saved.id), isTrue);
+      expect(
+        Uuid.isValidUUID(fromString: saved.servingOptions.single.id),
+        isTrue,
+      );
+    });
   });
 }

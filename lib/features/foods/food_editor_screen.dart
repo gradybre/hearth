@@ -10,22 +10,29 @@ import '../../domain/models/food.dart';
 import '../../domain/units/unit.dart';
 import 'food_draft.dart';
 
-/// Create or edit a food by hand (spec §5.5).
+/// Create or edit a food (spec §5.5).
 ///
-/// Until Phase 2 brings barcode lookup, this is the only way a food enters the
-/// library — and §12 names food-data coverage as the biggest threat to the
-/// success bar, so this screen has to be quick rather than thorough.
+/// Also the review screen a barcode scan lands on: [initialDraft] arrives
+/// prefilled from Open Food Facts or USDA, and nothing reaches the library
+/// until it is read and saved from here (CLAUDE.md rule 4). Every field stays
+/// editable, because a packet's own numbers are sometimes wrong and the user's
+/// correction has to win.
 class FoodEditorScreen extends ConsumerStatefulWidget {
-  const FoodEditorScreen({this.foodId, super.key});
+  const FoodEditorScreen({this.foodId, this.initialDraft, super.key});
 
   final String? foodId;
+
+  /// A food already filled in — from a barcode lookup, or from a miss that
+  /// carries only the number. Ignored when [foodId] is set: an existing food
+  /// loads its own values.
+  final FoodDraft? initialDraft;
 
   @override
   ConsumerState<FoodEditorScreen> createState() => _FoodEditorScreenState();
 }
 
 class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
-  FoodDraft _draft = FoodDraft.blank();
+  late FoodDraft _draft = widget.initialDraft ?? FoodDraft.blank();
   bool _loaded = false;
   bool _saving = false;
   bool _showErrors = false;
@@ -164,10 +171,12 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
       appBar: AppBar(
         backgroundColor: colors.surface,
         surfaceTintColor: Colors.transparent,
-        title: Text(
-          widget.foodId == null ? 'New food' : 'Edit food',
-          style: context.text.sectionHeader,
-        ),
+        title: Text(switch ((widget.foodId, widget.initialDraft)) {
+          (final String? id, _) when id != null => 'Edit food',
+          (_, final FoodDraft? draft) when draft?.barcode.isNotEmpty ?? false =>
+            'Check and save',
+          _ => 'New food',
+        }, style: context.text.sectionHeader),
         leading: TextButton(
           onPressed: _saving ? null : () => Navigator.of(context).pop(),
           child: const Text('Cancel'),

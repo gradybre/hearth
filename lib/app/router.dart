@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/account/household_screen.dart';
+import '../features/foods/barcode_scan_screen.dart';
+import '../features/foods/food_draft.dart';
 import '../features/foods/food_editor_screen.dart';
 import '../features/foods/food_library_screen.dart';
 import '../features/placeholder_screen.dart';
@@ -56,9 +58,19 @@ GoRouter buildRouter() => GoRouter(
       ],
     ),
     GoRoute(
-      path: '/food/new',
+      path: '/food/scan',
       builder: (BuildContext context, GoRouterState state) =>
-          const FoodEditorScreen(),
+          const BarcodeScanScreen(),
+    ),
+    GoRoute(
+      path: '/food/new',
+      builder: (BuildContext context, GoRouterState state) => FoodEditorScreen(
+        // A barcode scan pushes here with the food already filled in — the
+        // review step before anything is written (CLAUDE.md rule 4).
+        initialDraft: state.extra is FoodDraft
+            ? state.extra! as FoodDraft
+            : null,
+      ),
     ),
     GoRoute(
       path: '/food/:id',

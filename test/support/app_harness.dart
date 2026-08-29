@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
+import 'package:hearth/data/adapters/nutrition_lookup.dart';
+import 'package:hearth/data/adapters/nutrition_source.dart';
 import 'package:hearth/data/local/collection_store.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/domain/cooking/cook_session.dart';
@@ -41,6 +43,8 @@ Future<HearthDatabase> pumpHearthApp(
   List<CookTimer> timers = const <CookTimer>[],
   Map<String, String> photos = const <String, String>{},
   List<CollectionSummary> collections = const <CollectionSummary>[],
+  bool cameraAvailable = false,
+  List<NutritionSource> nutritionSources = const <NutritionSource>[],
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -55,6 +59,13 @@ Future<HearthDatabase> pumpHearthApp(
       // `Override` type name, only the methods that produce one.
       overrides: [
         databaseProvider.overrideWithValue(db),
+        // Widget tests have no camera and no platform channels to ask one for.
+        // Forcing this off keeps the scan screen on its typed-barcode path,
+        // which is the whole flow apart from the detector itself.
+        cameraScanningAvailableProvider.overrideWithValue(cameraAvailable),
+        nutritionLookupProvider.overrideWithValue(
+          NutritionLookup(nutritionSources),
+        ),
         recipeLibraryProvider.overrideWith(
           (Ref ref) => Stream<List<Recipe>>.value(recipes),
         ),

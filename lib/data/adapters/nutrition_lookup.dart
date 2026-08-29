@@ -1,4 +1,5 @@
 import '../../domain/models/food.dart';
+import 'barcode_scanner.dart';
 import 'nutrition_source.dart';
 
 /// The lookup chain: library → Open Food Facts → USDA → manual (spec §5.5).
@@ -22,9 +23,16 @@ class NutritionLookup {
   /// answering means the answer is already the household's own, and asking
   /// the internet afterwards could only produce a worse one.
   Future<NutritionMatch?> byBarcode(String barcode) async {
+    // Every form of the number, not just the digits as scanned. UPC-A is
+    // EAN-13 with a leading zero and the databases disagree about which they
+    // store, so looking up only what the camera read misses half the shelf
+    // for no reason anyone could understand.
+    final List<String> variants = BarcodeVariants.of(barcode);
     for (final NutritionSource source in sources) {
-      final NutritionMatch? match = await source.byBarcode(barcode);
-      if (match != null) return match;
+      for (final String variant in variants) {
+        final NutritionMatch? match = await source.byBarcode(variant);
+        if (match != null) return match;
+      }
     }
     return null;
   }

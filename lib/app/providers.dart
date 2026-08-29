@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -550,6 +551,18 @@ final Provider<RecordSync> recordSyncProvider = Provider<RecordSync>(
 /// External sources are only in the chain when there is a backend to reach.
 /// An unconfigured build still looks things up — it just finds only what the
 /// household already knows, which is the honest answer offline.
+/// Whether a camera is available to scan with.
+///
+/// Desktop and the simulator have none, and asking for one there produces a
+/// permission prompt that can never be satisfied. It is a provider rather than
+/// a bare platform check so a test can drive the typed-barcode path — which is
+/// the whole flow apart from the detector itself — without hardware.
+final Provider<bool> cameraScanningAvailableProvider = Provider<bool>(
+  (Ref ref) =>
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.android,
+);
+
 final Provider<NutritionLookup> nutritionLookupProvider =
     Provider<NutritionLookup>((Ref ref) {
       final bool connected = ref.watch(supabaseReadyProvider);

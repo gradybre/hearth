@@ -106,12 +106,16 @@ ServingOption aServing({
 Food aFood(
   String name, {
   String? id,
+  String? brand,
+  String? barcode,
   List<ServingOption>? servingOptions,
   double? gramsPerMillilitre,
   FoodSource source = FoodSource.manual,
 }) => Food(
   id: id ?? _id('food'),
   name: name,
+  brand: brand,
+  barcode: barcode,
   servingOptions: servingOptions ?? const <ServingOption>[],
   gramsPerMillilitre: gramsPerMillilitre,
   source: source,

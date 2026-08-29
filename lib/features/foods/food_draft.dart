@@ -134,6 +134,59 @@ class FoodDraft {
     ],
   );
 
+  /// A food that came back from a barcode lookup, ready to be reviewed.
+  ///
+  /// Every id is dropped on the way in. A match from Open Food Facts carries
+  /// ids of its own — `off:5000157024671` — which are the *source's* identity,
+  /// not this library's; saving one would put a non-uuid where the server
+  /// types a uuid, and the row would be rejected on its first sync, long after
+  /// the user thought they had saved it. The source and barcode are kept,
+  /// because those are what the food actually is.
+  factory FoodDraft.fromLookup(Food food) {
+    final FoodDraft mapped = FoodDraft.fromFood(food);
+    return FoodDraft(
+      name: mapped.name,
+      brand: mapped.brand,
+      storeTag: mapped.storeTag,
+      barcode: mapped.barcode,
+      source: food.source,
+      servings: <ServingDraft>[
+        for (final ServingDraft serving in mapped.servings)
+          ServingDraft(
+            amount: serving.amount,
+            unitId: serving.unitId,
+            kcal: _rounded(serving.kcal, decimals: 0),
+            protein: _rounded(serving.protein),
+            carbs: _rounded(serving.carbs),
+            fat: _rounded(serving.fat),
+          ),
+      ],
+    );
+  }
+
+  /// Trims the precision a source's own arithmetic produced.
+  ///
+  /// A source quotes per 100 g and scales to its serving, so 207 g of beans
+  /// arrives as 9.729 g of protein. The extra digits are a division, not a
+  /// measurement, and this is a screen the user is being asked to *check* —
+  /// numbers that look measured invite trust they have not earned. Rounding
+  /// here and not in [fromFood] is deliberate: a food already in the library
+  /// must reopen exactly as it was stored, or saving it again would quietly
+  /// edit macros nobody touched.
+  static String _rounded(String value, {int decimals = 1}) {
+    final double? parsed = double.tryParse(value);
+    if (parsed == null) return value;
+    return _trimNumber(double.parse(parsed.toStringAsFixed(decimals)));
+  }
+
+  /// A food nobody had, carrying only the number that was scanned, so the next
+  /// scan of the same packet finds it (spec §5.5).
+  factory FoodDraft.forBarcode(String barcode) => FoodDraft(
+    name: '',
+    barcode: barcode,
+    servings: const <ServingDraft>[ServingDraft(amount: '100')],
+  );
+
   final String name;
   final String brand;
   final String storeTag;

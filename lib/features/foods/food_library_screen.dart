@@ -55,12 +55,31 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
 
     return Scaffold(
       backgroundColor: colors.background,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/food/new'),
-        backgroundColor: colors.accent,
-        foregroundColor: colors.onAccent,
-        icon: const Icon(Icons.add),
-        label: Text('New food', style: context.text.label),
+      // Scanning leads because it is the faster path for anything with a
+      // packet, and typing a food in by hand is what §5.5 falls back to — not
+      // the other way round. Both stay one tap.
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: <Widget>[
+          FloatingActionButton.small(
+            heroTag: 'food-new',
+            onPressed: () => context.push('/food/new'),
+            backgroundColor: colors.surfaceElevated,
+            foregroundColor: colors.textPrimary,
+            tooltip: 'Add a food by hand',
+            child: const Icon(Icons.add),
+          ),
+          const SizedBox(height: HearthSpacing.sm),
+          FloatingActionButton.extended(
+            heroTag: 'food-scan',
+            onPressed: () => context.push('/food/scan'),
+            backgroundColor: colors.accent,
+            foregroundColor: colors.onAccent,
+            icon: const Icon(Icons.qr_code_scanner),
+            label: Text('Scan', style: context.text.label),
+          ),
+        ],
       ),
       body: SafeArea(
         child: library.when(
@@ -225,8 +244,7 @@ class _EmptyFoods extends StatelessWidget {
               ),
               const SizedBox(height: HearthSpacing.sm),
               Text(
-                'Add the things you eat often. Barcode scanning and lookup '
-                'arrive in a later phase.',
+                'Scan a packet, or add the things you eat often by hand.',
                 style: context.text.body.copyWith(color: colors.textSecondary),
                 textAlign: TextAlign.center,
               ),

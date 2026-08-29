@@ -10,10 +10,24 @@ class NutritionMatch {
     required this.food,
     required this.source,
     required this.confidence,
+    this.fromLibrary = false,
   });
 
   final Food food;
+
+  /// Where the numbers originally came from — provenance, not who answered.
+  ///
+  /// A food saved from Open Food Facts keeps that source for the rest of its
+  /// life, so this cannot be read as "the household does not have it yet".
+  /// [fromLibrary] is the field that answers that question.
   final FoodSource source;
+
+  /// True when this came out of the household's own library.
+  ///
+  /// The difference is what separates "here is a food, save it" from "you
+  /// already have this" — offering to save the second produces a duplicate of
+  /// a food the user may already have corrected.
+  final bool fromLibrary;
 
   /// 0..1. Anything the adapter is unsure of is flagged for review rather than
   /// silently accepted — a wrong match corrupts macros invisibly.

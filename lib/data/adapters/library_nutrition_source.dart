@@ -31,7 +31,18 @@ class LibraryNutritionSource implements NutritionSource {
     for (final Food food in await _store.all(householdId: _householdId)) {
       if (food.barcode == wanted) {
         // Certain: this household attached this barcode to this food.
-        return NutritionMatch(food: food, source: food.source, confidence: 1);
+        //
+        // [NutritionMatch.source] stays the food's provenance — where the
+        // numbers originally came from — so `fromLibrary` is what says the
+        // household already has this. Without it a food saved from Open Food
+        // Facts is indistinguishable from one fetched a moment ago, and the
+        // screen offers to save a second copy of it.
+        return NutritionMatch(
+          food: food,
+          source: food.source,
+          confidence: 1,
+          fromLibrary: true,
+        );
       }
     }
     return null;
@@ -67,7 +78,12 @@ class LibraryNutritionSource implements NutritionSource {
 
     return <NutritionMatch>[
       for (final ({Food food, int rank}) hit in hits.take(limit))
-        NutritionMatch(food: hit.food, source: hit.food.source, confidence: 1),
+        NutritionMatch(
+          food: hit.food,
+          source: hit.food.source,
+          confidence: 1,
+          fromLibrary: true,
+        ),
     ];
   }
 }

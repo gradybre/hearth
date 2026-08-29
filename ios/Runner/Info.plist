@@ -69,6 +69,6 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Hearth needs your photo library so you can add a picture to a recipe.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Hearth uses the camera so you can photograph a dish for its recipe.</string>
+	<string>Hearth uses the camera to photograph a dish for its recipe, and to scan a barcode when you add a food.</string>
 </dict>
 </plist>
