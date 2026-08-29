@@ -112,6 +112,51 @@ void main() {
     });
   });
 
+  group('pack sizes', () {
+    // "2 x 400g cans chopped tomatoes" is how half of Europe writes tinned
+    // tomatoes, and it turned up in the very first recipe imported from a
+    // web page. Read as a bare count it is "2 items", which contributes no
+    // macros at all and puts a stray "x" at the front of the name.
+    test('a pack multiplier becomes the amount it actually is', () {
+      final ParsedIngredient parsed = IngredientParser.parse(
+        '2 x 400g cans chopped tomatoes',
+      );
+
+      expect(parsed.quantity!.amountIn(Units.gram), 800);
+      expect(parsed.name, 'chopped tomatoes');
+    });
+
+    test('the multiplication sign works as well as the letter', () {
+      expect(
+        IngredientParser.parse('3 × 15 g sachets yeast').quantity!
+            .amountIn(Units.gram),
+        45,
+      );
+    });
+
+    test('a container word after the pack size is not part of the name', () {
+      expect(IngredientParser.parse('2 x 200 ml tubs cream').name, 'cream');
+      expect(IngredientParser.parse('4 x 125 g pots yoghurt').name, 'yoghurt');
+    });
+
+    test('an x that is not a multiplier is left alone', () {
+      // Conservative: only a number-then-unit after the x is a pack size.
+      final ParsedIngredient parsed = IngredientParser.parse('2 x large eggs');
+
+      expect(parsed.quantity!.amountIn(Units.item), 2);
+      expect(parsed.name, 'x large eggs');
+    });
+
+    test('a plain amount is untouched', () {
+      final ParsedIngredient parsed = IngredientParser.parse(
+        '400 g chopped tomatoes',
+      );
+
+      expect(parsed.quantity!.amountIn(Units.gram), 400);
+      expect(parsed.name, 'chopped tomatoes');
+    });
+  });
+
   group('conservative failure', () {
     test('an unquantified line keeps its whole text as the name', () {
       final ParsedIngredient p = IngredientParser.parse('olive oil');

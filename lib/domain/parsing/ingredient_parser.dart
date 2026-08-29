@@ -77,6 +77,25 @@ abstract final class IngredientParser {
     r'^\s*(\d+\s*[-–]\s*\d+|\d+\s+\d+\s*/\s*\d+|\d+\s*/\s*\d+|\d+(?:\.\d+)?\s*[½⅓⅔¼¾⅕⅙⅚⅛⅜⅝⅞]|\d+(?:\.\d+)?|[½⅓⅔¼¾⅕⅙⅚⅛⅜⅝⅞])\s*',
   );
 
+  /// A pack size following a count: the "x 400g" of "2 x 400g cans".
+  ///
+  /// Written this way across most of Europe, and read as a bare count it
+  /// becomes "2 items" — which contributes nothing to a macro total and
+  /// leaves a stray "x" at the front of the name.
+  static final RegExp _packSize = RegExp(
+    r'^[x×]\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)\b\s*',
+    caseSensitive: false,
+  );
+
+  /// What a pack comes in. Dropped from the name once its size has been
+  /// counted, because "2 x 400g cans chopped tomatoes" is 800 g of chopped
+  /// tomatoes, not of cans.
+  static final RegExp _container = RegExp(
+    r'^(?:cans?|tins?|jars?|packs?|packets?|sachets?|bottles?|tubs?|pots?|'
+    r'boxes|box|bags?)\s+',
+    caseSensitive: false,
+  );
+
   /// Parses one line.
   static ParsedIngredient parse(String line) {
     final String raw = line;
@@ -109,19 +128,32 @@ abstract final class IngredientParser {
       String rest = _tidy(working.substring(amountMatch.end));
 
       Unit? unit;
-      final int space = rest.indexOf(' ');
-      final String firstToken = space < 0 ? rest : rest.substring(0, space);
-      final Unit? parsedUnit = Units.parse(firstToken);
-      if (parsedUnit != null) {
-        unit = parsedUnit;
-        rest = space < 0 ? '' : _tidy(rest.substring(space + 1));
+      double multiplier = 1;
+
+      // "2 x 400g cans" before anything else: the real amount is the count
+      // times the pack size, in the pack's own unit.
+      final RegExpMatch? pack = _packSize.firstMatch(rest);
+      final Unit? packUnit = pack == null ? null : Units.parse(pack.group(2)!);
+      if (pack != null && packUnit != null) {
+        unit = packUnit;
+        multiplier = double.parse(pack.group(1)!);
+        rest = _tidy(rest.substring(pack.end)).replaceFirst(_container, '');
+        rest = _tidy(rest);
+      } else {
+        final int space = rest.indexOf(' ');
+        final String firstToken = space < 0 ? rest : rest.substring(0, space);
+        final Unit? parsedUnit = Units.parse(firstToken);
+        if (parsedUnit != null) {
+          unit = parsedUnit;
+          rest = space < 0 ? '' : _tidy(rest.substring(space + 1));
+        }
       }
 
       if (amount == null) {
         quantity = null;
       } else {
         // A bare number with no unit is a count: "2 eggs".
-        quantity = Quantity.of(amount, unit ?? Units.item);
+        quantity = Quantity.of(amount * multiplier, unit ?? Units.item);
         working = rest.isEmpty ? working : rest;
       }
     }
