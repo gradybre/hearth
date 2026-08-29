@@ -6,8 +6,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/adapters/image_picker_photos.dart';
 import '../data/adapters/kitchen_devices.dart';
+import '../data/adapters/library_nutrition_source.dart';
+import '../data/adapters/nutrition_lookup.dart';
+import '../data/adapters/nutrition_source.dart';
+import '../data/adapters/open_food_facts_source.dart';
 import '../data/adapters/photo_picker.dart';
 import '../data/adapters/platform_kitchen_devices.dart';
+import '../data/adapters/usda_nutrition_source.dart';
 import '../data/auth/auth_gateway.dart';
 import '../data/auth/local_auth_gateway.dart';
 import '../data/auth/supabase_auth_gateway.dart';
@@ -536,3 +541,24 @@ final Provider<RecordSync> recordSyncProvider = Provider<RecordSync>(
     userId: () => ref.read(currentUserIdProvider),
   ),
 );
+
+// ── Food lookup (spec §5.5) ──────────────────────────────────────────────────
+
+/// The lookup chain, in the order §5.5 sets: the household's own library
+/// first, then Open Food Facts, then USDA.
+///
+/// External sources are only in the chain when there is a backend to reach.
+/// An unconfigured build still looks things up — it just finds only what the
+/// household already knows, which is the honest answer offline.
+final Provider<NutritionLookup> nutritionLookupProvider =
+    Provider<NutritionLookup>((Ref ref) {
+      final bool connected = ref.watch(supabaseReadyProvider);
+      return NutritionLookup(<NutritionSource>[
+        LibraryNutritionSource(
+          store: ref.watch(foodStoreProvider),
+          householdId: ref.watch(currentHouseholdIdProvider),
+        ),
+        OpenFoodFactsSource(),
+        if (connected) UsdaNutritionSource(Supabase.instance.client),
+      ]);
+    });
