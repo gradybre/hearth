@@ -548,4 +548,72 @@ void main() {
       expect(await repository.targetsFor(today), isNull);
     });
   });
+
+  group('a day is identified by the day, not by chance', () {
+    test('two devices derive the same id for the same date', () async {
+      // The server keys meal_plan_days on (user_id, day). Random ids would
+      // give two devices two rows for the same Tuesday, and the second could
+      // never sync — its meals lost to a conflict that never resolves.
+      final String a = PlanRepository.dayIdFor(
+        userId: 'user-1',
+        date: DateTime(2026, 8, 28, 9),
+      );
+      final String b = PlanRepository.dayIdFor(
+        userId: 'user-1',
+        date: DateTime(2026, 8, 28, 23, 59),
+      );
+
+      expect(a, b, reason: 'the time of day is not part of the identity');
+    });
+
+    test('different users and different days do not collide', () {
+      final String mine = PlanRepository.dayIdFor(
+        userId: 'user-1',
+        date: DateTime(2026, 8, 28),
+      );
+      final String theirs = PlanRepository.dayIdFor(
+        userId: 'user-2',
+        date: DateTime(2026, 8, 28),
+      );
+      final String tomorrow = PlanRepository.dayIdFor(
+        userId: 'user-1',
+        date: DateTime(2026, 8, 29),
+      );
+
+      expect(mine, isNot(theirs));
+      expect(mine, isNot(tomorrow));
+    });
+
+    test('it is a real uuid, because the column is one', () {
+      expect(
+        PlanRepository.dayIdFor(userId: 'user-1', date: DateTime(2026, 8, 28)),
+        matches(
+          RegExp(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-'
+            r'[0-9a-f]{12}$',
+          ),
+        ),
+      );
+    });
+
+    test('the day row a repository creates uses it', () async {
+      await repository.add(
+        date: today,
+        slot: MealSlot.lunch,
+        refType: PlanRefType.recipe,
+        refId: 'recipe-1',
+        servings: 1,
+      );
+
+      final List<PendingWrite> writes = await queue.pending();
+      final PendingWrite day = writes.firstWhere(
+        (PendingWrite w) => w.entityTable == PlanRepository.daysTable,
+      );
+
+      expect(
+        day.entityId,
+        PlanRepository.dayIdFor(userId: 'user-1', date: today),
+      );
+    });
+  });
 }

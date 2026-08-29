@@ -87,6 +87,7 @@ flutter pub get                       # install dependencies
 flutter analyze                       # static analysis (must be clean)
 dart format .                         # format
 flutter test                          # unit + widget + golden tests
+HEARTH_LIVE=1 flutter test --tags live test/integration   # against local Supabase
 flutter test --update-goldens         # re-baseline goldens (review the diff!)
 dart run build_runner build --delete-conflicting-outputs   # drift + riverpod codegen
 

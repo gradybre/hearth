@@ -41,6 +41,26 @@ class PlanRepository {
   final DateTime Function() _now;
   final String Function() _newId;
 
+  /// The id of the row for one user's one day.
+  ///
+  /// Derived, not random. A day has no identity of its own — it *is* a user
+  /// and a date, and the server enforces that with a unique key on the pair.
+  /// Two devices that each invented a random id for the same Tuesday would
+  /// produce two rows, and the second would be rejected forever: its meals
+  /// could never sync, which is precisely the offline case this app promises
+  /// to survive.
+  static String dayIdFor({required String userId, required DateTime date}) {
+    final DateTime key = dayKey(date);
+    final String day =
+        '${key.year.toString().padLeft(4, '0')}-'
+        '${key.month.toString().padLeft(2, '0')}-'
+        '${key.day.toString().padLeft(2, '0')}';
+    return const Uuid().v5(
+      Namespace.url.value,
+      'hearth:meal-plan-day:$userId:$day',
+    );
+  }
+
   Future<List<MealPlanEntry>> entriesFor(DateTime date) =>
       _store.entriesForDay(userId: _userId, date: date);
 
@@ -106,7 +126,7 @@ class PlanRepository {
       final MealPlanDayRow day = await _store.ensureDay(
         userId: _userId,
         date: date,
-        idFactory: _newId,
+        idFactory: () => dayIdFor(userId: _userId, date: date),
         updatedAt: now,
       );
       await _queueDay(day, now);

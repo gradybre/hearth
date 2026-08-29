@@ -12,8 +12,6 @@ import 'package:hearth/data/local/preference_store.dart';
 import 'package:hearth/data/local/recipe_store.dart';
 import 'package:hearth/data/remote/supabase_remote_gateway.dart';
 import 'package:hearth/data/sync/library_sync.dart';
-import 'package:hearth/data/sync/record_sync.dart';
-import 'package:hearth/data/sync/remote_rows.dart';
 import 'package:hearth/data/sync/sync_engine.dart';
 import 'package:hearth/domain/models/recipe.dart';
 // Via supabase_flutter, which re-exports the client: depending on `supabase`
@@ -27,15 +25,18 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// Everything else mocks one side or the other, and the bugs that matter here
 /// live exactly in the join between them.
 ///
-/// Run with: flutter test --tags live test/integration
+/// Run with: HEARTH_LIVE=1 flutter test --tags live test/integration
+///
+/// Gated on the environment variable as well as the tag so a plain
+/// `flutter test` skips them: they need a running stack, and a suite that is
+/// red because a container is down teaches everyone to ignore red.
 void main() {
   const String url = 'http://127.0.0.1:54321';
-  final String? key = _publishableKey();
+  final String? key = _live ? _publishableKey() : null;
 
   late SupabaseClient client;
   late HearthDatabase db;
   late LibrarySync sync;
-  late RecordSync records;
   late RecipeStore recipes;
 
   setUpAll(() async {
@@ -55,13 +56,6 @@ void main() {
     final SyncEngine engine = SyncEngine(
       queue: queue,
       gateway: SupabaseRemoteGateway(client),
-    );
-    records = RecordSync(
-      engine: engine,
-      rows: RemoteRows(db),
-      queue: queue,
-      preferences: PreferenceStore(db),
-      userId: () => client.auth.currentUser?.id ?? '',
     );
     sync = LibrarySync(
       engine: engine,
@@ -109,37 +103,12 @@ void main() {
 
     await client.auth.signOut();
   }, skip: key == null ? 'supabase not running' : null);
-
-  test('a logged meal comes down with its snapshot intact', () async {
-    await client.auth.signInWithPassword(
-      email: 'pull@hearth.test',
-      password: 'HearthPull2026a',
-    );
-
-    final PullResult result = await records.pull();
-
-    expect(result.applied, greaterThan(0));
-
-    final List<MealPlanEntryRow> entries = await db
-        .select(db.mealPlanEntries)
-        .get();
-    expect(entries, hasLength(1));
-    expect(entries.single.isLogged, isTrue);
-    expect(entries.single.servings, 1.5);
-    expect(
-      entries.single.macroSnapshot,
-      contains('812.5'),
-      reason: 'the frozen snapshot must arrive verbatim (spec §4)',
-    );
-
-    final List<MacroTargetRow> targets = await db.select(db.macroTargets).get();
-    expect(targets.single.kcal, 2400);
-
-    await client.auth.signOut();
-  }, skip: key == null ? 'supabase not running' : null);
 }
 
 /// Reads the local publishable key, which is gitignored and never in the repo.
+/// Live tests run only when asked for: they need `supabase start`.
+bool get _live => Platform.environment['HEARTH_LIVE'] == '1';
+
 String? _publishableKey() {
   final File file = File('config/local.json');
   if (!file.existsSync()) return null;

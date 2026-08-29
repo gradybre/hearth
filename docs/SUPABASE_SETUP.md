@@ -45,6 +45,16 @@ Then run against it:
 flutter run -d ios --dart-define-from-file=config/local.json
 ```
 
+The integration suite runs against this stack:
+
+```bash
+HEARTH_LIVE=1 flutter test --tags live test/integration
+```
+
+It is gated on the environment variable as well as the tag so a plain
+`flutter test` skips it — a suite that goes red because a container is down
+teaches everyone to ignore red.
+
 Confirmation emails do not leave the machine — the local stack catches them at
 **http://127.0.0.1:54324** (Mailpit). That is where to click the link when
 testing sign-up.
