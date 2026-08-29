@@ -553,14 +553,21 @@ final Provider<RecordSync> recordSyncProvider = Provider<RecordSync>(
 /// household already knows, which is the honest answer offline.
 /// Whether a camera is available to scan with.
 ///
-/// Desktop and the simulator have none, and asking for one there produces a
-/// permission prompt that can never be satisfied. It is a provider rather than
-/// a bare platform check so a test can drive the typed-barcode path — which is
-/// the whole flow apart from the detector itself — without hardware.
+/// Windows has none that mobile_scanner speaks to, and asking for one produces
+/// a permission prompt that can never be satisfied. macOS is included because
+/// the package ships a real implementation there and every Mac has a webcam —
+/// which also makes the detector testable without a phone.
+///
+/// A provider rather than a bare platform check so a test can drive the
+/// typed-barcode path — the whole flow apart from the detector itself —
+/// without hardware.
 final Provider<bool> cameraScanningAvailableProvider = Provider<bool>(
-  (Ref ref) =>
-      defaultTargetPlatform == TargetPlatform.iOS ||
-      defaultTargetPlatform == TargetPlatform.android,
+  (Ref ref) => switch (defaultTargetPlatform) {
+    TargetPlatform.iOS ||
+    TargetPlatform.android ||
+    TargetPlatform.macOS => true,
+    _ => false,
+  },
 );
 
 final Provider<NutritionLookup> nutritionLookupProvider =
