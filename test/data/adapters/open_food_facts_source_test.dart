@@ -1,0 +1,244 @@
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/data/adapters/nutrition_source.dart';
+import 'package:hearth/data/adapters/open_food_facts_source.dart';
+import 'package:hearth/domain/models/food.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+
+/// A product as Open Food Facts actually returns one.
+Map<String, Object?> product({
+  String name = 'Baked beans',
+  String? brands = 'Heinz',
+  String code = '5000157024671',
+  Object? kcal = 78,
+  Object? protein = 4.7,
+  Object? carbs = 12.9,
+  Object? fat = 0.2,
+  String? servingSize,
+}) => <String, Object?>{
+  'code': code,
+  'product_name': name,
+  'brands': ?brands,
+  'serving_size': ?servingSize,
+  'nutriments': <String, Object?>{
+    'energy-kcal_100g': kcal,
+    'proteins_100g': protein,
+    'carbohydrates_100g': carbs,
+    'fat_100g': fat,
+  },
+};
+
+OpenFoodFactsSource sourceReturning(
+  Object? body, {
+  int status = 200,
+  List<Uri>? recordInto,
+}) => OpenFoodFactsSource(
+  client: MockClient((http.Request request) async {
+    recordInto?.add(request.url);
+    return http.Response(
+      jsonEncode(body),
+      status,
+      headers: <String, String>{'content-type': 'application/json'},
+    );
+  }),
+);
+
+void main() {
+  group('a barcode that exists', () {
+    test('becomes a food with macros per 100 g', () async {
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 1,
+        'product': product(),
+      });
+
+      final NutritionMatch match = (await off.byBarcode('5000157024671'))!;
+
+      expect(match.food.name, 'Baked beans');
+      expect(match.food.brand, 'Heinz');
+      expect(match.food.source, FoodSource.openFoodFacts);
+      final ServingOption per100g = match.food.servingOptions.first;
+      expect(per100g.label, '100 g');
+      expect(per100g.macros.kcal, 78);
+      expect(per100g.macros.proteinG, 4.7);
+    });
+
+    test('the barcode is the id, so scanning twice is one food', () async {
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 1,
+        'product': product(),
+      });
+
+      final NutritionMatch match = (await off.byBarcode('5000157024671'))!;
+      expect(match.food.id, 'off:5000157024671');
+      expect(match.food.barcode, '5000157024671');
+    });
+
+    test('a pack serving in grams is offered alongside the 100 g', () async {
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 1,
+        'product': product(servingSize: '200 g'),
+      });
+
+      final NutritionMatch match = (await off.byBarcode('5000157024671'))!;
+
+      expect(match.food.servingOptions, hasLength(2));
+      final ServingOption serving = match.food.servingOptions.last;
+      expect(serving.label, '200 g');
+      expect(serving.macros.kcal, closeTo(156, 0.001));
+    });
+
+    test('a serving given in pieces is not guessed at', () async {
+      // "1 biscuit" cannot be converted without knowing what a biscuit
+      // weighs, and a guess there puts a wrong number in someone's day.
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 1,
+        'product': product(servingSize: '1 biscuit'),
+      });
+
+      final NutritionMatch match = (await off.byBarcode('5000157024671'))!;
+      expect(match.food.servingOptions, hasLength(1));
+    });
+  });
+
+  group('a barcode that does not', () {
+    test('status 0 is a miss, not an error', () async {
+      // A miss hands off to the next source; it is the ordinary case.
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 0,
+      });
+
+      expect(await off.byBarcode('0000000000000'), isNull);
+    });
+
+    test('an unreachable source is a miss too', () async {
+      // Standing in a supermarket aisle is the worst place to meet a network
+      // error, so the chain simply moves on.
+      final OpenFoodFactsSource off = OpenFoodFactsSource(
+        client: MockClient(
+          (http.Request request) async => throw const SocketExceptionStub(),
+        ),
+      );
+
+      expect(await off.byBarcode('5000157024671'), isNull);
+    });
+
+    test('so is a server error', () async {
+      final OpenFoodFactsSource off = sourceReturning(
+        <String, Object?>{},
+        status: 503,
+      );
+      expect(await off.byBarcode('5000157024671'), isNull);
+    });
+
+    test('an empty barcode is never sent anywhere', () async {
+      final List<Uri> calls = <Uri>[];
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 0,
+      }, recordInto: calls);
+
+      expect(await off.byBarcode('  '), isNull);
+      expect(calls, isEmpty);
+    });
+  });
+
+  group('data worth doubting is flagged, not trusted', () {
+    Future<double> confidenceFor(Map<String, Object?> p) async {
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 1,
+        'product': p,
+      });
+      return (await off.byBarcode('5000157024671'))!.confidence;
+    }
+
+    test('a complete branded row is trusted', () async {
+      expect(await confidenceFor(product()), greaterThan(0.7));
+    });
+
+    test('energy with no macros at all is not', () async {
+      // A half-filled entry. Believing it silently corrupts a day's numbers.
+      expect(
+        await confidenceFor(product(protein: 0, carbs: 0, fat: 0)),
+        lessThan(0.7),
+      );
+    });
+
+    test('an impossible calorie count is not', () async {
+      // Nothing edible is over 900 kcal per 100 g; pure fat is about 900.
+      expect(await confidenceFor(product(kcal: 3200)), lessThan(0.7));
+    });
+
+    test('a product with no name at all is not offered', () async {
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 1,
+        'product': product(name: '   '),
+      });
+      expect(await off.byBarcode('5000157024671'), isNull);
+    });
+
+    test('a product with no energy is not offered', () async {
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 1,
+        'product': product(kcal: null),
+      });
+      expect(await off.byBarcode('5000157024671'), isNull);
+    });
+  });
+
+  group('numbers as they actually arrive', () {
+    test('a decimal comma is read, not dropped', () async {
+      // Much of the database is written by people using a comma decimal.
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 1,
+        'product': product(kcal: '78,5'),
+      });
+
+      final NutritionMatch match = (await off.byBarcode('5000157024671'))!;
+      expect(match.food.servingOptions.first.macros.kcal, 78.5);
+    });
+
+    test('only the first of several brands is kept', () async {
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 1,
+        'product': product(brands: 'Heinz,Heinz Beanz,H. J. Heinz'),
+      });
+
+      final NutritionMatch match = (await off.byBarcode('5000157024671'))!;
+      expect(match.food.brand, 'Heinz');
+    });
+  });
+
+  group('search', () {
+    test('returns only products it can make sense of', () async {
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'products': <Object?>[
+          product(name: 'Baked beans'),
+          product(name: '', code: '2'),
+          product(name: 'No energy', kcal: null, code: '3'),
+          'not even a map',
+        ],
+      });
+
+      final List<NutritionMatch> results = await off.search('beans');
+      expect(results, hasLength(1));
+      expect(results.single.food.name, 'Baked beans');
+    });
+
+    test('an empty query is never sent anywhere', () async {
+      final List<Uri> calls = <Uri>[];
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'products': <Object?>[],
+      }, recordInto: calls);
+
+      expect(await off.search('   '), isEmpty);
+      expect(calls, isEmpty);
+    });
+  });
+}
+
+/// Stands in for a network failure without importing dart:io into a test that
+/// otherwise has no need of it.
+class SocketExceptionStub implements Exception {
+  const SocketExceptionStub();
+}
