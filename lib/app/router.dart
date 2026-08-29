@@ -59,8 +59,11 @@ GoRouter buildRouter() => GoRouter(
     ),
     GoRoute(
       path: '/food/scan',
-      builder: (BuildContext context, GoRouterState state) =>
-          const BarcodeScanScreen(),
+      builder: (BuildContext context, GoRouterState state) => BarcodeScanScreen(
+        // Opened from a recipe ingredient rather than the food library: the
+        // scan ends by handing back the food it settled on (spec §5.5).
+        pickFood: state.uri.queryParameters['pick'] == '1',
+      ),
     ),
     GoRoute(
       path: '/food/new',

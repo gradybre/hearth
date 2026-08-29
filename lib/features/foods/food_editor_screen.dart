@@ -75,7 +75,10 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
     setState(() => _saving = true);
     try {
       await repository.save(food);
-      if (mounted) Navigator.of(context).pop();
+      // Pops the id, not nothing: a scan started from a recipe ingredient
+      // needs to know which food it just created so it can attach it. Callers
+      // that only wanted the food saved ignore the result.
+      if (mounted) Navigator.of(context).pop(food.id);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

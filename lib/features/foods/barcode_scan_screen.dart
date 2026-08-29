@@ -20,7 +20,15 @@ import 'food_draft.dart';
 /// rest of the flow does not care which was used. That is also what makes the
 /// whole path testable without hardware.
 class BarcodeScanScreen extends ConsumerStatefulWidget {
-  const BarcodeScanScreen({super.key});
+  const BarcodeScanScreen({this.pickFood = false, super.key});
+
+  /// Whether the screen was opened to *choose* a food rather than to file one.
+  ///
+  /// Set when a recipe ingredient is being matched (spec §5.5's in-recipe
+  /// capture). The lookup is identical; what changes is where the flow ends —
+  /// the chosen food's id is handed back to the caller instead of the user
+  /// being left on the scanner.
+  final bool pickFood;
 
   @override
   ConsumerState<BarcodeScanScreen> createState() => _BarcodeScanScreenState();
@@ -132,6 +140,7 @@ class _BarcodeScanScreenState extends ConsumerState<BarcodeScanScreen> {
             ),
             _ResultPanel(
               state: state,
+              pickFood: widget.pickFood,
               onRetry: () => ref.read(barcodeLookupProvider.notifier).retry(),
               onClear: () {
                 _lastDetected = null;
@@ -260,11 +269,13 @@ class _CameraUnavailable extends StatelessWidget {
 class _ResultPanel extends ConsumerWidget {
   const _ResultPanel({
     required this.state,
+    required this.pickFood,
     required this.onRetry,
     required this.onClear,
   });
 
   final BarcodeLookupState state;
+  final bool pickFood;
   final VoidCallback onRetry;
   final VoidCallback onClear;
 
@@ -308,6 +319,7 @@ class _ResultPanel extends ConsumerWidget {
           ),
           BarcodeFound(:final NutritionMatch match) => _Found(
             match: match,
+            pickFood: pickFood,
             onDiscard: onClear,
             onReviewed: onClear,
           ),
@@ -319,7 +331,17 @@ class _ResultPanel extends ConsumerWidget {
   Future<void> _addByHand(BuildContext context, String barcode) async {
     // Straight into the food editor with the barcode already attached, so the
     // food that comes out of a miss is found by the next scan (spec §5.5).
-    await context.push<void>('/food/new', extra: FoodDraft.forBarcode(barcode));
+    final String? saved = await context.push<String>(
+      '/food/new',
+      extra: FoodDraft.forBarcode(barcode),
+    );
+    if (!context.mounted) return;
+    // A miss during ingredient matching still ends in a match: the food the
+    // user just typed in is the one the line wanted.
+    if (pickFood && saved != null) {
+      Navigator.of(context).pop(saved);
+      return;
+    }
     onClear();
   }
 }
@@ -352,11 +374,13 @@ class _Searching extends StatelessWidget {
 class _Found extends StatelessWidget {
   const _Found({
     required this.match,
+    required this.pickFood,
     required this.onDiscard,
     required this.onReviewed,
   });
 
   final NutritionMatch match;
+  final bool pickFood;
   final VoidCallback onDiscard;
   final VoidCallback onReviewed;
 
@@ -429,24 +453,16 @@ class _Found extends StatelessWidget {
             Expanded(
               child: SizedBox(
                 height: HearthTouch.minTarget,
-                child: match.fromLibrary
-                    // Saving again would duplicate a food the household may
-                    // already have corrected, and "user overrides win" is the
-                    // reason the library is asked first at all (§5.5).
-                    ? FilledButton(
-                        onPressed: () => _open(context),
-                        child: const Text('Open it'),
-                      )
-                    : FilledButton(
-                        onPressed: () => _review(context),
-                        child: const Text('Review and save'),
-                      ),
+                child: FilledButton(
+                  onPressed: () => _primaryAction(context),
+                  child: Text(_primaryLabel),
+                ),
               ),
             ),
             const SizedBox(width: HearthSpacing.sm),
             TextButton(
               onPressed: onDiscard,
-              child: Text(match.fromLibrary ? 'Done' : 'Discard'),
+              child: Text(match.fromLibrary && !pickFood ? 'Done' : 'Discard'),
             ),
           ],
         ),
@@ -459,16 +475,45 @@ class _Found extends StatelessWidget {
   /// The editor is the review screen rather than a second, read-only one: a
   /// packet's own numbers are sometimes wrong, and the place you notice that
   /// should be the place you can fix it.
+  /// What the primary button says, and it says what will happen.
+  ///
+  /// Four outcomes, because the two questions are independent: is this food
+  /// already ours, and is the user filing it or choosing it for an ingredient?
+  String get _primaryLabel => switch ((match.fromLibrary, pickFood)) {
+    (true, true) => 'Use it',
+    (true, false) => 'Open it',
+    (false, true) => 'Check and use',
+    (false, false) => 'Review and save',
+  };
+
+  Future<void> _primaryAction(BuildContext context) {
+    // A library food already has an id, so choosing it for an ingredient needs
+    // no review — the household has already vouched for these numbers.
+    if (match.fromLibrary) {
+      if (pickFood) {
+        Navigator.of(context).pop(match.food.id);
+        return Future<void>.value();
+      }
+      return _open(context);
+    }
+    return _review(context);
+  }
+
   Future<void> _open(BuildContext context) async {
     await context.push<void>('/food/${match.food.id}');
     onReviewed();
   }
 
   Future<void> _review(BuildContext context) async {
-    await context.push<void>(
+    final String? saved = await context.push<String>(
       '/food/new',
       extra: FoodDraft.fromLookup(match.food),
     );
+    if (!context.mounted) return;
+    if (pickFood && saved != null) {
+      Navigator.of(context).pop(saved);
+      return;
+    }
     onReviewed();
   }
 }

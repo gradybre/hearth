@@ -8,6 +8,7 @@ import 'package:hearth/app/providers.dart';
 import 'package:hearth/data/adapters/nutrition_lookup.dart';
 import 'package:hearth/data/adapters/nutrition_source.dart';
 import 'package:hearth/data/local/collection_store.dart';
+import 'package:hearth/data/local/food_store.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/domain/cooking/cook_session.dart';
 import 'package:hearth/domain/models/food.dart';
@@ -52,6 +53,15 @@ Future<HearthDatabase> pumpHearthApp(
 
   final HearthDatabase db = HearthDatabase.forTesting(NativeDatabase.memory());
   addTearDown(db.close);
+
+  // Foods are handed to the UI as a plain stream (see above), but some of what
+  // the UI does with them writes to the database — remembering an ingredient
+  // match stores a row whose food_id is a foreign key. A food that exists only
+  // in the stream would make that write fail on a constraint the real app
+  // never hits, so the rows go in as well.
+  for (final Food food in foods) {
+    await FoodStore(db).upsert(food, updatedAt: DateTime(2026));
+  }
 
   await tester.pumpWidget(
     ProviderScope(
