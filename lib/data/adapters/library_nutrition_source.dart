@@ -62,9 +62,17 @@ class LibraryNutritionSource implements NutritionSource {
       // Ranked, not merely filtered: something you type the start of is
       // almost always what you meant, and burying it under an alphabetical
       // list is the tax logging speed cannot afford.
+      //
+      // Checked both ways round, not just food-name-contains-query. An
+      // ingredient line often carries words the saved food's own name does
+      // not — "diced white onion" against a library food saved plainly as
+      // "White onion" — and matching only one direction missed exactly that,
+      // making an already-corrected food invisible to its own name and
+      // sending the household's own onion back out to Open Food Facts to be
+      // saved a second time.
       if (name.startsWith(needle)) {
         hits.add((food: food, rank: 0));
-      } else if (name.contains(needle)) {
+      } else if (name.contains(needle) || needle.contains(name)) {
         hits.add((food: food, rank: 1));
       } else if (brand.contains(needle)) {
         hits.add((food: food, rank: 2));

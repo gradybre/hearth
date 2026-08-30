@@ -83,4 +83,45 @@ void main() {
 
     expect(await source.byBarcode('5000157024671'), isNull);
   });
+
+  group('search', () {
+    Food whiteOnion() => Food(
+      id: '33333333-3333-4333-8333-333333333333',
+      name: 'White onion',
+      source: FoodSource.manual,
+      servingOptions: <ServingOption>[
+        ServingOption(
+          id: '44444444-4444-4444-8444-444444444444',
+          label: '1 onion',
+          amount: Quantity.of(1, Units.item),
+          macros: const Macros(kcal: 44, proteinG: 1.2, carbG: 10.3, fatG: 0.1),
+        ),
+      ],
+    );
+
+    test(
+      'a plainer library name is still found by a more specific line',
+      () async {
+        // Reported bug: "White onion" was already saved once, and a second
+        // recipe's own wording for the same ingredient — carrying a
+        // descriptive word the saved food's name does not — failed to find it
+        // and went on to save a second, duplicate food instead.
+        await repository.save(whiteOnion());
+
+        final List<NutritionMatch> results = await source.search(
+          'diced white onion',
+        );
+
+        expect(results, hasLength(1));
+        expect(results.single.food.name, 'White onion');
+        expect(results.single.fromLibrary, isTrue);
+      },
+    );
+
+    test('an unrelated query does not match', () async {
+      await repository.save(whiteOnion());
+
+      expect(await source.search('chicken breast'), isEmpty);
+    });
+  });
 }
