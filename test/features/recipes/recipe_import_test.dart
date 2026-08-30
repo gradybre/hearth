@@ -162,6 +162,42 @@ void main() {
     );
   });
 
+  testWidgets('a rebuild while the reading is done does not open it twice', (
+    WidgetTester tester,
+  ) async {
+    // Importing two images once produced three identical recipes. The review
+    // screen was pushed from build(), so every rebuild that happened while the
+    // state was Done pushed another copy — a keyboard dismissing during the
+    // transition is enough — and saving each stacked editor in turn saved the
+    // same recipe again.
+    await openImport(
+      tester,
+      ai: FakeAi(answer: shortRibs()),
+      picker: FakePicker(count: 2),
+    );
+
+    await tester.tap(find.text('Choose pictures'));
+    await pumpFrames(tester);
+    await tester.tap(find.text('Read the recipe'));
+    await pumpFrames(tester, frames: 20);
+
+    expect(find.text('Check and save'), findsOneWidget);
+
+    // A metrics change — the keyboard going away — rebuilds the screen
+    // underneath while it is still in the Done state.
+    tester.view.physicalSize = const Size(390, 700);
+    addTearDown(tester.view.reset);
+    await pumpFrames(tester, frames: 20);
+
+    // Backing out of the review must land on the import screen, not on
+    // another identical review waiting behind it.
+    await tester.tap(find.text('Cancel'));
+    await pumpFrames(tester, frames: 20);
+
+    expect(find.text('Check and save'), findsNothing);
+    expect(find.text('Import a recipe'), findsOneWidget);
+  });
+
   testWidgets('what the reader was unsure of is named, not just counted', (
     WidgetTester tester,
   ) async {

@@ -321,8 +321,12 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
 
     setState(() => _saving = true);
     try {
-      await ref.read(recipeRepositoryProvider).save(draft.toRecipe());
-      if (mounted) Navigator.of(context).pop();
+      final Recipe saved = draft.toRecipe();
+      await ref.read(recipeRepositoryProvider).save(saved);
+      // Pops the id, not nothing: an import needs to tell a save from a
+      // cancel, because cancelling should leave you on the import screen to
+      // try different pictures rather than throwing you back to the library.
+      if (mounted) Navigator.of(context).pop(saved.id);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

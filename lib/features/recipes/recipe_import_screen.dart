@@ -27,6 +27,13 @@ class RecipeImportScreen extends ConsumerStatefulWidget {
 class _RecipeImportScreenState extends ConsumerState<RecipeImportScreen> {
   final TextEditingController _url = TextEditingController();
 
+  /// Whether the review screen is already open for this extraction.
+  ///
+  /// Belt and braces alongside listening for the transition rather than the
+  /// state: opening the review twice saves the recipe twice, and this screen
+  /// has already done that once.
+  bool _reviewing = false;
+
   @override
   void dispose() {
     _url.dispose();
@@ -35,20 +42,35 @@ class _RecipeImportScreenState extends ConsumerState<RecipeImportScreen> {
 
   /// Hands the extraction to the editor, which is the review screen.
   Future<void> _review(AiRecipe recipe) async {
+    if (_reviewing) return;
+    _reviewing = true;
+
     final RecipeImportController controller = ref.read(
       recipeImportProvider.notifier,
     );
-    await context.push<void>(
-      '/recipe/new',
-      extra: RecipeImportResult(
-        draft: AiRecipeMapper.toDraft(recipe),
-        uncertain: recipe.uncertain,
-      ),
-    );
-    if (!mounted) return;
-    controller.reset();
-    _url.clear();
-    if (mounted) Navigator.of(context).maybePop();
+    try {
+      final String? saved = await context.push<String>(
+        '/recipe/new',
+        extra: RecipeImportResult(
+          draft: AiRecipeMapper.toDraft(recipe),
+          uncertain: recipe.uncertain,
+        ),
+      );
+      if (!mounted) return;
+
+      if (saved == null) {
+        // Backed out of the review. Leave the pictures where they are so a
+        // second look, or a different set, does not start from nothing.
+        controller.clearResult();
+        return;
+      }
+
+      controller.reset();
+      _url.clear();
+      if (mounted) Navigator.of(context).maybePop();
+    } finally {
+      _reviewing = false;
+    }
   }
 
   @override
@@ -62,13 +84,21 @@ class _RecipeImportScreenState extends ConsumerState<RecipeImportScreen> {
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
 
-    // Landing on a finished extraction is the one state that navigates rather
-    // than renders: the review belongs in the editor, not here.
-    if (state is RecipeImportDone) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _review(state.recipe);
-      });
-    }
+    // Listened for rather than read out of the state, because this navigates.
+    //
+    // Scheduling the push from build() meant every rebuild that happened while
+    // the state was Done pushed another review — a keyboard dismissing during
+    // the transition was enough — and importing two images once produced three
+    // identical recipes. ref.listen fires on the *change* into Done, which
+    // happens exactly once per reading.
+    ref.listen<RecipeImportState>(recipeImportProvider, (
+      RecipeImportState? previous,
+      RecipeImportState next,
+    ) {
+      if (next is RecipeImportDone && previous is! RecipeImportDone) {
+        _review(next.recipe);
+      }
+    });
 
     final bool busy = state is RecipeImportReading;
 

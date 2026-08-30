@@ -181,6 +181,15 @@ class RecipeImportController extends Notifier<RecipeImportState> {
   /// Asks again with exactly what was already chosen.
   Future<void> retry() => read();
 
+  /// Drops the finished reading but keeps what was chosen.
+  ///
+  /// For backing out of the review: the pictures are still the ones you meant,
+  /// and making you pick them again would be a punishment for looking.
+  void clearResult() {
+    _run++;
+    state = _idle();
+  }
+
   void reset() {
     _run++;
     _images.clear();
