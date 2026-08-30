@@ -8,12 +8,50 @@ import 'auth_gateway.dart';
 ///
 /// Nothing here hashes a password or mints a token: Supabase does that, and
 /// rolling our own is the one thing §8.3 rules out by name.
+/// What to do when the account cannot be resolved.
+enum AccountResolution {
+  /// The server answered, and the answer was that this session is unusable.
+  signOut,
+
+  /// Something went wrong that says nothing about the account — carry on with
+  /// what we already knew.
+  keepGoing,
+}
+
 class SupabaseAuthGateway implements AuthGateway {
   SupabaseAuthGateway(this._client) {
-    _authChanges = _client.auth.onAuthStateChange.listen(
-      (AuthState _) => _refresh(),
-    );
+    _authChanges = _client.auth.onAuthStateChange.listen((AuthState state) {
+      if (changesWhoYouAre(state.event)) _refresh();
+    });
   }
+
+  /// Whether an auth event means the account itself may have changed.
+  ///
+  /// Deliberately narrow. A token refresh fires on resume and on a timer, and
+  /// re-resolving on it meant a network round trip for the profile every time
+  /// — which is the round trip that could fail and take the session down with
+  /// it. The token changed; who you are did not.
+  static bool changesWhoYouAre(AuthChangeEvent event) => switch (event) {
+    AuthChangeEvent.signedIn ||
+    AuthChangeEvent.signedOut ||
+    AuthChangeEvent.userUpdated => true,
+    _ => false,
+  };
+
+  /// What a failure to resolve the account actually tells us.
+  ///
+  /// Only [AuthFailure] means the account is gone: it is raised when the
+  /// profile query *succeeded* and said there is no household to belong to.
+  /// Everything else — a socket closing, a timeout, a 500 — is the phone being
+  /// briefly unreachable, which is its normal condition and no reason to throw
+  /// away a session.
+  ///
+  /// This used to sign out on anything at all. A moment of bad signal during a
+  /// token refresh would clear the session, swap the router for the sign-in
+  /// screen, and destroy every pushed route and open sheet with it.
+  static AccountResolution resolutionFor(Object error) => error is AuthFailure
+      ? AccountResolution.signOut
+      : AccountResolution.keepGoing;
 
   final SupabaseClient _client;
 
@@ -35,23 +73,36 @@ class SupabaseAuthGateway implements AuthGateway {
     yield* _accounts.stream;
   }
 
+  /// The last account we successfully resolved, so a blip does not look like a
+  /// sign-out.
+  HearthAccount? _lastKnown;
+
   Future<void> _refresh() async {
     if (_accounts.isClosed) return;
     _accounts.add(await _accountOrSignOut());
   }
 
-  /// The account, or null after clearing a session that cannot be used.
+  /// The account, or null after clearing a session the server says is unusable.
   ///
-  /// A stored session whose profile cannot be read is not a transient error to
-  /// sit on — the account has been deleted, or the project it belonged to is
-  /// gone. Signing out puts the user somewhere they can act; leaving the
-  /// session in place leaves them on a spinner with nothing to do.
+  /// A failure to read the profile is almost always the network, and treating
+  /// it as proof the account is gone is how a bad moment of signal becomes a
+  /// sign-out. Only [AuthFailure] — the query answering that there is no
+  /// household — clears the session; anything else keeps the last account we
+  /// actually saw.
   Future<HearthAccount?> _accountOrSignOut() async {
     try {
-      return await currentAccount();
-    } on Object {
-      await _client.auth.signOut();
-      return null;
+      final HearthAccount? account = await currentAccount();
+      _lastKnown = account;
+      return account;
+    } on Object catch (error) {
+      switch (resolutionFor(error)) {
+        case AccountResolution.signOut:
+          _lastKnown = null;
+          await _client.auth.signOut();
+          return null;
+        case AccountResolution.keepGoing:
+          return _lastKnown;
+      }
     }
   }
 
