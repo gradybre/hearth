@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/data/local/food_store.dart';
+import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/units/unit.dart';
@@ -34,16 +36,19 @@ Food chicken() => aFood(
   ],
 );
 
-Future<void> openFoods(
+Future<HearthDatabase> openFoods(
   WidgetTester tester, {
   List<Food> foods = const <Food>[],
 }) async {
-  await pumpHearthApp(tester, foods: foods);
+  final HearthDatabase db = await pumpHearthApp(tester, foods: foods);
   await tester.tap(find.text('Foods').last);
   await tester.pump(const Duration(milliseconds: 50));
+  return db;
 }
 
 void main() {
+  _selectingTests();
+
   group('removing a food from the library', () {
     Future<void> swipe(WidgetTester tester, double dx) async {
       final Offset row = tester.getCenter(find.byType(FoodCard).first);
@@ -192,6 +197,139 @@ void main() {
       await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
 
       handle.dispose();
+    });
+  });
+}
+
+void _selectingTests() {
+  group('selecting multiple foods to delete', () {
+    Future<void> select(WidgetTester tester, String name) async {
+      await tester.longPress(find.text(name));
+      await pumpFrames(tester, frames: 12);
+    }
+
+    testWidgets('long-pressing a food starts selecting it', (
+      WidgetTester tester,
+    ) async {
+      await openFoods(tester, foods: <Food>[yogurt(), chicken()]);
+
+      await select(tester, 'Greek yogurt');
+
+      expect(find.text('1 selected'), findsOneWidget);
+      expect(find.byIcon(Icons.check_box), findsOneWidget);
+      expect(find.byIcon(Icons.check_box_outline_blank), findsOneWidget);
+    });
+
+    testWidgets('a tap on another food while selecting adds it too', (
+      WidgetTester tester,
+    ) async {
+      await openFoods(tester, foods: <Food>[yogurt(), chicken()]);
+
+      await select(tester, 'Greek yogurt');
+      await tester.tap(find.text('Chicken breast'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('2 selected'), findsOneWidget);
+    });
+
+    testWidgets('tapping a selected food again drops it', (
+      WidgetTester tester,
+    ) async {
+      await openFoods(tester, foods: <Food>[yogurt(), chicken()]);
+
+      await select(tester, 'Greek yogurt');
+      await tester.tap(find.text('Chicken breast'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Chicken breast'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('1 selected'), findsOneWidget);
+    });
+
+    testWidgets('cancelling clears the selection and returns to browsing', (
+      WidgetTester tester,
+    ) async {
+      await openFoods(tester, foods: <Food>[yogurt(), chicken()]);
+
+      await select(tester, 'Greek yogurt');
+      await tester.tap(find.byIcon(Icons.close));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('1 selected'), findsNothing);
+      expect(find.byIcon(Icons.check_box_outline_blank), findsNothing);
+    });
+
+    testWidgets('deleting removes exactly the selected foods and offers undo', (
+      WidgetTester tester,
+    ) async {
+      // The harness feeds the library as a fixed, non-reactive stream (fake
+      // async cannot drive real sqlite change notifications), so the list
+      // itself never visibly shrinks in this test regardless of whether the
+      // delete worked. What can be checked, and what actually matters, is the
+      // real row underneath — this reads the database directly rather than
+      // trusting a UI that structurally cannot re-render here.
+      final HearthDatabase db = await openFoods(
+        tester,
+        foods: <Food>[yogurt(), chicken()],
+      );
+      final FoodStore store = FoodStore(db);
+
+      await select(tester, 'Greek yogurt');
+      await tester.tap(
+        find.widgetWithIcon(IconButton, Icons.delete_outline).last,
+      );
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('Deleted 1 food'), findsOneWidget);
+      expect(find.text('Undo'), findsOneWidget);
+      // Back to ordinary browsing, not still in selection mode.
+      expect(find.text('1 selected'), findsNothing);
+
+      // The one selected is actually gone; the one never touched is not.
+      expect((await store.byId('food-yogurt'))!.isDeleted, isTrue);
+      expect((await store.byId('food-chicken'))!.isDeleted, isFalse);
+
+      await tester.tap(find.text('Undo'));
+      await pumpFrames(tester, frames: 12);
+
+      // Soft-deleted (§4): undo is a real restore, not a re-creation.
+      expect((await store.byId('food-yogurt'))!.isDeleted, isFalse);
+    });
+
+    testWidgets('deleting several at once names the count', (
+      WidgetTester tester,
+    ) async {
+      final HearthDatabase db = await openFoods(
+        tester,
+        foods: <Food>[yogurt(), chicken()],
+      );
+      final FoodStore store = FoodStore(db);
+
+      await select(tester, 'Greek yogurt');
+      await tester.tap(find.text('Chicken breast'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(
+        find.widgetWithIcon(IconButton, Icons.delete_outline).last,
+      );
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('Deleted 2 foods'), findsOneWidget);
+      expect((await store.byId('food-yogurt'))!.isDeleted, isTrue);
+      expect((await store.byId('food-chicken'))!.isDeleted, isTrue);
+    });
+
+    testWidgets('a plain tap still opens the food when nobody is selecting', (
+      WidgetTester tester,
+    ) async {
+      // The regression this whole feature could have introduced: FoodCard now
+      // takes an onTap override, and getting the default wrong would break
+      // the single most common thing this screen does.
+      await openFoods(tester, foods: <Food>[yogurt()]);
+
+      await tester.tap(find.text('Greek yogurt'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('Edit food'), findsOneWidget);
     });
   });
 }

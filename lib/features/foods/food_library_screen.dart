@@ -31,10 +31,55 @@ class FoodLibraryScreen extends ConsumerStatefulWidget {
 class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
   final TextEditingController _search = TextEditingController();
 
+  /// Which foods are picked for a batch delete. Empty means normal browsing;
+  /// selection mode is however many of these there are, not a separate flag —
+  /// there is no state a flag could disagree with the set about.
+  final Set<String> _selected = <String>{};
+
   @override
   void dispose() {
     _search.dispose();
     super.dispose();
+  }
+
+  /// Long-press starts selecting; a tap while selecting adds to or removes
+  /// from it. Both are this one toggle — long-pressing an empty selection is
+  /// indistinguishable from starting one.
+  void _toggle(String id) => setState(() {
+    if (!_selected.add(id)) _selected.remove(id);
+  });
+
+  /// Deletes everything selected, with one undo that restores all of them.
+  ///
+  /// No confirmation dialog: long-press, then a tap per item, then a deliberate
+  /// tap on Delete is already three distinct gestures — more than the swipe
+  /// and tap that a single delete asks for without one. The safety net is the
+  /// same as a single delete's: a real soft-delete restore, not a re-creation.
+  Future<void> _deleteSelected() async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final List<String> ids = _selected.toList(growable: false);
+    final int count = ids.length;
+
+    await Future.wait(
+      ids.map((String id) => ref.read(foodRepositoryProvider).delete(id)),
+    );
+    if (!mounted) return;
+
+    setState(() => _selected.clear());
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(count == 1 ? 'Deleted 1 food' : 'Deleted $count foods'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {
+            for (final String id in ids) {
+              ref.read(foodRepositoryProvider).restore(id);
+            }
+          },
+        ),
+      ),
+    );
   }
 
   List<Food> _filter(List<Food> foods) {
@@ -98,7 +143,31 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
               children: <Widget>[
                 Padding(
                   padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
-                  child: Text('Foods', style: context.text.recipeTitle),
+                  child: _selected.isEmpty
+                      ? Text('Foods', style: context.text.recipeTitle)
+                      : Row(
+                          children: <Widget>[
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              tooltip: 'Cancel selecting',
+                              onPressed: () =>
+                                  setState(() => _selected.clear()),
+                            ),
+                            Expanded(
+                              child: Text(
+                                '${_selected.length} selected',
+                                style: context.text.recipeTitle,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              tooltip:
+                                  'Delete ${_selected.length} selected foods',
+                              color: colors.error,
+                              onPressed: _deleteSelected,
+                            ),
+                          ],
+                        ),
                 ),
                 Padding(
                   padding: EdgeInsets.all(gutter),
@@ -152,6 +221,9 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
                             // when the list shifts.
                             key: ValueKey<String>(food.id),
                             food: food,
+                            selecting: _selected.isNotEmpty,
+                            selected: _selected.contains(food.id),
+                            onToggle: _toggle,
                           ),
                           const SizedBox(height: HearthSpacing.sm),
                         ],
@@ -169,50 +241,109 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
 }
 
 class _DeletableFood extends ConsumerWidget {
-  const _DeletableFood({required this.food, super.key});
+  const _DeletableFood({
+    required this.food,
+    required this.selecting,
+    required this.selected,
+    required this.onToggle,
+    super.key,
+  });
 
   final Food food;
+  final bool selecting;
+  final bool selected;
+  final ValueChanged<String> onToggle;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => SwipeToDelete(
-    name: food.name,
-    onDelete: () => ref.read(foodRepositoryProvider).delete(food.id),
-    onRestore: () => ref.read(foodRepositoryProvider).restore(food.id),
-    child: FoodCard(food: food),
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Long-press still starts a selection while one is already running: it is
+    // just a toggle on an item that happens to be unselected.
+    if (selecting) {
+      return FoodCard(
+        food: food,
+        selecting: true,
+        selected: selected,
+        onTap: () => onToggle(food.id),
+        onLongPress: () => onToggle(food.id),
+      );
+    }
+    return SwipeToDelete(
+      name: food.name,
+      onDelete: () => ref.read(foodRepositoryProvider).delete(food.id),
+      onRestore: () => ref.read(foodRepositoryProvider).restore(food.id),
+      child: FoodCard(food: food, onLongPress: () => onToggle(food.id)),
+    );
+  }
 }
 
 /// One food in the library list.
 class FoodCard extends StatelessWidget {
-  const FoodCard({required this.food, super.key});
+  const FoodCard({
+    required this.food,
+    this.onTap,
+    this.onLongPress,
+    this.selecting = false,
+    this.selected = false,
+    super.key,
+  });
 
   final Food food;
+
+  /// Overrides the default tap-to-open, for a screen that has long-pressed
+  /// its way into picking foods instead of reading one.
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+
+  /// Whether a batch of these is being picked right now, and whether this one
+  /// is in it. [selecting] is a property of the *screen*; every card on it
+  /// gets it, not just the one that was long-pressed.
+  final bool selecting;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     final HearthTextStyles text = context.text;
     final ServingOption? serving = food.defaultServing;
+    final bool highlighted = selecting && selected;
+    final VoidCallback open = onTap ?? () => context.push('/food/${food.id}');
 
     return Semantics(
       button: true,
-      label: '${food.name}. ${_summary(food)}',
-      onTap: () => context.push('/food/${food.id}'),
+      selected: selecting ? selected : null,
+      label: selecting
+          ? '${food.name}. ${selected ? 'Selected' : 'Not selected'}.'
+          : '${food.name}. ${_summary(food)}',
+      onTap: open,
+      onLongPress: onLongPress,
       excludeSemantics: true,
       child: Material(
-        color: colors.surface,
+        color: highlighted ? colors.surfaceSunken : colors.surface,
         borderRadius: BorderRadius.circular(HearthRadius.md),
         child: InkWell(
-          onTap: () => context.push('/food/${food.id}'),
+          onTap: open,
+          onLongPress: onLongPress,
           borderRadius: BorderRadius.circular(HearthRadius.md),
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(HearthRadius.md),
-              border: Border.all(color: colors.outline),
+              border: Border.all(
+                color: highlighted ? colors.outlineStrong : colors.outline,
+              ),
             ),
             padding: const EdgeInsets.all(HearthSpacing.md),
             child: Row(
               children: <Widget>[
+                if (selecting) ...<Widget>[
+                  // Never colour alone (§6.3): the icon itself, not just the
+                  // row's tint, carries whether this one is picked.
+                  Icon(
+                    selected ? Icons.check_box : Icons.check_box_outline_blank,
+                    size: 20,
+                    color: selected ? colors.accent : colors.textMuted,
+                  ),
+                  const SizedBox(width: HearthSpacing.md),
+                ],
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
