@@ -152,6 +152,22 @@ class FoodStore {
     );
   }
 
+  /// Puts a soft-deleted food back.
+  ///
+  /// The undo half of [softDelete]. Nothing was physically removed, so this is
+  /// a genuine restore: same id, same serving options, and every meal logged
+  /// against it still resolves.
+  Future<void> restore(String id, {required DateTime updatedAt}) async {
+    await (_db.update(
+      _db.foods,
+    )..where(($FoodsTable f) => f.id.equals(id))).write(
+      FoodsCompanion(
+        isDeleted: const Value<bool>(false),
+        updatedAt: Value<DateTime>(updatedAt),
+      ),
+    );
+  }
+
   Future<List<Food>> _assemble(List<FoodRow> rows) async {
     if (rows.isEmpty) return const <Food>[];
     final List<String> ids = rows.map((FoodRow r) => r.id).toList();

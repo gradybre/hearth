@@ -44,6 +44,59 @@ Future<void> openFoods(
 }
 
 void main() {
+  group('removing a food from the library', () {
+    Future<void> swipe(WidgetTester tester, double dx) async {
+      final Offset row = tester.getCenter(find.byType(FoodCard).first);
+      await tester.dragFrom(Offset(200, row.dy), Offset(dx, 0));
+      await pumpFrames(tester, frames: 12);
+    }
+
+    testWidgets('delete is hidden until the card is swiped aside', (
+      WidgetTester tester,
+    ) async {
+      await openFoods(tester, foods: <Food>[yogurt()]);
+
+      final Finder delete = find.widgetWithText(TextButton, 'Delete');
+      expect(tester.widget<TextButton>(delete).onPressed, isNull);
+
+      await swipe(tester, -120);
+      expect(tester.widget<TextButton>(delete).onPressed, isNotNull);
+    });
+
+    testWidgets('deleting offers an undo, because it is only a hide', (
+      WidgetTester tester,
+    ) async {
+      await openFoods(tester, foods: <Food>[yogurt()]);
+
+      await swipe(tester, -120);
+      await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('Deleted Greek yogurt'), findsOneWidget);
+      // Soft-deleted (§4): undo restores the same food, so every meal already
+      // logged against it keeps resolving.
+      expect(find.text('Undo'), findsOneWidget);
+    });
+
+    testWidgets('the row closes itself once the food is gone', (
+      WidgetTester tester,
+    ) async {
+      // Keyed by food id, so a deletion cannot hand its open state to whatever
+      // moves up into its place.
+      await openFoods(tester, foods: <Food>[yogurt(), chicken()]);
+
+      await swipe(tester, -120);
+      await tester.tap(find.widgetWithText(TextButton, 'Delete').first);
+      await pumpFrames(tester, frames: 12);
+
+      for (final TextButton button in tester.widgetList<TextButton>(
+        find.widgetWithText(TextButton, 'Delete'),
+      )) {
+        expect(button.onPressed, isNull);
+      }
+    });
+  });
+
   group('empty library', () {
     testWidgets('says so, and points at both ways in', (
       WidgetTester tester,

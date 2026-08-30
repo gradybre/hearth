@@ -7,6 +7,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
+import '../../app/widgets/swipe_to_delete.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/text/text_normaliser.dart';
@@ -145,7 +146,13 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
                         _NoMatches(query: _search.text, gutter: gutter)
                       else
                         for (final Food food in visible) ...<Widget>[
-                          FoodCard(food: food),
+                          _DeletableFood(
+                            // Keyed by food, not by position: an unkeyed row
+                            // hands its swiped-open state to whatever moves up
+                            // when the list shifts.
+                            key: ValueKey<String>(food.id),
+                            food: food,
+                          ),
                           const SizedBox(height: HearthSpacing.sm),
                         ],
                       ExternalFoodResults(query: _search.text, onSaved: null),
@@ -159,6 +166,20 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
       ),
     );
   }
+}
+
+class _DeletableFood extends ConsumerWidget {
+  const _DeletableFood({required this.food, super.key});
+
+  final Food food;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => SwipeToDelete(
+    name: food.name,
+    onDelete: () => ref.read(foodRepositoryProvider).delete(food.id),
+    onRestore: () => ref.read(foodRepositoryProvider).restore(food.id),
+    child: FoodCard(food: food),
+  );
 }
 
 /// One food in the library list.

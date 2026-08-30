@@ -85,6 +85,26 @@ class FoodRepository {
     });
   }
 
+  /// Undoes a [delete].
+  ///
+  /// A real restore, not a re-creation: the food was only hidden, so it comes
+  /// back with the same id and every meal logged against it still resolves.
+  Future<void> restore(String id) {
+    final DateTime now = _now();
+    return _db.transaction(() async {
+      await _store.restore(id, updatedAt: now);
+      final Food? restored = await _store.byId(id);
+      if (restored == null) return;
+      await _queue.enqueue(
+        entityTable: entityTable,
+        entityId: id,
+        operation: WriteOperation.upsert,
+        payload: FoodMapper.toJson(restored, updatedAt: now),
+        queuedAt: now,
+      );
+    });
+  }
+
   Food _withHousehold(Food food) => Food(
     id: food.id,
     name: food.name,

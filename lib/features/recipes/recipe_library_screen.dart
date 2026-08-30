@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,6 +7,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
+import '../../app/widgets/swipe_to_delete.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/recipes/recipe_query.dart';
 import 'recipe_filter_bar.dart';
@@ -213,7 +213,7 @@ class _RecipeList extends StatelessWidget {
     itemCount: recipes.length,
     separatorBuilder: (BuildContext context, int index) =>
         const SizedBox(height: HearthSpacing.md),
-    itemBuilder: (BuildContext context, int index) => _SwipeToDelete(
+    itemBuilder: (BuildContext context, int index) => _DeletableRecipe(
       // Keyed by recipe, not by position. Without this the element at an index
       // is reused when the list shifts, so deleting a recipe handed its
       // swiped-open state straight to whatever moved up into its place.
@@ -223,121 +223,18 @@ class _RecipeList extends StatelessWidget {
   );
 }
 
-/// Swipe a recipe aside to reveal the way to delete it.
-///
-/// Two deliberate actions, not one: the swipe uncovers a button, and the
-/// button has to be pressed. A single flick removing something from a shared
-/// library would be far too easy to do by accident while scrolling with messy
-/// hands.
-///
-/// Deleting is soft (§4) — the recipe leaves the library, and every meal
-/// already logged against it keeps its frozen snapshot and its numbers.
-class _SwipeToDelete extends ConsumerStatefulWidget {
-  const _SwipeToDelete({required this.recipe, super.key});
+class _DeletableRecipe extends ConsumerWidget {
+  const _DeletableRecipe({required this.recipe, super.key});
 
   final Recipe recipe;
 
   @override
-  ConsumerState<_SwipeToDelete> createState() => _SwipeToDeleteState();
-}
-
-class _SwipeToDeleteState extends ConsumerState<_SwipeToDelete> {
-  /// How far a swipe has to travel before it counts.
-  static const double _swipeDistance = 40;
-
-  bool _open = false;
-  double _dragged = 0;
-
-  Future<void> _delete() async {
-    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    final String title = widget.recipe.title;
-
-    await ref.read(recipeRepositoryProvider).delete(widget.recipe.id);
-    if (!mounted) return;
-
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('Deleted $title'),
-        // Soft-deleted, so undo is a real restore rather than a re-creation —
-        // the recipe comes back with the same id and every log still pointing
-        // at it.
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () =>
-              ref.read(recipeRepositoryProvider).restore(widget.recipe.id),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-
-    return Semantics(
-      // Reachable without the gesture: a swipe is not something a screen
-      // reader user can discover (§6.3).
-      customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
-        CustomSemanticsAction(label: 'Delete ${widget.recipe.title}'): _delete,
-      },
-      // The gesture wraps the whole row, not the sliding card.
-      //
-      // Inside the slide, its hit area stayed where the card started — so once
-      // the card moved left, the part of it you could see was no longer the
-      // part you could grab, and swiping back did nothing.
-      child: GestureDetector(
-        onHorizontalDragStart: (_) => _dragged = 0,
-        onHorizontalDragUpdate: (DragUpdateDetails details) =>
-            _dragged += details.primaryDelta ?? 0,
-        onHorizontalDragEnd: (DragEndDetails details) {
-          // Distance as well as speed. Keying off velocity alone meant a slow,
-          // deliberate swipe did nothing — which is exactly how someone swipes
-          // when they mean it.
-          final double velocity = details.primaryVelocity ?? 0;
-          final bool left = _dragged < -_swipeDistance || velocity < -300;
-          final bool right = _dragged > _swipeDistance || velocity > 300;
-          if (left && !_open) setState(() => _open = true);
-          if (right && _open) setState(() => _open = false);
-        },
-        child: Stack(
-          children: <Widget>[
-            Positioned.fill(
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: Padding(
-                  padding: const EdgeInsets.only(right: HearthSpacing.sm),
-                  // Hidden from assistive tech while it is covered by the
-                  // card. Announcing a control nobody can reach — and whose
-                  // reveal is a gesture a screen reader user cannot discover —
-                  // is worse than not announcing it: the custom action above
-                  // is how they delete, and it works whatever the card is
-                  // doing (§6.3).
-                  child: ExcludeSemantics(
-                    excluding: !_open,
-                    child: TextButton.icon(
-                      onPressed: _open ? _delete : null,
-                      style: TextButton.styleFrom(
-                        foregroundColor: colors.error,
-                      ),
-                      icon: const Icon(Icons.delete_outline, size: 18),
-                      label: const Text('Delete'),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            AnimatedSlide(
-              offset: _open ? const Offset(-0.32, 0) : Offset.zero,
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              child: RecipeCard(recipe: widget.recipe),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context, WidgetRef ref) => SwipeToDelete(
+    name: recipe.title,
+    onDelete: () => ref.read(recipeRepositoryProvider).delete(recipe.id),
+    onRestore: () => ref.read(recipeRepositoryProvider).restore(recipe.id),
+    child: RecipeCard(recipe: recipe),
+  );
 }
 
 /// One recipe in the library list.
