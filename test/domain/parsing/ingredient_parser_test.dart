@@ -157,6 +157,41 @@ void main() {
     });
   });
 
+  group('a range resolves to its midpoint', () {
+    // Brendan's call: a cook still has to measure *something* from a range,
+    // and the midpoint is the least-biased single guess — unlike either
+    // endpoint, it does not systematically over- or under-count macros (or
+    // the shopping list) across every ranged ingredient in the library.
+    test('a hyphenated range of whole numbers', () {
+      final ParsedIngredient p = IngredientParser.parse('1-2 tbsp hot sauce');
+      expect(p.quantity!.amountIn(Units.tbsp), closeTo(1.5, 1e-12));
+      expect(p.name, 'hot sauce');
+    });
+
+    test('two fractions separated by a space, with no connector at all', () {
+      // The exact case reported from a real AI-imported recipe: the raw line
+      // was "1/4 1/2 small white onion", with no hyphen at all.
+      final ParsedIngredient p = IngredientParser.parse(
+        '1/4 1/2 small white onion',
+      );
+      expect(p.quantity!.amountIn(Units.item), closeTo(0.375, 1e-12));
+      expect(p.name, 'small white onion');
+    });
+
+    test('a hyphenated range of fractions', () {
+      final ParsedIngredient p = IngredientParser.parse(
+        '1/4-1/2 cup chopped onion',
+      );
+      expect(p.quantity!.amountIn(Units.cup), closeTo(0.375, 1e-12));
+      expect(p.name, 'chopped onion');
+    });
+
+    test('an en dash works the same as a hyphen', () {
+      final ParsedIngredient p = IngredientParser.parse('2–4 cloves garlic');
+      expect(p.quantity!.amountIn(Units.clove), 3);
+    });
+  });
+
   group('conservative failure', () {
     test('an unquantified line keeps its whole text as the name', () {
       final ParsedIngredient p = IngredientParser.parse('olive oil');
@@ -164,23 +199,14 @@ void main() {
       expect(p.name, 'olive oil');
     });
 
-    test('a range stays unquantified rather than picking a number', () {
-      // "1-2 tbsp" is a decision for the cook; guessing would silently
-      // corrupt macros and the shopping list.
-      final ParsedIngredient p = IngredientParser.parse('1-2 tbsp hot sauce');
+    test('a unit glued to a number with no space is left unquantified', () {
+      // "8" out of "8oz" is not a second quantity — averaging into it would
+      // invent a number with nothing behind it, so the whole line is kept as
+      // the name instead, same as any other pattern this parser doesn't
+      // recognise.
+      final ParsedIngredient p = IngredientParser.parse('2 8oz cans tomatoes');
       expect(p.quantity, isNull);
-      expect(p.name, contains('hot sauce'));
-    });
-
-    test('a second number right after the first is not a quantity either', () {
-      // Reported from a real AI-imported recipe: "1/4 1/2 small white onion"
-      // parsed as quantity 1/4, name "1/2 small white onion" — displayed as
-      // "1/4 1/2 small white onion", the same nonsense as the raw line.
-      final ParsedIngredient p = IngredientParser.parse(
-        '1/4 1/2 small white onion',
-      );
-      expect(p.quantity, isNull);
-      expect(p.name, '1/4 1/2 small white onion');
+      expect(p.name, '2 8oz cans tomatoes');
     });
 
     test('an unknown unit word stays part of the name', () {

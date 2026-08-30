@@ -127,13 +127,38 @@ abstract final class IngredientParser {
       final double? amount = _parseAmount(amountMatch.group(1)!);
       String rest = _tidy(working.substring(amountMatch.end));
 
-      // A second number immediately following the first ("1/4 1/2 small
-      // onion") is not two quantities cooperating — it is a line this parser
-      // does not actually understand, with the first number grabbed on a
-      // false match. Picking one and discarding the other would risk exactly
-      // the wrong-quantity failure this parser exists to avoid, so — same as
-      // a range — the whole line is left as an unquantified name instead.
-      final bool doubleAmount = _leadingAmount.hasMatch(rest);
+      // A second, standalone number immediately following the first
+      // ("1/4 1/2 small onion", or "1/4-1/2 small onion" — _tidy above
+      // already dropped the connecting hyphen) is read as the other end of
+      // a range, the same way "1-2 tbsp" always has been: a recipe writes a
+      // range because either end is a fine amount to actually measure, so
+      // the midpoint is a defensible single number rather than a blank the
+      // cook has to fill in by hand themselves.
+      //
+      // "Standalone" is what keeps this from misreading a unit glued to a
+      // number with no space — the "8" of "8oz cans" is not a second
+      // quantity, and averaging into it would invent a number with nothing
+      // behind it. That case is left unquantified instead, same as before.
+      double? effectiveAmount = amount;
+      final RegExpMatch? secondMatch = amount == null
+          ? null
+          : _leadingAmount.firstMatch(rest);
+      if (secondMatch != null) {
+        final String secondToken = secondMatch.group(1)!;
+        final int tokenEnd = secondMatch.start + secondToken.length;
+        final bool standalone =
+            tokenEnd >= rest.length || rest[tokenEnd] == ' ';
+
+        final double? secondAmount = standalone
+            ? _parseAmount(secondToken)
+            : null;
+        if (!standalone || secondAmount == null) {
+          effectiveAmount = null;
+        } else {
+          effectiveAmount = (amount! + secondAmount) / 2;
+          rest = _tidy(rest.substring(secondMatch.end));
+        }
+      }
 
       Unit? unit;
       double multiplier = 1;
@@ -157,11 +182,14 @@ abstract final class IngredientParser {
         }
       }
 
-      if (amount == null || doubleAmount) {
+      if (effectiveAmount == null) {
         quantity = null;
       } else {
         // A bare number with no unit is a count: "2 eggs".
-        quantity = Quantity.of(amount * multiplier, unit ?? Units.item);
+        quantity = Quantity.of(
+          effectiveAmount * multiplier,
+          unit ?? Units.item,
+        );
         working = rest.isEmpty ? working : rest;
       }
     }
@@ -175,13 +203,23 @@ abstract final class IngredientParser {
     );
   }
 
+  /// A hyphenated or en-dash range: "1-2", "3–4".
+  static final RegExp _hyphenRange = RegExp(r'^(\d+)\s*[-–]\s*(\d+)$');
+
   /// Parses a lone amount token into a number.
   ///
-  /// Returns null for a range like "1-2": the honest answer is that the cook
-  /// has to choose, so the line stays unquantified and visible.
+  /// A range like "1-2" resolves to its midpoint: a cook still has to
+  /// measure *something*, and the midpoint is the least-biased single guess
+  /// — unlike either endpoint, it does not systematically over- or
+  /// under-count macros (or the shopping list) across every ranged
+  /// ingredient in the library.
   static double? _parseAmount(String token) {
     final String text = token.trim();
-    if (RegExp(r'^\d+\s*[-–]\s*\d+$').hasMatch(text)) return null;
+    final RegExpMatch? range = _hyphenRange.firstMatch(text);
+    if (range != null) {
+      return (double.parse(range.group(1)!) + double.parse(range.group(2)!)) /
+          2;
+    }
 
     // Whole number followed by a vulgar fraction: "1½".
     final RegExpMatch? mixedVulgar = RegExp(
