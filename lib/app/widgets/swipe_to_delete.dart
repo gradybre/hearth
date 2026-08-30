@@ -4,6 +4,7 @@ import 'package:flutter/semantics.dart';
 import '../theme/hearth_colors.dart';
 import '../theme/hearth_spacing.dart';
 import '../theme/hearth_theme.dart';
+import 'undo_snackbar.dart';
 
 /// Swipe a row aside to uncover the way to delete it.
 ///
@@ -59,12 +60,10 @@ class _SwipeToDeleteState extends State<SwipeToDelete> {
     if (!mounted) return;
 
     setState(() => _open = false);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('Deleted $name'),
-        action: SnackBarAction(label: 'Undo', onPressed: widget.onRestore),
-      ),
+    showUndoSnackBar(
+      messenger,
+      message: 'Deleted $name',
+      onUndo: widget.onRestore,
     );
   }
 

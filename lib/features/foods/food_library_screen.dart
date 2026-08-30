@@ -8,6 +8,7 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
 import '../../app/widgets/swipe_to_delete.dart';
+import '../../app/widgets/undo_snackbar.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/text/text_normaliser.dart';
@@ -66,19 +67,14 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
     if (!mounted) return;
 
     setState(() => _selected.clear());
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(count == 1 ? 'Deleted 1 food' : 'Deleted $count foods'),
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () {
-            for (final String id in ids) {
-              ref.read(foodRepositoryProvider).restore(id);
-            }
-          },
-        ),
-      ),
+    showUndoSnackBar(
+      messenger,
+      message: count == 1 ? 'Deleted 1 food' : 'Deleted $count foods',
+      onUndo: () {
+        for (final String id in ids) {
+          ref.read(foodRepositoryProvider).restore(id);
+        }
+      },
     );
   }
 
