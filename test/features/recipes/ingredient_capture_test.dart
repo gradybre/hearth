@@ -129,6 +129,32 @@ void main() {
     expect(find.textContaining('Olive oil'), findsWidgets);
   });
 
+  testWidgets('a matched food can be edited in place, not just replaced', (
+    WidgetTester tester,
+  ) async {
+    // Reported bug: reopening the picker on an already-matched ingredient
+    // only offered a different food to switch to — no way to fix something
+    // wrong with the food already there without abandoning the match.
+    await openIngredientPicker(tester, foods: <Food>[oliveOil()]);
+
+    // Select the library food as this line's match.
+    await tester.tap(find.textContaining('Olive oil'));
+    await pumpFrames(tester);
+
+    // Reopen the picker on the now-matched line.
+    await tester.tap(find.text('olive oil'));
+    await pumpFrames(tester);
+
+    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await pumpFrames(tester);
+
+    expect(find.text('Edit food'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byType(TextField).first).controller?.text,
+      'Olive oil',
+    );
+  });
+
   testWidgets('a food not yet known is checked before it is used', (
     WidgetTester tester,
   ) async {

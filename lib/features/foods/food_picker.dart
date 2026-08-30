@@ -76,6 +76,19 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
     Navigator.of(context).pop(foodId);
   }
 
+  /// Opens the food's own editor without leaving this sheet.
+  ///
+  /// The sheet only ever offered a way to pick a *different* food for the
+  /// line — reasonable when nothing existed yet, wrong once something does:
+  /// a matched food with the wrong serving or a macro worth correcting had no
+  /// way to be fixed without abandoning the match, going to the Foods tab,
+  /// finding it there, and coming back. This edits it in place instead. The
+  /// match itself is untouched — editing changes what the food *is*, not
+  /// which food the line points at, so there is nothing to hand back here.
+  Future<void> _editFood(String foodId) async {
+    await context.push<void>('/food/$foodId');
+  }
+
   List<Food> _filter(List<Food> foods) {
     final String needle = normaliseKey(_search.text);
     if (needle.isEmpty) return foods;
@@ -209,6 +222,9 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
                               _FoodOption(
                                 food: food,
                                 selected: food.id == widget.currentFoodId,
+                                onEdit: food.id == widget.currentFoodId
+                                    ? () => _editFood(food.id)
+                                    : null,
                               ),
                               const SizedBox(height: HearthSpacing.sm),
                             ],
@@ -233,10 +249,14 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
 }
 
 class _FoodOption extends StatelessWidget {
-  const _FoodOption({required this.food, required this.selected});
+  const _FoodOption({required this.food, required this.selected, this.onEdit});
 
   final Food food;
   final bool selected;
+
+  /// Set only on the currently-matched option: editing makes sense for the
+  /// food already attached to this line, not for every alternative on offer.
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -295,6 +315,19 @@ class _FoodOption extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (onEdit != null)
+                  Semantics(
+                    button: true,
+                    label: "Edit ${food.name}'s details",
+                    onTap: onEdit,
+                    excludeSemantics: true,
+                    child: IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                      tooltip: 'Edit this food',
+                      color: colors.textSecondary,
+                      onPressed: onEdit,
+                    ),
+                  ),
               ],
             ),
           ),
