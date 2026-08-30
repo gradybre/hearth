@@ -2,10 +2,12 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/units/quantity.dart';
 import '../../domain/units/unit.dart';
+import '../../domain/units/unit_converter.dart';
 import 'nutrition_source.dart';
 
 /// Open Food Facts, the second link in the chain (spec §5.5).
@@ -205,14 +207,38 @@ class OpenFoodFactsSource implements NutritionSource {
         double.tryParse(match.group(1)!.replaceAll(',', '.'));
     if (amount == null || amount <= 0) return null;
 
+    // Open Food Facts' per-100 figures apply against 100 g or 100 ml
+    // interchangeably, so the same ratio holds either way — computed from the
+    // metric amount actually on record, before the unit is re-expressed below.
+    final Macros macros = per100g.scaledBy(amount / 100);
+
+    if (!isVolume) {
+      return <ServingOption>[
+        ServingOption(
+          id: 'off:$code:serving',
+          label: text,
+          amount: Quantity.of(amount, Units.gram),
+          macros: macros,
+        ),
+      ];
+    }
+
+    // Open Food Facts states volume in millilitres regardless of how the pack
+    // itself is labelled — a Swanson tin that says "1 cup, 4 servings per
+    // container" still reports "1 serving (240 ml)". Re-expressed in cups,
+    // tablespoons or teaspoons, whichever reads as a whole-ish number, so the
+    // scan review screen — and every later view of the saved food — shows
+    // what is printed on the box rather than OFF's metric bookkeeping.
+    final Quantity imperial = UnitConverter.normalise(
+      Quantity.of(amount, Units.millilitre),
+      system: UnitSystem.imperial,
+    );
     return <ServingOption>[
       ServingOption(
         id: 'off:$code:serving',
-        label: text,
-        amount: Quantity.of(amount, isVolume ? Units.millilitre : Units.gram),
-        // Open Food Facts stores per-100 figures against 100 g or 100 ml
-        // interchangeably, so the same ratio applies either way.
-        macros: per100g.scaledBy(amount / 100),
+        label: QuantityFormat.format(imperial),
+        amount: imperial,
+        macros: macros,
       ),
     ];
   }

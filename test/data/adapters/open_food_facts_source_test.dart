@@ -227,7 +227,9 @@ void main() {
       final NutritionMatch match = (await off.byBarcode('051000132796'))!;
       final ServingOption first = match.food.servingOptions.first;
 
-      expect(first.label, '1 serving (240 ml)');
+      // Not OFF's raw "1 serving (240 ml)" — see "a metric volume serving
+      // reads the way a US kitchen reads it" below for that.
+      expect(first.label, '1 cup');
       expect(first.amount.amountIn(Units.millilitre), 240);
       expect(first.macros.kcal, closeTo(15, 0.01));
     });
@@ -266,6 +268,37 @@ void main() {
           .first;
       expect(first.amount.amountIn(Units.millilitre), 250);
     });
+
+    test(
+      'a metric volume serving reads the way a US kitchen reads it',
+      () async {
+        // Real Swanson chicken broth data: Open Food Facts states the serving
+        // as "1 serving (240 ml)" regardless of what the tin itself says — and
+        // the tin says "1 cup". 100 g led before this, then the raw "240 ml"
+        // after that was fixed; a US household still had to do the arithmetic
+        // in their head either way.
+        final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+          'status': 1,
+          'product': <String, Object?>{
+            ...product(name: 'Chicken broth', kcal: 6.25),
+            'serving_size': '1 serving (240 ml)',
+            'serving_quantity': 240,
+          },
+        });
+
+        final ServingOption first = (await off.byBarcode('051000132796'))!
+            .food
+            .servingOptions
+            .first;
+
+        expect(first.label, '1 cup');
+        expect(first.amount.preferredUnit, Units.cup);
+        // The maths must not move with the display: still 240 ml underneath,
+        // and still the same 15 kcal Swanson's own label states.
+        expect(first.amount.amountIn(Units.millilitre), 240);
+        expect(first.macros.kcal, closeTo(15, 0.01));
+      },
+    );
 
     test('a serving nobody can weigh is still refused', () async {
       final OpenFoodFactsSource off = sourceReturning(<String, Object?>{

@@ -19,6 +19,17 @@ void main() {
       expect(QuantityFormat.format(Quantity.of(0, Units.cup)), '0 cups');
     });
 
+    test('a converted amount a hair over one whole is still singular', () {
+      // A real US Swanson chicken broth serving: Open Food Facts states it as
+      // 240 ml, which is 1.0144 cup — greater than one, but it displays as
+      // "1". English pluralises off what is on screen, not off the unrounded
+      // number. Regression: this printed "1 cups".
+      expect(
+        QuantityFormat.format(Quantity.of(240, Units.millilitre)),
+        '1 cup',
+      );
+    });
+
     test('common fractions get glyphs', () {
       expect(QuantityFormat.format(Quantity.of(0.5, Units.cup)), '½ cup');
       expect(QuantityFormat.format(Quantity.of(0.25, Units.tsp)), '¼ tsp');

@@ -69,8 +69,26 @@ abstract final class QuantityFormat {
   static String formatIn(Quantity quantity, Unit unit) {
     final double amount = quantity.amountIn(unit);
     final String number = formatAmount(amount, unit);
-    final String label = _label(unit, amount);
+    // Pluralisation has to agree with what [number] actually shows, not with
+    // the unrounded amount. 240 ml is 1.0144 cup — greater than one, but it
+    // *displays* as "1", and "1 cups" is what happens when the two disagree.
+    final String label = _label(unit, _displayedAmount(amount));
     return label.isEmpty ? number : '$number $label';
+  }
+
+  /// The amount as it will actually print, snapped to a whole number within
+  /// the same tolerance the cooking-fraction glyphs use.
+  ///
+  /// A source's conversion factor rarely lands on a clean number — 240 ml of
+  /// broth is 1.0144 US cup — and the display layer already hides that by
+  /// rounding to "1". Pluralisation has to see the same rounded value or it
+  /// disagrees with the number sitting right next to it.
+  static double _displayedAmount(double amount) {
+    final double whole = amount.floorToDouble();
+    final double remainder = amount - whole;
+    if (remainder <= _fractionTolerance) return whole;
+    if (remainder >= 1 - _fractionTolerance) return whole + 1;
+    return amount;
   }
 
   /// Formats a bare number the way [unit] should read.
