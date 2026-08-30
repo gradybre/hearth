@@ -89,17 +89,48 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
     await context.push<void>('/food/$foodId');
   }
 
-  List<Food> _filter(List<Food> foods) {
-    final String needle = normaliseKey(_search.text);
-    if (needle.isEmpty) return foods;
-    return foods
-        .where(
-          (Food food) =>
-              normaliseKey(food.name).contains(needle) ||
-              normaliseKey(food.brand ?? '').contains(needle) ||
-              needle.contains(normaliseKey(food.name)),
-        )
-        .toList(growable: false);
+  /// The library, filtered and ranked by how well each food answers the
+  /// search box — not left in whatever order the database happens to return,
+  /// which buried real matches anywhere in a long list and made them
+  /// indistinguishable from not being there at all.
+  ///
+  /// Word overlap rather than substring: an ingredient's own wording and a
+  /// saved food's name often share every meaningful word without one
+  /// containing the other ("lean ground beef" vs. a food named "96/4 Ground
+  /// Beef"), and a `contains` check in either direction missed that entirely.
+  List<Food> _rank(List<Food> foods) {
+    final String query = _search.text;
+    if (normaliseKey(query).isEmpty) return _withCurrentFirst(foods);
+
+    final List<(Food, double)> scored = <(Food, double)>[
+      for (final Food food in foods)
+        (food, wordCoverage(query, '${food.name} ${food.brand ?? ''}')),
+    ];
+    final List<(Food, double)> matched = <(Food, double)>[
+      for (final (Food, double) entry in scored)
+        if (entry.$2 > 0) entry,
+    ]..sort(((Food, double) a, (Food, double) b) => b.$2.compareTo(a.$2));
+
+    return _withCurrentFirst(<Food>[
+      for (final (Food, double) entry in matched) entry.$1,
+    ]);
+  }
+
+  /// Whatever is already matched — an actual pick, or a strong suggestion
+  /// like a previously-used or remembered food — leads the list, so it is
+  /// never left to compete with an arbitrary sort order for the top spot.
+  List<Food> _withCurrentFirst(List<Food> foods) {
+    final String? currentId = widget.currentFoodId;
+    if (currentId == null) return foods;
+
+    final int index = foods.indexWhere((Food f) => f.id == currentId);
+    if (index <= 0) return foods;
+
+    return <Food>[
+      foods[index],
+      for (int i = 0; i < foods.length; i++)
+        if (i != index) foods[i],
+    ];
   }
 
   @override
@@ -148,6 +179,19 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
                               ),
                           ],
                         ),
+                        const SizedBox(height: HearthSpacing.xxs),
+                        // Makes an existing mechanic visible rather than
+                        // adding a new one: picking a food here already
+                        // writes to `ingredient_match` and auto-applies next
+                        // time this exact wording turns up (spec §5.3) — the
+                        // one thing missing was saying so.
+                        Text(
+                          'Picking a food remembers it as the default for '
+                          "this ingredient's wording next time.",
+                          style: context.text.metadata.copyWith(
+                            color: colors.textMuted,
+                          ),
+                        ),
                         const SizedBox(height: HearthSpacing.md),
                         Row(
                           children: <Widget>[
@@ -189,7 +233,7 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
                       error: (Object e, StackTrace s) =>
                           Center(child: Text('Could not read foods.\n$e')),
                       data: (List<Food> foods) {
-                        final List<Food> visible = _filter(foods);
+                        final List<Food> visible = _rank(foods);
                         if (visible.isEmpty) {
                           return ListView(
                             controller: controller,

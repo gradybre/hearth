@@ -145,6 +145,49 @@ abstract final class IngredientMatcher {
     }
     return used;
   }
+
+  /// The food most often matched to each ingredient name, across every
+  /// recipe in the library — spec §5.3's "previously-used" tier applied
+  /// household-wide rather than within one recipe.
+  ///
+  /// [previouslyUsedFrom] is first-seen-wins, which is right for its own job
+  /// of keeping repeated lines in *one* recipe consistent with each other —
+  /// there is no meaningful frequency signal within a single recipe. Here
+  /// there is: a food matched to "ground beef" in nine recipes out of ten is
+  /// a real household habit, and picking whichever recipe happened to load
+  /// first would throw that signal away.
+  static Map<String, String> mostUsedByName(
+    Iterable<(String name, String? foodId)> ingredients,
+  ) {
+    final Map<String, Map<String, int>> countsByName =
+        <String, Map<String, int>>{};
+
+    for (final (String name, String? foodId) in ingredients) {
+      if (foodId == null) continue;
+      final String key = normaliseKey(name);
+      if (key.isEmpty) continue;
+
+      final Map<String, int> counts = countsByName.putIfAbsent(
+        key,
+        () => <String, int>{},
+      );
+      counts[foodId] = (counts[foodId] ?? 0) + 1;
+    }
+
+    final Map<String, String> mostUsed = <String, String>{};
+    countsByName.forEach((String key, Map<String, int> counts) {
+      String bestId = counts.keys.first;
+      int bestCount = counts[bestId]!;
+      counts.forEach((String foodId, int count) {
+        if (count > bestCount) {
+          bestId = foodId;
+          bestCount = count;
+        }
+      });
+      mostUsed[key] = bestId;
+    });
+    return mostUsed;
+  }
 }
 
 /// A food offered by some source, with how much that source trusts it.

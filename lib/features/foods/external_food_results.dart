@@ -71,7 +71,10 @@ class ExternalFoodResults extends ConsumerWidget {
           ],
         ),
       ),
-      FoodSearchResults(:final List<NutritionMatch> matches) =>
+      FoodSearchResults(
+        :final List<NutritionMatch> matches,
+        :final bool hasMore,
+      ) =>
         matches.isEmpty
             ? Padding(
                 padding: const EdgeInsets.symmetric(vertical: HearthSpacing.lg),
@@ -102,6 +105,17 @@ class ExternalFoodResults extends ConsumerWidget {
                     Padding(
                       padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
                       child: _ExternalFood(match: match, onSaved: onSaved),
+                    ),
+                  // The old hard cap made "is it really not there" and "there
+                  // just wasn't room to show it" look identical. This is the
+                  // difference between them.
+                  if (hasMore)
+                    Center(
+                      child: TextButton(
+                        onPressed: () =>
+                            ref.read(foodSearchProvider.notifier).loadMore(),
+                        child: const Text('Show more'),
+                      ),
                     ),
                 ],
               ),

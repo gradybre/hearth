@@ -52,6 +52,7 @@ import '../domain/planning/day_progress.dart';
 import '../domain/planning/meal_plan.dart';
 import '../domain/planning/recent_log.dart';
 import '../domain/planning/week.dart';
+import '../domain/recipes/ingredient_matcher.dart';
 import '../domain/recipes/macro_calculator.dart';
 import '../domain/recipes/recipe_query.dart';
 import 'cook_timers.dart';
@@ -187,6 +188,20 @@ final FutureProvider<Map<String, String>> rememberedMatchesProvider =
       return ref
           .watch(ingredientMatchStoreProvider)
           .allFor(ref.watch(currentHouseholdIdProvider));
+    });
+
+/// The food most often matched to each ingredient name, across every recipe
+/// in the library (spec §5.3's "previously-used" tier, applied household-wide
+/// rather than within one recipe — see [IngredientMatcher.mostUsedByName]).
+final Provider<Map<String, String>> mostUsedFoodsProvider =
+    Provider<Map<String, String>>((Ref ref) {
+      final List<Recipe> recipes =
+          ref.watch(recipeLibraryProvider).value ?? const <Recipe>[];
+      return IngredientMatcher.mostUsedByName(<(String, String?)>[
+        for (final Recipe recipe in recipes)
+          for (final RecipeIngredient ingredient in recipe.allIngredients)
+            (ingredient.name, ingredient.foodId),
+      ]);
     });
 
 /// The person whose plan and logs are on screen.

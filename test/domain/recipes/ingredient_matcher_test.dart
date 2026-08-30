@@ -161,4 +161,53 @@ void main() {
       expect(used['olive oil'], 'food-a');
     });
   });
+
+  group('mostUsedByName', () {
+    test('the food matched most often wins, not the first one seen', () {
+      // Unlike previouslyUsedFrom, order here should not decide the winner —
+      // frequency should, since this is meant to reflect an actual household
+      // habit across the whole recipe library.
+      final Map<String, String> mostUsed = IngredientMatcher.mostUsedByName(
+        <(String, String?)>[
+          ('ground beef', 'food-a'),
+          ('ground beef', 'food-b'),
+          ('ground beef', 'food-b'),
+          ('ground beef', 'food-b'),
+        ],
+      );
+
+      expect(mostUsed['ground beef'], 'food-b');
+    });
+
+    test('a tie breaks toward whichever was seen first', () {
+      final Map<String, String> mostUsed = IngredientMatcher.mostUsedByName(
+        <(String, String?)>[
+          ('ground beef', 'food-a'),
+          ('ground beef', 'food-b'),
+        ],
+      );
+
+      expect(mostUsed['ground beef'], 'food-a');
+    });
+
+    test('ingredients with no food attached are ignored', () {
+      final Map<String, String> mostUsed = IngredientMatcher.mostUsedByName(
+        <(String, String?)>[('salt', null), ('  ', 'food-a')],
+      );
+
+      expect(mostUsed, isEmpty);
+    });
+
+    test('different ingredient names are tallied separately', () {
+      final Map<String, String> mostUsed = IngredientMatcher.mostUsedByName(
+        <(String, String?)>[
+          ('olive oil', 'food-oil'),
+          ('chicken breast', 'food-chicken'),
+        ],
+      );
+
+      expect(mostUsed['olive oil'], 'food-oil');
+      expect(mostUsed['chicken breast'], 'food-chicken');
+    });
+  });
 }

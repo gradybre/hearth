@@ -197,6 +197,11 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
         : IngredientMatcher.suggest(
             ingredientName: ingredient.name,
             library: _foods.values.toList(growable: false),
+            // Not `remembered` here: a remembered match is already applied
+            // by `_autoApplyRemembered` before the row can even be tapped, so
+            // `current` would already be set — passing it again would just
+            // re-offer a match the user may have deliberately unmatched.
+            previouslyUsed: ref.read(mostUsedFoodsProvider),
           );
 
     final String? chosen = await showFoodPicker(

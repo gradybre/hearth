@@ -49,6 +49,8 @@ Future<void> openIngredientPicker(
   WidgetTester tester, {
   List<Food> foods = const <Food>[],
   Map<String, NutritionMatch> answers = const <String, NutritionMatch>{},
+  String ingredientLine = '2 tbsp olive oil',
+  String ingredientName = 'olive oil',
 }) async {
   await pumpHearthApp(
     tester,
@@ -66,11 +68,11 @@ Future<void> openIngredientPicker(
           w is TextField &&
           (w.decoration?.hintText ?? '').startsWith('2 tbsp olive oil'),
     ),
-    '2 tbsp olive oil',
+    ingredientLine,
   );
   await pumpFrames(tester);
 
-  await tester.tap(find.text('olive oil'));
+  await tester.tap(find.text(ingredientName));
   await pumpFrames(tester);
 }
 
@@ -181,4 +183,32 @@ void main() {
     expect(find.text('Check and use'), findsOneWidget);
     expect(find.text('Use it'), findsNothing);
   });
+
+  testWidgets(
+    'a food sharing every word, not a shared phrase, still shows up and ranks first',
+    (WidgetTester tester) async {
+      // Reported bug: "Maverick Ranch 96/4 Ground Beef" was already saved,
+      // but matching a differently-worded ingredient for it didn't show it at
+      // all — a plain substring check misses a match when neither string
+      // contains the other, even though every meaningful word is shared.
+      final Food groundBeef = aFood(
+        '96/4 Ground Beef',
+        id: 'food-beef',
+        brand: 'Maverick Ranch',
+      );
+      final Food unrelated = aFood('Butter', id: 'food-butter');
+
+      await openIngredientPicker(
+        tester,
+        foods: <Food>[unrelated, groundBeef],
+        ingredientLine: '1 lb lean ground beef',
+        ingredientName: 'lean ground beef',
+      );
+
+      expect(find.textContaining('96/4 Ground Beef'), findsOneWidget);
+      // Genuinely unrelated — no shared words at all — so it drops out
+      // rather than cluttering the list with noise.
+      expect(find.textContaining('Butter'), findsNothing);
+    },
+  );
 }
