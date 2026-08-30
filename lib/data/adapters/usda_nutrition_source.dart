@@ -100,14 +100,17 @@ class UsdaNutritionSource implements NutritionSource {
         brand: _text(json['brand']),
         barcode: barcode,
         source: FoodSource.usda,
+        // The pack's own serving leads, for the same reason it does in Open
+        // Food Facts: `Food.defaultServing` is whatever comes first, and what
+        // a log defaults to should be the number written on the box.
         servingOptions: <ServingOption>[
+          ...?_packServing(json, per100g, id),
           ServingOption(
             id: 'usda:$id:100g',
             label: '100 g',
             amount: Quantity.of(100, Units.gram),
             macros: per100g,
           ),
-          ...?_packServing(json, per100g, id),
         ],
       ),
       source: FoodSource.usda,

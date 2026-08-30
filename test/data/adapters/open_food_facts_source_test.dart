@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/data/adapters/nutrition_source.dart';
 import 'package:hearth/data/adapters/open_food_facts_source.dart';
 import 'package:hearth/domain/models/food.dart';
+import 'package:hearth/domain/units/unit.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -75,7 +76,7 @@ void main() {
       expect(match.food.barcode, '5000157024671');
     });
 
-    test('a pack serving in grams is offered alongside the 100 g', () async {
+    test('a pack serving in grams leads, with the 100 g behind it', () async {
       final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
         'status': 1,
         'product': product(servingSize: '200 g'),
@@ -84,7 +85,7 @@ void main() {
       final NutritionMatch match = (await off.byBarcode('5000157024671'))!;
 
       expect(match.food.servingOptions, hasLength(2));
-      final ServingOption serving = match.food.servingOptions.last;
+      final ServingOption serving = match.food.servingOptions.first;
       expect(serving.label, '200 g');
       expect(serving.macros.kcal, closeTo(156, 0.001));
     });
@@ -206,6 +207,88 @@ void main() {
 
       final NutritionMatch match = (await off.byBarcode('5000157024671'))!;
       expect(match.food.brand, 'Heinz');
+    });
+  });
+
+  group('the serving people actually read', () {
+    test('the pack serving leads, not per 100 g', () async {
+      // Scanning Swanson chicken broth offered "100 g". The tin says one cup,
+      // four servings per container — 100 g of broth is a number nobody has
+      // ever measured out.
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 1,
+        'product': <String, Object?>{
+          ...product(name: 'Chicken broth', kcal: 6.25),
+          'serving_size': '1 serving (240 ml)',
+          'serving_quantity': 240,
+        },
+      });
+
+      final NutritionMatch match = (await off.byBarcode('051000132796'))!;
+      final ServingOption first = match.food.servingOptions.first;
+
+      expect(first.label, '1 serving (240 ml)');
+      expect(first.amount.amountIn(Units.millilitre), 240);
+      expect(first.macros.kcal, closeTo(15, 0.01));
+    });
+
+    test('per 100 g is still offered, just not first', () async {
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 1,
+        'product': <String, Object?>{
+          ...product(name: 'Chicken broth', kcal: 6.25),
+          'serving_size': '1 serving (240 ml)',
+          'serving_quantity': 240,
+        },
+      });
+
+      final NutritionMatch match = (await off.byBarcode('051000132796'))!;
+      expect(match.food.servingOptions, hasLength(2));
+      expect(match.food.servingOptions.last.label, '100 g');
+    });
+
+    test('millilitres count as a serving, not just grams', () async {
+      // Only grams were parsed before, so every liquid on the shelf came back
+      // with 100 g as its only option. A volume is a real unit Hearth already
+      // converts; a count like "1 biscuit" is the thing that genuinely cannot
+      // be weighed, and that is still refused.
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 1,
+        'product': <String, Object?>{
+          ...product(name: 'Oat drink', kcal: 45),
+          'serving_size': '250 ml',
+        },
+      });
+
+      final ServingOption first = (await off.byBarcode('1'))!
+          .food
+          .servingOptions
+          .first;
+      expect(first.amount.amountIn(Units.millilitre), 250);
+    });
+
+    test('a serving nobody can weigh is still refused', () async {
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 1,
+        'product': <String, Object?>{
+          ...product(name: 'Digestives', kcal: 478),
+          'serving_size': '1 biscuit',
+        },
+      });
+
+      final Food food = (await off.byBarcode('1'))!.food;
+      expect(food.servingOptions, hasLength(1));
+      expect(food.servingOptions.single.label, '100 g');
+    });
+
+    test('a pack with no stated serving is unchanged', () async {
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 1,
+        'product': product(name: 'Chicken broth'),
+      });
+
+      final Food food = (await off.byBarcode('1'))!.food;
+      expect(food.servingOptions.single.label, '100 g');
     });
   });
 

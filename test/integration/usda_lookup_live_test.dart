@@ -38,7 +38,7 @@ void main() {
     expect(match!.food.source, FoodSource.usda);
     expect(match.food.barcode, '048707820026');
 
-    final ServingOption per100g = match.food.servingOptions.first;
+    final ServingOption per100g = match.food.servingOptions.last;
     expect(per100g.label, '100 g');
     expect(per100g.macros.kcal, greaterThan(0));
   }, skip: skip);
@@ -48,7 +48,8 @@ void main() {
     final NutritionMatch match = (await usda.byBarcode('048707820026'))!;
 
     expect(match.food.servingOptions.length, greaterThan(1));
-    final ServingOption serving = match.food.servingOptions.last;
+    // Leads, because it is the number a person reads off the box.
+    final ServingOption serving = match.food.servingOptions.first;
     expect(serving.label, contains('g)'));
     expect(serving.amount.canonicalAmount, greaterThan(0));
   }, skip: skip);

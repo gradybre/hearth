@@ -86,6 +86,27 @@ class RecipeRepository {
     });
   }
 
+  /// Undoes a [delete].
+  ///
+  /// A real restore, not a re-creation: the recipe was only ever hidden, so it
+  /// comes back with the same id and every meal logged against it still
+  /// resolves.
+  Future<void> restore(String id) {
+    final DateTime now = _now();
+    return _db.transaction(() async {
+      await _store.restore(id, updatedAt: now);
+      final Recipe? restored = await _store.byId(id);
+      if (restored == null) return;
+      await _queue.enqueue(
+        entityTable: entityTable,
+        entityId: id,
+        operation: WriteOperation.upsert,
+        payload: RecipeMapper.toJson(restored, updatedAt: now),
+        queuedAt: now,
+      );
+    });
+  }
+
   Recipe _withHousehold(Recipe recipe) => Recipe(
     id: recipe.id,
     title: recipe.title,

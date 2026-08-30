@@ -120,6 +120,22 @@ class RecipeStore {
     );
   }
 
+  /// Puts a soft-deleted recipe back.
+  ///
+  /// The undo half of [softDelete]. Because nothing was physically removed,
+  /// this is a genuine restore rather than a re-creation: same id, same
+  /// sections, and every log still pointing at it.
+  Future<void> restore(String id, {required DateTime updatedAt}) async {
+    await (_db.update(
+      _db.recipes,
+    )..where(($RecipesTable r) => r.id.equals(id))).write(
+      RecipesCompanion(
+        isDeleted: const Value<bool>(false),
+        updatedAt: Value<DateTime>(updatedAt),
+      ),
+    );
+  }
+
   /// Replaces the local copy with the server's, used when sync pulls changes.
   Future<void> replaceAll(
     Iterable<Recipe> recipes, {

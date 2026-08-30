@@ -147,14 +147,23 @@ class OpenFoodFactsSource implements NutritionSource {
         brand: brand,
         barcode: code.isEmpty ? null : code,
         source: FoodSource.openFoodFacts,
+        // The pack's own serving leads. `Food.defaultServing` is whatever comes
+        // first, and it is what every screen shows and what a log defaults to
+        // — so it has to be the number written on the tin, not a laboratory
+        // hundred grams.
         servingOptions: <ServingOption>[
+          ...?_servingOption(
+            product['serving_size'],
+            product['serving_quantity'],
+            per100g,
+            code,
+          ),
           ServingOption(
             id: 'off:$code:100g',
             label: '100 g',
             amount: Quantity.of(100, Units.gram),
             macros: per100g,
           ),
-          ...?_servingOption(product['serving_size'], per100g, code),
         ],
       ),
       source: FoodSource.openFoodFacts,
@@ -162,13 +171,19 @@ class OpenFoodFactsSource implements NutritionSource {
     );
   }
 
-  /// The pack's own serving, when it states one in grams.
+  /// The pack's own serving, when it states one in a unit that can be measured.
   ///
-  /// Only grams: a serving given as "1 biscuit" cannot be converted without
-  /// knowing what a biscuit weighs, and guessing there would put a wrong
+  /// Grams *or* millilitres. Only grams were read at first, so every liquid on
+  /// the shelf came back offering nothing but "100 g" — scanning a tin of
+  /// chicken broth that says "1 cup, 4 servings per container" produced a
+  /// serving size nobody has ever measured out.
+  ///
+  /// A serving given as "1 biscuit" is still refused: that cannot be converted
+  /// without knowing what a biscuit weighs, and guessing would put a wrong
   /// number into someone's day.
   List<ServingOption>? _servingOption(
     Object? servingSize,
+    Object? servingQuantity,
     Macros per100g,
     String code,
   ) {
@@ -176,20 +191,28 @@ class OpenFoodFactsSource implements NutritionSource {
     if (text.isEmpty) return null;
 
     final RegExpMatch? match = RegExp(
-      r'([\d.,]+)\s*g\b',
+      r'([\d.,]+)\s*(g|ml)\b',
       caseSensitive: false,
     ).firstMatch(text);
     if (match == null) return null;
 
-    final double? grams = double.tryParse(match.group(1)!.replaceAll(',', '.'));
-    if (grams == null || grams <= 0) return null;
+    final bool isVolume = match.group(2)!.toLowerCase() == 'ml';
+
+    // Open Food Facts states the amount separately as well, and that field is
+    // cleaner than anything pulled back out of the label text.
+    final double? amount =
+        _number(servingQuantity) ??
+        double.tryParse(match.group(1)!.replaceAll(',', '.'));
+    if (amount == null || amount <= 0) return null;
 
     return <ServingOption>[
       ServingOption(
         id: 'off:$code:serving',
         label: text,
-        amount: Quantity.of(grams, Units.gram),
-        macros: per100g.scaledBy(grams / 100),
+        amount: Quantity.of(amount, isVolume ? Units.millilitre : Units.gram),
+        // Open Food Facts stores per-100 figures against 100 g or 100 ml
+        // interchangeably, so the same ratio applies either way.
+        macros: per100g.scaledBy(amount / 100),
       ),
     ];
   }
