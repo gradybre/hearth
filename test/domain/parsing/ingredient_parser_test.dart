@@ -157,14 +157,14 @@ void main() {
     });
   });
 
-  group('a range resolves to its midpoint', () {
-    // Brendan's call: a cook still has to measure *something* from a range,
-    // and the midpoint is the least-biased single guess — unlike either
-    // endpoint, it does not systematically over- or under-count macros (or
-    // the shopping list) across every ranged ingredient in the library.
+  group('a range resolves to its higher number', () {
+    // Brendan's call: one of the two stated numbers, not an average — a
+    // measuring cup has a line for "1/2", not for "3/8" — and specifically
+    // the higher one, since a macro tracker that quietly rounds down is the
+    // more dangerous failure of the two.
     test('a hyphenated range of whole numbers', () {
       final ParsedIngredient p = IngredientParser.parse('1-2 tbsp hot sauce');
-      expect(p.quantity!.amountIn(Units.tbsp), closeTo(1.5, 1e-12));
+      expect(p.quantity!.amountIn(Units.tbsp), 2);
       expect(p.name, 'hot sauce');
     });
 
@@ -174,7 +174,7 @@ void main() {
       final ParsedIngredient p = IngredientParser.parse(
         '1/4 1/2 small white onion',
       );
-      expect(p.quantity!.amountIn(Units.item), closeTo(0.375, 1e-12));
+      expect(p.quantity!.amountIn(Units.item), closeTo(0.5, 1e-12));
       expect(p.name, 'small white onion');
     });
 
@@ -182,14 +182,25 @@ void main() {
       final ParsedIngredient p = IngredientParser.parse(
         '1/4-1/2 cup chopped onion',
       );
-      expect(p.quantity!.amountIn(Units.cup), closeTo(0.375, 1e-12));
+      expect(p.quantity!.amountIn(Units.cup), closeTo(0.5, 1e-12));
       expect(p.name, 'chopped onion');
     });
 
     test('an en dash works the same as a hyphen', () {
       final ParsedIngredient p = IngredientParser.parse('2–4 cloves garlic');
-      expect(p.quantity!.amountIn(Units.clove), 3);
+      expect(p.quantity!.amountIn(Units.clove), 4);
     });
+
+    test(
+      'the higher number wins regardless of which side it is written on',
+      () {
+        // Written low-to-high in every real example, but the parser does not
+        // rely on that — "1/2 1/4" would otherwise silently pick the smaller
+        // number just because it came first.
+        final ParsedIngredient p = IngredientParser.parse('1/2 1/4 cup onion');
+        expect(p.quantity!.amountIn(Units.cup), closeTo(0.5, 1e-12));
+      },
+    );
   });
 
   group('conservative failure', () {

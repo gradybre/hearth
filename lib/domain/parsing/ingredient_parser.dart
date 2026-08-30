@@ -130,15 +130,14 @@ abstract final class IngredientParser {
       // A second, standalone number immediately following the first
       // ("1/4 1/2 small onion", or "1/4-1/2 small onion" — _tidy above
       // already dropped the connecting hyphen) is read as the other end of
-      // a range, the same way "1-2 tbsp" always has been: a recipe writes a
-      // range because either end is a fine amount to actually measure, so
-      // the midpoint is a defensible single number rather than a blank the
-      // cook has to fill in by hand themselves.
+      // a range, the same way "1-2 tbsp" always has been. The higher of the
+      // two is used — see the note on [_higherOf] for why.
       //
       // "Standalone" is what keeps this from misreading a unit glued to a
       // number with no space — the "8" of "8oz cans" is not a second
-      // quantity, and averaging into it would invent a number with nothing
-      // behind it. That case is left unquantified instead, same as before.
+      // quantity, and picking between it and the first would invent a number
+      // with nothing behind it. That case is left unquantified instead, same
+      // as before.
       double? effectiveAmount = amount;
       final RegExpMatch? secondMatch = amount == null
           ? null
@@ -155,7 +154,7 @@ abstract final class IngredientParser {
         if (!standalone || secondAmount == null) {
           effectiveAmount = null;
         } else {
-          effectiveAmount = (amount! + secondAmount) / 2;
+          effectiveAmount = _higherOf(amount!, secondAmount);
           rest = _tidy(rest.substring(secondMatch.end));
         }
       }
@@ -206,19 +205,24 @@ abstract final class IngredientParser {
   /// A hyphenated or en-dash range: "1-2", "3–4".
   static final RegExp _hyphenRange = RegExp(r'^(\d+)\s*[-–]\s*(\d+)$');
 
+  /// Brendan's call: a range resolves to one of its two stated numbers, not
+  /// an average — a measuring cup has a line for "1/2", not for "3/8" — and
+  /// between the two, the higher one. A macro tracker that quietly rounds
+  /// down is the more dangerous failure: it is the well-known way a food log
+  /// stops matching what was actually eaten without ever looking wrong, and
+  /// it is a worse failure than the recipe coming out with a little extra
+  /// onion in it.
+  static double _higherOf(double a, double b) => a > b ? a : b;
+
   /// Parses a lone amount token into a number.
-  ///
-  /// A range like "1-2" resolves to its midpoint: a cook still has to
-  /// measure *something*, and the midpoint is the least-biased single guess
-  /// — unlike either endpoint, it does not systematically over- or
-  /// under-count macros (or the shopping list) across every ranged
-  /// ingredient in the library.
   static double? _parseAmount(String token) {
     final String text = token.trim();
     final RegExpMatch? range = _hyphenRange.firstMatch(text);
     if (range != null) {
-      return (double.parse(range.group(1)!) + double.parse(range.group(2)!)) /
-          2;
+      return _higherOf(
+        double.parse(range.group(1)!),
+        double.parse(range.group(2)!),
+      );
     }
 
     // Whole number followed by a vulgar fraction: "1½".
