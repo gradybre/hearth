@@ -211,8 +211,9 @@ void main() {
 
   group('search', () {
     test('returns only products it can make sense of', () async {
+      // Search-a-licious calls them hits; the barcode endpoint says products.
       final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
-        'products': <Object?>[
+        'hits': <Object?>[
           product(name: 'Baked beans'),
           product(name: '', code: '2'),
           product(name: 'No energy', kcal: null, code: '3'),
@@ -225,10 +226,42 @@ void main() {
       expect(results.single.food.name, 'Baked beans');
     });
 
+    test('search goes to the service that reads the query', () async {
+      // `world.openfoodfacts.org/api/v2/search` returns 503s intermittently
+      // and otherwise ignores search_terms entirely — "chicken broth" and
+      // "cheddar cheese" came back with the same six unrelated products.
+      final List<Uri> calls = <Uri>[];
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'hits': <Object?>[product(name: 'Chicken broth')],
+      }, recordInto: calls);
+
+      await off.search('chicken broth');
+
+      expect(calls.single.host, OpenFoodFactsSource.searchHost);
+      expect(calls.single.queryParameters['q'], 'chicken broth');
+      // Without a sort the order is arbitrary, which is what made relevant
+      // results still feel random.
+      expect(calls.single.queryParameters['sort_by'], '-popularity_key');
+    });
+
+    test('a brand list is read as well as a brand string', () async {
+      // Search sends brands as a list; stringifying it produced "[Heinz]".
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'hits': <Object?>[
+          <String, Object?>{
+            ...product(name: 'Chicken broth'),
+            'brands': <String>['Swanson', 'Campbell'],
+          },
+        ],
+      });
+
+      expect((await off.search('broth')).single.food.brand, 'Swanson');
+    });
+
     test('an empty query is never sent anywhere', () async {
       final List<Uri> calls = <Uri>[];
       final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
-        'products': <Object?>[],
+        'hits': <Object?>[],
       }, recordInto: calls);
 
       expect(await off.search('   '), isEmpty);

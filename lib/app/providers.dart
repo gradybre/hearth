@@ -16,6 +16,7 @@ import '../data/adapters/photo_picker.dart';
 import '../data/adapters/platform_kitchen_devices.dart';
 import '../data/adapters/recipe_ai.dart';
 import '../data/adapters/usda_nutrition_source.dart';
+import '../data/auth/account_cache.dart';
 import '../data/auth/auth_gateway.dart';
 import '../data/auth/local_auth_gateway.dart';
 import '../data/auth/supabase_auth_gateway.dart';
@@ -506,6 +507,9 @@ final Provider<AuthGateway> authGatewayProvider = Provider<AuthGateway>((
   if (!ref.watch(supabaseReadyProvider)) return LocalAuthGateway();
   final SupabaseAuthGateway gateway = SupabaseAuthGateway(
     Supabase.instance.client,
+    // Lets a cold start with no signal get in on a session that is already in
+    // the Keychain (spec §5.1's offline-first promise).
+    cache: AccountCache(ref.watch(preferenceStoreProvider)),
   );
   ref.onDispose(gateway.dispose);
   return gateway;

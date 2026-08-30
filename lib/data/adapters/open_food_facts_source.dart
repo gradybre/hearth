@@ -25,6 +25,15 @@ class OpenFoodFactsSource implements NutritionSource {
 
   static const String host = 'world.openfoodfacts.org';
 
+  /// Text search lives on a different service to barcode lookup.
+  ///
+  /// `world.openfoodfacts.org/api/v2/search` is not usable: it returns 503s
+  /// intermittently, and when it does answer it ignores `search_terms`
+  /// altogether — "chicken broth" and "cheddar cheese" came back with the same
+  /// six products, none of them either. Search-a-licious is the service Open
+  /// Food Facts now points text search at, and it actually reads the query.
+  static const String searchHost = 'search.openfoodfacts.org';
+
   /// Open Food Facts asks apps to identify themselves; anonymous traffic gets
   /// rate-limited.
   static const String defaultUserAgent = 'Hearth/1.0 (household meal planner)';
@@ -67,8 +76,12 @@ class OpenFoodFactsSource implements NutritionSource {
     final String needle = query.trim();
     if (needle.isEmpty) return const <NutritionMatch>[];
 
-    final Uri uri = Uri.https(host, '/api/v2/search', <String, String>{
-      'search_terms': needle,
+    final Uri uri = Uri.https(searchHost, '/search', <String, String>{
+      'q': needle,
+      // Open Food Facts' own popularity signal, descending. Without it the
+      // order is arbitrary, which is what made results feel random even once
+      // they were relevant.
+      'sort_by': '-popularity_key',
       'fields': fields,
       'page_size': '$limit',
     });
@@ -76,13 +89,14 @@ class OpenFoodFactsSource implements NutritionSource {
     final Map<String, Object?>? body = await _get(uri);
     if (body == null) return const <NutritionMatch>[];
 
-    final Object? products = body['products'];
-    if (products is! List<Object?>) return const <NutritionMatch>[];
+    // Search-a-licious calls them hits, not products.
+    final Object? hits = body['hits'];
+    if (hits is! List<Object?>) return const <NutritionMatch>[];
 
     return <NutritionMatch>[
-      for (final Object? product in products)
-        if (product is Map<String, Object?>)
-          if (_toMatch(product) case final NutritionMatch match) match,
+      for (final Object? hit in hits)
+        if (hit is Map<String, Object?>)
+          if (_toMatch(hit) case final NutritionMatch match) match,
     ];
   }
 
@@ -200,7 +214,20 @@ class OpenFoodFactsSource implements NutritionSource {
     return score.clamp(0, 1);
   }
 
+  /// The first brand, from either shape the two services use.
+  ///
+  /// The barcode endpoint sends a comma-separated string; search sends a list.
+  /// Stringifying a list would have produced "[Heinz]", brackets and all, on
+  /// every search result.
   static String? _firstBrand(Object? brands) {
+    if (brands is List<Object?>) {
+      for (final Object? brand in brands) {
+        final String text = '${brand ?? ''}'.trim();
+        if (text.isNotEmpty) return text;
+      }
+      return null;
+    }
+
     final String text = '${brands ?? ''}'.trim();
     if (text.isEmpty) return null;
     return text.split(',').first.trim();

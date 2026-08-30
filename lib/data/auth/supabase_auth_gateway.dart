@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'account_cache.dart';
 import 'auth_gateway.dart';
 
 /// The real accounts implementation, on Supabase Auth (spec §8.3).
@@ -19,7 +20,7 @@ enum AccountResolution {
 }
 
 class SupabaseAuthGateway implements AuthGateway {
-  SupabaseAuthGateway(this._client) {
+  SupabaseAuthGateway(this._client, {AccountCache? cache}) : _cache = cache {
     _authChanges = _client.auth.onAuthStateChange.listen((AuthState state) {
       if (changesWhoYouAre(state.event)) _refresh();
     });
@@ -54,6 +55,10 @@ class SupabaseAuthGateway implements AuthGateway {
       : AccountResolution.keepGoing;
 
   final SupabaseClient _client;
+
+  /// Where the last good account is kept so a cold start without signal can
+  /// still get in. Null in builds that have no local database to write to.
+  final AccountCache? _cache;
 
   /// Pushed to whenever the account may have changed.
   ///
@@ -93,15 +98,27 @@ class SupabaseAuthGateway implements AuthGateway {
     try {
       final HearthAccount? account = await currentAccount();
       _lastKnown = account;
+      if (account != null) {
+        await _cache?.remember(account);
+      } else {
+        await _cache?.forget();
+      }
       return account;
     } on Object catch (error) {
       switch (resolutionFor(error)) {
         case AccountResolution.signOut:
           _lastKnown = null;
+          await _cache?.forget();
           await _client.auth.signOut();
           return null;
         case AccountResolution.keepGoing:
-          return _lastKnown;
+          // In-memory first, then the device. The cache is what carries a
+          // signed-in user through a cold start with no signal — the session
+          // is in the Keychain, and the only thing missing is the household
+          // id, which we already knew last time.
+          final String? userId = _client.auth.currentUser?.id;
+          if (_lastKnown != null || userId == null) return _lastKnown;
+          return _lastKnown = await _cache?.forUser(userId);
       }
     }
   }

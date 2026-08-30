@@ -313,6 +313,57 @@ void searchTests() {
       expect(found, hasLength(1));
     });
 
+    test('the closest name comes first, not whatever arrived first', () async {
+      // Source order alone decided this before, so the list was whatever Open
+      // Food Facts happened to return followed by whatever USDA happened to
+      // return — relevant after filtering, but in no order anyone could see a
+      // reason for.
+      final StubSource off = StubSource(
+        'Open Food Facts',
+        results: <NutritionMatch>[
+          match(named('Rice with chicken broth', id: 'loose')),
+          match(named('Chicken broth concentrate', id: 'prefix')),
+          match(named('Chicken broth', id: 'exact')),
+        ],
+      );
+
+      final List<NutritionMatch> found = await NutritionLookup(
+        <NutritionSource>[off],
+      ).search('chicken broth');
+
+      expect(found.map((NutritionMatch m) => m.food.id), <String>[
+        'exact',
+        'prefix',
+        'loose',
+      ]);
+    });
+
+    test("the household's own food stays on top regardless", () async {
+      // Few, already vouched for, and burying one under a stranger's product
+      // would undo the point of keeping a library.
+      final StubSource library = StubSource(
+        'Your library',
+        results: <NutritionMatch>[
+          NutritionMatch(
+            food: named('Broth, the one we buy', id: 'ours'),
+            source: FoodSource.manual,
+            confidence: 1,
+            fromLibrary: true,
+          ),
+        ],
+      );
+      final StubSource off = StubSource(
+        'Open Food Facts',
+        results: <NutritionMatch>[match(named('Chicken broth', id: 'theirs'))],
+      );
+
+      final List<NutritionMatch> found = await NutritionLookup(
+        <NutritionSource>[library, off],
+      ).search('chicken broth');
+
+      expect(found.first.food.id, 'ours');
+    });
+
     test('a short query is not used to filter', () async {
       // "oat" would throw away "Oatly" for want of a word boundary.
       final StubSource off = StubSource(

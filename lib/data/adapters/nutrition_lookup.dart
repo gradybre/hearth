@@ -93,8 +93,73 @@ class NutritionLookup {
       take(i, limit);
     }
 
-    return found;
+    return _ranked(found, query);
   }
+
+  /// Puts the likeliest answer first.
+  ///
+  /// Source order alone decided this before, which meant the list was whatever
+  /// Open Food Facts happened to return followed by whatever USDA happened to
+  /// return — relevant, after the filter, but in no order a person could see a
+  /// reason for.
+  ///
+  /// The household's own foods stay on top regardless: they are few, they are
+  /// already vouched for, and burying one under a stranger's product would
+  /// undo the point of keeping a library.
+  static List<NutritionMatch> _ranked(
+    List<NutritionMatch> matches,
+    String query,
+  ) {
+    final List<String> terms = _terms(query);
+
+    final List<NutritionMatch> ordered = <NutritionMatch>[...matches];
+    ordered.sort((NutritionMatch a, NutritionMatch b) {
+      if (a.fromLibrary != b.fromLibrary) return a.fromLibrary ? -1 : 1;
+
+      final int byName = _nameScore(b, terms).compareTo(_nameScore(a, terms));
+      if (byName != 0) return byName;
+
+      // Something with no numbers on it cannot be logged, so it sinks — but
+      // it is still shown, flagged as incomplete, rather than hidden.
+      final int byUsable = _usable(b).compareTo(_usable(a));
+      if (byUsable != 0) return byUsable;
+
+      return b.confidence.compareTo(a.confidence);
+    });
+    return ordered;
+  }
+
+  /// How well a result's name answers what was asked.
+  ///
+  /// An exact name beats a name that merely starts with the words, which beats
+  /// one that happens to contain them somewhere — "Chicken broth" over
+  /// "Chicken broth concentrate" over "Rice with chicken broth".
+  static int _nameScore(NutritionMatch match, List<String> terms) {
+    if (terms.isEmpty) return 0;
+
+    final String name = normaliseKey(match.food.name);
+    final String wanted = terms.join(' ');
+    if (name == wanted) return 100;
+    if (name.startsWith(wanted)) return 80;
+    if (name.contains(wanted)) return 60;
+
+    final String haystack = normaliseKey(
+      '${match.food.name} ${match.food.brand ?? ''}',
+    );
+    return (terms.where(haystack.contains).length * 40) ~/ terms.length;
+  }
+
+  static int _usable(NutritionMatch match) =>
+      match.food.servingOptions.any(
+        (ServingOption option) => !option.macros.isZero,
+      )
+      ? 1
+      : 0;
+
+  static List<String> _terms(String query) => <String>[
+    for (final String word in normaliseKey(query).split(' '))
+      if (word.isNotEmpty) word,
+  ];
 
   /// Whether a result has anything to do with what was asked for.
   ///
