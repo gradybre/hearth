@@ -80,10 +80,18 @@ class OpenFoodFactsSource implements NutritionSource {
 
     final Uri uri = Uri.https(searchHost, '/search', <String, String>{
       'q': needle,
-      // Open Food Facts' own popularity signal, descending. Without it the
-      // order is arbitrary, which is what made results feel random even once
-      // they were relevant.
-      'sort_by': '-popularity_key',
+      // Deliberately no `sort_by`: Search-a-licious only sorts by relevance
+      // when nothing overrides it, and `sort_by` is not a tiebreaker on top
+      // of that — it replaces relevance entirely. `sort_by=-popularity_key`
+      // was tried here for exactly the "results feel random" complaint this
+      // fixes, and it does return well-known brands first for a query with
+      // many popular near-matches ("chicken broth" → Swanson). But it also
+      // sorts the *entire* multi-thousand-result match set by popularity
+      // before relevance ever gets a vote, so a query with an exact but less
+      // globally popular answer never appears within the page at all — a
+      // search for "96/4 Ground Beef" returned peanut butter and coffee, with
+      // real matches for the query buried past position 10,000. Relevance
+      // alone already surfaces the right answer first for both cases.
       'fields': fields,
       'page_size': '$limit',
     });

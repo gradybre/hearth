@@ -355,9 +355,11 @@ void main() {
 
       expect(calls.single.host, OpenFoodFactsSource.searchHost);
       expect(calls.single.queryParameters['q'], 'chicken broth');
-      // Without a sort the order is arbitrary, which is what made relevant
-      // results still feel random.
-      expect(calls.single.queryParameters['sort_by'], '-popularity_key');
+      // No sort_by: Search-a-licious only ranks by relevance when nothing
+      // overrides it, and sort_by replaces relevance rather than tie-breaking
+      // it — forcing popularity order buried an exact match for a less
+      // globally popular query ("96/4 Ground Beef") past the first page.
+      expect(calls.single.queryParameters.containsKey('sort_by'), isFalse);
     });
 
     test('a brand list is read as well as a brand string', () async {
