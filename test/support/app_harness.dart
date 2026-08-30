@@ -41,6 +41,7 @@ Future<HearthDatabase> pumpHearthApp(
   WidgetTester tester, {
   Size size = const Size(390, 844),
   List<Recipe> recipes = const <Recipe>[],
+  Stream<List<Recipe>>? recipeStream,
   List<Food> foods = const <Food>[],
   List<MealPlanEntry> entries = const <MealPlanEntry>[],
   Set<String> favorites = const <String>{},
@@ -96,8 +97,10 @@ Future<HearthDatabase> pumpHearthApp(
         ),
         if (photoPicker != null)
           photoPickerProvider.overrideWithValue(photoPicker),
+        // A stream can be supplied instead of a fixed list, for the tests that
+        // need the library to actually change — a deletion, say.
         recipeLibraryProvider.overrideWith(
-          (Ref ref) => Stream<List<Recipe>>.value(recipes),
+          (Ref ref) => recipeStream ?? Stream<List<Recipe>>.value(recipes),
         ),
         foodLibraryProvider.overrideWith(
           (Ref ref) => Stream<List<Food>>.value(foods),

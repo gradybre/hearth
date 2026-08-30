@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,6 +26,42 @@ Future<void> swipe(WidgetTester tester, double dx) async {
 }
 
 void main() {
+  testWidgets('deleting a row does not leave the next one hanging open', (
+    WidgetTester tester,
+  ) async {
+    // The rows had no keys, so when a recipe left the list the element at that
+    // index was reused for the one below — and its open state came with it.
+    // Deleting the top recipe left the next one already swiped aside with its
+    // delete showing.
+    final StreamController<List<Recipe>> library =
+        StreamController<List<Recipe>>();
+    addTearDown(library.close);
+
+    final Recipe ribs = aRecipe(title: 'Braised short ribs', id: 'ribs');
+    final Recipe soup = aRecipe(title: 'Leek and potato soup', id: 'soup');
+
+    await pumpHearthApp(tester, recipeStream: library.stream);
+    library.add(<Recipe>[ribs, soup]);
+    await pumpFrames(tester);
+
+    await swipe(tester, -120);
+    await tester.tap(find.widgetWithText(TextButton, 'Delete').first);
+    await pumpFrames(tester, frames: 12);
+
+    // The library now holds only the soup, exactly as a real delete leaves it.
+    library.add(<Recipe>[soup]);
+    await pumpFrames(tester, frames: 12);
+
+    expect(find.text('Leek and potato soup'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Delete'))
+          .onPressed,
+      isNull,
+      reason: 'the surviving recipe must not inherit the deleted one\'s swipe',
+    );
+  });
+
   testWidgets('delete is hidden until the card is swiped aside', (
     WidgetTester tester,
   ) async {

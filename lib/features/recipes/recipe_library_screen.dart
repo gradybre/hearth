@@ -213,8 +213,13 @@ class _RecipeList extends StatelessWidget {
     itemCount: recipes.length,
     separatorBuilder: (BuildContext context, int index) =>
         const SizedBox(height: HearthSpacing.md),
-    itemBuilder: (BuildContext context, int index) =>
-        _SwipeToDelete(recipe: recipes[index]),
+    itemBuilder: (BuildContext context, int index) => _SwipeToDelete(
+      // Keyed by recipe, not by position. Without this the element at an index
+      // is reused when the list shifts, so deleting a recipe handed its
+      // swiped-open state straight to whatever moved up into its place.
+      key: ValueKey<String>(recipes[index].id),
+      recipe: recipes[index],
+    ),
   );
 }
 
@@ -228,7 +233,7 @@ class _RecipeList extends StatelessWidget {
 /// Deleting is soft (§4) — the recipe leaves the library, and every meal
 /// already logged against it keeps its frozen snapshot and its numbers.
 class _SwipeToDelete extends ConsumerStatefulWidget {
-  const _SwipeToDelete({required this.recipe});
+  const _SwipeToDelete({required this.recipe, super.key});
 
   final Recipe recipe;
 
