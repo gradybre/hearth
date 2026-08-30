@@ -172,6 +172,17 @@ void main() {
       expect(p.name, contains('hot sauce'));
     });
 
+    test('a second number right after the first is not a quantity either', () {
+      // Reported from a real AI-imported recipe: "1/4 1/2 small white onion"
+      // parsed as quantity 1/4, name "1/2 small white onion" — displayed as
+      // "1/4 1/2 small white onion", the same nonsense as the raw line.
+      final ParsedIngredient p = IngredientParser.parse(
+        '1/4 1/2 small white onion',
+      );
+      expect(p.quantity, isNull);
+      expect(p.name, '1/4 1/2 small white onion');
+    });
+
     test('an unknown unit word stays part of the name', () {
       final ParsedIngredient p = IngredientParser.parse('1 handful spinach');
       expect(p.quantity!.kind, UnitKind.count);

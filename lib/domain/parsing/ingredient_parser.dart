@@ -127,6 +127,14 @@ abstract final class IngredientParser {
       final double? amount = _parseAmount(amountMatch.group(1)!);
       String rest = _tidy(working.substring(amountMatch.end));
 
+      // A second number immediately following the first ("1/4 1/2 small
+      // onion") is not two quantities cooperating — it is a line this parser
+      // does not actually understand, with the first number grabbed on a
+      // false match. Picking one and discarding the other would risk exactly
+      // the wrong-quantity failure this parser exists to avoid, so — same as
+      // a range — the whole line is left as an unquantified name instead.
+      final bool doubleAmount = _leadingAmount.hasMatch(rest);
+
       Unit? unit;
       double multiplier = 1;
 
@@ -149,7 +157,7 @@ abstract final class IngredientParser {
         }
       }
 
-      if (amount == null) {
+      if (amount == null || doubleAmount) {
         quantity = null;
       } else {
         // A bare number with no unit is a count: "2 eggs".
