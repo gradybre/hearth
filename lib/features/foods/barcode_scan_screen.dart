@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -106,6 +108,8 @@ class _BarcodeScanScreenState extends ConsumerState<BarcodeScanScreen> {
         surfaceTintColor: Colors.transparent,
         title: Text('Scan a barcode', style: context.text.label),
         actions: <Widget>[
+          if (_cameraIsPossible && !_typing && _camera != null)
+            _TorchButton(controller: _camera!),
           if (_cameraIsPossible)
             IconButton(
               icon: Icon(
@@ -126,16 +130,10 @@ class _BarcodeScanScreenState extends ConsumerState<BarcodeScanScreen> {
                       onSubmit: _submitTyped,
                       cameraAvailable: _cameraIsPossible,
                     )
-                  : MobileScanner(
+                  : _CameraView(
                       controller: _camera!,
                       onDetect: _onDetect,
-                      errorBuilder:
-                          (
-                            BuildContext context,
-                            MobileScannerException error,
-                          ) => _CameraUnavailable(
-                            onTypeInstead: () => setState(() => _typing = true),
-                          ),
+                      onTypeInstead: () => setState(() => _typing = true),
                     ),
             ),
             _ResultPanel(
@@ -217,6 +215,183 @@ class _TypeItIn extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The live preview, a frame to line the barcode up against, and detection
+/// restricted to what that frame actually shows.
+///
+/// A bare full-screen preview leaves it to guesswork how close to hold a
+/// package and where in it the label needs to sit. The frame is not just
+/// decoration — [MobileScanner.scanWindow] is set to the same rectangle, so a
+/// second barcode elsewhere in frame (a shelf, a multipack) is genuinely
+/// ignored rather than a plausible source of a wrong match.
+class _CameraView extends StatelessWidget {
+  const _CameraView({
+    required this.controller,
+    required this.onDetect,
+    required this.onTypeInstead,
+  });
+
+  final MobileScannerController controller;
+  final void Function(BarcodeCapture) onDetect;
+  final VoidCallback onTypeInstead;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final Rect frame = _frameFor(constraints.biggest);
+        return MobileScanner(
+          controller: controller,
+          onDetect: onDetect,
+          scanWindow: frame,
+          // Close-up labels in dim kitchen or pantry light are exactly where
+          // autofocus struggles most; letting a tap re-focus costs nothing.
+          tapToFocus: true,
+          errorBuilder: (BuildContext context, MobileScannerException error) =>
+              _CameraUnavailable(onTypeInstead: onTypeInstead),
+          overlayBuilder: (BuildContext context, BoxConstraints _) =>
+              _Viewfinder(frame: frame),
+        );
+      },
+    );
+  }
+
+  /// Wide rather than square: every symbology scanned here (EAN/UPC) is a
+  /// horizontal strip, so a square window either crops the sides of a
+  /// close-up label or leaves most of itself unused.
+  static Rect _frameFor(Size layout) {
+    final double width = math.min(layout.width * 0.82, 360);
+    final double height = width * 0.5;
+    return Rect.fromCenter(
+      center: layout.center(Offset.zero),
+      width: width,
+      height: height,
+    );
+  }
+}
+
+/// The frame itself: a dimmed scrim outside it, an open window inside it, and
+/// an instruction below in words — the shape carries the idea, but §6.3 still
+/// applies, so it is never the only thing saying it.
+class _Viewfinder extends StatelessWidget {
+  const _Viewfinder({required this.frame});
+
+  final Rect frame;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: <Widget>[
+        Positioned.fill(
+          // Purely visual guidance over a preview a screen reader user cannot
+          // see anyway; the barcode field's own semantics carry the workflow.
+          child: ExcludeSemantics(
+            child: CustomPaint(
+              painter: _ViewfinderPainter(
+                frame: frame,
+                accent: context.colors.accent,
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          top: frame.bottom + HearthSpacing.lg,
+          child: ExcludeSemantics(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: HearthSpacing.xl,
+                ),
+                child: Text(
+                  'Line up the barcode inside the frame',
+                  textAlign: TextAlign.center,
+                  style: context.text.body.copyWith(
+                    color: Colors.white,
+                    shadows: const <Shadow>[
+                      Shadow(blurRadius: 6, color: Colors.black87),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ViewfinderPainter extends CustomPainter {
+  _ViewfinderPainter({required this.frame, required this.accent});
+
+  final Rect frame;
+  final Color accent;
+
+  static const double _cornerLength = 28;
+  static const double _cornerStroke = 4;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final RRect hole = RRect.fromRectAndRadius(
+      frame,
+      const Radius.circular(HearthRadius.lg),
+    );
+    final Path scrim = Path()
+      ..addRect(Offset.zero & size)
+      ..addRRect(hole)
+      ..fillType = PathFillType.evenOdd;
+    canvas.drawPath(scrim, Paint()..color = const Color(0x8C000000));
+
+    final Paint bracket = Paint()
+      ..color = accent
+      ..strokeWidth = _cornerStroke
+      ..strokeCap = StrokeCap.round;
+
+    void corner(Offset origin, Offset horizontal, Offset vertical) {
+      canvas.drawLine(origin, origin + horizontal, bracket);
+      canvas.drawLine(origin, origin + vertical, bracket);
+    }
+
+    const Offset h = Offset(_cornerLength, 0);
+    const Offset v = Offset(0, _cornerLength);
+    corner(frame.topLeft, h, v);
+    corner(frame.topRight, -h, v);
+    corner(frame.bottomLeft, h, -v);
+    corner(frame.bottomRight, -h, -v);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ViewfinderPainter oldDelegate) =>
+      oldDelegate.frame != frame || oldDelegate.accent != accent;
+}
+
+/// Torch on/off, hidden entirely on hardware that has none rather than shown
+/// disabled — a control nobody's device can ever act on is not a control.
+class _TorchButton extends StatelessWidget {
+  const _TorchButton({required this.controller});
+
+  final MobileScannerController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<MobileScannerState>(
+      valueListenable: controller,
+      builder: (BuildContext context, MobileScannerState state, Widget? _) {
+        if (state.torchState == TorchState.unavailable) {
+          return const SizedBox.shrink();
+        }
+        final bool on = state.torchState == TorchState.on;
+        return IconButton(
+          icon: Icon(on ? Icons.flash_on : Icons.flash_off),
+          tooltip: on ? 'Turn off the flashlight' : 'Turn on the flashlight',
+          onPressed: controller.toggleTorch,
+        );
+      },
     );
   }
 }
