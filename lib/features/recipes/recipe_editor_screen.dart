@@ -25,6 +25,9 @@ import 'recipe_draft.dart';
 import 'recipe_import_controller.dart';
 import 'recipe_photo.dart';
 
+/// The ways out of a line whose food cannot answer in its unit.
+enum _FixChoice { addServing, pickAnother, scan, unmatch }
+
 /// Create or edit a recipe (spec §5.2).
 ///
 /// Ingredients and directions are typed or pasted as blocks and parsed live,
@@ -221,7 +224,17 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       ingredientName: ingredient.name,
       currentFoodId: current ?? suggestion?.foodId,
     );
+    await _applyMatch(ingredient, chosen);
+  }
+
+  /// Records what a line was matched to — or unmatched from.
+  ///
+  /// Shared by the picker, the scanner, and the unmatch action, because all
+  /// three end in the same two things: the draft updated, and the decision
+  /// remembered so the same correction is never made twice (spec §5.3).
+  Future<void> _applyMatch(ParsedIngredient ingredient, String? chosen) async {
     if (chosen == null || !mounted) return;
+    final String key = normaliseKey(ingredient.name);
 
     setState(() {
       final Map<String, String> next = <String, String>{..._matches};
@@ -236,7 +249,6 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       _matches = next;
     });
 
-    // Remember it, so the same correction is never made twice (spec §5.3).
     if (chosen != clearFoodSentinel) {
       await ref
           .read(ingredientMatchStoreProvider)
@@ -256,6 +268,78 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
           );
     }
     ref.invalidate(rememberedMatchesProvider);
+  }
+
+  /// What to do about a line whose food cannot answer in the unit it is
+  /// written in.
+  ///
+  /// Four ways out, because the right one depends on what actually went
+  /// wrong: the food is right and just needs this unit, the wrong food is
+  /// attached, the packet is in your hand, or it should not be matched at
+  /// all. Going straight to the food editor assumed the first and quietly
+  /// removed the other three.
+  Future<void> _showFixOptions(ParsedIngredient ingredient, Food food) async {
+    final String unit =
+        ingredient.quantity?.preferredUnit?.label ?? 'that unit';
+
+    final _FixChoice? choice = await showModalBottomSheet<_FixChoice>(
+      context: context,
+      backgroundColor: context.colors.surface,
+      builder: (BuildContext context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.all(HearthSpacing.lg),
+              child: Text(
+                '${food.name} has no serving in $unit',
+                style: context.text.sectionHeader,
+              ),
+            ),
+            for (final (_FixChoice value, IconData icon, String label)
+                in <(_FixChoice, IconData, String)>[
+                  (
+                    _FixChoice.addServing,
+                    Icons.straighten,
+                    'Add a serving in $unit',
+                  ),
+                  (
+                    _FixChoice.pickAnother,
+                    Icons.search,
+                    'Match a different food',
+                  ),
+                  (
+                    _FixChoice.scan,
+                    Icons.qr_code_scanner,
+                    'Scan the packet instead',
+                  ),
+                  (_FixChoice.unmatch, Icons.link_off, 'Unmatch this line'),
+                ])
+              ListTile(
+                leading: Icon(icon, color: context.colors.textSecondary),
+                title: Text(label, style: context.text.body),
+                onTap: () => Navigator.of(context).pop(value),
+              ),
+            const SizedBox(height: HearthSpacing.sm),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+
+    switch (choice) {
+      case _FixChoice.addServing:
+        await _fixFood(food.id);
+      case _FixChoice.pickAnother:
+        await _matchIngredient(ingredient);
+      case _FixChoice.scan:
+        await _applyMatch(
+          ingredient,
+          await context.push<String>('/food/scan?pick=1'),
+        );
+      case _FixChoice.unmatch:
+        await _applyMatch(ingredient, clearFoodSentinel);
+    }
   }
 
   RecipeDraft get _draft => RecipeDraft(
@@ -527,7 +611,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
                   draft: draft,
                   statusByName: statusByName,
                   onMatch: _matchIngredient,
-                  onFixFood: _fixFood,
+                  onFix: _showFixOptions,
                 ),
                 if (_unmatchedIn(i, draft) case final List<ParsedIngredient> u
                     when u.isNotEmpty) ...<Widget>[
@@ -691,7 +775,7 @@ class _IngredientPreview extends StatelessWidget {
     required this.draft,
     required this.statusByName,
     required this.onMatch,
-    required this.onFixFood,
+    required this.onFix,
   });
 
   final List<ParsedIngredient> ingredients;
@@ -704,8 +788,8 @@ class _IngredientPreview extends StatelessWidget {
 
   final ValueChanged<ParsedIngredient> onMatch;
 
-  /// Opens a matched food for editing, by id.
-  final ValueChanged<String> onFixFood;
+  /// Offers the ways out of a line whose food cannot answer in its unit.
+  final void Function(ParsedIngredient, Food) onFix;
 
   @override
   Widget build(BuildContext context) {
@@ -723,7 +807,10 @@ class _IngredientPreview extends StatelessWidget {
               food: foods[draft.foodIdFor(ingredient.name)],
               status: statusByName[normaliseKey(ingredient.name)],
               onMatch: () => onMatch(ingredient),
-              onFixFood: onFixFood,
+              onFix: () {
+                final Food? matched = foods[draft.foodIdFor(ingredient.name)];
+                if (matched != null) onFix(ingredient, matched);
+              },
               colors: colors,
               text: text,
             ),
@@ -739,7 +826,7 @@ class _IngredientRow extends StatelessWidget {
     required this.food,
     required this.status,
     required this.onMatch,
-    required this.onFixFood,
+    required this.onFix,
     required this.colors,
     required this.text,
   });
@@ -751,7 +838,10 @@ class _IngredientRow extends StatelessWidget {
   final IngredientMacroStatus? status;
 
   final VoidCallback onMatch;
-  final ValueChanged<String> onFixFood;
+
+  /// Tapped instead of [onMatch] when the food is attached but unusable.
+  final VoidCallback onFix;
+
   final HearthColors colors;
   final HearthTextStyles text;
 
@@ -802,16 +892,13 @@ class _IngredientRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ({IconData icon, Color colour, String text}) state = _state();
 
-    // A row whose food cannot answer in this unit is not asking to be
-    // rematched — it is asking for a serving in that unit, which lives in
-    // the food's own editor. Sending it to the picker offered to solve the
-    // problem by choosing a different food, which is not what went wrong.
-    final String? fixableFoodId = status == IngredientMacroStatus.unconvertible
-        ? food?.id
-        : null;
-    final VoidCallback onTap = fixableFoodId == null
-        ? onMatch
-        : () => onFixFood(fixableFoodId);
+    // A row whose food cannot answer in this unit has more than one thing
+    // possibly wrong with it — the food may need that serving, or be the
+    // wrong food entirely — so it opens the choices rather than the picker,
+    // which can only ever offer a different food.
+    final bool needsFixing =
+        status == IngredientMacroStatus.unconvertible && food != null;
+    final VoidCallback onTap = needsFixing ? onFix : onMatch;
 
     return Semantics(
       button: true,

@@ -268,11 +268,7 @@ void main() {
       expect(find.text('tap to match a food'), findsNothing);
     });
 
-    testWidgets('tapping an unconvertible row opens the food, not the picker', (
-      WidgetTester tester,
-    ) async {
-      // "No serving in tbsp" is fixed by giving that food a serving in tbsp.
-      // The picker only offers a different food, which is not what is wrong.
+    Future<void> openFixSheet(WidgetTester tester) async {
       await openEditorWith(
         tester,
         line: '1 tbsp white onion',
@@ -290,13 +286,58 @@ void main() {
           ),
         ],
       );
-
       // The row, not the summary sentence underneath — both mention it.
       await tester.tap(find.textContaining('White onion — no serving in'));
       await tester.pumpAndSettle();
+    }
+
+    testWidgets('a flagged row offers every way out, not just one', (
+      WidgetTester tester,
+    ) async {
+      // Going straight to the food editor assumed the food was right and only
+      // wanted the unit. It might be the wrong food, or the packet might be
+      // in your hand, or the line might not want matching at all.
+      await openFixSheet(tester);
+
+      expect(find.textContaining('no serving in tbsp'), findsWidgets);
+      expect(find.text('Add a serving in tbsp'), findsOneWidget);
+      expect(find.text('Match a different food'), findsOneWidget);
+      expect(find.text('Scan the packet instead'), findsOneWidget);
+      expect(find.text('Unmatch this line'), findsOneWidget);
+    });
+
+    testWidgets('adding a serving goes to that food, not the picker', (
+      WidgetTester tester,
+    ) async {
+      await openFixSheet(tester);
+
+      await tester.tap(find.text('Add a serving in tbsp'));
+      await tester.pumpAndSettle();
 
       expect(find.text('Edit food'), findsOneWidget);
-      expect(find.textContaining('Match "'), findsNothing);
+    });
+
+    testWidgets('matching a different food opens the picker', (
+      WidgetTester tester,
+    ) async {
+      await openFixSheet(tester);
+
+      await tester.tap(find.text('Match a different food'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Match "white onion"'), findsOneWidget);
+    });
+
+    testWidgets('unmatching detaches the food and says so', (
+      WidgetTester tester,
+    ) async {
+      await openFixSheet(tester);
+
+      await tester.tap(find.text('Unmatch this line'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('tap to match a food'), findsWidgets);
+      expect(find.textContaining('no serving in'), findsNothing);
     });
 
     testWidgets('a healthy match shows the food, with no warning', (
