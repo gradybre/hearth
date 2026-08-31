@@ -234,6 +234,92 @@ void main() {
       expect(first.macros.kcal, closeTo(15, 0.01));
     });
 
+    test('the household measure on the label leads when there is one', () async {
+      // Brendan's question: a Kirkland cheddar whose label is in imperial
+      // came back in grams. Open Food Facts' numeric fields are always metric
+      // — `serving_quantity` is grams for every US product — but the measure
+      // printed on the box usually survives in the text beside them, and it
+      // was being thrown away.
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 1,
+        'product': <String, Object?>{
+          ...product(name: 'Honey nut cheerios', kcal: 375),
+          'serving_size': '3/4 cup (28 g) (28 g)',
+          'serving_quantity': 28,
+        },
+      });
+
+      final NutritionMatch match = (await off.byBarcode('016000275270'))!;
+      final ServingOption first = match.food.servingOptions.first;
+
+      // Rendered the way a recipe writes it, by the shared formatter.
+      expect(first.label, '¾ cup');
+      expect(first.amount.amountIn(Units.cup), closeTo(0.75, 1e-9));
+      // Scaled from the grams, which is the only figure with macros behind it.
+      expect(first.macros.kcal, closeTo(105, 0.01));
+      // And the grams stay on offer underneath, so a recipe measured by
+      // weight is no worse off than before.
+      expect(
+        match.food.servingOptions.map((ServingOption o) => o.label),
+        <String>['¾ cup', '3/4 cup (28 g) (28 g)', '100 g'],
+      );
+    });
+
+    test(
+      'a label in ounces reads in ounces, without losing the grams',
+      () async {
+        // The gram figure is exact and the ounce one is the label's rounding,
+        // so this changes how it reads and not what it weighs.
+        final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+          'status': 1,
+          'product': <String, Object?>{
+            ...product(name: 'Sharp cheddar', kcal: 403),
+            'serving_size': '1 oz (28 g)',
+            'serving_quantity': 28,
+          },
+        });
+
+        final ServingOption first = (await off.byBarcode('0096619456202'))!
+            .food
+            .servingOptions
+            .first;
+
+        expect(first.label, '1 oz');
+        expect(first.amount.amountIn(Units.gram), closeTo(28, 1e-9));
+      },
+    );
+
+    test('a serving nobody can measure leaves the grams alone', () async {
+      // "1 serving", "1 bar", "0.5 Can" — all real Open Food Facts strings,
+      // and none of them a measure a cook can use. The grams stand.
+      for (final String stated in <String>[
+        '1 serving (28 g)',
+        '1 bar (43 g)',
+        '0.5 Can (207 g)',
+        '1 portion (28.3 g)',
+      ]) {
+        final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+          'status': 1,
+          'product': <String, Object?>{
+            ...product(kcal: 100),
+            'serving_size': stated,
+            'serving_quantity': 28,
+          },
+        });
+
+        final ServingOption first = (await off.byBarcode('5000157024671'))!
+            .food
+            .servingOptions
+            .first;
+        expect(
+          first.label,
+          stated,
+          reason: '"\$stated" names no measurable unit',
+        );
+        expect(first.amount.kind, UnitKind.mass);
+      }
+    });
+
     test('per 100 g is still offered, just not first', () async {
       final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
         'status': 1,
