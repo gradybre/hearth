@@ -33,12 +33,25 @@ class ServingOption {
     required this.label,
     required this.amount,
     required this.macros,
+    this.isReference = false,
   });
 
   final String id;
 
   /// How the portion reads in the UI: "1 slice", "100 g".
   final String label;
+
+  /// Whether this is a source's per-100 reference rather than a portion.
+  ///
+  /// Open Food Facts and USDA both quote nutrition per 100 g and often know
+  /// nothing else, so every food carries a 100 g option whether or not anybody
+  /// eats 100 g of it. Saying which one that is stops a screen dressing it up
+  /// as a serving — a search list that rendered it in ounces read as though
+  /// every yogurt on the shelf came in identical 3.5 oz pots.
+  ///
+  /// Deliberately not persisted: once a human has reviewed a food and saved
+  /// it, every serving on it is one they chose.
+  final bool isReference;
 
   /// The measured size of this portion. Its [Quantity.kind] decides whether an
   /// ingredient measured by volume, weight, or count can use it directly.

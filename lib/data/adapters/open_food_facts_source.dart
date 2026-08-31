@@ -46,6 +46,26 @@ class OpenFoodFactsSource implements NutritionSource {
   static const String fields =
       'code,product_name,brands,quantity,serving_size,nutriments';
 
+  /// What the search index can actually answer with.
+  ///
+  /// Search-a-licious does not carry `serving_size` at all — asking for it
+  /// returns null for every hit, including products whose barcode record has
+  /// one — so serving sizes are filled in afterwards by [_hydrateServings].
+  static const String searchFields =
+      'code,product_name,brands,quantity,nutriments';
+
+  /// The serving fields only the product endpoint holds.
+  static const String servingFields = 'code,serving_size,serving_quantity';
+
+  /// How many hits to go back and fetch a serving size for.
+  ///
+  /// One request each, run together, and they are the cheap `product` endpoint
+  /// rather than the flaky v2 `search` one — a batched `?code=a,b,c` call
+  /// returns the same data but 503s better than half the time at this many
+  /// codes, which is the same unreliability that made v2 search unusable for
+  /// text in the first place.
+  static const int maxHydrations = 20;
+
   final http.Client _client;
   final String _userAgent;
 
@@ -93,7 +113,7 @@ class OpenFoodFactsSource implements NutritionSource {
       // search for "96/4 Ground Beef" returned peanut butter and coffee, with
       // real matches for the query buried past position 10,000. Relevance
       // alone already surfaces the right answer first for both cases.
-      'fields': fields,
+      'fields': searchFields,
       'page_size': '$limit',
     });
 
@@ -104,11 +124,56 @@ class OpenFoodFactsSource implements NutritionSource {
     final Object? hits = body['hits'];
     if (hits is! List<Object?>) return const <NutritionMatch>[];
 
-    return <NutritionMatch>[
+    final List<Map<String, Object?>> products = <Map<String, Object?>>[
       for (final Object? hit in hits)
-        if (hit is Map<String, Object?>)
-          if (_toMatch(hit) case final NutritionMatch match) match,
+        if (hit is Map<String, Object?>) hit,
     ];
+    await _hydrateServings(products);
+
+    return <NutritionMatch>[
+      for (final Map<String, Object?> product in products)
+        if (_toMatch(product) case final NutritionMatch match) match,
+    ];
+  }
+
+  /// Fills in the serving sizes the search index does not carry.
+  ///
+  /// Without this every search result fell back to the per-100 g reference,
+  /// so a shelf of yogurts all claimed the same serving — the products know
+  /// better ("1 CONTAINER (150 g)", "0.5 cup (89 g)"), that knowledge just
+  /// lives on the barcode endpoint rather than in the search index.
+  ///
+  /// Best-effort throughout: a product that does not answer keeps the
+  /// reference, which now says so rather than posing as a portion. Nothing
+  /// here can fail the search that has already succeeded.
+  Future<void> _hydrateServings(List<Map<String, Object?>> products) async {
+    final List<Map<String, Object?>> wanted = <Map<String, Object?>>[
+      for (final Map<String, Object?> product in products)
+        if (product['serving_size'] == null)
+          if ('${product['code'] ?? ''}'.trim().isNotEmpty) product,
+    ];
+    if (wanted.isEmpty) return;
+
+    await Future.wait(<Future<void>>[
+      for (final Map<String, Object?> product in wanted.take(maxHydrations))
+        _fillServing(product),
+    ]);
+  }
+
+  Future<void> _fillServing(Map<String, Object?> product) async {
+    final String code = '${product['code']}'.trim();
+    final Map<String, Object?>? body = await _get(
+      Uri.https(host, '/api/v2/product/$code.json', <String, String>{
+        'fields': servingFields,
+      }),
+    );
+    if (body == null || body['status'] != 1) return;
+
+    final Object? full = body['product'];
+    if (full is! Map<String, Object?>) return;
+
+    product['serving_size'] = full['serving_size'];
+    product['serving_quantity'] = full['serving_quantity'];
   }
 
   Future<Map<String, Object?>?> _get(Uri uri) async {
@@ -174,6 +239,7 @@ class OpenFoodFactsSource implements NutritionSource {
             label: '100 g',
             amount: Quantity.of(100, Units.gram),
             macros: per100g,
+            isReference: true,
           ),
         ],
       ),

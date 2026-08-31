@@ -47,6 +47,8 @@ OpenFoodFactsSource sourceReturning(
 );
 
 void main() {
+  hydrationTests();
+
   group('a barcode that exists', () {
     test('becomes a food with macros per 100 g', () async {
       final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
@@ -439,13 +441,17 @@ void main() {
 
       await off.search('chicken broth');
 
-      expect(calls.single.host, OpenFoodFactsSource.searchHost);
-      expect(calls.single.queryParameters['q'], 'chicken broth');
+      // The text query goes to one service; the serving sizes it cannot
+      // answer with are fetched from the other afterwards.
+      final Uri search = calls.firstWhere(
+        (Uri call) => call.host == OpenFoodFactsSource.searchHost,
+      );
+      expect(search.queryParameters['q'], 'chicken broth');
       // No sort_by: Search-a-licious only ranks by relevance when nothing
       // overrides it, and sort_by replaces relevance rather than tie-breaking
       // it — forcing popularity order buried an exact match for a less
       // globally popular query ("96/4 Ground Beef") past the first page.
-      expect(calls.single.queryParameters.containsKey('sort_by'), isFalse);
+      expect(search.queryParameters.containsKey('sort_by'), isFalse);
     });
 
     test('a brand list is read as well as a brand string', () async {
@@ -478,4 +484,121 @@ void main() {
 /// otherwise has no need of it.
 class SocketExceptionStub implements Exception {
   const SocketExceptionStub();
+}
+
+/// Search results carry no serving size (see [_hydrationTests]).
+void hydrationTests() {
+  /// A source whose search index answers without serving sizes and whose
+  /// product endpoint has them — which is exactly how Open Food Facts behaves.
+  OpenFoodFactsSource splitSource({
+    required List<Map<String, Object?>> hits,
+    required Map<String, String?> servingsByCode,
+    List<Uri>? recordInto,
+    bool productsFail = false,
+  }) => OpenFoodFactsSource(
+    client: MockClient((http.Request request) async {
+      recordInto?.add(request.url);
+
+      if (request.url.host == OpenFoodFactsSource.searchHost) {
+        return http.Response(
+          jsonEncode(<String, Object?>{'hits': hits}),
+          200,
+          headers: <String, String>{'content-type': 'application/json'},
+        );
+      }
+
+      if (productsFail) return http.Response('nope', 503);
+
+      final String code = request.url.pathSegments.last.replaceAll('.json', '');
+      return http.Response(
+        jsonEncode(<String, Object?>{
+          'status': 1,
+          'product': <String, Object?>{
+            'code': code,
+            'serving_size': ?servingsByCode[code],
+            'serving_quantity': 150,
+          },
+        }),
+        200,
+        headers: <String, String>{'content-type': 'application/json'},
+      );
+    }),
+  );
+
+  group('serving sizes the search index does not carry', () {
+    test('are fetched from the product endpoint afterwards', () async {
+      // Brendan's report: every Oikos yogurt in the list claimed the same
+      // serving. Search-a-licious does not hold `serving_size` at all — it
+      // answers null for it even on products whose barcode record has one —
+      // so every hit fell back to the per-100 g reference.
+      final OpenFoodFactsSource off = splitSource(
+        hits: <Map<String, Object?>>[
+          product(name: 'Oikos Strawberry', code: '111'),
+          product(name: 'Oikos Vanilla', code: '222'),
+        ],
+        servingsByCode: <String, String?>{
+          '111': '1 CONTAINER (150 g)',
+          '222': '0.5 cup (89 g)',
+        },
+      );
+
+      final List<NutritionMatch> matches = await off.search('oikos');
+
+      expect(matches, hasLength(2));
+      // A count is kept as the packet's own wording — nothing converts a
+      // container — while a volume becomes a measure a cook can use.
+      expect(matches[0].food.defaultServing!.label, '1 CONTAINER (150 g)');
+      expect(matches[1].food.defaultServing!.label, '½ cup');
+    });
+
+    test('are asked for once each, and only where one is missing', () async {
+      final List<Uri> calls = <Uri>[];
+      final OpenFoodFactsSource off = splitSource(
+        hits: <Map<String, Object?>>[
+          product(code: '111'),
+          product(code: '222', servingSize: '1 bar (43 g)'),
+        ],
+        servingsByCode: <String, String?>{'111': '1 CONTAINER (150 g)'},
+        recordInto: calls,
+      );
+
+      await off.search('oikos');
+
+      final List<Uri> products = <Uri>[
+        for (final Uri call in calls)
+          if (call.path.contains('/product/')) call,
+      ];
+      expect(products, hasLength(1));
+      expect(products.single.path, contains('111'));
+    });
+
+    test('a product that will not answer keeps the reference', () async {
+      // Best-effort: nothing here can fail a search that already succeeded.
+      final OpenFoodFactsSource off = splitSource(
+        hits: <Map<String, Object?>>[product(code: '111')],
+        servingsByCode: const <String, String?>{},
+        productsFail: true,
+      );
+
+      final List<NutritionMatch> matches = await off.search('oikos');
+
+      expect(matches, hasLength(1));
+      final ServingOption serving = matches.single.food.defaultServing!;
+      expect(serving.label, '100 g');
+      // And it says what it is, so no screen can show it as a portion.
+      expect(serving.isReference, isTrue);
+    });
+
+    test('the reference is never the only thing offered when a real serving '
+        'arrives', () async {
+      final OpenFoodFactsSource off = splitSource(
+        hits: <Map<String, Object?>>[product(code: '111')],
+        servingsByCode: <String, String?>{'111': '1 CONTAINER (150 g)'},
+      );
+
+      final Food food = (await off.search('oikos')).single.food;
+      expect(food.servingOptions.last.isReference, isTrue);
+      expect(food.servingOptions.first.isReference, isFalse);
+    });
+  });
 }

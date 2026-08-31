@@ -6,7 +6,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../data/adapters/nutrition_source.dart';
-import '../../domain/format/quantity_format.dart';
+import '../../domain/format/serving_format.dart';
 import '../../domain/models/food.dart';
 import 'food_draft.dart';
 import 'food_search_controller.dart';
@@ -151,13 +151,12 @@ class _ExternalFood extends StatelessWidget {
     final ServingOption? serving = match.food.defaultServing;
     // Not `serving.label`: that is whatever prose the source shipped, and
     // every source reports metrically whatever the packet says, so the list
-    // read as an unbroken column of grams. Formatting the quantity instead
-    // shows the measure the box states when the label named one — the
-    // adapters keep it as a real unit now — and falls back to imperial when
-    // it did not, rather than to a source's own bookkeeping.
+    // read as an unbroken column of grams. [ServingFormat] prefers the words
+    // on the packet, falls back to imperial, and leaves a per-100 g reference
+    // alone rather than dressing it up as a portion.
     final String macros = serving == null
         ? 'No serving size'
-        : '${QuantityFormat.format(serving.amount)} · '
+        : '${ServingFormat.describe(serving)} · '
               '${serving.macros.kcal.round()} kcal';
 
     return Semantics(

@@ -4,6 +4,7 @@ import 'package:hearth/data/adapters/nutrition_source.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
+import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/app_harness.dart';
@@ -39,6 +40,8 @@ NutritionMatch aMatch(
   String name, {
   double amount = 100,
   Unit unit = Units.gram,
+  String? label,
+  bool isReference = false,
 }) => NutritionMatch(
   source: FoodSource.usda,
   confidence: 0.95,
@@ -47,11 +50,12 @@ NutritionMatch aMatch(
     id: 'usda:$name',
     source: FoodSource.usda,
     servingOptions: <ServingOption>[
-      aServing(
+      ServingOption(
         id: 'usda:$name:serving',
-        amount: amount,
-        unit: unit,
+        label: label ?? '$amount ${unit.label}',
+        amount: Quantity.of(amount, unit),
         macros: const Macros(kcal: 52, proteinG: 0.3, carbG: 14),
+        isReference: isReference,
       ),
     ],
   ),
@@ -210,12 +214,47 @@ void main() {
     await openMealPicker(
       tester,
       sources: <NutritionSource>[
-        _StubSource(<NutritionMatch>[aMatch('Apple, raw')]),
+        _StubSource(<NutritionMatch>[aMatch('Apple, raw', amount: 150)]),
       ],
     );
     await searchFor(tester, 'apple');
 
-    expect(find.textContaining('3.5 oz'), findsOneWidget);
-    expect(find.textContaining('100 g'), findsNothing);
+    expect(find.textContaining('5.3 oz'), findsOneWidget);
+  });
+
+  testWidgets('a per-100 g reference is not dressed up as a serving', (
+    WidgetTester tester,
+  ) async {
+    // Brendan's report: every Oikos yogurt in the list claimed "3.5 oz".
+    // None of them said so — that is 100 g in ounces, the figure nutrition is
+    // quoted against rather than a pot anybody eats.
+    await openMealPicker(
+      tester,
+      sources: <NutritionSource>[
+        _StubSource(<NutritionMatch>[
+          aMatch('Apple, raw', amount: 100, label: '100 g', isReference: true),
+        ]),
+      ],
+    );
+    await searchFor(tester, 'apple');
+
+    expect(find.textContaining('100 g'), findsOneWidget);
+    expect(find.textContaining('3.5 oz'), findsNothing);
+  });
+
+  testWidgets("a serving reads in the packet's own words", (
+    WidgetTester tester,
+  ) async {
+    await openMealPicker(
+      tester,
+      sources: <NutritionSource>[
+        _StubSource(<NutritionMatch>[
+          aMatch('Oikos Strawberry', amount: 150, label: '1 con (150 g)'),
+        ]),
+      ],
+    );
+    await searchFor(tester, 'oikos');
+
+    expect(find.textContaining('1 container'), findsOneWidget);
   });
 }

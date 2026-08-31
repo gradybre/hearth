@@ -112,6 +112,7 @@ class UsdaNutritionSource implements NutritionSource {
             label: '100 g',
             amount: Quantity.of(100, Units.gram),
             macros: per100g,
+            isReference: true,
           ),
         ],
       ),
