@@ -461,7 +461,12 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
                   child: _Field(
                     controller: _servings,
                     label: 'Serves',
-                    keyboardType: TextInputType.number,
+                    // A number pad on iOS has no decimal point, so a recipe
+                    // that serves 4.5 could not be typed. Prep and cook
+                    // beside it stay whole minutes.
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     errorText: _showErrors ? draft.servingsError : null,
                     onChanged: _rebuild,
                   ),

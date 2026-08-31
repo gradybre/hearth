@@ -1,0 +1,78 @@
+/// Reading the numbers people actually write for amounts.
+///
+/// Kitchens are the last place decimals won: a measuring cup is marked ⅓ and
+/// ⅔, a spoon is a half, and a recipe says "1 1/2 cups". Anywhere Hearth asks
+/// for an amount it has to read those back, or the answer is "type 0.6667",
+/// which nobody is going to do.
+///
+/// Shared rather than owned by the ingredient parser, which is where this
+/// logic started: a serving size typed into the food editor needs exactly the
+/// same reading, and two copies of it would drift.
+library;
+
+/// Single-character fractions, as typed on a phone or pasted from the web.
+const Map<String, double> vulgarFractions = <String, double>{
+  '½': 0.5,
+  '⅓': 1 / 3,
+  '⅔': 2 / 3,
+  '¼': 0.25,
+  '¾': 0.75,
+  '⅕': 0.2,
+  '⅙': 1 / 6,
+  '⅚': 5 / 6,
+  '⅛': 0.125,
+  '⅜': 0.375,
+  '⅝': 0.625,
+  '⅞': 0.875,
+};
+
+/// The characters an amount can legitimately contain.
+///
+/// Used to keep a full keyboard from putting letters into a number field on
+/// the platforms that have no numeric pad carrying both "." and "/".
+final RegExp amountCharacters = RegExp(
+  '[0-9 ./${vulgarFractions.keys.join()}]',
+);
+
+/// Parses one written amount into a number, or null when it is not one.
+///
+/// Understands "2", "1.5", "1/2", "2 1/3", "1½" and a bare "½". Returns null
+/// rather than a guess for anything else — a serving size nobody can read
+/// back is better left empty than silently turned into a number the user did
+/// not mean.
+double? parseAmount(String raw) {
+  final String text = raw.trim();
+  if (text.isEmpty) return null;
+
+  // Whole number followed by a vulgar fraction: "1½".
+  final RegExpMatch? mixedVulgar = RegExp(
+    '^(\\d+(?:\\.\\d+)?)\\s*([${vulgarFractions.keys.join()}])\$',
+  ).firstMatch(text);
+  if (mixedVulgar != null) {
+    return double.parse(mixedVulgar.group(1)!) +
+        vulgarFractions[mixedVulgar.group(2)!]!;
+  }
+
+  final double? vulgar = vulgarFractions[text];
+  if (vulgar != null) return vulgar;
+
+  // Mixed number: "1 1/2".
+  final RegExpMatch? mixed = RegExp(r'^(\d+)\s+(\d+)\s*/\s*(\d+)$')
+      .firstMatch(text);
+  if (mixed != null) {
+    final double denominator = double.parse(mixed.group(3)!);
+    if (denominator == 0) return null;
+    return double.parse(mixed.group(1)!) +
+        double.parse(mixed.group(2)!) / denominator;
+  }
+
+  // Plain fraction: "2/3".
+  final RegExpMatch? fraction = RegExp(r'^(\d+)\s*/\s*(\d+)$').firstMatch(text);
+  if (fraction != null) {
+    final double denominator = double.parse(fraction.group(2)!);
+    if (denominator == 0) return null;
+    return double.parse(fraction.group(1)!) / denominator;
+  }
+
+  return double.tryParse(text);
+}

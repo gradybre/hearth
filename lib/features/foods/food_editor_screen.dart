@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
@@ -7,6 +8,7 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../data/repositories/food_repository.dart';
 import '../../domain/models/food.dart';
+import '../../domain/parsing/amount_parser.dart';
 import '../../domain/units/unit.dart';
 import 'food_draft.dart';
 
@@ -328,7 +330,15 @@ class _ServingRow extends StatelessWidget {
                   child: _TextField(
                     label: 'Amount',
                     value: serving.amount,
-                    keyboardType: TextInputType.number,
+                    // A plain number pad on iOS offers digits and nothing
+                    // else — no "." and no "/" — so a serving of 2/3 cup or
+                    // 1.5 tsp simply could not be typed. There is no numeric
+                    // keyboard carrying both, so this takes the full one and
+                    // filters it down to what an amount can contain.
+                    keyboardType: TextInputType.text,
+                    inputFormatters: <TextInputFormatter>[
+                      FilteringTextInputFormatter.allow(amountCharacters),
+                    ],
                     onChanged: (String v) =>
                         onChanged(serving.copyWith(amount: v)),
                   ),
@@ -385,7 +395,7 @@ class _ServingRow extends StatelessWidget {
                   child: _TextField(
                     label: 'kcal',
                     value: serving.kcal,
-                    keyboardType: TextInputType.number,
+                    keyboardType: _decimal,
                     onChanged: (String v) =>
                         onChanged(serving.copyWith(kcal: v)),
                   ),
@@ -395,7 +405,7 @@ class _ServingRow extends StatelessWidget {
                   child: _TextField(
                     label: 'Protein',
                     value: serving.protein,
-                    keyboardType: TextInputType.number,
+                    keyboardType: _decimal,
                     onChanged: (String v) =>
                         onChanged(serving.copyWith(protein: v)),
                   ),
@@ -405,7 +415,7 @@ class _ServingRow extends StatelessWidget {
                   child: _TextField(
                     label: 'Carbs',
                     value: serving.carbs,
-                    keyboardType: TextInputType.number,
+                    keyboardType: _decimal,
                     onChanged: (String v) =>
                         onChanged(serving.copyWith(carbs: v)),
                   ),
@@ -415,7 +425,7 @@ class _ServingRow extends StatelessWidget {
                   child: _TextField(
                     label: 'Fat',
                     value: serving.fat,
-                    keyboardType: TextInputType.number,
+                    keyboardType: _decimal,
                     onChanged: (String v) =>
                         onChanged(serving.copyWith(fat: v)),
                   ),
@@ -429,6 +439,12 @@ class _ServingRow extends StatelessWidget {
   }
 }
 
+/// A number pad that carries a decimal point.
+///
+/// `TextInputType.number` gives digits alone on iOS, which is why every macro
+/// on this screen had to be a whole number — 3.6 g of fat could not be typed.
+const TextInputType _decimal = TextInputType.numberWithOptions(decimal: true);
+
 /// A labelled field driven by a value rather than a controller, so the parent
 /// can hold the draft as immutable state.
 class _TextField extends StatefulWidget {
@@ -439,6 +455,7 @@ class _TextField extends StatefulWidget {
     this.hint,
     this.errorText,
     this.keyboardType,
+    this.inputFormatters,
     this.textCapitalization = TextCapitalization.none,
   });
 
@@ -447,6 +464,7 @@ class _TextField extends StatefulWidget {
   final String? hint;
   final String? errorText;
   final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
   final TextCapitalization textCapitalization;
   final ValueChanged<String> onChanged;
 
@@ -489,6 +507,7 @@ class _TextFieldState extends State<_TextField> {
           controller: _controller,
           onChanged: widget.onChanged,
           keyboardType: widget.keyboardType,
+          inputFormatters: widget.inputFormatters,
           textCapitalization: widget.textCapitalization,
           style: context.text.body,
           decoration: InputDecoration(

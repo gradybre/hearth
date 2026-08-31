@@ -46,6 +46,27 @@ void main() {
       expect(const ServingDraft(amount: '100').isUsable, isTrue);
     });
 
+    test('a serving written as a fraction is a real amount', () {
+      // Brendan's report: a 2/3 cup serving could not be saved. The keyboard
+      // was half of it; the other half was here, where the amount was read
+      // with a plain double parse that rejects every fraction a measuring
+      // cup is actually marked with.
+      expect(const ServingDraft(amount: '2/3').isUsable, isTrue);
+      expect(
+        const ServingDraft(amount: '2/3').amountValue,
+        closeTo(2 / 3, 1e-12),
+      );
+      expect(
+        const ServingDraft(amount: '1 1/2').amountValue,
+        closeTo(1.5, 1e-12),
+      );
+      expect(
+        const ServingDraft(amount: '1.5').amountValue,
+        closeTo(1.5, 1e-12),
+      );
+      expect(const ServingDraft(amount: '½').amountValue, closeTo(0.5, 1e-12));
+    });
+
     test('missing macros do not block a save', () {
       // A food with a known portion and unknown calories still beats no food
       // at all — flag, never block (spec §5.3).

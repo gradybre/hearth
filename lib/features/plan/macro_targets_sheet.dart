@@ -169,7 +169,9 @@ class _TargetField extends StatelessWidget {
         const SizedBox(height: HearthSpacing.xs),
         TextField(
           controller: controller,
-          keyboardType: TextInputType.number,
+          // A target of 162.5 g of protein is an ordinary number; a plain
+          // number pad on iOS cannot type the point.
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           style: context.text.body,
         ),
       ],

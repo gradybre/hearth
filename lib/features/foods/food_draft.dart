@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
+import '../../domain/parsing/amount_parser.dart';
 import '../../domain/units/quantity.dart';
 import '../../domain/units/unit.dart';
 
@@ -31,7 +32,10 @@ class ServingDraft {
 
   Unit get unit => Units.byId(unitId) ?? Units.gram;
 
-  double? get amountValue => double.tryParse(amount.trim());
+  /// Reads fractions as well as decimals: a measuring cup is marked ⅔, and
+  /// a serving typed as "2/3" has to come back as a number rather than as
+  /// nothing at all.
+  double? get amountValue => parseAmount(amount);
 
   /// A serving is worth saving once it has a positive amount. Macros default
   /// to zero rather than blocking: a food with a known portion and unknown

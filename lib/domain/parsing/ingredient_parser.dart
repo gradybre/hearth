@@ -2,6 +2,7 @@ import 'package:meta/meta.dart';
 
 import '../units/quantity.dart';
 import '../units/unit.dart';
+import 'amount_parser.dart';
 
 /// A free-typed or AI-imported ingredient line, broken into structured fields.
 ///
@@ -48,21 +49,6 @@ class ParsedIngredient {
 /// A wrong quantity is far more damaging than a missing one — it silently
 /// corrupts macros and the shopping list.
 abstract final class IngredientParser {
-  static const Map<String, double> _vulgarFractions = <String, double>{
-    '½': 0.5,
-    '⅓': 1 / 3,
-    '⅔': 2 / 3,
-    '¼': 0.25,
-    '¾': 0.75,
-    '⅕': 0.2,
-    '⅙': 1 / 6,
-    '⅚': 5 / 6,
-    '⅛': 0.125,
-    '⅜': 0.375,
-    '⅝': 0.625,
-    '⅞': 0.875,
-  };
-
   /// Phrases that mark a line as optional / to taste.
   static final List<RegExp> _optionalMarkers = <RegExp>[
     RegExp(r'\bto taste\b', caseSensitive: false),
@@ -229,6 +215,10 @@ abstract final class IngredientParser {
   static double _higherOf(double a, double b) => a > b ? a : b;
 
   /// Parses a lone amount token into a number.
+  ///
+  /// Ranges are this parser's own business — a serving size is never "1-2" —
+  /// so they are resolved here and everything else is read by the shared
+  /// [parseAmount], which the food editor uses for exactly the same job.
   static double? _parseAmount(String token) {
     final String text = token.trim();
     final RegExpMatch? range = _hyphenRange.firstMatch(text);
@@ -238,39 +228,7 @@ abstract final class IngredientParser {
         double.parse(range.group(2)!),
       );
     }
-
-    // Whole number followed by a vulgar fraction: "1½".
-    final RegExpMatch? mixedVulgar = RegExp(
-      r'^(\d+(?:\.\d+)?)\s*([½⅓⅔¼¾⅕⅙⅚⅛⅜⅝⅞])$',
-    ).firstMatch(text);
-    if (mixedVulgar != null) {
-      return double.parse(mixedVulgar.group(1)!) +
-          _vulgarFractions[mixedVulgar.group(2)!]!;
-    }
-
-    final double? vulgar = _vulgarFractions[text];
-    if (vulgar != null) return vulgar;
-
-    // Mixed number: "1 1/2".
-    final RegExpMatch? mixed = RegExp(r'^(\d+)\s+(\d+)\s*/\s*(\d+)$')
-        .firstMatch(text);
-    if (mixed != null) {
-      final double denominator = double.parse(mixed.group(3)!);
-      if (denominator == 0) return null;
-      return double.parse(mixed.group(1)!) +
-          double.parse(mixed.group(2)!) / denominator;
-    }
-
-    // Plain fraction: "1/2".
-    final RegExpMatch? fraction = RegExp(r'^(\d+)\s*/\s*(\d+)$')
-        .firstMatch(text);
-    if (fraction != null) {
-      final double denominator = double.parse(fraction.group(2)!);
-      if (denominator == 0) return null;
-      return double.parse(fraction.group(1)!) / denominator;
-    }
-
-    return double.tryParse(text);
+    return parseAmount(text);
   }
 
   static String _tidy(String value) => value

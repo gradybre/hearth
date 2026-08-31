@@ -250,7 +250,9 @@ class _NumberField extends StatelessWidget {
       const SizedBox(height: HearthSpacing.xs),
       TextField(
         controller: controller,
-        keyboardType: TextInputType.number,
+        // Weights and targets are not always whole numbers, and a plain
+        // number pad on iOS has no decimal point.
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
         style: context.text.body,
         decoration: const InputDecoration(hintText: '—', isDense: false),
       ),
