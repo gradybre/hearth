@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
@@ -184,6 +185,17 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
           );
     }
     ref.invalidate(rememberedMatchesProvider);
+  }
+
+  /// Opens the matched food's editor, for a line whose problem is the food
+  /// rather than the match.
+  ///
+  /// "No serving in tbsp" is fixed by giving that food a serving in tbsp —
+  /// sending the user to the food *picker* instead, as tapping the row used
+  /// to, offers to solve it by choosing a different food, which is not what
+  /// went wrong.
+  Future<void> _fixFood(String foodId) async {
+    await context.push<void>('/food/$foodId');
   }
 
   Future<void> _matchIngredient(ParsedIngredient ingredient) async {
@@ -510,6 +522,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
                   draft: draft,
                   statusByName: statusByName,
                   onMatch: _matchIngredient,
+                  onFixFood: _fixFood,
                 ),
                 if (_unmatchedIn(i, draft) case final List<ParsedIngredient> u
                     when u.isNotEmpty) ...<Widget>[
@@ -673,6 +686,7 @@ class _IngredientPreview extends StatelessWidget {
     required this.draft,
     required this.statusByName,
     required this.onMatch,
+    required this.onFixFood,
   });
 
   final List<ParsedIngredient> ingredients;
@@ -684,6 +698,9 @@ class _IngredientPreview extends StatelessWidget {
   final Map<String, IngredientMacroStatus> statusByName;
 
   final ValueChanged<ParsedIngredient> onMatch;
+
+  /// Opens a matched food for editing, by id.
+  final ValueChanged<String> onFixFood;
 
   @override
   Widget build(BuildContext context) {
@@ -701,6 +718,7 @@ class _IngredientPreview extends StatelessWidget {
               food: foods[draft.foodIdFor(ingredient.name)],
               status: statusByName[normaliseKey(ingredient.name)],
               onMatch: () => onMatch(ingredient),
+              onFixFood: onFixFood,
               colors: colors,
               text: text,
             ),
@@ -716,6 +734,7 @@ class _IngredientRow extends StatelessWidget {
     required this.food,
     required this.status,
     required this.onMatch,
+    required this.onFixFood,
     required this.colors,
     required this.text,
   });
@@ -727,6 +746,7 @@ class _IngredientRow extends StatelessWidget {
   final IngredientMacroStatus? status;
 
   final VoidCallback onMatch;
+  final ValueChanged<String> onFixFood;
   final HearthColors colors;
   final HearthTextStyles text;
 
@@ -777,16 +797,27 @@ class _IngredientRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ({IconData icon, Color colour, String text}) state = _state();
 
+    // A row whose food cannot answer in this unit is not asking to be
+    // rematched — it is asking for a serving in that unit, which lives in
+    // the food's own editor. Sending it to the picker offered to solve the
+    // problem by choosing a different food, which is not what went wrong.
+    final String? fixableFoodId = status == IngredientMacroStatus.unconvertible
+        ? food?.id
+        : null;
+    final VoidCallback onTap = fixableFoodId == null
+        ? onMatch
+        : () => onFixFood(fixableFoodId);
+
     return Semantics(
       button: true,
       label:
           '${ingredient.quantity == null ? '' : '${QuantityFormat.formatAsAuthored(ingredient.quantity!)} '}'
           '${ingredient.name}. '
           '${state.text}',
-      onTap: onMatch,
+      onTap: onTap,
       excludeSemantics: true,
       child: InkWell(
-        onTap: onMatch,
+        onTap: onTap,
         borderRadius: BorderRadius.circular(HearthRadius.sm),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: HearthSpacing.xs),

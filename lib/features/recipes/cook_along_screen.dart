@@ -13,6 +13,7 @@ import '../../data/local/cook_session_store.dart';
 import '../../domain/cooking/cook_session.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/recipe.dart';
+import 'step_amounts.dart';
 import 'timer_bar.dart';
 
 /// Cooking a recipe, step by step (spec §5.2).
@@ -34,6 +35,14 @@ class CookAlongScreen extends ConsumerStatefulWidget {
 
 class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
   late CookSession _session = CookSession(recipe: widget.recipe);
+
+  /// The recipe's sections by id, so a step can look up the ingredients of
+  /// its own section — and only its own. Two teaspoons in the sauce and two
+  /// in the rub must read as two in each place.
+  late final Map<String, RecipeSection> _sectionsById = <String, RecipeSection>{
+    for (final RecipeSection section in widget.recipe.sections)
+      section.id: section,
+  };
   Timer? _tick;
   bool _askedPermission = false;
 
@@ -272,6 +281,7 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                     child: showAllSteps
                         ? _StepList(
                             session: _session,
+                            sections: _sectionsById,
                             timerByStep: timerByStep,
                             // Anywhere on the row ticks the step off. Nothing
                             // in the list navigates: the toggle above is the
@@ -283,6 +293,7 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                           )
                         : _StepCard(
                             step: step,
+                            section: _sectionsById[step.sectionId],
                             isChecked: _session.isChecked(step),
                             onAdvance: () => _update(_session.next()),
                             onCheck: () => _update(_session.toggle(step)),
@@ -388,12 +399,18 @@ class _Progress extends StatelessWidget {
 class _StepList extends StatelessWidget {
   const _StepList({
     required this.session,
+    required this.sections,
     required this.timerByStep,
     required this.onCheck,
     required this.onStartTimer,
   });
 
   final CookSession session;
+
+  /// The recipe's sections by id, so a step can say how much of its own
+  /// section's ingredients it uses.
+  final Map<String, RecipeSection> sections;
+
   final Map<String, CookTimer> timerByStep;
   final ValueChanged<RecipeStep> onCheck;
   final ValueChanged<RecipeStep> onStartTimer;
@@ -411,6 +428,7 @@ class _StepList extends StatelessWidget {
       itemCount: steps.length,
       itemBuilder: (BuildContext context, int index) => _StepListRow(
         step: steps[index],
+        section: sections[steps[index].sectionId],
         isChecked: session.isChecked(steps[index]),
         isCurrent: index == session.currentStep,
         isTimerRunning: timerByStep.containsKey(steps[index].id),
@@ -426,6 +444,7 @@ class _StepList extends StatelessWidget {
 class _StepListRow extends StatelessWidget {
   const _StepListRow({
     required this.step,
+    required this.section,
     required this.isChecked,
     required this.isCurrent,
     required this.isTimerRunning,
@@ -434,6 +453,7 @@ class _StepListRow extends StatelessWidget {
   });
 
   final RecipeStep step;
+  final RecipeSection? section;
   final bool isChecked;
   final bool isCurrent;
 
@@ -511,6 +531,8 @@ class _StepListRow extends StatelessWidget {
                                   : colors.textPrimary,
                             ),
                           ),
+                          if (section case final RecipeSection s)
+                            StepAmounts(step: step, section: s),
                           if (onStartTimer != null &&
                               !isTimerRunning) ...<Widget>[
                             const SizedBox(height: HearthSpacing.sm),
@@ -594,6 +616,7 @@ class _TimerChip extends StatelessWidget {
 class _StepCard extends StatelessWidget {
   const _StepCard({
     required this.step,
+    required this.section,
     required this.isChecked,
     required this.onAdvance,
     required this.onCheck,
@@ -603,6 +626,7 @@ class _StepCard extends StatelessWidget {
   });
 
   final RecipeStep step;
+  final RecipeSection? section;
   final bool isChecked;
   final VoidCallback onAdvance;
   final VoidCallback onCheck;
@@ -672,6 +696,13 @@ class _StepCard extends StatelessWidget {
                                   : colors.textPrimary,
                             ),
                           ),
+                          // The amounts belong on this screen above all
+                          // others: hands busy, and the ingredient list a
+                          // whole screen away.
+                          if (section case final RecipeSection s) ...<Widget>[
+                            const SizedBox(height: HearthSpacing.md),
+                            StepAmounts(step: step, section: s),
+                          ],
                         ],
                       ),
                     ),

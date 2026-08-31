@@ -268,6 +268,37 @@ void main() {
       expect(find.text('tap to match a food'), findsNothing);
     });
 
+    testWidgets('tapping an unconvertible row opens the food, not the picker', (
+      WidgetTester tester,
+    ) async {
+      // "No serving in tbsp" is fixed by giving that food a serving in tbsp.
+      // The picker only offers a different food, which is not what is wrong.
+      await openEditorWith(
+        tester,
+        line: '1 tbsp white onion',
+        foods: <Food>[
+          aFood(
+            'White onion',
+            id: 'food-onion',
+            servingOptions: <ServingOption>[
+              aServing(
+                amount: 100,
+                unit: Units.gram,
+                macros: const Macros(kcal: 40),
+              ),
+            ],
+          ),
+        ],
+      );
+
+      // The row, not the summary sentence underneath — both mention it.
+      await tester.tap(find.textContaining('White onion — no serving in'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit food'), findsOneWidget);
+      expect(find.textContaining('Match "'), findsNothing);
+    });
+
     testWidgets('a healthy match shows the food, with no warning', (
       WidgetTester tester,
     ) async {

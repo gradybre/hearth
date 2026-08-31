@@ -18,6 +18,7 @@ import 'macro_stats_row.dart';
 import 'recipe_library_screen.dart';
 import 'recipe_photo.dart';
 import 'scale_control.dart';
+import 'step_amounts.dart';
 import 'timer_bar.dart';
 
 /// Reading a recipe (spec §5.2).
@@ -201,7 +202,7 @@ class _RecipeBodyState extends State<_RecipeBody> {
               if (section.steps.isNotEmpty) ...<Widget>[
                 const SizedBox(height: HearthSpacing.md),
                 for (final RecipeStep step in section.orderedSteps)
-                  _StepRow(step: step),
+                  _StepRow(step: step, section: section),
               ],
               const SizedBox(height: HearthSpacing.xl),
             ]
@@ -212,8 +213,12 @@ class _RecipeBodyState extends State<_RecipeBody> {
               const SizedBox(height: HearthSpacing.xl),
               Text('Directions', style: text.sectionHeader),
               const SizedBox(height: HearthSpacing.md),
-              for (final RecipeStep step in recipe.allSteps)
-                _StepRow(step: step),
+              // Walked per section even here: an ungrouped recipe has exactly
+              // one, and a step needs to know which one it belongs to before
+              // it can say how much of anything it uses.
+              for (final RecipeSection section in recipe.orderedSections)
+                for (final RecipeStep step in section.orderedSteps)
+                  _StepRow(step: step, section: section),
             ],
           ],
           if (scaled != null && scaled.hasWarnings) ...<Widget>[
@@ -288,9 +293,10 @@ class _IngredientRow extends StatelessWidget {
 }
 
 class _StepRow extends StatelessWidget {
-  const _StepRow({required this.step});
+  const _StepRow({required this.step, required this.section});
 
   final RecipeStep step;
+  final RecipeSection section;
 
   @override
   Widget build(BuildContext context) {
@@ -310,9 +316,15 @@ class _StepRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Text(
-              step.text,
-              style: text.body.copyWith(color: colors.textSecondary),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  step.text,
+                  style: text.body.copyWith(color: colors.textSecondary),
+                ),
+                StepAmounts(step: step, section: section),
+              ],
             ),
           ),
         ],

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
@@ -90,6 +91,129 @@ void main() {
       );
 
       expect(find.text('Nutrition per serving'), findsNothing);
+    });
+  });
+
+  group('amounts beside the directions', () {
+    Recipe ragu() => aRecipe(
+      id: 'recipe-ragu',
+      title: 'Beef ragu bowl',
+      servings: 4,
+      sections: <RecipeSection>[
+        aSection(
+          id: 'sec-beef',
+          name: 'Beef',
+          sortOrder: 0,
+          ingredients: <RecipeIngredient>[
+            anIngredient(
+              'ground beef',
+              amount: 2,
+              unit: Units.pound,
+              sectionId: 'sec-beef',
+            ),
+            anIngredient(
+              'ground cumin',
+              amount: 2,
+              unit: Units.tsp,
+              sectionId: 'sec-beef',
+            ),
+          ],
+          steps: <RecipeStep>[
+            aStep(
+              'Brown the ground beef with the cumin',
+              sectionId: 'sec-beef',
+              stepNumber: 1,
+            ),
+          ],
+        ),
+        aSection(
+          id: 'sec-sauce',
+          name: 'Sauce',
+          sortOrder: 1,
+          ingredients: <RecipeIngredient>[
+            anIngredient(
+              'ground cumin',
+              amount: 2,
+              unit: Units.tsp,
+              sectionId: 'sec-sauce',
+            ),
+          ],
+          steps: <RecipeStep>[
+            aStep(
+              'Whisk the cumin into the sauce',
+              sectionId: 'sec-sauce',
+              stepNumber: 2,
+            ),
+          ],
+        ),
+      ],
+    );
+
+    testWidgets('a step says how much of what it names', (
+      WidgetTester tester,
+    ) async {
+      await openRecipe(tester, ragu());
+
+      expect(find.textContaining('2 lb ground beef'), findsOneWidget);
+    });
+
+    testWidgets('the same ingredient in two sections is never added up', (
+      WidgetTester tester,
+    ) async {
+      // Brendan's requirement: two teaspoons in the sauce and two with the
+      // beef is two teaspoons beside each step, never the four that
+      // consolidating across the recipe would produce.
+      await openRecipe(tester, ragu());
+
+      expect(find.textContaining('2 tsp ground cumin'), findsNWidgets(2));
+      expect(find.textContaining('4 tsp'), findsNothing);
+    });
+
+    testWidgets('scaling the recipe scales what the steps say', (
+      WidgetTester tester,
+    ) async {
+      // The numbers come from the scaled ingredients rather than the step
+      // text, so doubling the recipe cannot leave them behind.
+      await openRecipe(tester, ragu());
+
+      await tester.tap(find.byIcon(Icons.add_circle_outline).first);
+      await pumpFrames(tester, frames: 12);
+
+      // Five servings of a four-serving recipe: the beef goes up with it.
+      expect(find.textContaining('2 lb ground beef'), findsNothing);
+      expect(find.textContaining('ground beef'), findsWidgets);
+    });
+
+    testWidgets('a step naming nothing measurable stays uncluttered', (
+      WidgetTester tester,
+    ) async {
+      await openRecipe(
+        tester,
+        aRecipe(
+          id: 'recipe-rest',
+          title: 'Resting',
+          sections: <RecipeSection>[
+            aSection(
+              id: 'sec',
+              ingredients: <RecipeIngredient>[
+                anIngredient(
+                  'ground beef',
+                  amount: 2,
+                  unit: Units.pound,
+                  sectionId: 'sec',
+                ),
+              ],
+              steps: <RecipeStep>[
+                aStep('Let it rest for ten minutes', sectionId: 'sec'),
+              ],
+            ),
+          ],
+        ),
+      );
+
+      // StepAmounts is always in the tree and renders nothing when it has
+      // nothing to say, so the icon is what marks a line actually appearing.
+      expect(find.byIcon(Icons.straighten), findsNothing);
     });
   });
 }
