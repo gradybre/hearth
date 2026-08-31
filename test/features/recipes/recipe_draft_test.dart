@@ -1,4 +1,5 @@
 import 'package:hearth/domain/models/recipe.dart';
+import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 import 'package:hearth/features/recipes/recipe_draft.dart';
 import 'package:test/test.dart';
@@ -346,4 +347,86 @@ void main() {
       ], reason: 'numbering follows the new order rather than the old one');
     });
   });
+
+  group('reopening a recipe re-reads its lines', () {
+    // Why editing a *food* could not fix Brendan's frozen onions: the recipe
+    // stores the quantity the parser produced when it was saved. A recipe
+    // written before the parser understood "4 (10 oz) bags" still holds four
+    // bare items, and a count converts to nothing however many servings the
+    // food gains afterwards.
+    //
+    // The raw line is kept on every ingredient precisely so this is
+    // recoverable: reopening the recipe parses it again, and saving stores
+    // the better reading.
+    test('a line saved by an older parser is re-read on the way in', () {
+      final Recipe stale = aStaleRecipe();
+      expect(
+        stale.allIngredients.single.quantity!.kind,
+        UnitKind.count,
+        reason: 'the stored quantity is what the old parser produced',
+      );
+
+      final Recipe reopened = RecipeDraft.fromRecipe(stale)
+          .toRecipe(idFactory: sequentialIds());
+
+      final RecipeIngredient onion = reopened.allIngredients.single;
+      expect(onion.quantity!.kind, UnitKind.mass);
+      expect(onion.quantity!.amountIn(Units.ounce), closeTo(40, 1e-9));
+      expect(onion.name, 'frozen chopped onion');
+    });
+
+    test('a line with no raw text falls back to its name', () {
+      // Older rows may carry no rawText at all; re-reading must not lose the
+      // ingredient entirely.
+      final Recipe reopened = RecipeDraft.fromRecipe(
+        const Recipe(
+          id: 'r',
+          title: 'T',
+          servings: 2,
+          sections: <RecipeSection>[
+            RecipeSection(
+              id: 's',
+              name: Recipe.defaultSectionName,
+              sortOrder: 0,
+              ingredients: <RecipeIngredient>[
+                RecipeIngredient(
+                  id: 'i',
+                  sectionId: 's',
+                  name: 'olive oil',
+                  sortOrder: 0,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ).toRecipe(idFactory: sequentialIds());
+
+      expect(reopened.allIngredients.single.name, 'olive oil');
+    });
+  });
 }
+
+/// A recipe as it would have been stored before the parser understood the
+/// bracketed multipack form: four bare items, with the real line preserved.
+Recipe aStaleRecipe() => Recipe(
+  id: 'recipe-ragu',
+  title: 'Beef ragu bowl',
+  servings: 4,
+  sections: <RecipeSection>[
+    RecipeSection(
+      id: 'sec',
+      name: Recipe.defaultSectionName,
+      sortOrder: 0,
+      ingredients: <RecipeIngredient>[
+        RecipeIngredient(
+          id: 'ing',
+          sectionId: 'sec',
+          name: 'frozen chopped onion',
+          quantity: Quantity.of(4, Units.item),
+          rawText: '4 (10 oz) bags frozen chopped onion',
+          sortOrder: 0,
+        ),
+      ],
+    ),
+  ],
+);
