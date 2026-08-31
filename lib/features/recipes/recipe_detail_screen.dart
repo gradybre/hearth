@@ -163,13 +163,13 @@ class _RecipeBodyState extends State<_RecipeBody> {
             MacroStatsRow(macros: macros.perServing),
             // Missing data flags, never blocks (spec §5.3): shown alongside
             // the numbers rather than hiding them, so what is known is never
-            // held back for want of what isn't.
-            if (macros.isIncomplete) ...<Widget>[
+            // held back for want of what isn't — and naming the actual gap,
+            // because "not matched" sent people to re-match ingredients that
+            // were already matched and were never the problem.
+            if (macros.incompleteReason case final String reason) ...<Widget>[
               const SizedBox(height: HearthSpacing.sm),
               Text(
-                '${macros.incompleteIngredients.length} ingredient'
-                '${macros.incompleteIngredients.length == 1 ? '' : 's'} '
-                'not matched to a food — not counted above.',
+                reason,
                 style: text.metadata.copyWith(color: colors.textMuted),
               ),
             ],

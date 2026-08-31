@@ -828,12 +828,10 @@ class _LiveMacros extends StatelessWidget {
 
     return _PreviewCard(
       title: 'Nutrition per serving',
-      // Missing data flags, never blocks (spec §5.3).
-      note: macros.isIncomplete
-          ? '${macros.incompleteIngredients.length} ingredient'
-                '${macros.incompleteIngredients.length == 1 ? '' : 's'} '
-                'not matched yet — not counted below.'
-          : null,
+      // Missing data flags, never blocks (spec §5.3) — and names the actual
+      // gap, since "not matched" sent people to re-match ingredients that
+      // were already matched and were never the problem.
+      note: macros.incompleteReason,
       child: MacroStatsRow(macros: macros.perServing),
     );
   }

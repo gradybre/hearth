@@ -54,9 +54,21 @@ class MacroStatsRow extends StatelessWidget {
 /// carbs · 22g fat" — for a place with room for a summary line but not a
 /// four-column block, like a card in a recipe list.
 class MacroStatsLine extends StatelessWidget {
-  const MacroStatsLine({required this.macros, super.key});
+  const MacroStatsLine({
+    required this.macros,
+    this.isPartial = false,
+    super.key,
+  });
 
   final Macros macros;
+
+  /// Whether something the recipe contains is missing from these numbers.
+  ///
+  /// Marked rather than hidden: a total that quietly undercounts is the worse
+  /// failure, but so is a recipe whose nutrition vanishes entirely over one
+  /// unresolved line. The word "partial" is what makes showing it honest, and
+  /// it is a word rather than a colour (spec §6.3).
+  final bool isPartial;
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +78,7 @@ class MacroStatsLine extends StatelessWidget {
       '${macros.proteinG.round()}g protein',
       '${macros.carbG.round()}g carbs',
       '${macros.fatG.round()}g fat',
+      if (isPartial) 'partial',
     ].join('  ·  ');
 
     return Text(

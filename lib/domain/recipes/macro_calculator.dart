@@ -83,6 +83,59 @@ class RecipeMacros {
     for (final IngredientMacros i in ingredients)
       if (i.isDataGap) i.ingredient,
   ];
+
+  /// The gaps that really are a missing food match.
+  ///
+  /// Split out from the other two because they ask different things of the
+  /// user: this one is fixed by matching a food, and telling someone to match
+  /// an ingredient they have already matched is worse than saying nothing —
+  /// it reads as the app losing their work.
+  List<RecipeIngredient> get ingredientsMissingFood =>
+      _withStatus(IngredientMacroStatus.noFoodMatch);
+
+  /// Matched, but the ingredient's unit cannot reach the food's servings —
+  /// half an onion against a food that only knows grams, with no density to
+  /// bridge them. Fixed by giving the food a serving in the ingredient's own
+  /// unit, not by matching anything.
+  List<RecipeIngredient> get ingredientsUnconvertible =>
+      _withStatus(IngredientMacroStatus.unconvertible);
+
+  /// Quantified nowhere on the line, and not marked optional either. Fixed by
+  /// writing an amount.
+  List<RecipeIngredient> get ingredientsWithoutQuantity =>
+      _withStatus(IngredientMacroStatus.noQuantity);
+
+  List<RecipeIngredient> _withStatus(IngredientMacroStatus status) =>
+      <RecipeIngredient>[
+        for (final IngredientMacros i in ingredients)
+          if (i.status == status) i.ingredient,
+      ];
+
+  /// One sentence naming what is actually missing, or null when nothing is.
+  ///
+  /// Every gap used to be reported as "not matched to a food", whatever its
+  /// real cause. A recipe whose ingredients were all matched — but four of
+  /// which were counts against weight-only foods — therefore said four were
+  /// unmatched, sending the user back to re-match things that were already
+  /// matched and could not have been the problem.
+  String? get incompleteReason {
+    final List<String> reasons = <String>[
+      if (ingredientsMissingFood.isNotEmpty)
+        '${_count(ingredientsMissingFood)} not matched to a food',
+      if (ingredientsUnconvertible.isNotEmpty)
+        '${_count(ingredientsUnconvertible)} matched to a food that has no '
+            'serving in that unit',
+      if (ingredientsWithoutQuantity.isNotEmpty)
+        '${_count(ingredientsWithoutQuantity)} with no amount',
+    ];
+    if (reasons.isEmpty) return null;
+    return '${reasons.join('; ')} — not counted here.';
+  }
+
+  static String _count(List<RecipeIngredient> ingredients) =>
+      ingredients.length == 1
+      ? '1 ingredient'
+      : '${ingredients.length} ingredients';
 }
 
 /// Macro maths. Pure, exact, and unrounded (spec §9.1).

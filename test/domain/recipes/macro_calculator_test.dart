@@ -229,6 +229,103 @@ void main() {
     });
   });
 
+  group('why a recipe is incomplete', () {
+    // Brendan's report: a recipe with all 8 ingredients matched to foods
+    // still said 4 were "not matched". They were matched — they were counts
+    // ("1/2 small white onion") against foods that only knew grams, which is
+    // a different gap with a different fix, and telling him to re-match them
+    // sent him back to work that could not have helped.
+    final Food onion = aFoodPer100g('White onion', kcal: 40, id: 'food-onion');
+    final Food chicken = aFoodPer100g(
+      'chicken breast',
+      kcal: 165,
+      protein: 31,
+      id: 'food-chicken',
+    );
+
+    test('a matched-but-unconvertible ingredient is not reported as '
+        'unmatched', () {
+      final Recipe recipe = aRecipe(
+        ingredients: <RecipeIngredient>[
+          anIngredient(
+            'small white onion',
+            amount: 0.5,
+            unit: Units.item,
+            foodId: 'food-onion',
+          ),
+        ],
+      );
+      final RecipeMacros result = MacroCalculator.forRecipe(
+        recipe,
+        foods: <String, Food>{'food-onion': onion},
+      );
+
+      expect(result.isIncomplete, isTrue);
+      expect(result.ingredientsMissingFood, isEmpty);
+      expect(result.ingredientsUnconvertible, hasLength(1));
+      expect(result.incompleteReason, isNot(contains('not matched to a food')));
+      expect(result.incompleteReason, contains('no serving in that unit'));
+    });
+
+    test('a genuinely unmatched ingredient still says so', () {
+      final Recipe recipe = aRecipe(
+        ingredients: <RecipeIngredient>[
+          anIngredient('mystery spice', amount: 1, unit: Units.tsp),
+        ],
+      );
+      final RecipeMacros result = MacroCalculator.forRecipe(recipe);
+
+      expect(result.ingredientsMissingFood, hasLength(1));
+      expect(result.incompleteReason, contains('not matched to a food'));
+    });
+
+    test('several kinds of gap are all named, not collapsed into one', () {
+      final Recipe recipe = aRecipe(
+        ingredients: <RecipeIngredient>[
+          anIngredient(
+            'small white onion',
+            amount: 0.5,
+            unit: Units.item,
+            foodId: 'food-onion',
+          ),
+          anIngredient('mystery spice', amount: 1, unit: Units.tsp),
+          anIngredient('a pinch of something'),
+        ],
+      );
+      final RecipeMacros result = MacroCalculator.forRecipe(
+        recipe,
+        foods: <String, Food>{'food-onion': onion},
+      );
+
+      expect(result.ingredientsUnconvertible, hasLength(1));
+      expect(result.ingredientsMissingFood, hasLength(1));
+      expect(result.ingredientsWithoutQuantity, hasLength(1));
+      expect(result.incompleteReason, contains('not matched to a food'));
+      expect(result.incompleteReason, contains('no serving in that unit'));
+      expect(result.incompleteReason, contains('no amount'));
+    });
+
+    test('a complete recipe has no reason to give', () {
+      final Recipe recipe = aRecipe(
+        ingredients: <RecipeIngredient>[
+          anIngredient(
+            'chicken breast',
+            amount: 100,
+            unit: Units.gram,
+            foodId: 'food-chicken',
+          ),
+        ],
+      );
+      final RecipeMacros result = MacroCalculator.forRecipe(
+        recipe,
+        foods: <String, Food>{'food-chicken': chicken},
+      );
+
+      expect(result.isIncomplete, isFalse);
+      expect(result.incompleteReason, isNull);
+    });
+  });
+
   test('forServings scales a logged portion', () {
     final ServingOption slice = aServing(
       amount: 1,

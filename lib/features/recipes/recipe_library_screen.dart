@@ -255,24 +255,26 @@ class RecipeCard extends ConsumerWidget {
         (ref.watch(favoriteRecipeIdsProvider).value ?? const <String>{})
             .contains(recipe.id);
 
-    // Shown only once every ingredient actually resolves to a food: a
-    // partial total in a list this dense has no room for the caveat that
-    // would keep it honest, so an incomplete recipe shows no macros at all
-    // rather than a number that undercounts what is really in it.
     final Map<String, Food> foods = <String, Food>{
       for (final Food food
           in ref.watch(foodLibraryProvider).value ?? const <Food>[])
         food.id: food,
     };
     final RecipeMacros macros = MacroCalculator.forRecipe(recipe, foods: foods);
-    final bool showMacros =
-        recipe.allIngredients.isNotEmpty && !macros.isIncomplete;
+    // Shown for any recipe with ingredients, complete or not. Hiding a
+    // partial total was meant to avoid quoting a number that undercounts,
+    // but it made a whole recipe's nutrition vanish over one unresolved
+    // line, with nothing on screen to say why — so the total stays and is
+    // marked as partial instead, which is the same "flag, never block" rule
+    // the rest of the app follows (spec §5.3).
+    final bool showMacros = recipe.allIngredients.isNotEmpty;
 
     return Semantics(
       button: true,
       label:
           '${recipe.title}. ${_summary(recipe)}'
-          '${showMacros ? '. ${_macroLabel(macros.perServing)}' : ''}'
+          '${showMacros ? '. ${_macroLabel(macros.perServing)}'
+                    '${macros.isIncomplete ? '. Partial — ${macros.incompleteReason}' : ''}' : ''}'
           '${isFavorite ? '. Favourite' : ''}',
       onTap: () => context.push('/recipe/${recipe.id}'),
       excludeSemantics: true,
@@ -320,7 +322,10 @@ class RecipeCard extends ConsumerWidget {
                       ),
                       if (showMacros) ...<Widget>[
                         const SizedBox(height: HearthSpacing.xxs),
-                        MacroStatsLine(macros: macros.perServing),
+                        MacroStatsLine(
+                          macros: macros.perServing,
+                          isPartial: macros.isIncomplete,
+                        ),
                       ],
                       if (recipe.tags.isNotEmpty) ...<Widget>[
                         const SizedBox(height: HearthSpacing.md),

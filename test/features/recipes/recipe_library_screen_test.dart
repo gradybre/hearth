@@ -195,13 +195,64 @@ void main() {
       expect(find.textContaining('7g fat'), findsOneWidget);
     });
 
-    testWidgets('an unmatched ingredient hides the line rather than '
-        'undercounting it', (WidgetTester tester) async {
-      // shortRibs()'s oil carries no foodId — nothing for a dense list to
-      // caveat, so no macros at all rather than a number that is wrong.
+    testWidgets('an incomplete recipe still shows a total, marked partial', (
+      WidgetTester tester,
+    ) async {
+      // shortRibs()'s oil carries no foodId. Hiding the line entirely made a
+      // recipe's nutrition vanish over one unresolved ingredient with nothing
+      // on screen to say why; marking it partial keeps the numbers honest
+      // without keeping them secret.
       await pumpHearthApp(tester, recipes: <Recipe>[shortRibs()]);
 
-      expect(find.byType(MacroStatsLine), findsNothing);
+      expect(find.byType(MacroStatsLine), findsOneWidget);
+      // Never colour alone (§6.3) — the caveat is a word.
+      expect(find.textContaining('partial'), findsOneWidget);
+    });
+
+    testWidgets('a complete recipe is not marked partial', (
+      WidgetTester tester,
+    ) async {
+      await pumpHearthApp(
+        tester,
+        recipes: <Recipe>[shortRibsWithMatchedOil()],
+        foods: <Food>[oliveOilPerTbsp()],
+      );
+
+      expect(find.textContaining('partial'), findsNothing);
+    });
+
+    testWidgets('an ingredient matched to a food that cannot convert is not '
+        'called unmatched', (WidgetTester tester) async {
+      // Brendan's report, on the card: every ingredient matched, but a count
+      // against a weight-only food still counted as a gap. It is a gap — but
+      // not an unmatched one, and saying so sent him to re-match work that
+      // was already done.
+      await pumpHearthApp(
+        tester,
+        recipes: <Recipe>[shortRibsWithMatchedOil()],
+        // Oil measured in tbsp, food knows only grams, no density.
+        foods: <Food>[
+          aFood(
+            'Olive oil',
+            id: 'food-oil',
+            servingOptions: <ServingOption>[
+              aServing(
+                amount: 100,
+                unit: Units.gram,
+                macros: const Macros(kcal: 884, fatG: 100),
+              ),
+            ],
+          ),
+        ],
+      );
+      final SemanticsHandle handle = tester.ensureSemantics();
+
+      expect(
+        find.bySemanticsLabel(RegExp('not matched to a food')),
+        findsNothing,
+      );
+
+      handle.dispose();
     });
   });
 }
