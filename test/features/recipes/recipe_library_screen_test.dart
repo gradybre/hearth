@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/domain/models/food.dart';
+import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/units/unit.dart';
+import 'package:hearth/features/recipes/macro_stats_row.dart';
 import 'package:hearth/features/recipes/recipe_library_screen.dart';
 
 import '../../support/app_harness.dart';
@@ -20,6 +23,40 @@ Recipe shortRibs() => aRecipe(
           amount: 2,
           unit: Units.tbsp,
           sectionId: 'sec',
+        ),
+      ],
+    ),
+  ],
+);
+
+/// A tablespoon of oil, matched to a food, so the recipe's macros actually
+/// resolve rather than sitting incomplete.
+Food oliveOilPerTbsp() => aFood(
+  'Olive oil',
+  id: 'food-oil',
+  servingOptions: <ServingOption>[
+    aServing(
+      amount: 1,
+      unit: Units.tbsp,
+      macros: const Macros(kcal: 120, fatG: 14),
+    ),
+  ],
+);
+
+Recipe shortRibsWithMatchedOil() => aRecipe(
+  id: 'recipe-1',
+  title: 'Braised short ribs',
+  servings: 4,
+  sections: <RecipeSection>[
+    aSection(
+      id: 'sec',
+      ingredients: <RecipeIngredient>[
+        anIngredient(
+          'olive oil',
+          amount: 2,
+          unit: Units.tbsp,
+          sectionId: 'sec',
+          foodId: 'food-oil',
         ),
       ],
     ),
@@ -140,6 +177,31 @@ void main() {
       await pumpFrames(tester);
 
       expect(find.byTooltip('Household'), findsOneWidget);
+    });
+  });
+
+  group('per-serving macros on the card', () {
+    testWidgets('a fully matched recipe shows its numbers', (
+      WidgetTester tester,
+    ) async {
+      await pumpHearthApp(
+        tester,
+        recipes: <Recipe>[shortRibsWithMatchedOil()],
+        foods: <Food>[oliveOilPerTbsp()],
+      );
+
+      // 2 tbsp at 120 kcal / 14 g fat per tbsp, across 4 servings.
+      expect(find.textContaining('60 kcal'), findsOneWidget);
+      expect(find.textContaining('7g fat'), findsOneWidget);
+    });
+
+    testWidgets('an unmatched ingredient hides the line rather than '
+        'undercounting it', (WidgetTester tester) async {
+      // shortRibs()'s oil carries no foodId — nothing for a dense list to
+      // caveat, so no macros at all rather than a number that is wrong.
+      await pumpHearthApp(tester, recipes: <Recipe>[shortRibs()]);
+
+      expect(find.byType(MacroStatsLine), findsNothing);
     });
   });
 }

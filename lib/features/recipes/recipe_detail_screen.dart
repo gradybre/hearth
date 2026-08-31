@@ -8,10 +8,13 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
 import '../../domain/format/quantity_format.dart';
+import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
+import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/recipes/recipe_scaler.dart';
 import 'collections_sheet.dart';
 import 'cook_along_screen.dart';
+import 'macro_stats_row.dart';
 import 'recipe_library_screen.dart';
 import 'recipe_photo.dart';
 import 'scale_control.dart';
@@ -31,6 +34,11 @@ class RecipeDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final HearthColors colors = context.colors;
     final AsyncValue<Recipe?> recipe = ref.watch(recipeByIdProvider(recipeId));
+    final Map<String, Food> foods = <String, Food>{
+      for (final Food food
+          in ref.watch(foodLibraryProvider).value ?? const <Food>[])
+        food.id: food,
+    };
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -58,7 +66,7 @@ class RecipeDetailScreen extends ConsumerWidget {
             Center(child: Text('Could not open that recipe.\n$error')),
         data: (Recipe? loaded) => loaded == null
             ? const Center(child: Text('That recipe no longer exists.'))
-            : _RecipeBody(recipe: loaded),
+            : _RecipeBody(recipe: loaded, foods: foods),
       ),
       // The recipe screen is pushed above the shell, so it does not get the
       // shell's timer bar. Without this, opening a recipe mid-cook is the one
@@ -88,9 +96,10 @@ class RecipeDetailScreen extends ConsumerWidget {
 }
 
 class _RecipeBody extends StatefulWidget {
-  const _RecipeBody({required this.recipe});
+  const _RecipeBody({required this.recipe, required this.foods});
 
   final Recipe recipe;
+  final Map<String, Food> foods;
 
   @override
   State<_RecipeBody> createState() => _RecipeBodyState();
@@ -119,6 +128,10 @@ class _RecipeBodyState extends State<_RecipeBody> {
         ? RecipeScaler.toServings(original, _targetServings)
         : null;
     final Recipe recipe = scaled?.recipe ?? original;
+    final RecipeMacros macros = MacroCalculator.forRecipe(
+      recipe,
+      foods: widget.foods,
+    );
 
     return SafeArea(
       child: ListView(
@@ -142,6 +155,24 @@ class _RecipeBodyState extends State<_RecipeBody> {
               original.notes!,
               style: text.body.copyWith(color: colors.textSecondary),
             ),
+          ],
+          if (recipe.allIngredients.isNotEmpty) ...<Widget>[
+            const SizedBox(height: HearthSpacing.lg),
+            Text('Nutrition per serving', style: text.sectionHeader),
+            const SizedBox(height: HearthSpacing.sm),
+            MacroStatsRow(macros: macros.perServing),
+            // Missing data flags, never blocks (spec §5.3): shown alongside
+            // the numbers rather than hiding them, so what is known is never
+            // held back for want of what isn't.
+            if (macros.isIncomplete) ...<Widget>[
+              const SizedBox(height: HearthSpacing.sm),
+              Text(
+                '${macros.incompleteIngredients.length} ingredient'
+                '${macros.incompleteIngredients.length == 1 ? '' : 's'} '
+                'not matched to a food — not counted above.',
+                style: text.metadata.copyWith(color: colors.textMuted),
+              ),
+            ],
           ],
           if (scalable) ...<Widget>[
             const SizedBox(height: HearthSpacing.lg),

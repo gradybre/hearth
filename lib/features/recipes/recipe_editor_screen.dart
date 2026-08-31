@@ -10,7 +10,6 @@ import '../../app/theme/hearth_typography.dart';
 import '../../data/adapters/recipe_ai.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
-import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/parsing/direction_parser.dart';
 import '../../domain/parsing/ingredient_parser.dart';
@@ -18,6 +17,7 @@ import '../../domain/recipes/ingredient_matcher.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/text/text_normaliser.dart';
 import '../foods/food_picker.dart';
+import 'macro_stats_row.dart';
 import 'match_review_controller.dart';
 import 'match_review_screen.dart';
 import 'recipe_draft.dart';
@@ -820,15 +820,11 @@ class _LiveMacros extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    final HearthTextStyles text = context.text;
-
     final Recipe provisional = draft.toRecipe(idFactory: () => 'preview');
     final RecipeMacros macros = MacroCalculator.forRecipe(
       provisional,
       foods: foods,
     );
-    final Macros perServing = macros.perServing;
 
     return _PreviewCard(
       title: 'Nutrition per serving',
@@ -838,31 +834,7 @@ class _LiveMacros extends StatelessWidget {
                 '${macros.incompleteIngredients.length == 1 ? '' : 's'} '
                 'not matched yet — not counted below.'
           : null,
-      child: Row(
-        children: <Widget>[
-          for (final (String label, double value) in <(String, double)>[
-            ('kcal', perServing.kcal),
-            ('protein', perServing.proteinG),
-            ('carbs', perServing.carbG),
-            ('fat', perServing.fatG),
-          ])
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    value.round().toString(),
-                    style: text.ingredient.copyWith(fontSize: 20),
-                  ),
-                  Text(
-                    label,
-                    style: text.metadata.copyWith(color: colors.textMuted),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
+      child: MacroStatsRow(macros: macros.perServing),
     );
   }
 }

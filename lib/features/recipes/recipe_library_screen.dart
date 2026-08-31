@@ -8,8 +8,12 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
 import '../../app/widgets/swipe_to_delete.dart';
+import '../../domain/models/food.dart';
+import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
+import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/recipes/recipe_query.dart';
+import 'macro_stats_row.dart';
 import 'recipe_filter_bar.dart';
 import 'recipe_photo.dart';
 
@@ -251,10 +255,24 @@ class RecipeCard extends ConsumerWidget {
         (ref.watch(favoriteRecipeIdsProvider).value ?? const <String>{})
             .contains(recipe.id);
 
+    // Shown only once every ingredient actually resolves to a food: a
+    // partial total in a list this dense has no room for the caveat that
+    // would keep it honest, so an incomplete recipe shows no macros at all
+    // rather than a number that undercounts what is really in it.
+    final Map<String, Food> foods = <String, Food>{
+      for (final Food food
+          in ref.watch(foodLibraryProvider).value ?? const <Food>[])
+        food.id: food,
+    };
+    final RecipeMacros macros = MacroCalculator.forRecipe(recipe, foods: foods);
+    final bool showMacros =
+        recipe.allIngredients.isNotEmpty && !macros.isIncomplete;
+
     return Semantics(
       button: true,
       label:
           '${recipe.title}. ${_summary(recipe)}'
+          '${showMacros ? '. ${_macroLabel(macros.perServing)}' : ''}'
           '${isFavorite ? '. Favourite' : ''}',
       onTap: () => context.push('/recipe/${recipe.id}'),
       excludeSemantics: true,
@@ -300,6 +318,10 @@ class RecipeCard extends ConsumerWidget {
                         _summary(recipe),
                         style: text.metadata.copyWith(color: colors.textMuted),
                       ),
+                      if (showMacros) ...<Widget>[
+                        const SizedBox(height: HearthSpacing.xxs),
+                        MacroStatsLine(macros: macros.perServing),
+                      ],
                       if (recipe.tags.isNotEmpty) ...<Widget>[
                         const SizedBox(height: HearthSpacing.md),
                         Wrap(
@@ -334,6 +356,12 @@ class RecipeCard extends ConsumerWidget {
     ];
     return parts.join('  ·  ');
   }
+
+  static String _macroLabel(Macros perServing) =>
+      'Per serving: ${perServing.kcal.round()} calories, '
+      '${perServing.proteinG.round()} grams protein, '
+      '${perServing.carbG.round()} grams carbohydrates, '
+      '${perServing.fatG.round()} grams fat';
 
   static String _trimZero(double value) =>
       value == value.roundToDouble() ? value.round().toString() : '$value';

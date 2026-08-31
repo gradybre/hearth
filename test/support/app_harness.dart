@@ -12,6 +12,7 @@ import 'package:hearth/data/adapters/recipe_ai.dart';
 import 'package:hearth/data/local/collection_store.dart';
 import 'package:hearth/data/local/food_store.dart';
 import 'package:hearth/data/local/hearth_database.dart';
+import 'package:hearth/data/local/recipe_store.dart';
 import 'package:hearth/domain/cooking/cook_session.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/food_profile.dart';
@@ -68,6 +69,15 @@ Future<HearthDatabase> pumpHearthApp(
   // never hits, so the rows go in as well.
   for (final Food food in foods) {
     await FoodStore(db).upsert(food, updatedAt: DateTime(2026));
+  }
+
+  // Same reasoning as foods: the library list reads from the stream override
+  // below, but the recipe detail screen resolves a single recipe through
+  // recipeByIdProvider, which reads the real database rather than the
+  // stream. A recipe that exists only in the stream would show as "no longer
+  // exists" the moment a test opens it.
+  for (final Recipe recipe in recipes) {
+    await RecipeStore(db).upsert(recipe, updatedAt: DateTime(2026));
   }
 
   await tester.pumpWidget(
