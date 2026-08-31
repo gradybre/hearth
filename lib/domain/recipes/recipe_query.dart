@@ -23,6 +23,30 @@ class RecipeContext {
   final Macros? perServing;
 }
 
+/// How the library is ordered (spec §5.2).
+///
+/// Favourites are pinned above whichever of these is chosen — see
+/// [RecipeSearch.apply]. This only decides the order *within* each of those
+/// two groups.
+enum RecipeSort {
+  /// Most recently added or edited first. The default: the recipe you are
+  /// most likely to want next is almost always one you just touched.
+  recent('Recent'),
+
+  nameAsc('A–Z'),
+
+  /// Lowest calories per serving first.
+  caloriesAsc('Calories'),
+
+  /// Highest protein per serving first.
+  proteinDesc('Protein');
+
+  const RecipeSort(this.label);
+
+  /// What the sort control shows.
+  final String label;
+}
+
 /// The library's combinable filter chips (spec §5.2).
 ///
 /// Dimensions combine with AND — "Italian" *and* "under 30 min" *and*
@@ -40,6 +64,7 @@ class RecipeFilter {
     this.maxTotalTime,
     this.maxKcalPerServing,
     this.minProteinPerServing,
+    this.sort = RecipeSort.recent,
   });
 
   final String text;
@@ -50,6 +75,10 @@ class RecipeFilter {
   final Duration? maxTotalTime;
   final double? maxKcalPerServing;
   final double? minProteinPerServing;
+
+  /// Ordering. Not a filter — it never hides anything — so it is deliberately
+  /// left out of [isEmpty] and [activeCount], and survives "clear filters".
+  final RecipeSort sort;
 
   static const RecipeFilter none = RecipeFilter();
 
@@ -82,6 +111,7 @@ class RecipeFilter {
     Duration? maxTotalTime,
     double? maxKcalPerServing,
     double? minProteinPerServing,
+    RecipeSort? sort,
     bool clearMaxTotalTime = false,
     bool clearMaxKcal = false,
     bool clearMinProtein = false,
@@ -100,6 +130,7 @@ class RecipeFilter {
     minProteinPerServing: clearMinProtein
         ? null
         : (minProteinPerServing ?? this.minProteinPerServing),
+    sort: sort ?? this.sort,
   );
 
   /// Flips one value of a multi-select dimension.
@@ -245,9 +276,16 @@ abstract final class RecipeSearch {
 
   /// Applies [filter] across the library, keeping favourites first.
   ///
-  /// Ordering is favourites, then title. Sorting by title alone buries the
-  /// handful of recipes actually cooked every week under an alphabet of ones
-  /// tried once.
+  /// Favourites come first whatever the sort, and that is not negotiable by a
+  /// chip: sorting by title alone buried the handful of recipes actually
+  /// cooked every week under an alphabet of ones tried once, and every other
+  /// ordering can bury them the same way. [RecipeFilter.sort] decides the
+  /// order *within* the favourites and within the rest.
+  ///
+  /// Title is always the last tiebreaker, so an ordering that cannot separate
+  /// two recipes — two undated ones, two with the same calories — still lands
+  /// somewhere stable and readable rather than wherever the database happened
+  /// to return them.
   static List<Recipe> apply(
     Iterable<Recipe> recipes,
     RecipeFilter filter, {
@@ -264,13 +302,55 @@ abstract final class RecipeSearch {
     ];
 
     kept.sort((Recipe a, Recipe b) {
-      final bool aFav = contextOf?.call(a).isFavorite ?? false;
-      final bool bFav = contextOf?.call(b).isFavorite ?? false;
-      if (aFav != bFav) return aFav ? -1 : 1;
+      final RecipeContext aContext =
+          contextOf?.call(a) ?? const RecipeContext();
+      final RecipeContext bContext =
+          contextOf?.call(b) ?? const RecipeContext();
+      if (aContext.isFavorite != bContext.isFavorite) {
+        return aContext.isFavorite ? -1 : 1;
+      }
+
+      final int bySort = switch (filter.sort) {
+        RecipeSort.recent => _descendingNullsLast(a.updatedAt, b.updatedAt),
+        RecipeSort.nameAsc => 0,
+        RecipeSort.caloriesAsc => _ascendingNullsLast(
+          aContext.perServing?.kcal,
+          bContext.perServing?.kcal,
+        ),
+        RecipeSort.proteinDesc => _descendingNullsLast(
+          aContext.perServing?.proteinG,
+          bContext.perServing?.proteinG,
+        ),
+      };
+      if (bySort != 0) return bySort;
+
       return fold(a.title).compareTo(fold(b.title));
     });
     return kept;
   }
+
+  /// Bigger first, with anything unknown at the end.
+  ///
+  /// Unknown sinks rather than sorting as zero or as "now": a recipe with no
+  /// timestamp has not just been edited, and one whose macros are incomplete
+  /// has not got the lowest calories in the library — it has no answer, and
+  /// putting it where an answer would go is the quiet lie this avoids.
+  static int _descendingNullsLast<T extends Comparable<T>>(T? a, T? b) =>
+      switch ((a, b)) {
+        (null, null) => 0,
+        (null, _) => 1,
+        (_, null) => -1,
+        (final T x, final T y) => y.compareTo(x),
+      };
+
+  /// Smaller first, with anything unknown at the end.
+  static int _ascendingNullsLast<T extends Comparable<T>>(T? a, T? b) =>
+      switch ((a, b)) {
+        (null, null) => 0,
+        (null, _) => 1,
+        (_, null) => -1,
+        (final T x, final T y) => x.compareTo(y),
+      };
 
   /// Every tag in the library, folded and sorted — the tag chips on offer.
   static List<String> tagsIn(Iterable<Recipe> recipes) => _sortedFolded(

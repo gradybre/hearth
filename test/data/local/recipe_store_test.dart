@@ -90,6 +90,22 @@ void main() {
     });
 
     test(
+      'a reloaded recipe carries the timestamp it was written with',
+      () async {
+        // What the library's recency sort actually reads. The column was
+        // written on every save long before anything read it back.
+        await store.upsert(sauced(), updatedAt: now);
+
+        // An instant comparison: Drift returns local time, and DateTime's ==
+        // also requires the UTC flag to match.
+        expect(
+          (await store.byId('recipe-1'))!.updatedAt!.isAtSameMomentAs(now),
+          isTrue,
+        );
+      },
+    );
+
+    test(
       'quantities keep their exact canonical value and authored unit',
       () async {
         // The stored value must not drift through the database round trip, and

@@ -332,4 +332,115 @@ void _selectingTests() {
       expect(find.text('Edit food'), findsOneWidget);
     });
   });
+
+  group('filtering and sorting the library', () {
+    DateTime at(int day) => DateTime.utc(2026, 8, day);
+
+    List<Food> mixedLibrary() => <Food>[
+      aFood(
+        'Aaa oldest',
+        id: 'old',
+        updatedAt: at(1),
+        servingOptions: <ServingOption>[
+          aServing(
+            amount: 100,
+            unit: Units.gram,
+            macros: const Macros(kcal: 5),
+          ),
+        ],
+      ),
+      aFood(
+        'Zzz newest',
+        id: 'new',
+        barcode: '5000157024671',
+        source: FoodSource.openFoodFacts,
+        updatedAt: at(3),
+        servingOptions: <ServingOption>[
+          aServing(
+            amount: 100,
+            unit: Units.gram,
+            macros: const Macros(kcal: 9),
+          ),
+        ],
+      ),
+      // No servings at all, so it cannot be logged as it stands.
+      aFood('Broken import', id: 'broken', updatedAt: at(2)),
+    ];
+
+    testWidgets('opens most recent first, not alphabetically', (
+      WidgetTester tester,
+    ) async {
+      await openFoods(tester, foods: mixedLibrary());
+      await pumpFrames(tester);
+
+      final List<FoodCard> cards = tester
+          .widgetList<FoodCard>(find.byType(FoodCard))
+          .toList();
+      expect(cards.map((FoodCard c) => c.food.id), <String>[
+        'new',
+        'broken',
+        'old',
+      ]);
+    });
+
+    testWidgets('the control says which order the list is in', (
+      WidgetTester tester,
+    ) async {
+      await openFoods(tester, foods: mixedLibrary());
+      await pumpFrames(tester);
+
+      expect(find.text('Recent'), findsOneWidget);
+    });
+
+    testWidgets('needs-attention keeps only what cannot be logged', (
+      WidgetTester tester,
+    ) async {
+      await openFoods(tester, foods: mixedLibrary());
+      await pumpFrames(tester);
+
+      await tester.tap(find.text('Needs attention'));
+      await pumpFrames(tester);
+
+      expect(find.byType(FoodCard), findsOneWidget);
+      expect(find.text('Broken import'), findsOneWidget);
+    });
+
+    testWidgets('has-barcode keeps only scanned packets', (
+      WidgetTester tester,
+    ) async {
+      await openFoods(tester, foods: mixedLibrary());
+      await pumpFrames(tester);
+
+      await tester.tap(find.text('Has barcode'));
+      await pumpFrames(tester);
+
+      expect(find.byType(FoodCard), findsOneWidget);
+      expect(find.text('Zzz newest'), findsOneWidget);
+    });
+
+    testWidgets('a lit chip offers to clear itself', (
+      WidgetTester tester,
+    ) async {
+      await openFoods(tester, foods: mixedLibrary());
+      await pumpFrames(tester);
+      await tester.tap(find.text('Has barcode'));
+      await pumpFrames(tester);
+
+      expect(find.text('Clear 1 filter'), findsOneWidget);
+
+      await tester.tap(find.text('Clear 1 filter'));
+      await pumpFrames(tester);
+
+      expect(find.byType(FoodCard), findsNWidgets(3));
+    });
+
+    testWidgets('an empty library shows no filter chips to fiddle with', (
+      WidgetTester tester,
+    ) async {
+      await openFoods(tester);
+      await pumpFrames(tester);
+
+      expect(find.text('Needs attention'), findsNothing);
+    });
+  });
 }

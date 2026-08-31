@@ -379,6 +379,19 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   Widget _form(BuildContext context, HearthColors colors) {
     final HearthTextStyles text = context.text;
     final RecipeDraft draft = _draft;
+    // Computed once for the whole form rather than per section and again for
+    // the macro card: the ingredient rows and the nutrition summary are two
+    // views of the same calculation, and they must never disagree about which
+    // lines counted.
+    final RecipeMacros macros = MacroCalculator.forRecipe(
+      draft.toRecipe(idFactory: () => 'preview'),
+      foods: _foods,
+    );
+    final Map<String, IngredientMacroStatus> statusByName =
+        <String, IngredientMacroStatus>{
+          for (final IngredientMacros part in macros.ingredients)
+            normaliseKey(part.ingredient.name): part.status,
+        };
     final double gutter = MediaQuery.sizeOf(context).width >= 840
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
@@ -495,6 +508,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
                   ),
                   foods: _foods,
                   draft: draft,
+                  statusByName: statusByName,
                   onMatch: _matchIngredient,
                 ),
                 if (_unmatchedIn(i, draft) case final List<ParsedIngredient> u
@@ -542,7 +556,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
               // Whole-recipe, not per section: nutrition is about the dish,
               // and a section's macros on their own are not a number anyone
               // eats (spec §5.2's flatten-for-nutrition).
-              _LiveMacros(draft: draft, foods: _foods),
+              _LiveMacros(macros: macros),
             ],
             if (draft.parsedDirections.steps.isNotEmpty) ...<Widget>[
               const SizedBox(height: HearthSpacing.lg),
@@ -657,12 +671,18 @@ class _IngredientPreview extends StatelessWidget {
     required this.ingredients,
     required this.foods,
     required this.draft,
+    required this.statusByName,
     required this.onMatch,
   });
 
   final List<ParsedIngredient> ingredients;
   final Map<String, Food> foods;
   final RecipeDraft draft;
+
+  /// Why each line did or did not count, keyed by normalised ingredient name
+  /// — the same key the matches themselves use.
+  final Map<String, IngredientMacroStatus> statusByName;
+
   final ValueChanged<ParsedIngredient> onMatch;
 
   @override
@@ -679,6 +699,7 @@ class _IngredientPreview extends StatelessWidget {
             _IngredientRow(
               ingredient: ingredient,
               food: foods[draft.foodIdFor(ingredient.name)],
+              status: statusByName[normaliseKey(ingredient.name)],
               onMatch: () => onMatch(ingredient),
               colors: colors,
               text: text,
@@ -693,6 +714,7 @@ class _IngredientRow extends StatelessWidget {
   const _IngredientRow({
     required this.ingredient,
     required this.food,
+    required this.status,
     required this.onMatch,
     required this.colors,
     required this.text,
@@ -700,22 +722,67 @@ class _IngredientRow extends StatelessWidget {
 
   final ParsedIngredient ingredient;
   final Food? food;
+
+  /// Null only for a line the macro calculation never saw — a blank one.
+  final IngredientMacroStatus? status;
+
   final VoidCallback onMatch;
   final HearthColors colors;
   final HearthTextStyles text;
 
+  /// What the status line under the ingredient says, and how it looks.
+  ///
+  /// The row used to know only "linked" and "not linked", which made a line
+  /// that was linked *and* unusable look exactly like one that was fine —
+  /// the summary would count four problems and nothing on screen said which
+  /// four. A gap that is not a missing match gets its own icon and its own
+  /// words, because it wants a different fix.
+  ({IconData icon, Color colour, String text}) _state() {
+    final String name = food?.name ?? '';
+    return switch (status) {
+      IngredientMacroStatus.unconvertible => (
+        icon: Icons.error_outline,
+        colour: colors.error,
+        text:
+            '$name — no serving in '
+            '${ingredient.quantity?.preferredUnit?.label ?? 'that unit'}. '
+            'Tap to fix.',
+      ),
+      IngredientMacroStatus.noQuantity => (
+        icon: Icons.error_outline,
+        colour: colors.error,
+        text: name.isEmpty
+            ? 'no amount on this line'
+            : '$name — no amount on this line',
+      ),
+      IngredientMacroStatus.optionalExcluded => (
+        icon: Icons.remove,
+        colour: colors.textMuted,
+        text: 'not counted',
+      ),
+      IngredientMacroStatus.noFoodMatch => (
+        icon: Icons.link_off,
+        colour: colors.textMuted,
+        text: 'tap to match a food',
+      ),
+      IngredientMacroStatus.resolved || null => (
+        icon: food == null ? Icons.link_off : Icons.link,
+        colour: food == null ? colors.textMuted : colors.accent,
+        text: food?.name ?? 'tap to match a food',
+      ),
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Optional lines are excluded from macros on purpose, so they are not a
-    // gap and must not be nagged about (spec §5.2).
-    final bool needsMatch = food == null && !ingredient.isOptional;
+    final ({IconData icon, Color colour, String text}) state = _state();
 
     return Semantics(
       button: true,
       label:
           '${ingredient.quantity == null ? '' : '${QuantityFormat.formatAsAuthored(ingredient.quantity!)} '}'
           '${ingredient.name}. '
-          '${food == null ? (ingredient.isOptional ? 'Optional, not counted.' : 'Not matched to a food.') : 'Matched to ${food!.name}.'}',
+          '${state.text}',
       onTap: onMatch,
       excludeSemantics: true,
       child: InkWell(
@@ -770,30 +837,14 @@ class _IngredientRow extends StatelessWidget {
                     const SizedBox(height: HearthSpacing.xxs),
                     Row(
                       children: <Widget>[
-                        Icon(
-                          food != null
-                              ? Icons.link
-                              : needsMatch
-                              ? Icons.link_off
-                              : Icons.remove,
-                          size: 13,
-                          color: food != null
-                              ? colors.accent
-                              : colors.textMuted,
-                        ),
+                        // Icon and wording change together — the colour is
+                        // reinforcement, never the only signal (spec §6.3).
+                        Icon(state.icon, size: 13, color: state.colour),
                         const SizedBox(width: HearthSpacing.xs),
                         Flexible(
                           child: Text(
-                            food != null
-                                ? food!.name
-                                : ingredient.isOptional
-                                ? 'not counted'
-                                : 'tap to match a food',
-                            style: text.metadata.copyWith(
-                              color: food != null
-                                  ? colors.textSecondary
-                                  : colors.textMuted,
-                            ),
+                            state.text,
+                            style: text.metadata.copyWith(color: state.colour),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -813,19 +864,14 @@ class _IngredientRow extends StatelessWidget {
 /// Per-serving and whole-recipe macros, updating as ingredients change
 /// (spec §5.2's live nutrition).
 class _LiveMacros extends StatelessWidget {
-  const _LiveMacros({required this.draft, required this.foods});
+  const _LiveMacros({required this.macros});
 
-  final RecipeDraft draft;
-  final Map<String, Food> foods;
+  /// Handed in already computed, so this card and the ingredient rows above
+  /// it are guaranteed to be describing the same calculation.
+  final RecipeMacros macros;
 
   @override
   Widget build(BuildContext context) {
-    final Recipe provisional = draft.toRecipe(idFactory: () => 'preview');
-    final RecipeMacros macros = MacroCalculator.forRecipe(
-      provisional,
-      foods: foods,
-    );
-
     return _PreviewCard(
       title: 'Nutrition per serving',
       // Missing data flags, never blocks (spec §5.3) — and names the actual

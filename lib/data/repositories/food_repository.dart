@@ -117,5 +117,6 @@ class FoodRepository {
     gramsPerMillilitre: food.gramsPerMillilitre,
     macrosOverridden: food.macrosOverridden,
     isDeleted: food.isDeleted,
+    updatedAt: food.updatedAt,
   );
 }

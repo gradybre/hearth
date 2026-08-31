@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/app/widgets/sort_button.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
+import 'package:hearth/domain/recipes/recipe_query.dart';
 import 'package:hearth/domain/units/unit.dart';
 import 'package:hearth/features/recipes/macro_stats_row.dart';
 import 'package:hearth/features/recipes/recipe_library_screen.dart';
@@ -253,6 +255,70 @@ void main() {
       );
 
       handle.dispose();
+    });
+  });
+
+  group('sorting the library', () {
+    DateTime at(int day) => DateTime.utc(2026, 8, day);
+
+    List<Recipe> byDate() => <Recipe>[
+      aRecipe(id: 'old', title: 'Aaa oldest', updatedAt: at(1)),
+      aRecipe(id: 'new', title: 'Zzz newest', updatedAt: at(3)),
+    ];
+
+    testWidgets('opens most recent first, not alphabetically', (
+      WidgetTester tester,
+    ) async {
+      await pumpHearthApp(tester, recipes: byDate());
+      await pumpFrames(tester);
+
+      final List<RecipeCard> cards = tester
+          .widgetList<RecipeCard>(find.byType(RecipeCard))
+          .toList();
+      expect(cards.map((RecipeCard c) => c.recipe.id), <String>['new', 'old']);
+    });
+
+    testWidgets('the control says which order the list is in', (
+      WidgetTester tester,
+    ) async {
+      await pumpHearthApp(tester, recipes: byDate());
+      await pumpFrames(tester);
+
+      // The order is never something you have to open a menu to discover.
+      expect(find.text('Recent'), findsOneWidget);
+    });
+
+    testWidgets('choosing A–Z reorders the list', (WidgetTester tester) async {
+      await pumpHearthApp(tester, recipes: byDate());
+      await pumpFrames(tester);
+
+      await tester.tap(find.byType(SortButton<RecipeSort>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('A–Z').last);
+      await tester.pumpAndSettle();
+
+      final List<RecipeCard> cards = tester
+          .widgetList<RecipeCard>(find.byType(RecipeCard))
+          .toList();
+      expect(cards.map((RecipeCard c) => c.recipe.id), <String>['old', 'new']);
+    });
+
+    testWidgets('a favourite stays on top of a newer recipe', (
+      WidgetTester tester,
+    ) async {
+      // Brendan's call: the sort orders each group, it does not get to bury
+      // the handful of recipes actually cooked every week.
+      await pumpHearthApp(
+        tester,
+        recipes: byDate(),
+        favorites: <String>{'old'},
+      );
+      await pumpFrames(tester);
+
+      final List<RecipeCard> cards = tester
+          .widgetList<RecipeCard>(find.byType(RecipeCard))
+          .toList();
+      expect(cards.first.recipe.id, 'old');
     });
   });
 }

@@ -40,6 +40,7 @@ abstract final class FoodMapper {
     source: sourceFromSql(food.source),
     macrosOverridden: food.macrosOverridden,
     isDeleted: food.isDeleted,
+    updatedAt: food.updatedAt,
     servingOptions: <ServingOption>[
       for (final FoodServingOptionRow row in servings)
         ServingOption(

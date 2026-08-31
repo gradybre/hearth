@@ -69,6 +69,7 @@ class Food {
     this.gramsPerMillilitre,
     this.macrosOverridden = false,
     this.isDeleted = false,
+    this.updatedAt,
   });
 
   final String id;
@@ -101,7 +102,26 @@ class Food {
   /// Foods are soft-deleted so historical logs keep resolving (spec §4).
   final bool isDeleted;
 
+  /// When this food was last written, for sorting a library by recency.
+  ///
+  /// Null for a food that has not been through the household's own store — a
+  /// lookup result, an unsaved draft. That is the honest answer rather than a
+  /// stand-in date, and the sort puts them last rather than pretending they
+  /// are new.
+  final DateTime? updatedAt;
+
   bool get isGlobal => householdId == null;
+
+  /// Whether this food cannot actually be logged as it stands.
+  ///
+  /// Either it carries no serving at all, or every serving it has is zero
+  /// across the board — both of which make it look like a real entry in a
+  /// list while contributing nothing to a day's numbers. Crowd-sourced
+  /// imports land in this state often enough to be worth filtering for
+  /// deliberately (spec §5.5), which is the whole point of surfacing it.
+  bool get needsAttention =>
+      servingOptions.isEmpty ||
+      servingOptions.every((ServingOption o) => o.macros.isZero);
 
   /// The serving option to offer first — the first declared one.
   ServingOption? get defaultServing =>

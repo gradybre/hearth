@@ -5,6 +5,7 @@ import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../app/widgets/sort_button.dart';
 import '../../data/local/collection_store.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/recipes/recipe_query.dart';
@@ -81,6 +82,16 @@ class _RecipeFilterBarState extends ConsumerState<RecipeFilterBar> {
           padding: EdgeInsets.symmetric(horizontal: widget.gutter),
           child: Row(
             children: <Widget>[
+              // Sort leads the row: it is always on and always relevant,
+              // unlike the chips beside it, which are each off until chosen.
+              SortButton<RecipeSort>(
+                value: filter.sort,
+                choices: <SortChoice<RecipeSort>>[
+                  for (final RecipeSort sort in RecipeSort.values)
+                    SortChoice<RecipeSort>(value: sort, label: sort.label),
+                ],
+                onChanged: control.setSort,
+              ),
               _Chip(
                 label: 'Favourites',
                 icon: Icons.favorite,

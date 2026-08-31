@@ -40,6 +40,7 @@ abstract final class SyncPayload {
       notes: json['notes'] as String?,
       createdBy: json['created_by'] as String?,
       isDeleted: json['is_deleted'] == true,
+      updatedAt: updatedAt(json),
       sections: <RecipeSection>[
         for (final Map<String, Object?> section in sections)
           RecipeSection(
@@ -92,6 +93,7 @@ abstract final class SyncPayload {
     source: FoodMapper.sourceFromSql('${json['source'] ?? 'manual'}'),
     macrosOverridden: json['macros_overridden'] == true,
     isDeleted: json['is_deleted'] == true,
+    updatedAt: updatedAt(json),
     servingOptions: <ServingOption>[
       for (final Map<String, Object?> o in _list(json['serving_options']))
         ServingOption(

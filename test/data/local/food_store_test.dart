@@ -57,6 +57,23 @@ void main() {
       );
     });
 
+    test('a reloaded food carries the timestamp it was written with', () async {
+      // The sort on the Foods tab is only as good as this: `updatedAt` lives
+      // on the row and is easy to write without ever reading back, which is
+      // exactly how it behaved before the library gained a recency sort.
+      //
+      // Compared as an instant, not with ==: Drift stores the epoch and hands
+      // it back in local time, and DateTime equality also demands a matching
+      // UTC flag. Sorting compares instants, so the difference is real here
+      // and irrelevant there.
+      await store.upsert(chicken(), updatedAt: now);
+
+      expect(
+        (await store.byId('food-chicken'))!.updatedAt!.isAtSameMomentAs(now),
+        isTrue,
+      );
+    });
+
     test('serving option order is preserved', () async {
       await store.upsert(chicken(), updatedAt: now);
       final Food loaded = (await store.byId('food-chicken'))!;

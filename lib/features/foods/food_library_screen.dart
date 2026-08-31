@@ -11,8 +11,8 @@ import '../../app/widgets/swipe_to_delete.dart';
 import '../../app/widgets/undo_snackbar.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
-import '../../domain/text/text_normaliser.dart';
 import 'external_food_results.dart';
+import 'food_filter_bar.dart';
 import 'food_search_controller.dart';
 
 /// The household food library (spec §5.5).
@@ -78,22 +78,10 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
     );
   }
 
-  List<Food> _filter(List<Food> foods) {
-    final String needle = normaliseKey(_search.text);
-    if (needle.isEmpty) return foods;
-    return foods
-        .where(
-          (Food food) =>
-              normaliseKey(food.name).contains(needle) ||
-              normaliseKey(food.brand ?? '').contains(needle),
-        )
-        .toList(growable: false);
-  }
-
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    final AsyncValue<List<Food>> library = ref.watch(foodLibraryProvider);
+    final AsyncValue<List<Food>> library = ref.watch(filteredFoodsProvider);
     final double gutter = MediaQuery.sizeOf(context).width >= 840
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
@@ -132,8 +120,12 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
           error: (Object error, StackTrace stack) => Center(
             child: Text('The food library could not be read.\n$error'),
           ),
-          data: (List<Food> foods) {
-            final List<Food> visible = _filter(foods);
+          data: (List<Food> visible) {
+            // The unfiltered library, for the "your library is empty" branch:
+            // no foods at all and no foods *matching* are different states
+            // and want different words.
+            final List<Food> foods =
+                ref.watch(foodLibraryProvider).value ?? const <Food>[];
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
@@ -172,6 +164,7 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
                     // The library filters as you type; the wider search waits
                     // for a pause and lands underneath when it arrives.
                     onChanged: (String value) {
+                      ref.read(foodFilterProvider.notifier).search(value);
                       ref.read(foodSearchProvider.notifier).search(value);
                       setState(() {});
                     },
@@ -186,6 +179,9 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
                               tooltip: 'Clear search',
                               onPressed: () {
                                 _search.clear();
+                                ref
+                                    .read(foodFilterProvider.notifier)
+                                    .search('');
                                 ref.read(foodSearchProvider.notifier).clear();
                                 setState(() {});
                               },
@@ -193,6 +189,13 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
                     ),
                   ),
                 ),
+                // Hidden while the library is genuinely empty: chips that can
+                // only ever filter nothing down to nothing are just clutter in
+                // front of someone who has yet to add their first food.
+                if (foods.isNotEmpty) ...<Widget>[
+                  FoodFilterBar(gutter: gutter),
+                  const SizedBox(height: HearthSpacing.md),
+                ],
                 Expanded(
                   // One scroll view for both: what the household has, then
                   // what the wider sources turned up. An empty library is no

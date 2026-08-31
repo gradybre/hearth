@@ -211,4 +211,89 @@ void main() {
       expect(find.textContaining('Butter'), findsNothing);
     },
   );
+
+  group('which ingredient needs attention', () {
+    // Brendan's report: the summary counted four problem ingredients and
+    // nothing in the list said which four — a row that was linked and broken
+    // looked exactly like one that was linked and fine.
+    Future<void> openEditorWith(
+      WidgetTester tester, {
+      required String line,
+      required List<Food> foods,
+    }) async {
+      await openIngredientPicker(
+        tester,
+        foods: foods,
+        ingredientLine: line,
+        ingredientName: line.split(' ').skip(2).join(' '),
+      );
+      // Match the line to the only food on offer, then close the sheet.
+      await tester.tap(find.textContaining(foods.first.name).last);
+      await pumpFrames(tester, frames: 12);
+    }
+
+    testWidgets('a food that cannot convert is flagged, not called unmatched', (
+      WidgetTester tester,
+    ) async {
+      // Half an onion against a food that only knows grams: matched, and
+      // still uncountable. The fix is a serving in that unit, not a match.
+      await openEditorWith(
+        tester,
+        line: '1 tbsp white onion',
+        foods: <Food>[
+          aFood(
+            'White onion',
+            id: 'food-onion',
+            servingOptions: <ServingOption>[
+              aServing(
+                amount: 100,
+                unit: Units.gram,
+                macros: const Macros(kcal: 40),
+              ),
+            ],
+          ),
+        ],
+      );
+
+      // Twice over, and deliberately: the row names the offending
+      // ingredient, and the nutrition summary counts it. The whole point is
+      // that the two now agree about which lines did not count.
+      expect(
+        find.textContaining('White onion — no serving in tbsp'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('no serving in'), findsNWidgets(2));
+      // Icon and words together, never colour alone (§6.3).
+      expect(find.byIcon(Icons.error_outline), findsWidgets);
+      expect(find.text('tap to match a food'), findsNothing);
+    });
+
+    testWidgets('a healthy match shows the food, with no warning', (
+      WidgetTester tester,
+    ) async {
+      await openEditorWith(
+        tester,
+        line: '2 tbsp olive oil',
+        foods: <Food>[oliveOil()],
+      );
+
+      expect(find.textContaining('no serving in'), findsNothing);
+      expect(find.byIcon(Icons.link), findsWidgets);
+    });
+
+    testWidgets('an unmatched line still says so plainly', (
+      WidgetTester tester,
+    ) async {
+      await openIngredientPicker(
+        tester,
+        foods: <Food>[aFood('Butter', id: 'food-butter')],
+      );
+      // Leave it unmatched: close the sheet without choosing anything.
+      await tester.tap(find.text('Match "olive oil"'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('tap to match a food'), findsWidgets);
+      expect(find.textContaining('no serving in'), findsNothing);
+    });
+  });
 }

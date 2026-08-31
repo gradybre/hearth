@@ -246,6 +246,23 @@ void main() {
       );
     });
 
+    test('undated recipes fall through to title, as they always did', () {
+      // The library above has no timestamps, so with the default recency sort
+      // every comparison is a tie and the title tiebreaker decides — which is
+      // exactly the ordering this had before sorting was configurable. Stated
+      // outright because it is what keeps the test above honest rather than
+      // accidentally passing.
+      final List<Recipe> library = <Recipe>[
+        aRecipe(id: 'c', title: 'Chili'),
+        aRecipe(id: 'a', title: 'Aubergine bake'),
+      ];
+
+      expect(
+        RecipeSearch.apply(library, RecipeFilter.none).map((Recipe r) => r.id),
+        <String>['a', 'c'],
+      );
+    });
+
     test('soft-deleted recipes never appear', () {
       // They are kept forever so old logs resolve (§4) — the library is not
       // where they belong.
@@ -268,6 +285,142 @@ void main() {
 
       expect(RecipeSearch.tagsIn(library), <String>['quick', 'weeknight']);
       expect(RecipeSearch.cuisinesIn(library), <String>['thai']);
+    });
+  });
+
+  group('sorting', () {
+    DateTime at(int day) => DateTime.utc(2026, 8, day);
+
+    test('most recent first is the default', () {
+      final List<Recipe> library = <Recipe>[
+        aRecipe(id: 'old', title: 'Aaa', updatedAt: at(1)),
+        aRecipe(id: 'new', title: 'Zzz', updatedAt: at(3)),
+        aRecipe(id: 'mid', title: 'Mmm', updatedAt: at(2)),
+      ];
+
+      expect(
+        RecipeSearch.apply(library, RecipeFilter.none).map((Recipe r) => r.id),
+        <String>['new', 'mid', 'old'],
+      );
+    });
+
+    test('an undated recipe sorts last, not first', () {
+      // Not "just now" and not the epoch — simply unknown, which belongs at
+      // the end rather than at either extreme.
+      final List<Recipe> library = <Recipe>[
+        aRecipe(id: 'undated', title: 'Aaa'),
+        aRecipe(id: 'dated', title: 'Zzz', updatedAt: at(1)),
+      ];
+
+      expect(
+        RecipeSearch.apply(library, RecipeFilter.none).map((Recipe r) => r.id),
+        <String>['dated', 'undated'],
+      );
+    });
+
+    test('favourites stay pinned above whatever the sort is', () {
+      // Brendan's call: the sort orders each group, it does not get to bury
+      // the handful of recipes actually cooked every week.
+      final List<Recipe> library = <Recipe>[
+        aRecipe(id: 'newest', title: 'Newest', updatedAt: at(9)),
+        aRecipe(id: 'fav', title: 'Old favourite', updatedAt: at(1)),
+      ];
+
+      expect(
+        RecipeSearch.apply(
+          library,
+          RecipeFilter.none,
+          contextOf: (Recipe r) => RecipeContext(isFavorite: r.id == 'fav'),
+        ).map((Recipe r) => r.id),
+        <String>['fav', 'newest'],
+      );
+    });
+
+    test('A–Z ignores the timestamps entirely', () {
+      final List<Recipe> library = <Recipe>[
+        aRecipe(id: 'z', title: 'Ziti', updatedAt: at(9)),
+        aRecipe(id: 'a', title: 'Aubergine', updatedAt: at(1)),
+      ];
+
+      expect(
+        RecipeSearch.apply(
+          library,
+          const RecipeFilter(sort: RecipeSort.nameAsc),
+        ).map((Recipe r) => r.id),
+        <String>['a', 'z'],
+      );
+    });
+
+    test('calories sorts low to high, with unknowns last', () {
+      final List<Recipe> library = <Recipe>[
+        aRecipe(id: 'high', title: 'High'),
+        aRecipe(id: 'unknown', title: 'Unknown'),
+        aRecipe(id: 'low', title: 'Low'),
+      ];
+      const Map<String, double?> kcal = <String, double?>{
+        'high': 800,
+        'low': 300,
+        'unknown': null,
+      };
+
+      expect(
+        RecipeSearch.apply(
+          library,
+          const RecipeFilter(sort: RecipeSort.caloriesAsc),
+          contextOf: (Recipe r) => RecipeContext(
+            perServing: kcal[r.id] == null ? null : Macros(kcal: kcal[r.id]!),
+          ),
+        ).map((Recipe r) => r.id),
+        // An incomplete recipe has no calories — not the lowest in the
+        // library, which is what sorting it as zero would have claimed.
+        <String>['low', 'high', 'unknown'],
+      );
+    });
+
+    test('protein sorts high to low, with unknowns last', () {
+      final List<Recipe> library = <Recipe>[
+        aRecipe(id: 'lean', title: 'Lean'),
+        aRecipe(id: 'unknown', title: 'Unknown'),
+        aRecipe(id: 'protein', title: 'Protein'),
+      ];
+      const Map<String, double?> protein = <String, double?>{
+        'lean': 8,
+        'protein': 42,
+        'unknown': null,
+      };
+
+      expect(
+        RecipeSearch.apply(
+          library,
+          const RecipeFilter(sort: RecipeSort.proteinDesc),
+          contextOf: (Recipe r) => RecipeContext(
+            perServing: protein[r.id] == null
+                ? null
+                : Macros(kcal: 0, proteinG: protein[r.id]!),
+          ),
+        ).map((Recipe r) => r.id),
+        <String>['protein', 'lean', 'unknown'],
+      );
+    });
+
+    test('a tie on the sort falls back to title', () {
+      final List<Recipe> library = <Recipe>[
+        aRecipe(id: 'z', title: 'Ziti', updatedAt: at(1)),
+        aRecipe(id: 'a', title: 'Aubergine', updatedAt: at(1)),
+      ];
+
+      expect(
+        RecipeSearch.apply(library, RecipeFilter.none).map((Recipe r) => r.id),
+        <String>['a', 'z'],
+      );
+    });
+
+    test('the sort is not counted as an active filter', () {
+      // It never hides anything, so a lit sort must not show up as "1 filter"
+      // with a clear button offering to undo it.
+      const RecipeFilter sorted = RecipeFilter(sort: RecipeSort.nameAsc);
+      expect(sorted.activeCount, 0);
+      expect(sorted.isEmpty, isTrue);
     });
   });
 }

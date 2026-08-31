@@ -13,7 +13,7 @@ RecipeIngredient anIngredient(
   String name, {
   num? amount,
   Unit? unit,
-  String sectionId = 'section-main',
+  String sectionId = _defaultSectionId,
   bool optional = false,
   String? foodId,
   String? prepNote,
@@ -32,7 +32,7 @@ RecipeIngredient anIngredient(
 
 RecipeStep aStep(
   String text, {
-  String sectionId = 'section-main',
+  String sectionId = _defaultSectionId,
   int stepNumber = 1,
   int? timerSeconds,
 }) => RecipeStep(
@@ -45,7 +45,7 @@ RecipeStep aStep(
 
 RecipeSection aSection({
   String name = Recipe.defaultSectionName,
-  String id = 'section-main',
+  String id = _defaultSectionId,
   int sortOrder = 0,
   List<RecipeIngredient> ingredients = const <RecipeIngredient>[],
   List<RecipeStep> steps = const <RecipeStep>[],
@@ -70,25 +70,61 @@ Recipe aRecipe({
   Duration? prepTime,
   Duration? cookTime,
   bool isDeleted = false,
-}) => Recipe(
-  id: id ?? _id('recipe'),
-  householdId: householdId,
-  title: title,
-  servings: servings,
-  tags: tags,
-  cuisine: cuisine,
-  prepTime: prepTime,
-  cookTime: cookTime,
-  isDeleted: isDeleted,
-  sections:
-      sections ??
-      <RecipeSection>[
-        aSection(
-          ingredients: ingredients ?? const <RecipeIngredient>[],
-          steps: steps ?? const <RecipeStep>[],
-        ),
-      ],
-);
+  DateTime? updatedAt,
+}) {
+  final String recipeId = id ?? _id('recipe');
+  // Section ids are primary keys in their own right, so the default section
+  // is named after its recipe rather than a shared constant. Two fixture
+  // recipes built with the defaults used to collide the moment both reached
+  // a real database.
+  final String sectionId = 'sec-$recipeId';
+
+  return Recipe(
+    id: recipeId,
+    householdId: householdId,
+    title: title,
+    servings: servings,
+    tags: tags,
+    cuisine: cuisine,
+    prepTime: prepTime,
+    cookTime: cookTime,
+    isDeleted: isDeleted,
+    updatedAt: updatedAt,
+    sections:
+        sections ??
+        <RecipeSection>[
+          aSection(
+            id: sectionId,
+            // Children left on `anIngredient`/`aStep`'s default section are
+            // re-parented onto it, so a caller that never mentions sections
+            // still gets a recipe whose children actually belong to one.
+            ingredients: <RecipeIngredient>[
+              for (final RecipeIngredient i
+                  in ingredients ?? const <RecipeIngredient>[])
+                i.sectionId == _defaultSectionId
+                    ? i.copyWith(sectionId: sectionId)
+                    : i,
+            ],
+            steps: <RecipeStep>[
+              for (final RecipeStep step in steps ?? const <RecipeStep>[])
+                step.sectionId == _defaultSectionId
+                    ? RecipeStep(
+                        id: step.id,
+                        sectionId: sectionId,
+                        stepNumber: step.stepNumber,
+                        text: step.text,
+                        timerSeconds: step.timerSeconds,
+                      )
+                    : step,
+            ],
+          ),
+        ],
+  );
+}
+
+/// The section id `anIngredient` and `aStep` default to, and the one
+/// [aRecipe] re-parents off.
+const String _defaultSectionId = 'section-main';
 
 ServingOption aServing({
   required num amount,
@@ -111,6 +147,7 @@ Food aFood(
   List<ServingOption>? servingOptions,
   double? gramsPerMillilitre,
   FoodSource source = FoodSource.manual,
+  DateTime? updatedAt,
 }) => Food(
   id: id ?? _id('food'),
   name: name,
@@ -119,6 +156,7 @@ Food aFood(
   servingOptions: servingOptions ?? const <ServingOption>[],
   gramsPerMillilitre: gramsPerMillilitre,
   source: source,
+  updatedAt: updatedAt,
 );
 
 /// A food defined per 100 g, the usual shape of an Open Food Facts record.
@@ -150,23 +188,31 @@ extension FoodTestCopies on Food {
   Food withHousehold(String? id) => _copy(householdId: id);
   Food withBrand(String brand) => _copy(brand: brand);
   Food withBarcode(String barcode) => _copy(barcode: barcode);
+  Food withStoreTag(String tag) => _copy(storeTag: tag);
+  Food withDeleted() => _copy(isDeleted: true);
 
-  Food _copy({Object? householdId = _unset, String? brand, String? barcode}) =>
-      Food(
-        id: id,
-        name: name,
-        servingOptions: servingOptions,
-        source: source,
-        householdId: householdId == _unset
-            ? this.householdId
-            : householdId as String?,
-        brand: brand ?? this.brand,
-        storeTag: storeTag,
-        barcode: barcode ?? this.barcode,
-        gramsPerMillilitre: gramsPerMillilitre,
-        macrosOverridden: macrosOverridden,
-        isDeleted: isDeleted,
-      );
+  Food _copy({
+    Object? householdId = _unset,
+    String? brand,
+    String? barcode,
+    String? storeTag,
+    bool? isDeleted,
+  }) => Food(
+    id: id,
+    name: name,
+    servingOptions: servingOptions,
+    source: source,
+    householdId: householdId == _unset
+        ? this.householdId
+        : householdId as String?,
+    brand: brand ?? this.brand,
+    storeTag: storeTag ?? this.storeTag,
+    barcode: barcode ?? this.barcode,
+    gramsPerMillilitre: gramsPerMillilitre,
+    macrosOverridden: macrosOverridden,
+    isDeleted: isDeleted ?? this.isDeleted,
+    updatedAt: updatedAt,
+  );
 }
 
 const Object _unset = Object();

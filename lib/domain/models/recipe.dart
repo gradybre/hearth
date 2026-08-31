@@ -172,6 +172,7 @@ class Recipe {
     this.notes,
     this.createdBy,
     this.isDeleted = false,
+    this.updatedAt,
   });
 
   /// The section every simple recipe gets. Rendered without a header.
@@ -197,6 +198,13 @@ class Recipe {
 
   /// Soft delete — the row stays so historical logs keep resolving (spec §4).
   final bool isDeleted;
+
+  /// When this recipe was last written, for sorting a library by recency.
+  ///
+  /// Null for a recipe that has not been through the household's own store —
+  /// an unsaved draft, an import still under review. The sort puts those last
+  /// rather than treating a missing date as "just now".
+  final DateTime? updatedAt;
 
   Duration? get totalTime => switch ((prepTime, cookTime)) {
     (null, null) => null,
@@ -259,6 +267,7 @@ class Recipe {
     notes: notes,
     createdBy: createdBy,
     isDeleted: isDeleted,
+    updatedAt: updatedAt,
   );
 
   @override

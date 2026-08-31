@@ -44,6 +44,7 @@ import '../data/sync/record_sync.dart';
 import '../data/sync/remote_rows.dart';
 import '../data/sync/sync_engine.dart';
 import '../domain/cooking/cook_session.dart';
+import '../domain/foods/food_query.dart';
 import '../domain/models/food.dart';
 import '../domain/models/food_profile.dart';
 import '../domain/models/macros.dart';
@@ -339,6 +340,44 @@ final StreamProvider<Map<String, Set<String>>> recipeCollectionsProvider =
       (Ref ref) => ref.watch(collectionRepositoryProvider).watchMembership(),
     );
 
+/// The food library's search text, filter chips, and sort.
+///
+/// A provider for the same reason as the recipe one below: opening a food and
+/// coming back should not silently reset what you were looking at.
+final NotifierProvider<FoodFilterController, FoodFilter> foodFilterProvider =
+    NotifierProvider<FoodFilterController, FoodFilter>(
+      FoodFilterController.new,
+    );
+
+class FoodFilterController extends Notifier<FoodFilter> {
+  @override
+  FoodFilter build() => FoodFilter.none;
+
+  void search(String text) => state = state.copyWith(text: text);
+  void toggleSource(FoodSource source) => state = state.toggleSource(source);
+  void toggleStoreTag(String tag) => state = state.toggleStoreTag(tag);
+  void toggleNeedsAttention() =>
+      state = state.copyWith(needsAttention: !state.needsAttention);
+  void toggleHasBarcode() =>
+      state = state.copyWith(hasBarcode: !state.hasBarcode);
+  void setSort(FoodSort sort) => state = state.copyWith(sort: sort);
+
+  /// Keeps the typed text and the sort, for the same reasons as the recipe
+  /// library: the search box is a separate control, and the sort hides
+  /// nothing so clearing filters must not reorder the list.
+  void clearChips() => state = FoodFilter(text: state.text, sort: state.sort);
+}
+
+/// The food library as the screen shows it: filtered and sorted.
+final Provider<AsyncValue<List<Food>>> filteredFoodsProvider =
+    Provider<AsyncValue<List<Food>>>((Ref ref) {
+      final AsyncValue<List<Food>> library = ref.watch(foodLibraryProvider);
+      final FoodFilter filter = ref.watch(foodFilterProvider);
+      return library.whenData(
+        (List<Food> foods) => FoodSearch.apply(foods, filter),
+      );
+    });
+
 /// The library's live search text and filter chips.
 ///
 /// Held in a provider rather than the screen's state so it survives navigating
@@ -374,11 +413,16 @@ class RecipeFilterController extends Notifier<RecipeFilter> {
       ? state.copyWith(clearMinProtein: true)
       : state.copyWith(minProteinPerServing: value);
 
+  void setSort(RecipeSort sort) => state = state.copyWith(sort: sort);
+
   /// Clears the chips but keeps what was typed — they are separate controls,
   /// and wiping the search box out from under the cursor is startling.
-  void clearChips() => state = RecipeFilter(text: state.text);
+  ///
+  /// The sort is kept for the same reason: it hides nothing, so clearing
+  /// filters has no business reordering the list under the user.
+  void clearChips() => state = RecipeFilter(text: state.text, sort: state.sort);
 
-  void clearAll() => state = RecipeFilter.none;
+  void clearAll() => state = RecipeFilter(sort: state.sort);
 }
 
 /// The library as the screen shows it: filtered, and favourites first.

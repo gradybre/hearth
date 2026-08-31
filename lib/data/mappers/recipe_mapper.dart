@@ -51,6 +51,7 @@ abstract final class RecipeMapper {
     notes: recipe.notes,
     createdBy: recipe.createdBy,
     isDeleted: recipe.isDeleted,
+    updatedAt: recipe.updatedAt,
     sections: <RecipeSection>[
       for (final RecipeSectionRow section in sections)
         RecipeSection(

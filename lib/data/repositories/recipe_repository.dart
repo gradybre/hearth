@@ -122,5 +122,6 @@ class RecipeRepository {
     notes: recipe.notes,
     createdBy: recipe.createdBy,
     isDeleted: recipe.isDeleted,
+    updatedAt: recipe.updatedAt,
   );
 }
