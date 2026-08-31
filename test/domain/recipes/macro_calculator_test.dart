@@ -114,6 +114,99 @@ void main() {
     });
   });
 
+  group('a food that can bridge its own units', () {
+    // Brendan's report: 2.5 cups of a cheddar recorded in grams came back
+    // "no serving in cup", even though the food itself states both a cup
+    // serving and a gram serving — it had already said how much a cup
+    // weighs, and nothing was reading it.
+    Food cheddar() => aFood(
+      'Costco shredded cheddar',
+      id: 'food-cheddar',
+      servingOptions: <ServingOption>[
+        // 1/4 cup is 28 g: 110 kcal against 393 kcal per 100 g.
+        aServing(
+          amount: 0.25,
+          unit: Units.cup,
+          macros: const Macros(kcal: 110, proteinG: 7, fatG: 9),
+        ),
+        aServing(
+          amount: 100,
+          unit: Units.gram,
+          macros: const Macros(kcal: 393, proteinG: 25, fatG: 32),
+        ),
+      ],
+    );
+
+    test('states a density its own servings imply', () {
+      // A quarter-cup (59.15 ml) weighing 28 g is about 0.47 g/ml.
+      expect(cheddar().effectiveGramsPerMillilitre, closeTo(0.473, 0.01));
+    });
+
+    test('an explicit density still wins over the derived one', () {
+      // A figure the source measured describes this food better than one
+      // inferred from two of its own roundings.
+      final Food measured = aFood(
+        'Cheddar',
+        gramsPerMillilitre: 0.6,
+        servingOptions: cheddar().servingOptions,
+      );
+      expect(measured.effectiveGramsPerMillilitre, 0.6);
+    });
+
+    test('a cup of it now resolves instead of being flagged', () {
+      final IngredientMacros result = MacroCalculator.forIngredient(
+        anIngredient(
+          'shredded cheddar',
+          amount: 2.5,
+          unit: Units.cup,
+          foodId: 'food-cheddar',
+        ),
+        food: cheddar(),
+      );
+
+      expect(result.status, IngredientMacroStatus.resolved);
+      // 2.5 cups is ten quarter-cups: ten times the 110 kcal serving.
+      expect(result.macros.kcal, closeTo(1100, 1));
+    });
+
+    test('one serving alone still cannot bridge anything', () {
+      // Nothing dishonest happens when the food has only one measurement to
+      // go on — there is no second one to compare it against.
+      final Food massOnly = aFoodPer100g('Mystery', kcal: 200);
+      expect(massOnly.effectiveGramsPerMillilitre, isNull);
+    });
+
+    test('a zero-calorie food bridges on its other macros', () {
+      final Food water = aFood(
+        'Sparkling water',
+        servingOptions: <ServingOption>[
+          aServing(
+            amount: 100,
+            unit: Units.millilitre,
+            macros: const Macros(kcal: 0, proteinG: 1),
+          ),
+          aServing(
+            amount: 100,
+            unit: Units.gram,
+            macros: const Macros(kcal: 0, proteinG: 1),
+          ),
+        ],
+      );
+      expect(water.effectiveGramsPerMillilitre, closeTo(1, 1e-9));
+    });
+
+    test('a food with no numbers at all bridges nothing', () {
+      final Food empty = aFood(
+        'Empty',
+        servingOptions: <ServingOption>[
+          aServing(amount: 1, unit: Units.cup, macros: Macros.zero),
+          aServing(amount: 100, unit: Units.gram, macros: Macros.zero),
+        ],
+      );
+      expect(empty.effectiveGramsPerMillilitre, isNull);
+    });
+  });
+
   group('whole recipe', () {
     Recipe buildRecipe() => aRecipe(
       servings: 4,

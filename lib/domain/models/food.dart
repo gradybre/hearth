@@ -112,6 +112,54 @@ class Food {
 
   bool get isGlobal => householdId == null;
 
+  /// This food's density, from the source if it gave one, otherwise worked
+  /// out from its own serving sizes.
+  ///
+  /// A food that states both a volume serving and a weight serving has
+  /// already told us how much a millilitre of it weighs, even when nobody
+  /// filled in [gramsPerMillilitre] — the macros are the bridge. If 2 cups
+  /// carries 200 kcal and 100 g carries 400 kcal, then 2 cups *is* 50 g, and
+  /// that is arithmetic on what this food asserts rather than a guess from a
+  /// table of category averages.
+  ///
+  /// This is what lets a recipe measured in cups use a food recorded in
+  /// grams. Without it a perfectly well-described food still could not
+  /// answer "how much is 2.5 cups of it", and the ingredient came back
+  /// flagged with nothing obviously wrong.
+  double? get effectiveGramsPerMillilitre =>
+      gramsPerMillilitre ?? _densityFromServings();
+
+  double? _densityFromServings() {
+    final ({double amount, double scale})? volume = _bridge(UnitKind.volume);
+    final ({double amount, double scale})? mass = _bridge(UnitKind.mass);
+    if (volume == null || mass == null) return null;
+
+    // How many of the mass serving one volume serving is worth.
+    final double massServings = volume.scale / mass.scale;
+    final double grams = mass.amount * massServings;
+    final double density = grams / volume.amount;
+    return density.isFinite && density > 0 ? density : null;
+  }
+
+  /// One serving of [kind] with something to scale by, in canonical units.
+  ///
+  /// The scale is whichever macro is non-zero on both sides of the
+  /// comparison — energy usually, but a zero-calorie food still has a weight,
+  /// so the others stand in rather than giving up.
+  ({double amount, double scale})? _bridge(UnitKind kind) {
+    for (final ServingOption option in servingOptions) {
+      if (option.amount.kind != kind) continue;
+      final double amount = option.amount.canonicalAmount;
+      if (amount <= 0) continue;
+
+      final Macros m = option.macros;
+      final double scale = m.kcal != 0 ? m.kcal : m.proteinG + m.carbG + m.fatG;
+      if (scale <= 0) continue;
+      return (amount: amount, scale: scale);
+    }
+    return null;
+  }
+
   /// Whether this food cannot actually be logged as it stands.
   ///
   /// Either it carries no serving at all, or every serving it has is zero

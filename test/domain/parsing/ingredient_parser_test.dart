@@ -147,6 +147,42 @@ void main() {
       expect(parsed.name, 'x large eggs');
     });
 
+    test('the American bracketed form counts the same as the x form', () {
+      // Brendan's report: "4 (10 oz) bags frozen chopped onion" was read as
+      // 4 bare items — no macros at all, and a stray "(10 oz)" left at the
+      // front of the name. Four ten-ounce bags is forty ounces.
+      final ParsedIngredient parsed = IngredientParser.parse(
+        '4 (10 oz) bags frozen chopped onion',
+      );
+
+      expect(parsed.quantity!.amountIn(Units.ounce), closeTo(40, 1e-9));
+      expect(parsed.name, 'frozen chopped onion');
+    });
+
+    test('a bracketed size with no space or a trailing dot still counts', () {
+      expect(
+        IngredientParser.parse('2 (14.5oz) cans diced tomatoes').quantity!
+            .amountIn(Units.ounce),
+        closeTo(29, 1e-9),
+      );
+      expect(
+        IngredientParser.parse('3 (15 oz.) cans black beans').quantity!
+            .amountIn(Units.ounce),
+        closeTo(45, 1e-9),
+      );
+    });
+
+    test('a bracket that is not a size is left alone', () {
+      // Conservative, exactly as the bare x is: only a number-then-unit in
+      // the brackets is a pack size.
+      final ParsedIngredient parsed = IngredientParser.parse(
+        '2 (large) onions, diced',
+      );
+
+      expect(parsed.quantity!.amountIn(Units.item), 2);
+      expect(parsed.name, contains('onions'));
+    });
+
     test('a plain amount is untouched', () {
       final ParsedIngredient parsed = IngredientParser.parse(
         '400 g chopped tomatoes',

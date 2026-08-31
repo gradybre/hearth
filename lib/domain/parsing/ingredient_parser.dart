@@ -87,6 +87,18 @@ abstract final class IngredientParser {
     caseSensitive: false,
   );
 
+  /// The same thing written the American way: the "(10 oz)" of
+  /// "4 (10 oz) bags frozen chopped onion".
+  ///
+  /// Every US recipe site writes multipacks like this, and read as a bare
+  /// count it is "4 items" — no macros at all, and a stray "(10 oz)" left at
+  /// the front of the name. The size in the brackets is the whole point of
+  /// the line: four of them is forty ounces.
+  static final RegExp _parenthesisedPackSize = RegExp(
+    r'^\(\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)\.?\s*\)\s*',
+    caseSensitive: false,
+  );
+
   /// What a pack comes in. Dropped from the name once its size has been
   /// counted, because "2 x 400g cans chopped tomatoes" is 800 g of chopped
   /// tomatoes, not of cans.
@@ -162,9 +174,11 @@ abstract final class IngredientParser {
       Unit? unit;
       double multiplier = 1;
 
-      // "2 x 400g cans" before anything else: the real amount is the count
-      // times the pack size, in the pack's own unit.
-      final RegExpMatch? pack = _packSize.firstMatch(rest);
+      // "2 x 400g cans" and "4 (10 oz) bags" before anything else: the real
+      // amount is the count times the pack size, in the pack's own unit.
+      // Both notations mean the same thing and neither is a bare count.
+      final RegExpMatch? pack =
+          _packSize.firstMatch(rest) ?? _parenthesisedPackSize.firstMatch(rest);
       final Unit? packUnit = pack == null ? null : Units.parse(pack.group(2)!);
       if (pack != null && packUnit != null) {
         unit = packUnit;

@@ -28,6 +28,27 @@ void main() {
       expect(DensityTable.lookup('2 cups warm water'), 1.0);
     });
 
+    test('a different food is not its head noun', () {
+      // Brendan's report, found while chasing it: "cauliflower rice" took
+      // white rice's 0.85 g/ml through a plain substring match — about five
+      // times its real weight, silently, inside a macro total. A missing
+      // density is flagged; a wrong one is not.
+      expect(DensityTable.lookup('cauliflower rice'), isNull);
+      expect(DensityTable.lookup('frozen cauliflower rice'), isNull);
+      expect(DensityTable.lookup('almond flour'), isNull);
+      expect(DensityTable.lookup('coconut milk'), isNull);
+      expect(DensityTable.lookup('oat milk'), isNull);
+    });
+
+    test('a qualified form of a known food still resolves', () {
+      // The other half of the same rule: the words in front must not stop a
+      // real match, or every recipe's "finely grated parmesan" goes unknown.
+      expect(DensityTable.lookup('boiling water'), 1.0);
+      expect(DensityTable.lookup('finely grated parmesan'), 0.4);
+      expect(DensityTable.lookup('melted unsalted butter'), 0.911);
+      expect(DensityTable.lookup('sifted all-purpose flour'), 0.528);
+    });
+
     test('returns null rather than guessing an unknown ingredient', () {
       expect(DensityTable.lookup('chopped fennel fronds'), isNull);
       expect(DensityTable.lookup(''), isNull);

@@ -195,7 +195,10 @@ abstract final class MacroCalculator {
         quantity,
         option.amount.kind,
         ingredient: food.name,
-        gramsPerMillilitre: food.gramsPerMillilitre,
+        // The food's own figure when it has one, otherwise the one implied
+        // by its own serving sizes — either beats the generic table, which
+        // is only consulted when the food itself cannot answer.
+        gramsPerMillilitre: food.effectiveGramsPerMillilitre,
       );
       if (!converted.isExact) continue;
       final double ratio =

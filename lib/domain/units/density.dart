@@ -15,6 +15,7 @@
 library;
 
 import '../text/text_normaliser.dart';
+import 'unit.dart';
 
 /// A density lookup over a normalised ingredient name.
 abstract final class DensityTable {
@@ -100,33 +101,105 @@ abstract final class DensityTable {
 
   /// Density for [ingredient] in g/ml, or null when unknown.
   ///
-  /// Tries an exact match on the normalised name, then the alias table, then
-  /// the longest table key contained in the name — so "freshly grated
-  /// parmesan" and "extra virgin olive oil, divided" both resolve.
+  /// Strips the words that say how much or how prepared — amounts, units, and
+  /// the qualifiers in [_qualifiers] — and then requires what is left to name
+  /// a food this table actually knows. "Freshly grated parmesan" and
+  /// "2 cups warm water" both resolve; "cauliflower rice" and "almond flour"
+  /// deliberately do not.
+  ///
+  /// The rule used to be a plain substring match, which silently handed
+  /// cauliflower rice white rice's 0.85 g/ml — roughly five times its real
+  /// weight, buried in a macro total nobody would think to question. English
+  /// puts the head noun last, so "grated parmesan" is parmesan while
+  /// "cauliflower rice" is not rice, and nothing short of a vocabulary can
+  /// tell those apart. Anything this cannot name is left unknown and flagged
+  /// upstream: a wrong density is worse than a missing one.
   static double? lookup(String ingredient) {
     final String key = normalise(ingredient);
     if (key.isEmpty) return null;
 
-    final double? exact = gramsPerMillilitre[key];
-    if (exact != null) return exact;
+    for (final String candidate in <String>{key, _stripQualifiers(key)}) {
+      if (candidate.isEmpty) continue;
+      final double? exact = gramsPerMillilitre[candidate];
+      if (exact != null) return exact;
 
-    final String? aliased = _aliases[key];
-    if (aliased != null) return gramsPerMillilitre[aliased];
-
-    String? bestKey;
-    for (final String candidate in <String>[
-      ...gramsPerMillilitre.keys,
-      ..._aliases.keys,
-    ]) {
-      if (!key.contains(candidate)) continue;
-      if (bestKey == null || candidate.length > bestKey.length) {
-        bestKey = candidate;
-      }
+      final String? aliased = _aliases[candidate];
+      if (aliased != null) return gramsPerMillilitre[aliased];
     }
-    if (bestKey == null) return null;
-    return gramsPerMillilitre[bestKey] ??
-        gramsPerMillilitre[_aliases[bestKey]!];
+    return null;
   }
+
+  /// Drops amounts, units, and preparation words, leaving what the thing is.
+  static String _stripQualifiers(String key) => key
+      .split(' ')
+      .where(
+        (String word) =>
+            word.isNotEmpty &&
+            !_qualifiers.contains(word) &&
+            double.tryParse(word) == null &&
+            Units.parse(word) == null,
+      )
+      .join(' ');
+
+  /// Words that describe how an ingredient was prepared or graded, rather
+  /// than what it is.
+  ///
+  /// This list is what makes the match safe. "Freshly grated parmesan" is
+  /// parmesan — every extra word only says what was done to it. "Cauliflower
+  /// rice" is not rice and "almond flour" is not flour, because those words
+  /// name a different substance. So this is the vocabulary of words that may
+  /// be ignored, and any word outside it makes the phrase a different food.
+  static const Set<String> _qualifiers = <String>{
+    'boiling',
+    'chilled',
+    'chopped',
+    'coarsely',
+    'cold',
+    'cooked',
+    'cracked',
+    'crushed',
+    'cubed',
+    'diced',
+    'dried',
+    'extra',
+    'fine',
+    'finely',
+    'firm',
+    'flaked',
+    'freeze-dried',
+    'fresh',
+    'freshly',
+    'frozen',
+    'grated',
+    'ground',
+    'hot',
+    'large',
+    'lukewarm',
+    'medium',
+    'melted',
+    'minced',
+    'organic',
+    'plain',
+    'pure',
+    'raw',
+    'roughly',
+    'roasted',
+    'salted',
+    'shredded',
+    'sifted',
+    'sliced',
+    'small',
+    'softened',
+    'divided',
+    'drained',
+    'rinsed',
+    'thawed',
+    'toasted',
+    'unsalted',
+    'virgin',
+    'warm',
+    'whole',
+  };
 
   /// True when a real density is known for [ingredient].
   static bool knows(String ingredient) => lookup(ingredient) != null;
