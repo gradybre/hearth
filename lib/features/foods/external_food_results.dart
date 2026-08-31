@@ -6,6 +6,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../data/adapters/nutrition_source.dart';
+import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import 'food_draft.dart';
 import 'food_search_controller.dart';
@@ -148,9 +149,16 @@ class _ExternalFood extends StatelessWidget {
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     final ServingOption? serving = match.food.defaultServing;
+    // Not `serving.label`: that is whatever prose the source shipped, and
+    // every source reports metrically whatever the packet says, so the list
+    // read as an unbroken column of grams. Formatting the quantity instead
+    // shows the measure the box states when the label named one — the
+    // adapters keep it as a real unit now — and falls back to imperial when
+    // it did not, rather than to a source's own bookkeeping.
     final String macros = serving == null
         ? 'No serving size'
-        : '${serving.label} · ${serving.macros.kcal.round()} kcal';
+        : '${QuantityFormat.format(serving.amount)} · '
+              '${serving.macros.kcal.round()} kcal';
 
     return Semantics(
       button: true,

@@ -1,7 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
+import '../../domain/parsing/serving_label.dart';
 import '../../domain/units/quantity.dart';
 import '../../domain/units/unit.dart';
 import 'nutrition_source.dart';
@@ -120,8 +122,13 @@ class UsdaNutritionSource implements NutritionSource {
 
   /// The pack's own serving, when the function found one in grams.
   ///
-  /// The label is kept as the pack states it — "2 Tbsp" — because that is what
-  /// a person reads off the box, while the grams are what the maths uses.
+  /// The label's own measure is recovered as a real quantity rather than left
+  /// as prose. USDA reports the weight — `serving_grams` — and states the
+  /// household measure separately as "2 Tbsp"; keeping only the grams meant a
+  /// food saved from here could never be used against a recipe line written in
+  /// tablespoons, and every screen showed a weight nobody measures out. Both
+  /// options are offered, the measurable one first, so `defaultServing` is the
+  /// number written on the box (see [servingAmountFor]).
   List<ServingOption>? _packServing(
     Map<Object?, Object?> json,
     Macros per100g,
@@ -131,14 +138,26 @@ class UsdaNutritionSource implements NutritionSource {
     if (grams == null || grams <= 0) return null;
 
     final String? stated = _text(json['serving_label']);
+    final Macros macros = per100g.scaledBy(grams / 100);
+    final Quantity? measure = stated == null
+        ? null
+        : statedHouseholdMeasure(stated);
+
     return <ServingOption>[
+      if (measure != null)
+        ServingOption(
+          id: 'usda:$id:stated',
+          label: QuantityFormat.format(servingAmountFor(stated!, grams: grams)),
+          amount: servingAmountFor(stated, grams: grams),
+          macros: macros,
+        ),
       ServingOption(
         id: 'usda:$id:serving',
         label: stated == null
             ? '${_trim(grams)} g'
             : '$stated (${_trim(grams)} g)',
         amount: Quantity.of(grams, Units.gram),
-        macros: per100g.scaledBy(grams / 100),
+        macros: macros,
       ),
     ];
   }

@@ -11,6 +11,8 @@ import '../../domain/models/recipe.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/recent_log.dart';
 import '../../domain/recipes/macro_calculator.dart';
+import '../foods/external_food_results.dart';
+import '../foods/food_search_controller.dart';
 import 'day_picker_sheet.dart';
 import 'entry_resolver.dart';
 
@@ -206,6 +208,18 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     }
   }
 
+  /// Uses a food that was just saved from a wider search.
+  ///
+  /// Read back through the repository rather than picked out of
+  /// [foodLibraryProvider]: the save has only just landed, and waiting for the
+  /// library stream to re-emit would leave the sheet showing the picker for a
+  /// frame after the user chose something.
+  Future<void> _useSavedFood(String foodId) async {
+    final Food? food = await ref.read(foodRepositoryProvider).byId(foodId);
+    if (!mounted || food == null) return;
+    setState(() => _food = food);
+  }
+
   Future<void> _remove() async {
     setState(() => _busy = true);
     try {
@@ -364,6 +378,8 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
           (Food f) => needle.isEmpty || f.name.toLowerCase().contains(needle),
         )
         .toList(growable: false);
+    final bool nothingLocally =
+        matchingRecipes.isEmpty && matchingFoods.isEmpty;
 
     return SafeArea(
       child: Column(
@@ -377,7 +393,14 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
                 const SizedBox(height: HearthSpacing.md),
                 TextField(
                   controller: _search,
-                  onChanged: (_) => setState(() {}),
+                  // The library filters as you type; the wider search waits
+                  // for a pause and lands underneath when it arrives — the
+                  // same arrangement the Foods tab uses, so the daily path
+                  // never waits on the network.
+                  onChanged: (String value) {
+                    ref.read(foodSearchProvider.notifier).search(value);
+                    setState(() {});
+                  },
                   style: context.text.body,
                   decoration: InputDecoration(
                     hintText: 'Search recipes and foods',
@@ -388,65 +411,80 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
             ),
           ),
           Expanded(
-            child: matchingRecipes.isEmpty && matchingFoods.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(HearthSpacing.xl),
-                      child: Text(
-                        recipes.isEmpty && foods.isEmpty
-                            ? 'Add a recipe or a food first, then it can be '
-                                  'logged here.'
-                            : 'Nothing matches that search.',
-                        style: context.text.body,
-                        textAlign: TextAlign.center,
-                      ),
+            // One scroll view for both: what the household has, then what the
+            // wider sources turned up. Logging used to dead-end at the
+            // library — anything not already saved had to be added from the
+            // Foods tab and the meal picked up again afterwards, which is
+            // three screens for one sandwich.
+            child: ListView(
+              controller: controller,
+              padding: const EdgeInsets.fromLTRB(
+                HearthSpacing.lg,
+                0,
+                HearthSpacing.lg,
+                HearthSpacing.xl,
+              ),
+              children: <Widget>[
+                if (recents.isNotEmpty) ...<Widget>[
+                  const _GroupLabel(text: 'Recent'),
+                  for (final RecentLog recent in recents)
+                    _RecentRow(
+                      recent: recent,
+                      onTap: _busy
+                          ? null
+                          : () => _logAgain(
+                              recent,
+                              foods: foods,
+                              recipes: recipes,
+                            ),
                     ),
-                  )
-                : ListView(
-                    controller: controller,
-                    padding: const EdgeInsets.fromLTRB(
-                      HearthSpacing.lg,
-                      0,
-                      HearthSpacing.lg,
-                      HearthSpacing.xl,
-                    ),
-                    children: <Widget>[
-                      if (recents.isNotEmpty) ...<Widget>[
-                        const _GroupLabel(text: 'Recent'),
-                        for (final RecentLog recent in recents)
-                          _RecentRow(
-                            recent: recent,
-                            onTap: _busy
-                                ? null
-                                : () => _logAgain(
-                                    recent,
-                                    foods: foods,
-                                    recipes: recipes,
-                                  ),
-                          ),
-                      ],
-                      if (matchingRecipes.isNotEmpty)
-                        const _GroupLabel(text: 'Recipes'),
-                      for (final Recipe recipe in matchingRecipes)
-                        _PickRow(
-                          title: recipe.title,
-                          subtitle:
-                              'serves ${recipe.servings == recipe.servings.roundToDouble() ? recipe.servings.round() : recipe.servings}',
-                          onTap: () => setState(() => _recipe = recipe),
-                        ),
-                      if (matchingFoods.isNotEmpty)
-                        const _GroupLabel(text: 'Foods'),
-                      for (final Food food in matchingFoods)
-                        _PickRow(
-                          title: food.name,
-                          subtitle: food.defaultServing == null
-                              ? 'no serving size'
-                              : '${food.defaultServing!.macros.kcal.round()} kcal '
-                                    'per ${food.defaultServing!.label}',
-                          onTap: () => setState(() => _food = food),
-                        ),
-                    ],
+                ],
+                if (matchingRecipes.isNotEmpty)
+                  const _GroupLabel(text: 'Recipes'),
+                for (final Recipe recipe in matchingRecipes)
+                  _PickRow(
+                    title: recipe.title,
+                    subtitle:
+                        'serves ${recipe.servings == recipe.servings.roundToDouble() ? recipe.servings.round() : recipe.servings}',
+                    onTap: () => setState(() => _recipe = recipe),
                   ),
+                if (matchingFoods.isNotEmpty) const _GroupLabel(text: 'Foods'),
+                for (final Food food in matchingFoods)
+                  _PickRow(
+                    title: food.name,
+                    subtitle: food.defaultServing == null
+                        ? 'no serving size'
+                        : '${food.defaultServing!.macros.kcal.round()} kcal '
+                              'per ${food.defaultServing!.label}',
+                    onTap: () => setState(() => _food = food),
+                  ),
+                // Only ever about what the household already has: results
+                // from further afield may well be listed directly underneath,
+                // and "nothing matches" above a list of matches reads as a
+                // broken screen.
+                if (nothingLocally)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: HearthSpacing.xl,
+                    ),
+                    child: Text(
+                      recipes.isEmpty && foods.isEmpty
+                          ? 'Nothing saved yet. Search for a food and it can '
+                                'be added straight from here.'
+                          : 'None of your recipes or foods match.',
+                      style: context.text.body,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                // Saved to the library first, then logged — the same review
+                // every other route into the library goes through
+                // (CLAUDE.md rule 4). Nothing reaches a day unchecked.
+                ExternalFoodResults(
+                  query: _search.text,
+                  onSaved: _useSavedFood,
+                ),
+              ],
+            ),
           ),
         ],
       ),

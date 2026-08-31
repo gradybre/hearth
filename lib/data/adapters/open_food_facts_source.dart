@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
-import '../../domain/parsing/amount_parser.dart';
+import '../../domain/parsing/serving_label.dart';
 import '../../domain/units/quantity.dart';
 import '../../domain/units/unit.dart';
 import '../../domain/units/unit_converter.dart';
@@ -230,7 +230,7 @@ class OpenFoodFactsSource implements NutritionSource {
       // household measure often survives in the text beside them
       // ("3/4 cup (28 g)", "1 oz (28 g)"), and it is the one printed on the
       // box, so it leads when it is there.
-      final Quantity? stated = _statedHouseholdMeasure(text);
+      final Quantity? stated = statedHouseholdMeasure(text);
       return <ServingOption>[
         if (stated != null)
           ServingOption(
@@ -274,30 +274,6 @@ class OpenFoodFactsSource implements NutritionSource {
         macros: macros,
       ),
     ];
-  }
-
-  /// The household measure a label leads with, when it names one.
-  ///
-  /// "3/4 cup (28 g)" and "1 oz (28 g)" both carry a measure a cook can
-  /// actually use in front of the metric figure. "1 serving (28 g)",
-  /// "1 bar (43 g)" and "0.5 Can (207 g)" do not — a serving, a bar and a can
-  /// cannot be measured out — so those come back null and the grams stand.
-  static Quantity? _statedHouseholdMeasure(String text) {
-    final RegExpMatch? match = RegExp(
-      r'^\s*([\d]+(?:[./\s]\d+)*)\s*([a-zA-Z]+)',
-    ).firstMatch(text);
-    if (match == null) return null;
-
-    final double? amount = parseAmount(match.group(1)!);
-    if (amount == null || amount <= 0) return null;
-
-    final Unit? unit = Units.parse(match.group(2)!);
-    if (unit == null) return null;
-    // Already the metric figure, so there is nothing to restore.
-    if (unit == Units.gram || unit == Units.millilitre) return null;
-    if (unit.kind == UnitKind.count) return null;
-
-    return Quantity.of(amount, unit);
   }
 
   /// How much to trust the row.
