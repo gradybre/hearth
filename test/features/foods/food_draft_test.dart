@@ -67,6 +67,32 @@ void main() {
       expect(const ServingDraft(amount: '½').amountValue, closeTo(0.5, 1e-12));
     });
 
+    test('a fractional serving reopens as a fraction, not a long decimal', () {
+      // A ⅔ cup serving came back as 0.6666666666666666 in the field —
+      // neither what was typed nor anything anyone would type over it.
+      final Food food = aFood(
+        'Frozen chopped onions',
+        servingOptions: <ServingOption>[
+          aServing(
+            amount: 2 / 3,
+            unit: Units.cup,
+            macros: const Macros(kcal: 35),
+          ),
+          aServing(amount: 1.5, unit: Units.tsp, macros: const Macros(kcal: 5)),
+          aServing(amount: 0.7, unit: Units.cup, macros: const Macros(kcal: 9)),
+        ],
+      );
+
+      final FoodDraft reopened = FoodDraft.fromFood(food);
+      expect(reopened.servings.first.amount, '2/3');
+      // A mixed number reads the way a spoon is measured, and parseAmount
+      // reads it straight back.
+      expect(reopened.servings[1].amount, '1 1/2');
+      // A decimal that is not a kitchen fraction keeps its digits rather than
+      // being rounded into something the user never entered.
+      expect(reopened.servings[2].amount, '0.7');
+    });
+
     test('missing macros do not block a save', () {
       // A food with a known portion and unknown calories still beats no food
       // at all — flag, never block (spec §5.3).

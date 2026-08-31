@@ -186,15 +186,27 @@ abstract final class IngredientParser {
       // "2 x 400g cans" and "4 (10 oz) bags" before anything else: the real
       // amount is the count times the pack size, in the pack's own unit.
       // Both notations mean the same thing and neither is a bare count.
+      //
+      // The container word may come before the size as easily as after it —
+      // "4 package (10 oz) onions" is how a US shopping list writes what
+      // Europe writes as "4 x 10oz packages". It is only stepped over when a
+      // pack size really does follow, so "2 cans tomatoes" keeps its cans and
+      // stays a count of two.
+      final RegExpMatch? leadingContainer = _container.firstMatch(rest);
+      final String packSource = leadingContainer == null
+          ? rest
+          : rest.substring(leadingContainer.end);
+
       final RegExpMatch? pack =
-          _packSize.firstMatch(rest) ??
-          _parenthesisedPackSize.firstMatch(rest) ??
-          _barePackSize.firstMatch(rest);
+          _packSize.firstMatch(packSource) ??
+          _parenthesisedPackSize.firstMatch(packSource) ??
+          _barePackSize.firstMatch(packSource);
       final Unit? packUnit = pack == null ? null : Units.parse(pack.group(2)!);
       if (pack != null && packUnit != null) {
         unit = packUnit;
         multiplier = double.parse(pack.group(1)!);
-        rest = _tidy(rest.substring(pack.end)).replaceFirst(_container, '');
+        rest = _tidy(packSource.substring(pack.end))
+            .replaceFirst(_container, '');
         rest = _tidy(rest);
       } else {
         final int space = rest.indexOf(' ');

@@ -248,8 +248,37 @@ class FoodDraft {
     source: source,
   );
 
-  static String _trimNumber(double value) =>
-      value == value.roundToDouble() ? value.round().toString() : '$value';
+  /// A number as a person would write it back into the field.
+  ///
+  /// Fractions reopen as fractions: a ⅔ cup serving stored as a double comes
+  /// back as 0.6666666666666666 otherwise, which is neither what was typed
+  /// nor anything anyone would type. Only the fractions a kitchen actually
+  /// uses are recognised — anything else keeps its digits rather than being
+  /// rounded into a number the user did not enter.
+  static String _trimNumber(double value) {
+    if (value == value.roundToDouble()) return value.round().toString();
+
+    const Map<String, double> fractions = <String, double>{
+      '1/2': 0.5,
+      '1/3': 1 / 3,
+      '2/3': 2 / 3,
+      '1/4': 0.25,
+      '3/4': 0.75,
+      '1/8': 0.125,
+      '3/8': 0.375,
+      '5/8': 0.625,
+      '7/8': 0.875,
+    };
+
+    final double whole = value - value % 1;
+    final double fraction = value - whole;
+    for (final MapEntry<String, double> entry in fractions.entries) {
+      if ((fraction - entry.value).abs() < 1e-9) {
+        return whole == 0 ? entry.key : '${whole.round()} ${entry.key}';
+      }
+    }
+    return '$value';
+  }
 
   /// A zero macro reopens as an empty field, not a literal "0".
   ///

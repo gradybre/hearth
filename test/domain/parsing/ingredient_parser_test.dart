@@ -203,6 +203,29 @@ void main() {
       expect(IngredientParser.parse('2 8oz cans tomatoes').name, 'tomatoes');
     });
 
+    test('the container word may come before the size', () {
+      // Brendan's actual line, and the one none of the shapes above caught:
+      // a US shopping list writes "4 package (10 oz)" where Europe writes
+      // "4 x 10oz packages". Read as a bare count it was four items, which
+      // converts to nothing no matter what servings the food is given.
+      final ParsedIngredient parsed = IngredientParser.parse(
+        '4 package (10 oz) Onions Frozen Chopped Unprepared',
+      );
+
+      expect(parsed.quantity!.amountIn(Units.ounce), closeTo(40, 1e-9));
+      expect(parsed.name, 'Onions Frozen Chopped Unprepared');
+    });
+
+    test('a container word with no size after it is not stepped over', () {
+      // Only skipped when a pack size really does follow — otherwise "2 cans
+      // tomatoes" would quietly lose the cans and stay a count of two
+      // anyway, having thrown away a word for nothing.
+      final ParsedIngredient parsed = IngredientParser.parse('2 cans tomatoes');
+
+      expect(parsed.quantity!.amountIn(Units.item), 2);
+      expect(parsed.name, 'cans tomatoes');
+    });
+
     test('a fraction pair with no container word is still a range', () {
       // The other side of the same ambiguity: nothing here names a pack, and
       // two fractions side by side are how a range gets written without its
