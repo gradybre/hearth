@@ -285,10 +285,25 @@ class RecipeDraft {
     tags: recipe.tags,
     notes: recipe.notes,
     existingId: recipe.id,
+    // Keyed by the stored name *and* by whatever the current parser makes of
+    // the raw line, because those are not always the same string.
+    //
+    // The editor re-reads every line on the way in, so a parser that has
+    // learned something since — "4 (10 oz) bags frozen chopped onion" now
+    // yields "frozen chopped onion" rather than "(10 oz) bags frozen chopped
+    // onion" — produces a different key on the way out. Keyed only by the old
+    // name, the food quietly detached itself the moment the recipe was saved,
+    // which is the opposite of what reopening a recipe should do.
     matches: <String, String>{
       for (final RecipeIngredient ingredient in recipe.allIngredients)
-        if (ingredient.foodId != null)
-          normaliseKey(ingredient.name): ingredient.foodId!,
+        if (ingredient.foodId != null) ...<String, String>{
+          if (normaliseKey(ingredient.name).isNotEmpty)
+            normaliseKey(ingredient.name): ingredient.foodId!,
+          if (ingredient.rawText case final String raw)
+            if (normaliseKey(IngredientParser.parse(raw).name).isNotEmpty)
+              normaliseKey(IngredientParser.parse(raw).name):
+                  ingredient.foodId!,
+        },
     },
   );
 

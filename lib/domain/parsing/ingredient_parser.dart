@@ -88,9 +88,25 @@ abstract final class IngredientParser {
   /// What a pack comes in. Dropped from the name once its size has been
   /// counted, because "2 x 400g cans chopped tomatoes" is 800 g of chopped
   /// tomatoes, not of cans.
+  /// The words a pack comes in, as one alternation both patterns below share.
+  static const String _containerWords =
+      r'cans?|tins?|jars?|packs?|packages?|packets?|sachets?|bottles?|'
+      r'tubs?|pots?|boxes|box|bags?|containers?|cartons?|pouches|pouch|'
+      r'sticks?|blocks?';
+
   static final RegExp _container = RegExp(
-    r'^(?:cans?|tins?|jars?|packs?|packets?|sachets?|bottles?|tubs?|pots?|'
-    r'boxes|box|bags?)\s+',
+    '^(?:$_containerWords)\\s+',
+    caseSensitive: false,
+  );
+
+  /// A pack size written with neither an x nor brackets, but named as a pack:
+  /// the "10 oz" of "4 10 oz bags frozen chopped onion".
+  ///
+  /// The container word is what makes this readable at all. Two numbers side
+  /// by side are otherwise ambiguous — "1/4 1/2 small onion" is a range — and
+  /// it is the "bags" that says this pair is a count and a pack size instead.
+  static final RegExp _barePackSize = RegExp(
+    '^(\\d+(?:\\.\\d+)?)\\s*([a-zA-Z]+)\\.?\\s+(?=(?:$_containerWords)\\b)',
     caseSensitive: false,
   );
 
@@ -136,8 +152,15 @@ abstract final class IngredientParser {
       // quantity, and picking between it and the first would invent a number
       // with nothing behind it. That case is left unquantified instead, same
       // as before.
+      //
+      // Only when the *first* number is a fraction. "1/4 1/2 small onion" is
+      // a range written without its dash; "4 10 oz bags" is a count followed
+      // by a pack size, and reading that as a range quietly turned four
+      // ten-ounce bags into ten ounces. Whole numbers side by side mean
+      // something else often enough that this will not guess at them.
       double? effectiveAmount = amount;
-      final RegExpMatch? secondMatch = amount == null
+      final RegExpMatch? secondMatch =
+          amount == null || !_isFraction(amountMatch.group(1)!)
           ? null
           : _leadingAmount.firstMatch(rest);
       if (secondMatch != null) {
@@ -164,7 +187,9 @@ abstract final class IngredientParser {
       // amount is the count times the pack size, in the pack's own unit.
       // Both notations mean the same thing and neither is a bare count.
       final RegExpMatch? pack =
-          _packSize.firstMatch(rest) ?? _parenthesisedPackSize.firstMatch(rest);
+          _packSize.firstMatch(rest) ??
+          _parenthesisedPackSize.firstMatch(rest) ??
+          _barePackSize.firstMatch(rest);
       final Unit? packUnit = pack == null ? null : Units.parse(pack.group(2)!);
       if (pack != null && packUnit != null) {
         unit = packUnit;
@@ -201,6 +226,10 @@ abstract final class IngredientParser {
       isOptional: isOptional,
     );
   }
+
+  /// Whether a token is written as a fraction rather than a whole number.
+  static bool _isFraction(String token) =>
+      token.contains('/') || vulgarFractions.keys.any(token.contains);
 
   /// A hyphenated or en-dash range: "1-2", "3–4".
   static final RegExp _hyphenRange = RegExp(r'^(\d+)\s*[-–]\s*(\d+)$');

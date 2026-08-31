@@ -172,6 +172,48 @@ void main() {
       );
     });
 
+    test('the American container words are dropped too', () {
+      // "Packages" and "containers" are how US freezer aisles label things,
+      // and left in the name they stop the line matching the food it means.
+      expect(
+        IngredientParser.parse('4 (10 oz) packages frozen chopped onions').name,
+        'frozen chopped onions',
+      );
+      expect(
+        IngredientParser.parse('2 (12 oz) containers cottage cheese').name,
+        'cottage cheese',
+      );
+    });
+
+    test('a pack size needs neither an x nor brackets', () {
+      // "4 10 oz bags" is a count followed by a pack size, not four-to-ten of
+      // anything — read as a range it quietly became ten ounces, turning four
+      // bags into one. The container word is what tells the two apart, and
+      // with it the line means what it says: forty ounces.
+      expect(
+        IngredientParser.parse('4 10 oz bags frozen chopped onion').quantity!
+            .amountIn(Units.ounce),
+        closeTo(40, 1e-9),
+      );
+      expect(
+        IngredientParser.parse('2 8oz cans tomatoes').quantity!
+            .amountIn(Units.ounce),
+        closeTo(16, 1e-9),
+      );
+      expect(IngredientParser.parse('2 8oz cans tomatoes').name, 'tomatoes');
+    });
+
+    test('a fraction pair with no container word is still a range', () {
+      // The other side of the same ambiguity: nothing here names a pack, and
+      // two fractions side by side are how a range gets written without its
+      // dash.
+      expect(
+        IngredientParser.parse('1/4 1/2 small white onion').quantity!
+            .amountIn(Units.item),
+        closeTo(0.5, 1e-12),
+      );
+    });
+
     test('a bracket that is not a size is left alone', () {
       // Conservative, exactly as the bare x is: only a number-then-unit in
       // the brackets is a pack size.
@@ -244,16 +286,6 @@ void main() {
       final ParsedIngredient p = IngredientParser.parse('olive oil');
       expect(p.quantity, isNull);
       expect(p.name, 'olive oil');
-    });
-
-    test('a unit glued to a number with no space is left unquantified', () {
-      // "8" out of "8oz" is not a second quantity — averaging into it would
-      // invent a number with nothing behind it, so the whole line is kept as
-      // the name instead, same as any other pattern this parser doesn't
-      // recognise.
-      final ParsedIngredient p = IngredientParser.parse('2 8oz cans tomatoes');
-      expect(p.quantity, isNull);
-      expect(p.name, '2 8oz cans tomatoes');
     });
 
     test('an unknown unit word stays part of the name', () {

@@ -375,6 +375,26 @@ void main() {
       expect(onion.name, 'frozen chopped onion');
     });
 
+    test('the food stays attached even when the parser renames the line', () {
+      // The bug behind "I edited and saved it and nothing changed": re-saving
+      // did fix the quantity, and silently dropped the food doing it. The
+      // matches are keyed by ingredient name, and the name the current parser
+      // produces — "frozen chopped onion" — is not the name the old one
+      // stored, so the lookup on the way out found nothing.
+      final Recipe reopened = RecipeDraft.fromRecipe(
+        aStaleRecipe(foodId: 'food-onion'),
+      ).toRecipe(idFactory: sequentialIds());
+
+      final RecipeIngredient onion = reopened.allIngredients.single;
+      expect(onion.name, 'frozen chopped onion');
+      expect(onion.quantity!.amountIn(Units.ounce), closeTo(40, 1e-9));
+      expect(
+        onion.foodId,
+        'food-onion',
+        reason: 'reopening a recipe must not detach what it was matched to',
+      );
+    });
+
     test('a line with no raw text falls back to its name', () {
       // Older rows may carry no rawText at all; re-reading must not lose the
       // ingredient entirely.
@@ -408,7 +428,7 @@ void main() {
 
 /// A recipe as it would have been stored before the parser understood the
 /// bracketed multipack form: four bare items, with the real line preserved.
-Recipe aStaleRecipe() => Recipe(
+Recipe aStaleRecipe({String? foodId}) => Recipe(
   id: 'recipe-ragu',
   title: 'Beef ragu bowl',
   servings: 4,
@@ -424,6 +444,7 @@ Recipe aStaleRecipe() => Recipe(
           name: 'frozen chopped onion',
           quantity: Quantity.of(4, Units.item),
           rawText: '4 (10 oz) bags frozen chopped onion',
+          foodId: foodId,
           sortOrder: 0,
         ),
       ],
