@@ -94,7 +94,11 @@ class RecipeImportController extends Notifier<RecipeImportState> {
   /// Beyond this an image is not a screenshot, and the function will refuse it
   /// anyway. Caught here so the user is told before waiting on an upload.
   static const int maxImageBytes = 5 * 1024 * 1024;
-  static const int maxImages = 3;
+
+  /// A recipe spans as many screens as it spans. Three covered a short one
+  /// and quietly truncated a long one — the pages past the third were simply
+  /// not picked, and nothing said so.
+  static const int maxImages = 10;
 
   Future<void> addPhotos(PhotoOrigin origin) async {
     final PhotoPicker picker = ref.read(photoPickerProvider);

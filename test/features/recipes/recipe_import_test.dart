@@ -47,6 +47,11 @@ class FakePicker implements PhotoPicker {
 
   final int count;
 
+  /// What the screen asked for, so the limit can be checked where it is
+  /// actually applied rather than by counting widgets a scroll view has not
+  /// built yet.
+  int? lastMax;
+
   /// Null means a real (tiny) PNG. A size is for testing the too-large guard,
   /// where the bytes never reach a decoder.
   final int? bytes;
@@ -69,9 +74,10 @@ class FakePicker implements PhotoPicker {
   Future<PickedPhoto?> pick(PhotoOrigin origin) async => _photo();
 
   @override
-  Future<List<PickedPhoto>> pickMultiple({int max = 3}) async => <PickedPhoto>[
-    for (int i = 0; i < count && i < max; i++) _photo(),
-  ];
+  Future<List<PickedPhoto>> pickMultiple({int max = 10}) async {
+    lastMax = max;
+    return <PickedPhoto>[for (int i = 0; i < count && i < max; i++) _photo()];
+  }
 }
 
 AiRecipe shortRibs({List<AiUncertainty> uncertain = const <AiUncertainty>[]}) =>
@@ -99,6 +105,8 @@ Future<void> openImport(
 }
 
 void main() {
+  imageLimitTests();
+
   testWidgets('the library offers importing beside typing one in', (
     WidgetTester tester,
   ) async {
@@ -281,5 +289,37 @@ void main() {
     await pumpFrames(tester, frames: 20);
 
     expect(find.textContaining('none configured'), findsOneWidget);
+  });
+}
+
+/// How many screens one recipe is allowed to span (spec §5.3).
+void imageLimitTests() {
+  testWidgets('a recipe may span ten screens, not three', (
+    WidgetTester tester,
+  ) async {
+    // Three quietly truncated a long recipe: the pages past the third were
+    // simply not picked, and nothing on screen said so.
+    final FakePicker picker = FakePicker(count: 5);
+    await openImport(tester, picker: picker);
+    await tester.tap(find.text('Choose pictures'));
+    await pumpFrames(tester);
+
+    expect(picker.lastMax, 10);
+    expect(find.text('5 of 10 pictures'), findsOneWidget);
+    // Still room for more, where three would already have been full.
+    expect(find.text('Choose pictures'), findsOneWidget);
+  });
+
+  testWidgets('picking more than ten stops at ten rather than silently', (
+    WidgetTester tester,
+  ) async {
+    // The strip scrolls sideways, so counting the pictures on screen counts
+    // only the visible ones. The line under it is the honest total.
+    await openImport(tester, picker: FakePicker(count: 14));
+    await tester.tap(find.text('Choose pictures'));
+    await pumpFrames(tester);
+
+    expect(find.text('10 of 10 pictures'), findsOneWidget);
+    expect(find.text('Choose pictures'), findsNothing);
   });
 }

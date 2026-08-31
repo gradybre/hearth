@@ -126,6 +126,20 @@ class _RecipeImportScreenState extends ConsumerState<RecipeImportScreen> {
               images: state.images,
               onRemove: busy ? null : controller.removePhoto,
             ),
+            // The strip scrolls sideways, so past about four pictures you can
+            // no longer see how many you have — which matters at ten in a way
+            // it never did at three.
+            if (state.images.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: HearthSpacing.xs),
+                child: Text(
+                  '${state.images.length} of '
+                  '${RecipeImportController.maxImages} pictures',
+                  style: context.text.metadata.copyWith(
+                    color: colors.textMuted,
+                  ),
+                ),
+              ),
             if (state.images.length < RecipeImportController.maxImages)
               Padding(
                 padding: const EdgeInsets.only(top: HearthSpacing.sm),

@@ -40,7 +40,7 @@ class ImagePickerPhotos implements PhotoPicker {
   }
 
   @override
-  Future<List<PickedPhoto>> pickMultiple({int max = 3}) async {
+  Future<List<PickedPhoto>> pickMultiple({int max = 10}) async {
     final List<XFile> files = await _picker.pickMultiImage(
       maxWidth: maxEdge,
       maxHeight: maxEdge,

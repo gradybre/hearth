@@ -92,7 +92,7 @@ class FakeCamera implements PhotoPicker {
   }
 
   @override
-  Future<List<PickedPhoto>> pickMultiple({int max = 3}) async => <PickedPhoto>[
+  Future<List<PickedPhoto>> pickMultiple({int max = 10}) async => <PickedPhoto>[
     (await pick(PhotoOrigin.library))!,
   ];
 }

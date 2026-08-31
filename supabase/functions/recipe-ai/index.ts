@@ -28,9 +28,14 @@ const MODEL = 'claude-sonnet-5';
 
 /// Caps live here rather than only in the client. A client-side limit protects
 /// nobody once the endpoint exists — anyone with a session can call it.
-const MAX_IMAGES = 3;
+const MAX_IMAGES = 10;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MAX_TOTAL_BYTES = 12 * 1024 * 1024;
+// Ten images rather than three, because a MacrosFirst recipe can run to that
+// many screens. Sized against Anthropic's 32 MB request body rather than
+// against ten times the per-image cap: base64 inflates by a third, so 18 MB of
+// pictures arrives as about 24 MB of request, which leaves room. Ten
+// downscaled screenshots come to a small fraction of it.
+const MAX_TOTAL_BYTES = 18 * 1024 * 1024;
 const MAX_MESSAGES = 40;
 const MAX_URL_BYTES = 2 * 1024 * 1024;
 
