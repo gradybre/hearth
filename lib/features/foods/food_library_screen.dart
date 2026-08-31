@@ -9,11 +9,14 @@ import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
 import '../../app/widgets/swipe_to_delete.dart';
 import '../../app/widgets/undo_snackbar.dart';
+import '../../data/adapters/label_reader.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import 'external_food_results.dart';
+import 'food_draft.dart';
 import 'food_filter_bar.dart';
 import 'food_search_controller.dart';
+import 'read_label_sheet.dart';
 
 /// The household food library (spec §5.5).
 ///
@@ -56,6 +59,19 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
   /// tap on Delete is already three distinct gestures — more than the swipe
   /// and tap that a single delete asks for without one. The safety net is the
   /// same as a single delete's: a real soft-delete restore, not a re-creation.
+  /// Reads a label and opens the editor with it, for a food with no barcode.
+  ///
+  /// Straight to the editor, like every other route into the library: nothing
+  /// a camera produced is saved without being looked at (CLAUDE.md rule 4).
+  Future<void> _readLabel() async {
+    final LabelReading? reading = await showReadLabelSheet(context);
+    if (reading == null || !mounted) return;
+    await context.push<String>(
+      '/food/new',
+      extra: FoodDraft.blank().withLabel(reading),
+    );
+  }
+
   Future<void> _deleteSelected() async {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     final List<String> ids = _selected.toList(growable: false);
@@ -104,6 +120,21 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
             child: const Icon(Icons.add),
           ),
           const SizedBox(height: HearthSpacing.sm),
+          // For the things with no barcode to scan at all — the deli counter,
+          // bulk bins, a wrapper already torn open. §12 names food-data
+          // coverage as the biggest threat to the success bar, and none of
+          // the databases above cover any of those.
+          if (canReadLabels(ref)) ...<Widget>[
+            FloatingActionButton.small(
+              heroTag: 'food-label',
+              onPressed: _readLabel,
+              backgroundColor: colors.surfaceElevated,
+              foregroundColor: colors.textPrimary,
+              tooltip: 'Read a label from a photo',
+              child: const Icon(Icons.document_scanner_outlined),
+            ),
+            const SizedBox(height: HearthSpacing.sm),
+          ],
           FloatingActionButton.extended(
             heroTag: 'food-scan',
             onPressed: () => context.push('/food/scan'),

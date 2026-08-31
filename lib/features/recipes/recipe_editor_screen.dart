@@ -8,6 +8,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
+import '../../data/adapters/label_reader.dart';
 import '../../data/adapters/recipe_ai.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
@@ -18,6 +19,7 @@ import '../../domain/recipes/ingredient_matcher.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/text/text_normaliser.dart';
 import '../foods/food_picker.dart';
+import '../foods/read_label_sheet.dart';
 import 'macro_stats_row.dart';
 import 'match_review_controller.dart';
 import 'match_review_screen.dart';
@@ -26,7 +28,7 @@ import 'recipe_import_controller.dart';
 import 'recipe_photo.dart';
 
 /// The ways out of a line whose food cannot answer in its unit.
-enum _FixChoice { addServing, pickAnother, scan, unmatch }
+enum _FixChoice { addServing, readLabel, pickAnother, scan, unmatch }
 
 /// Create or edit a recipe (spec §5.2).
 ///
@@ -201,6 +203,19 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     await context.push<void>('/food/$foodId');
   }
 
+  /// Reads the packet and opens the matched food's editor with it merged in.
+  ///
+  /// The same destination as "add a serving", with the numbers already
+  /// filled: the food keeps every serving it had and gains the ones the label
+  /// states, which for a US panel is usually a weight *and* a volume — the
+  /// pair that lets a line measured in cups resolve against a food sold by
+  /// weight. Still saved by hand from there (CLAUDE.md rule 4).
+  Future<void> _readLabelFor(Food food) async {
+    final LabelReading? reading = await showReadLabelSheet(context);
+    if (reading == null || !mounted) return;
+    await context.push<void>('/food/${food.id}', extra: reading);
+  }
+
   Future<void> _matchIngredient(ParsedIngredient ingredient) async {
     final String key = normaliseKey(ingredient.name);
     final String? current = _matches[key];
@@ -303,6 +318,16 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
                     Icons.straighten,
                     'Add a serving in $unit',
                   ),
+                  // Above picking a different food, because the usual reason
+                  // a line is flagged is not that the match is wrong — it is
+                  // that the food only knows one unit, and the packet's own
+                  // panel is the thing that states both.
+                  if (canReadLabels(ref))
+                    (
+                      _FixChoice.readLabel,
+                      Icons.document_scanner_outlined,
+                      "Read the packet's label",
+                    ),
                   (
                     _FixChoice.pickAnother,
                     Icons.search,
@@ -330,6 +355,8 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     switch (choice) {
       case _FixChoice.addServing:
         await _fixFood(food.id);
+      case _FixChoice.readLabel:
+        await _readLabelFor(food);
       case _FixChoice.pickAnother:
         await _matchIngredient(ingredient);
       case _FixChoice.scan:

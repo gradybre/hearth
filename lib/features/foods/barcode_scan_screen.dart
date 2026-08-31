@@ -10,10 +10,12 @@ import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../data/adapters/label_reader.dart';
 import '../../data/adapters/nutrition_source.dart';
 import '../../domain/models/food.dart';
 import 'barcode_lookup_controller.dart';
 import 'food_draft.dart';
+import 'read_label_sheet.dart';
 
 /// Scanning a barcode to add or log a food (spec §5.5).
 ///
@@ -487,6 +489,13 @@ class _ResultPanel extends ConsumerWidget {
             detail:
                 'Add it yourself and Hearth will remember it — every future '
                 'scan of $barcode finds it first.',
+            // The packet is in your hand at exactly this moment, which is why
+            // reading its label leads and typing is the fallback behind it.
+            // §5.5 treats the miss as a first-class path; this is the fastest
+            // way off it.
+            leadingLabel: canReadLabels(ref) ? 'Read the label' : null,
+            leadingIcon: Icons.document_scanner_outlined,
+            onLeading: () => _readLabel(context, ref, barcode),
             actionLabel: 'Add it by hand',
             onAction: () => _addByHand(context, barcode),
             secondaryLabel: 'Try again',
@@ -501,6 +510,31 @@ class _ResultPanel extends ConsumerWidget {
         },
       ),
     );
+  }
+
+  /// Reads the packet's own label and opens the editor already filled in.
+  ///
+  /// The same destination as adding by hand, and deliberately so: this is
+  /// manual entry with the typing removed, not a way around the review
+  /// (CLAUDE.md rule 4).
+  Future<void> _readLabel(
+    BuildContext context,
+    WidgetRef ref,
+    String barcode,
+  ) async {
+    final LabelReading? reading = await showReadLabelSheet(context);
+    if (reading == null || !context.mounted) return;
+
+    final String? saved = await context.push<String>(
+      '/food/new',
+      extra: FoodDraft.forBarcode(barcode).withLabel(reading),
+    );
+    if (!context.mounted) return;
+    if (pickFood && saved != null) {
+      Navigator.of(context).pop(saved);
+      return;
+    }
+    onClear();
   }
 
   Future<void> _addByHand(BuildContext context, String barcode) async {
@@ -743,6 +777,9 @@ class _Message extends StatelessWidget {
     required this.onAction,
     this.secondaryLabel,
     this.onSecondary,
+    this.leadingLabel,
+    this.leadingIcon,
+    this.onLeading,
   });
 
   final IconData icon;
@@ -752,6 +789,12 @@ class _Message extends StatelessWidget {
   final VoidCallback onAction;
   final String? secondaryLabel;
   final VoidCallback? onSecondary;
+
+  /// An action above the others, for when there is a faster way out than the
+  /// one this message was originally written around.
+  final String? leadingLabel;
+  final IconData? leadingIcon;
+  final VoidCallback? onLeading;
 
   @override
   Widget build(BuildContext context) {
@@ -772,15 +815,32 @@ class _Message extends StatelessWidget {
           style: context.text.body.copyWith(color: colors.textSecondary),
         ),
         const SizedBox(height: HearthSpacing.md),
+        if (leadingLabel != null) ...<Widget>[
+          SizedBox(
+            width: double.infinity,
+            height: HearthTouch.minTarget,
+            child: FilledButton.icon(
+              onPressed: onLeading,
+              icon: Icon(leadingIcon, size: 18),
+              label: Text(leadingLabel!),
+            ),
+          ),
+          const SizedBox(height: HearthSpacing.sm),
+        ],
         Row(
           children: <Widget>[
             Expanded(
               child: SizedBox(
                 height: HearthTouch.minTarget,
-                child: FilledButton(
-                  onPressed: onAction,
-                  child: Text(actionLabel),
-                ),
+                child: leadingLabel == null
+                    ? FilledButton(
+                        onPressed: onAction,
+                        child: Text(actionLabel),
+                      )
+                    : OutlinedButton(
+                        onPressed: onAction,
+                        child: Text(actionLabel),
+                      ),
               ),
             ),
             if (secondaryLabel != null) ...<Widget>[

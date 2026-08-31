@@ -5,9 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../data/adapters/edge_function_label_reader.dart';
 import '../data/adapters/edge_function_recipe_ai.dart';
 import '../data/adapters/image_picker_photos.dart';
 import '../data/adapters/kitchen_devices.dart';
+import '../data/adapters/label_reader.dart';
 import '../data/adapters/library_nutrition_source.dart';
 import '../data/adapters/nutrition_lookup.dart';
 import '../data/adapters/nutrition_source.dart';
@@ -667,6 +669,17 @@ final Provider<bool> cameraScanningAvailableProvider = Provider<bool>(
 final Provider<RecipeAiSource?> recipeAiProvider = Provider<RecipeAiSource?>(
   (Ref ref) => ref.watch(supabaseReadyProvider)
       ? EdgeFunctionRecipeAi(Supabase.instance.client)
+      : null,
+);
+
+/// Reading a nutrition label off a photo (spec §5.5).
+///
+/// Nullable for the same reason as [recipeAiProvider], and the buttons that
+/// use it hide themselves rather than failing on tap: offering a camera that
+/// cannot lead anywhere is worse than not offering one.
+final Provider<LabelReader?> labelReaderProvider = Provider<LabelReader?>(
+  (Ref ref) => ref.watch(supabaseReadyProvider)
+      ? EdgeFunctionLabelReader(Supabase.instance.client)
       : null,
 );
 

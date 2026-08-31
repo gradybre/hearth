@@ -6,11 +6,13 @@ import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../data/adapters/label_reader.dart';
 import '../../data/repositories/food_repository.dart';
 import '../../domain/models/food.dart';
 import '../../domain/parsing/amount_parser.dart';
 import '../../domain/units/unit.dart';
 import 'food_draft.dart';
+import 'read_label_sheet.dart';
 
 /// Create or edit a food (spec §5.5).
 ///
@@ -20,7 +22,12 @@ import 'food_draft.dart';
 /// editable, because a packet's own numbers are sometimes wrong and the user's
 /// correction has to win.
 class FoodEditorScreen extends ConsumerStatefulWidget {
-  const FoodEditorScreen({this.foodId, this.initialDraft, super.key});
+  const FoodEditorScreen({
+    this.foodId,
+    this.initialDraft,
+    this.initialLabel,
+    super.key,
+  });
 
   final String? foodId;
 
@@ -29,12 +36,22 @@ class FoodEditorScreen extends ConsumerStatefulWidget {
   /// loads its own values.
   final FoodDraft? initialDraft;
 
+  /// A label read on the way here, merged in once the food has loaded.
+  ///
+  /// Separate from [initialDraft] because it has to be applied *after* an
+  /// existing food's own values, not instead of them: the case it comes from
+  /// is a flagged ingredient whose food has grams and needs a cup, and
+  /// [FoodDraft.withLabel] is what keeps both.
+  final LabelReading? initialLabel;
+
   @override
   ConsumerState<FoodEditorScreen> createState() => _FoodEditorScreenState();
 }
 
 class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
-  late FoodDraft _draft = widget.initialDraft ?? FoodDraft.blank();
+  late FoodDraft _draft = _applyInitialLabel(
+    widget.initialDraft ?? FoodDraft.blank(),
+  );
   bool _loaded = false;
   bool _saving = false;
   bool _showErrors = false;
@@ -55,6 +72,37 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
     Units.item,
     Units.slice,
   ];
+
+  FoodDraft _applyInitialLabel(FoodDraft draft) => widget.initialLabel == null
+      ? draft
+      : draft.withLabel(widget.initialLabel!);
+
+  /// Fills the draft from a photographed label (spec §5.5).
+  ///
+  /// Merged rather than replacing: the case this exists for is a food that
+  /// already has grams and needs a cup, and a typed name must survive a
+  /// picture. [FoodDraft.withLabel] holds those rules.
+  ///
+  /// Nothing is saved — this is the review screen, and it stays one.
+  Future<void> _readLabel() async {
+    final LabelReading? reading = await showReadLabelSheet(context);
+    if (reading == null || !mounted) return;
+    setState(() => _draft = _draft.withLabel(reading));
+
+    if (reading.uncertain.isEmpty) return;
+    // §5.3's flag-never-guess, at the one moment it matters: the user is
+    // looking at numbers they are about to trust.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          reading.uncertain.length == 1
+              ? 'Worth checking: ${reading.uncertain.single.note}'
+              : '${reading.uncertain.length} figures were hard to read — '
+                    'check them against the packet.',
+        ),
+      ),
+    );
+  }
 
   Future<void> _save() async {
     if (!_draft.isValid) {
@@ -155,7 +203,7 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
               body: Center(child: Text('That food no longer exists.')),
             );
           }
-          _draft = FoodDraft.fromFood(food);
+          _draft = _applyInitialLabel(FoodDraft.fromFood(food));
           _loaded = true;
           return _form(context);
         },
@@ -237,9 +285,25 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
             ),
             const SizedBox(height: HearthSpacing.xl),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: <Widget>[
-                Text('Serving sizes', style: context.text.sectionHeader),
+                Expanded(
+                  child: Text(
+                    'Serving sizes',
+                    style: context.text.sectionHeader,
+                  ),
+                ),
+                // §5.5's fallback chain ends at manual entry, and this is
+                // manual entry with the typing removed. It leads because it
+                // is the faster path for anything with a panel on it, and
+                // because it is the only thing here that can produce a weight
+                // and a volume for the same portion — the pair a recipe line
+                // measured in cups needs from a food sold by weight.
+                if (canReadLabels(ref))
+                  TextButton.icon(
+                    onPressed: _readLabel,
+                    icon: const Icon(Icons.document_scanner_outlined, size: 18),
+                    label: const Text('Read label'),
+                  ),
                 TextButton.icon(
                   onPressed: () => setState(
                     () => _draft = _draft.copyWith(

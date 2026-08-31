@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
+import 'package:hearth/data/adapters/label_reader.dart';
 import 'package:hearth/data/adapters/nutrition_lookup.dart';
 import 'package:hearth/data/adapters/nutrition_source.dart';
 import 'package:hearth/data/adapters/photo_picker.dart';
@@ -52,6 +53,7 @@ Future<HearthDatabase> pumpHearthApp(
   bool cameraAvailable = false,
   List<NutritionSource> nutritionSources = const <NutritionSource>[],
   RecipeAiSource? recipeAi,
+  LabelReader? labelReader,
   PhotoPicker? photoPicker,
   FoodProfile? foodProfile,
 }) async {
@@ -97,6 +99,11 @@ Future<HearthDatabase> pumpHearthApp(
         // neither belongs in a widget test, and null is also the honest state
         // of a build with no backend configured.
         recipeAiProvider.overrideWithValue(recipeAi),
+        // Reading a label goes through the same Edge Function, and the same
+        // reasoning applies: null is the honest state of a build with no
+        // backend, and it is what the buttons check before offering
+        // themselves.
+        labelReaderProvider.overrideWithValue(labelReader),
         // Another sqlite-backed stream, and the same reasoning as the rest:
         // fake async cannot drive real I/O, so a live subscription would
         // never emit and would still be open at teardown.

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/data/adapters/label_reader.dart';
 import 'package:hearth/data/adapters/nutrition_source.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
@@ -7,6 +8,7 @@ import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/fixtures.dart';
+import '../foods/label_scan_test.dart' show FakeCamera, FakeLabelReader;
 
 /// In-recipe barcode capture (spec §5.5, §10 phase 2).
 ///
@@ -51,11 +53,14 @@ Future<void> openIngredientPicker(
   Map<String, NutritionMatch> answers = const <String, NutritionMatch>{},
   String ingredientLine = '2 tbsp olive oil',
   String ingredientName = 'olive oil',
+  LabelReader? labelReader,
 }) async {
   await pumpHearthApp(
     tester,
     foods: foods,
     nutritionSources: <NutritionSource>[_StubSource(answers)],
+    labelReader: labelReader,
+    photoPicker: FakeCamera(),
   );
 
   await tester.tap(find.text('New recipe'));
@@ -220,12 +225,14 @@ void main() {
       WidgetTester tester, {
       required String line,
       required List<Food> foods,
+      LabelReader? labelReader,
     }) async {
       await openIngredientPicker(
         tester,
         foods: foods,
         ingredientLine: line,
         ingredientName: line.split(' ').skip(2).join(' '),
+        labelReader: labelReader,
       );
       // Match the line to the only food on offer, then close the sheet.
       await tester.tap(find.textContaining(foods.first.name).last);
@@ -268,9 +275,13 @@ void main() {
       expect(find.text('tap to match a food'), findsNothing);
     });
 
-    Future<void> openFixSheet(WidgetTester tester) async {
+    Future<void> openFixSheet(
+      WidgetTester tester, {
+      LabelReader? labelReader,
+    }) async {
       await openEditorWith(
         tester,
+        labelReader: labelReader,
         line: '1 tbsp white onion',
         foods: <Food>[
           aFood(
@@ -304,6 +315,41 @@ void main() {
       expect(find.text('Match a different food'), findsOneWidget);
       expect(find.text('Scan the packet instead'), findsOneWidget);
       expect(find.text('Unmatch this line'), findsOneWidget);
+    });
+
+    testWidgets('reading the packet is offered above picking another food', (
+      WidgetTester tester,
+    ) async {
+      // The usual reason a line is flagged is not that the match is wrong —
+      // it is that the food only knows one unit, and the packet's own panel
+      // is the thing that states both.
+      await openFixSheet(tester, labelReader: FakeLabelReader());
+
+      expect(find.text("Read the packet's label"), findsOneWidget);
+    });
+
+    testWidgets('a build with no backend does not offer to read a label', (
+      WidgetTester tester,
+    ) async {
+      await openFixSheet(tester);
+      expect(find.text("Read the packet's label"), findsNothing);
+    });
+
+    testWidgets('reading a packet fills that food, keeping what it had', (
+      WidgetTester tester,
+    ) async {
+      await openFixSheet(tester, labelReader: FakeLabelReader());
+
+      await tester.tap(find.text("Read the packet's label"));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Take a photo'));
+      await pumpFrames(tester, frames: 12);
+
+      // That food's own editor, with the grams it had and the units the label
+      // states — and nothing saved until it is (CLAUDE.md rule 4).
+      expect(find.text('Edit food'), findsOneWidget);
+      expect(find.text('g'), findsOneWidget);
+      expect(find.text('cup'), findsOneWidget);
     });
 
     testWidgets('adding a serving goes to that food, not the picker', (

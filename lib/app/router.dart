@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../data/adapters/label_reader.dart';
 import '../features/account/food_profile_screen.dart';
 import '../features/account/household_screen.dart';
 import '../features/foods/barcode_scan_screen.dart';
@@ -102,8 +103,15 @@ GoRouter buildRouter() => GoRouter(
     ),
     GoRoute(
       path: '/food/:id',
-      builder: (BuildContext context, GoRouterState state) =>
-          FoodEditorScreen(foodId: state.pathParameters['id']),
+      builder: (BuildContext context, GoRouterState state) => FoodEditorScreen(
+        foodId: state.pathParameters['id'],
+        // A label read on the way here, merged in on top of the food's own
+        // values rather than instead of them — the flagged-ingredient path,
+        // where the food has grams and the recipe wants cups.
+        initialLabel: state.extra is LabelReading
+            ? state.extra! as LabelReading
+            : null,
+      ),
     ),
     GoRoute(
       path: '/:section',

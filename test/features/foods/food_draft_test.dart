@@ -1,3 +1,4 @@
+import 'package:hearth/data/adapters/label_reader.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/units/unit.dart';
@@ -24,6 +25,7 @@ FoodDraft draft({String name = 'Greek yogurt', List<ServingDraft>? servings}) =>
 
 void main() {
   fromLookupTests();
+  withLabelTests();
 
   group('validation', () {
     test('a name is required', () {
@@ -333,6 +335,154 @@ void fromLookupTests() {
         Uuid.isValidUUID(fromString: saved.servingOptions.single.id),
         isTrue,
       );
+    });
+  });
+}
+
+/// Merging a photographed label into whatever is already on screen (§5.5).
+void withLabelTests() {
+  LabelReading reading({
+    String? name,
+    String? brand,
+    List<LabelServing> servings = const <LabelServing>[
+      LabelServing(
+        amount: 1,
+        unitId: 'oz',
+        kcal: 110,
+        proteinG: 7,
+        carbG: 1,
+        fatG: 9,
+      ),
+      LabelServing(
+        amount: 0.25,
+        unitId: 'cup',
+        kcal: 110,
+        proteinG: 7,
+        carbG: 1,
+        fatG: 9,
+      ),
+    ],
+  }) => LabelReading(servings: servings, name: name, brand: brand);
+
+  group('FoodDraft.withLabel', () {
+    test('the weight and the volume of one portion both arrive', () {
+      // The whole reason this exists. Brendan's Kirkland cheddar says
+      // "1oz (28g/about 1/4 cup)"; those two rows together are the only
+      // statement of the food's density, and without them a recipe line
+      // measured in cups can never resolve against it.
+      final FoodDraft merged = FoodDraft.blank().withLabel(reading());
+
+      expect(merged.servings, hasLength(2));
+      expect(merged.servings[0].unitId, 'oz');
+      expect(merged.servings[0].amount, '1');
+      expect(merged.servings[1].unitId, 'cup');
+      expect(merged.servings[1].amount, '1/4');
+      expect(merged.servings[1].kcal, '110');
+    });
+
+    test('an untouched starter row is replaced, not left above them', () {
+      final FoodDraft merged = FoodDraft.blank().withLabel(reading());
+      expect(
+        merged.servings.any((ServingDraft s) => s.unitId == 'g'),
+        isFalse,
+        reason: 'the 100 g default was never an answer',
+      );
+    });
+
+    test('a starter row someone has typed into is theirs and is kept', () {
+      final FoodDraft typed = const FoodDraft(
+        name: '',
+        servings: <ServingDraft>[ServingDraft(amount: '100', kcal: '400')],
+      ).withLabel(reading());
+
+      expect(typed.servings, hasLength(3));
+      expect(typed.servings.first.kcal, '400');
+    });
+
+    test('an existing food keeps every serving it already had', () {
+      // The case this is reached from: a food that has grams and needs a cup.
+      // Replacing rather than appending would be exactly backwards.
+      final FoodDraft existing = const FoodDraft(
+        name: 'Kirkland cheddar',
+        existingId: 'food-1',
+        servings: <ServingDraft>[
+          ServingDraft(id: 'serving-1', amount: '28', kcal: '110'),
+        ],
+      ).withLabel(reading());
+
+      expect(existing.servings.first.id, 'serving-1');
+      expect(existing.servings.first.amount, '28');
+      expect(existing.servings, hasLength(3));
+    });
+
+    test('a portion already on the draft is not added twice', () {
+      final FoodDraft existing = const FoodDraft(
+        name: 'Kirkland cheddar',
+        servings: <ServingDraft>[
+          ServingDraft(id: 'serving-1', amount: '1/4', unitId: 'cup'),
+        ],
+      ).withLabel(reading());
+
+      expect(existing.servings, hasLength(2));
+      expect(
+        existing.servings.where((ServingDraft s) => s.unitId == 'cup'),
+        hasLength(1),
+      );
+    });
+
+    test('a typed name and brand survive the photo', () {
+      // A photo is evidence, not an authority. Overwriting what someone typed
+      // is the worst kind of helpful.
+      final FoodDraft merged = const FoodDraft(
+        name: 'Sharp cheddar',
+        brand: 'Kirkland',
+        servings: <ServingDraft>[ServingDraft(amount: '100')],
+      ).withLabel(reading(name: 'SHREDDED SHARP CHEDDAR', brand: 'Costco'));
+
+      expect(merged.name, 'Sharp cheddar');
+      expect(merged.brand, 'Kirkland');
+    });
+
+    test('an empty name and brand are filled from the label', () {
+      final FoodDraft merged = FoodDraft.blank().withLabel(
+        reading(name: 'Shredded Sharp Cheddar', brand: 'Kirkland Signature'),
+      );
+
+      expect(merged.name, 'Shredded Sharp Cheddar');
+      expect(merged.brand, 'Kirkland Signature');
+    });
+
+    test('the barcode and the food being edited are carried through', () {
+      // Reached from a barcode miss: the whole point is that the food which
+      // comes out of it is found by the next scan.
+      final FoodDraft merged = FoodDraft.forBarcode('0096619364756')
+          .withLabel(reading());
+
+      expect(merged.barcode, '0096619364756');
+      expect(merged.isValid, isFalse, reason: 'it still needs a name');
+    });
+
+    test("the source's arithmetic is not shown as though it were measured", () {
+      final FoodDraft merged = FoodDraft.blank().withLabel(
+        reading(
+          servings: const <LabelServing>[
+            LabelServing(
+              amount: 1,
+              unitId: 'oz',
+              kcal: 109.87,
+              proteinG: 7.049,
+              carbG: 0.977,
+              fatG: 8.999,
+            ),
+          ],
+        ),
+      );
+
+      final ServingDraft serving = merged.servings.single;
+      expect(serving.kcal, '110');
+      expect(serving.protein, '7');
+      expect(serving.carbs, '1');
+      expect(serving.fat, '9');
     });
   });
 }

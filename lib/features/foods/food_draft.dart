@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../data/adapters/label_reader.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/parsing/amount_parser.dart';
@@ -42,6 +43,31 @@ class ServingDraft {
   /// calories is still more useful than no food at all (spec §5.3's
   /// flag-never-block principle).
   bool get isUsable => (amountValue ?? 0) > 0;
+
+  /// The row [FoodDraft.blank] opens with, still exactly as it opened.
+  ///
+  /// Not the same as [isBlank]: this one has "100" in it, which is a default
+  /// rather than an answer. Anything typed into it — a macro, a different
+  /// amount, another unit — makes it the user's and it is kept.
+  bool get isUntouchedStarter =>
+      id == null &&
+      amount == '100' &&
+      unitId == 'g' &&
+      kcal.trim().isEmpty &&
+      protein.trim().isEmpty &&
+      carbs.trim().isEmpty &&
+      fat.trim().isEmpty;
+
+  /// Whether two rows describe the same portion, so one need not be added
+  /// twice. Compared on the amount as displayed rather than as a double: a
+  /// row typed "1/4" and one read as 0.25 are the same cup of cheese.
+  bool isSamePortionAs(ServingDraft other) {
+    if (unitId != other.unitId) return false;
+    final double? mine = amountValue;
+    final double? theirs = other.amountValue;
+    if (mine == null || theirs == null) return false;
+    return (mine - theirs).abs() < 1e-6;
+  }
 
   bool get isBlank =>
       amount.trim().isEmpty &&
@@ -190,6 +216,61 @@ class FoodDraft {
     barcode: barcode,
     servings: const <ServingDraft>[ServingDraft(amount: '100')],
   );
+
+  /// This draft with everything a photographed label said, merged in
+  /// (spec §5.5).
+  ///
+  /// Three rules, and each one is a way this could quietly lose the user's
+  /// work:
+  ///
+  ///  * **Name and brand fill blanks only.** A photo is evidence, not an
+  ///    authority; typing a name and having a picture overwrite it is the
+  ///    worst kind of helpful.
+  ///  * **Servings are appended, never replacing what is there.** The case
+  ///    this exists for is a food that already has grams and needs a cup, so
+  ///    dropping the grams to add the cup would be exactly backwards. A row
+  ///    the draft already has — same unit, same amount — is skipped rather
+  ///    than duplicated.
+  ///  * **An untouched starter row is replaced.** [blank] opens on 100 g with
+  ///    no macros; leaving it above two rows read off a packet is junk for
+  ///    someone else to delete.
+  ///
+  /// Numbers are rounded the way [fromLookup] rounds them, and for the same
+  /// reason: this lands on a screen the user is being asked to *check*, and
+  /// digits that look measured invite trust they have not earned.
+  FoodDraft withLabel(LabelReading reading) {
+    final List<ServingDraft> kept = <ServingDraft>[
+      for (final ServingDraft serving in servings)
+        if (!serving.isUntouchedStarter) serving,
+    ];
+
+    final List<ServingDraft> added = <ServingDraft>[];
+    for (final LabelServing read in reading.servings) {
+      final ServingDraft candidate = ServingDraft(
+        amount: _trimNumber(read.amount),
+        unitId: read.unitId,
+        kcal: _rounded('${read.kcal}', decimals: 0),
+        protein: _rounded('${read.proteinG}'),
+        carbs: _rounded('${read.carbG}'),
+        fat: _rounded('${read.fatG}'),
+      );
+      final bool alreadyHere = <ServingDraft>[
+        ...kept,
+        ...added,
+      ].any((ServingDraft existing) => existing.isSamePortionAs(candidate));
+      if (!alreadyHere) added.add(candidate);
+    }
+
+    return FoodDraft(
+      name: name.trim().isEmpty ? (reading.name ?? '') : name,
+      brand: brand.trim().isEmpty ? (reading.brand ?? '') : brand,
+      storeTag: storeTag,
+      barcode: barcode,
+      existingId: existingId,
+      source: source,
+      servings: <ServingDraft>[...kept, ...added],
+    );
+  }
 
   final String name;
   final String brand;

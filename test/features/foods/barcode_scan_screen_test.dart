@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/data/adapters/label_reader.dart';
 import 'package:hearth/data/adapters/nutrition_source.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
@@ -7,6 +8,7 @@ import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/fixtures.dart';
+import 'label_scan_test.dart' show FakeCamera, FakeLabelReader;
 
 /// A source that answers for exactly one barcode.
 ///
@@ -51,10 +53,13 @@ NutritionMatch aMatch({double confidence = 0.95}) => NutritionMatch(
 Future<void> openScanner(
   WidgetTester tester, {
   Map<String, NutritionMatch> answers = const <String, NutritionMatch>{},
+  LabelReader? labelReader,
 }) async {
   await pumpHearthApp(
     tester,
     nutritionSources: <NutritionSource>[_StubSource(answers)],
+    labelReader: labelReader,
+    photoPicker: FakeCamera(),
   );
   await tester.tap(find.text('Foods').last);
   await pumpFrames(tester);
@@ -191,6 +196,42 @@ void main() {
     await pumpFrames(tester);
 
     expect(find.text('Check and save'), findsOneWidget);
+  });
+
+  testWidgets('a miss leads with reading the packet, not typing it in', (
+    WidgetTester tester,
+  ) async {
+    // The packet is in your hand at exactly this moment, which is the whole
+    // argument for the order: §5.5 treats the miss as a first-class path, and
+    // this is the fastest way off it.
+    await openScanner(tester, labelReader: FakeLabelReader());
+    await typeBarcode(tester, '5000157024671');
+
+    expect(find.text('Read the label'), findsOneWidget);
+
+    await tester.tap(find.text('Read the label'));
+    await pumpFrames(tester);
+    await tester.tap(find.text('Take a photo'));
+    await pumpFrames(tester, frames: 10);
+
+    // The same destination as adding by hand — this is manual entry with the
+    // typing removed, not a way around the review (CLAUDE.md rule 4). The
+    // barcode is still attached, so the next scan of this packet finds it.
+    expect(find.text('Check and save'), findsOneWidget);
+    expect(
+      find.widgetWithText(TextField, 'Shredded Sharp Cheddar Cheese'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a miss without a backend still offers typing it in', (
+    WidgetTester tester,
+  ) async {
+    await openScanner(tester);
+    await typeBarcode(tester, '5000157024671');
+
+    expect(find.text('Read the label'), findsNothing);
+    expect(find.text('Add it by hand'), findsOneWidget);
   });
 
   testWidgets('a code that is not a product says so before looking anywhere', (

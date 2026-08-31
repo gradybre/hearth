@@ -1,10 +1,17 @@
-// Recipe import and generation, behind the server (spec §5.3, §5.4).
+// Recipe import, generation, and label reading, behind the server
+// (spec §5.3, §5.4, §5.5).
 //
-// One function for both because §5.4 asks for it: generation "runs through the
-// same Edge Function → Claude API path as import". They differ only in what
+// One function for recipes because §5.4 asks for it: generation "runs through
+// the same Edge Function → Claude API path as import". They differ only in what
 // goes in — images or a URL for extraction, a conversation for generation —
 // and both come back as the same recipe shape, so one adapter and one review
 // screen serve both.
+//
+// Reading a nutrition label is a third mode here rather than a second function
+// for a plainer reason: it is the same key, the same model, the same image
+// plumbing and the same size caps, and splitting it would mean maintaining two
+// of each. The name is now a slight misnomer — renaming a deployed function is
+// a migration for a cosmetic gain, so it keeps it.
 //
 // The key is the reason this exists at all. ANTHROPIC_API_KEY in the client is
 // a key anyone can pull out of the app bundle and spend (CLAUDE.md §8.1).
@@ -164,6 +171,91 @@ contributes as written. These are a fallback the app uses only for ingredients
 it cannot find in a real database, and it labels them as estimates when it
 does. A rough number that is honest about being rough beats a silent zero.`;
 
+/// One serving of one food, as a Nutrition Facts panel states it.
+///
+/// The unit is an enum rather than free text so the model cannot answer in
+/// something the app then silently drops — "serving", "portion", "scoop" all
+/// arrive as words Hearth has no conversion for, and a serving that vanishes
+/// between the photo and the review screen is worse than one that was never
+/// offered.
+const LABEL_TOOL = {
+  name: 'nutrition_label',
+  description: "Return what the food's label states.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      name: {
+        type: 'string',
+        description:
+          'What the food is, as the packet names it — "Shredded Sharp ' +
+          'Cheddar Cheese". Omit if the panel is photographed alone.',
+      },
+      brand: { type: 'string', description: 'Omit if not visible.' },
+      servings: {
+        type: 'array',
+        description:
+          'One entry per way the label expresses the SAME serving. A line ' +
+          'reading "Serving size 1oz (28g/about 1/4 cup)" is three ways of ' +
+          'saying one portion: return the ounces and the cups as two ' +
+          'entries with identical macros. Do not return the grams as well ' +
+          'when an ounce figure is given for the same portion.',
+        items: {
+          type: 'object',
+          properties: {
+            amount: { type: 'number', description: 'How much. 0.25 for 1/4.' },
+            unit: {
+              type: 'string',
+              enum: ['g', 'ml', 'oz', 'lb', 'cup', 'tbsp', 'tsp', 'item'],
+            },
+            kcal: { type: 'number' },
+            protein_g: { type: 'number' },
+            carb_g: { type: 'number' },
+            fat_g: { type: 'number' },
+          },
+          required: ['amount', 'unit', 'kcal'],
+        },
+      },
+      uncertain: {
+        type: 'array',
+        description: 'Anything blurred, cut off, or ambiguous.',
+        items: {
+          type: 'object',
+          properties: {
+            field: { type: 'string' },
+            note: { type: 'string' },
+          },
+          required: ['field', 'note'],
+        },
+      },
+    },
+    required: ['servings'],
+  },
+} as const;
+
+const LABEL_PROMPT = `You read Nutrition Facts panels off packaging.
+
+Transcribe the printed numbers. Never compute: do not scale a per-100 g column
+to a serving, do not infer fat from calories, do not convert between units the
+label does not itself give. A number the user can find on their own packet is
+checkable; one you worked out is not.
+
+The serving line is the important part, and US labels usually state one portion
+several ways: "Serving size 1oz (28g/about 1/4 cup)". Return each measurable
+way as its own serving with the SAME macros — the weight and the volume of one
+portion together are the only statement of how dense the food is, and it is
+what lets the app use this food in a recipe that measures in cups. Prefer the
+ounce figure over the gram figure when both are given for the same portion; if
+only grams are printed, return the grams.
+
+Ignore "servings per container" — that is how many are in the packet, not a
+portion anybody eats.
+
+Return at most the servings the label states. Do not invent a 100 g row.
+
+If a digit is blurred, a line is cut off, or a figure could be read two ways,
+transcribe your best reading AND list it in uncertain. A flagged guess is
+useful; a confident wrong number is not.`;
+
 interface Uncertain {
   field: string;
   note: string;
@@ -195,19 +287,34 @@ Deno.serve(async (request: Request): Promise<Response> => {
   }
 
   const mode = (body.mode ?? '').trim();
-  if (mode !== 'extract' && mode !== 'generate') {
-    return json({ error: 'mode must be extract or generate' }, 400);
+  if (mode !== 'extract' && mode !== 'generate' && mode !== 'label') {
+    return json({ error: 'mode must be extract, generate or label' }, 400);
   }
 
   try {
+    if (mode === 'label') {
+      const input = await ask(
+        LABEL_PROMPT,
+        labelContent(body.images ?? []),
+        key,
+        LABEL_TOOL,
+      );
+      return json(shapeLabel(input));
+    }
+
     const content = mode === 'extract'
       ? await extractContent(body.images ?? [], (body.url ?? '').trim())
       : generateContent(body.messages ?? [], body.profile ?? {});
 
     const system = mode === 'extract' ? EXTRACT_PROMPT : GENERATE_PROMPT;
-    return json(await ask(system, content, key));
+    return json(shape(await ask(system, content, key, RECIPE_TOOL)));
   } catch (error) {
-    const message = `${error}`;
+    // `${error}` on an Error stringifies as "Error: bad request: …", so the
+    // prefix check never matched: every malformed request came back 502 with
+    // "Error: bad request:" showing through to the user. A 502 is retryable
+    // and "you sent no photo" is not, so the app offered a retry that could
+    // only fail the same way.
+    const message = error instanceof Error ? error.message : `${error}`;
     // A bad request from the client is a 400 it can act on; anything else is
     // upstream, and the app offers a retry rather than losing the input.
     const status = message.startsWith('bad request:') ? 400 : 502;
@@ -223,11 +330,55 @@ async function extractContent(
   if (images.length === 0 && !url) {
     throw new Error('bad request: give images or a url');
   }
+
+  const content: unknown[] = imageBlocks(images);
+
+  if (url) {
+    content.push({ type: 'text', text: await fetchPage(url) });
+  }
+
+  content.push({
+    type: 'text',
+    text: images.length > 1
+      ? 'These images are one recipe. Extract it.'
+      : 'Extract the recipe.',
+  });
+
+  return content;
+}
+
+/// A label, as Claude content blocks.
+///
+/// Several images are the same packet from more than one angle — a panel is
+/// often easier to read in two shots than one — so they are stitched into a
+/// single reading rather than treated as several foods.
+function labelContent(images: string[]): unknown[] {
+  if (images.length === 0) {
+    throw new Error('bad request: give a photo of the label');
+  }
+
+  return [
+    ...imageBlocks(images),
+    {
+      type: 'text',
+      text: images.length > 1
+        ? 'These are photos of one packet. Read its label.'
+        : 'Read this label.',
+    },
+  ];
+}
+
+/// Images as content blocks, size-capped.
+///
+/// The caps live here rather than only in the client because a client-side
+/// limit protects nobody once the endpoint exists — anyone with a session can
+/// call it (CLAUDE.md §8.1).
+function imageBlocks(images: string[]): unknown[] {
   if (images.length > MAX_IMAGES) {
     throw new Error(`bad request: at most ${MAX_IMAGES} images`);
   }
 
-  const content: unknown[] = [];
+  const blocks: unknown[] = [];
   let total = 0;
 
   for (const raw of images) {
@@ -243,28 +394,13 @@ async function extractContent(
       throw new Error('bad request: those images are too large together');
     }
 
-    content.push({
+    blocks.push({
       type: 'image',
-      source: {
-        type: 'base64',
-        media_type: mediaTypeOf(raw),
-        data,
-      },
+      source: { type: 'base64', media_type: mediaTypeOf(raw), data },
     });
   }
 
-  if (url) {
-    content.push({ type: 'text', text: await fetchPage(url) });
-  }
-
-  content.push({
-    type: 'text',
-    text: images.length > 1
-      ? 'These images are one recipe. Extract it.'
-      : 'Extract the recipe.',
-  });
-
-  return content;
+  return blocks;
 }
 
 /// The conversation so far, plus the profile as standing context.
@@ -348,6 +484,7 @@ async function ask(
   system: string,
   content: unknown[],
   key: string,
+  tool: { name: string },
 ): Promise<Record<string, unknown>> {
   const response = await fetch(ANTHROPIC, {
     method: 'POST',
@@ -360,8 +497,8 @@ async function ask(
       model: MODEL,
       max_tokens: 4096,
       system,
-      tools: [RECIPE_TOOL],
-      tool_choice: { type: 'tool', name: RECIPE_TOOL.name },
+      tools: [tool],
+      tool_choice: { type: 'tool', name: tool.name },
       messages: [{ role: 'user', content }],
     }),
     signal: AbortSignal.timeout(90_000),
@@ -377,10 +514,10 @@ async function ask(
     (c: { type?: string }) => c?.type === 'tool_use',
   );
   if (!block?.input) {
-    throw new Error('Claude returned no recipe');
+    throw new Error('Claude returned nothing readable');
   }
 
-  return shape(block.input);
+  return block.input;
 }
 
 /// Narrows what the model returned to the shape the app is promised.
@@ -424,6 +561,40 @@ function shape(input: Record<string, unknown>): Record<string, unknown> {
         .map((u) => ({ field: text(u.field), note: text(u.note) }))
       : [],
     reply: text(input.reply) || null,
+  };
+}
+
+/// Narrows a label reading the same way, and drops what the app cannot use.
+///
+/// A serving with a unit Hearth does not know is dropped rather than defaulted
+/// to grams: a portion silently reinterpreted as a weight it is not would put
+/// a wrong number into a day, which is the one failure mode a review screen
+/// cannot catch, because it looks correct.
+function shapeLabel(input: Record<string, unknown>): Record<string, unknown> {
+  const units = ['g', 'ml', 'oz', 'lb', 'cup', 'tbsp', 'tsp', 'item'];
+  const servings = Array.isArray(input.servings) ? input.servings : [];
+
+  return {
+    name: text(input.name) || null,
+    brand: text(input.brand) || null,
+    servings: (servings as Record<string, unknown>[])
+      .filter((s) => {
+        const amount = number(s?.amount);
+        return amount !== null && amount > 0 && units.includes(text(s?.unit));
+      })
+      .map((s) => ({
+        amount: number(s.amount),
+        unit: text(s.unit),
+        kcal: number(s.kcal) ?? 0,
+        protein_g: number(s.protein_g) ?? 0,
+        carb_g: number(s.carb_g) ?? 0,
+        fat_g: number(s.fat_g) ?? 0,
+      })),
+    uncertain: Array.isArray(input.uncertain)
+      ? (input.uncertain as Uncertain[])
+        .filter((u) => u?.field || u?.note)
+        .map((u) => ({ field: text(u.field), note: text(u.note) }))
+      : [],
   };
 }
 
