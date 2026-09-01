@@ -20,7 +20,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.hearth.hearth</string>
+			<string>com.brendangrady.hearth</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<!-- Opened by the share extension to bring Hearth forward. -->

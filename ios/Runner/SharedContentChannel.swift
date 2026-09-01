@@ -14,7 +14,7 @@ import UIKit
 enum SharedContentChannel {
   /// Must match `ShareViewController.appGroup` — the two processes have
   /// nothing else in common.
-  static let appGroup = "group.com.hearth.hearth"
+  static let appGroup = "group.com.brendangrady.hearth"
   static let name = "hearth/shared_content"
 
   private static var channel: FlutterMethodChannel?

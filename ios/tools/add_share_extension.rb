@@ -1,16 +1,18 @@
 # Adds the share-extension target to Runner.xcodeproj.
 #
-# Kept as a script rather than committed as project edits because it cannot be
-# used yet: the target needs an App Group, an App Group needs an explicit App
-# ID, and registering `com.hearth.hearth` fails with "cannot be registered to
-# your development team because it is not available". Until that is settled the
-# extension would only break the build, so the app ships without it and this
-# turns it back on in one command.
+# The target is already in the committed project — this is how it got there,
+# kept so the change is reproducible rather than a 200-line diff nobody can
+# read or redo. Run it after a regenerated project, or to rebuild the target
+# from scratch; it is a no-op when the target is already present.
 #
 #   gem install xcodeproj --user-install
 #   cd ios && ruby tools/add_share_extension.rb
 #
-# Everything else the extension needs is already in the tree: ShareExtension/,
+# The extension needs an App Group, an App Group needs an explicit App ID, and
+# `com.hearth.hearth` turned out to be registered to somebody else's team —
+# which is why the app is `com.brendangrady.hearth`.
+#
+# Everything else the extension needs is in the tree: ShareExtension/,
 # Runner/SharedContentChannel.swift, Runner/Runner.entitlements, and the
 # `hearth` URL scheme in Runner/Info.plist.
 require 'xcodeproj'
@@ -34,11 +36,19 @@ group.new_reference('Info.plist')
 group.new_reference('ShareExtension.entitlements')
 
 extension.build_configurations.each do |config|
-  base = runner.build_configurations
-    .find { |c| c.name == config.name }&.build_settings || {}
+  twin = runner.build_configurations.find { |c| c.name == config.name }
+  base = twin&.build_settings || {}
+
+  # The same xcconfig Runner uses, which is where FLUTTER_BUILD_NAME and
+  # FLUTTER_BUILD_NUMBER come from. Without it the extension's Info.plist
+  # resolves them to empty strings and installd refuses the whole app:
+  # "does not have a CFBundleVersion key with a non-zero length string value".
+  # Sharing the file also keeps the extension's version in step with the app's,
+  # which the App Store requires of them.
+  config.base_configuration_reference = twin&.base_configuration_reference
 
   config.build_settings.merge!(
-    'PRODUCT_BUNDLE_IDENTIFIER' => 'com.hearth.hearth.share',
+    'PRODUCT_BUNDLE_IDENTIFIER' => 'com.brendangrady.hearth.share',
     'PRODUCT_NAME' => '$(TARGET_NAME)',
     'INFOPLIST_FILE' => 'ShareExtension/Info.plist',
     'CODE_SIGN_ENTITLEMENTS' => 'ShareExtension/ShareExtension.entitlements',

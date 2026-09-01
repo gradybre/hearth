@@ -15,7 +15,7 @@ import UniformTypeIdentifiers
 class ShareViewController: UIViewController {
   /// Shared with the app. Must match `AppGroup.identifier` in the Runner
   /// target — the two processes have nothing else in common.
-  private static let appGroup = "group.com.hearth.hearth"
+  private static let appGroup = "group.com.brendangrady.hearth"
 
   /// The same cap the photo import applies: a recipe spans as many screens as
   /// it spans, and ten covers a long one.
