@@ -97,7 +97,16 @@ abstract final class DensityTable {
   ///
   /// Delegates to the shared normaliser so density lookup, consolidation, and
   /// remembered matches all key on the same string.
-  static String normalise(String raw) => normaliseKey(raw);
+  /// The key this table matches on.
+  ///
+  /// A hyphen separates rather than binds: `normaliseKey` keeps hyphens, so
+  /// "extra-virgin olive oil" arrived as the single word "extra-virgin" and
+  /// missed the qualifier list that "extra virgin" walks straight through.
+  /// The result was a null density for a spelling half of every recipe uses,
+  /// and a null density is an ingredient that cannot cross between cups and
+  /// grams at all.
+  static String normalise(String raw) =>
+      normaliseKey(raw.replaceAll(RegExp(r'[-–—]+'), ' '));
 
   /// Density for [ingredient] in g/ml, or null when unknown.
   ///
@@ -120,14 +129,31 @@ abstract final class DensityTable {
 
     for (final String candidate in <String>{key, _stripQualifiers(key)}) {
       if (candidate.isEmpty) continue;
-      final double? exact = gramsPerMillilitre[candidate];
+      final double? exact = _byNormalisedName[candidate];
       if (exact != null) return exact;
 
-      final String? aliased = _aliases[candidate];
-      if (aliased != null) return gramsPerMillilitre[aliased];
+      final String? aliased = _byNormalisedAlias[candidate];
+      if (aliased != null) return _byNormalisedName[aliased];
     }
     return null;
   }
+
+  /// The tables above, keyed the way a query arrives.
+  ///
+  /// Built rather than hand-maintained: the table writes "all-purpose flour"
+  /// and a recipe may write either spelling, so both sides have to go through
+  /// [normalise] or the two drift the moment somebody adds an entry with a
+  /// hyphen in it — which is exactly how "extra-virgin olive oil" came to have
+  /// no density.
+  static final Map<String, double> _byNormalisedName = <String, double>{
+    for (final MapEntry<String, double> entry in gramsPerMillilitre.entries)
+      normalise(entry.key): entry.value,
+  };
+
+  static final Map<String, String> _byNormalisedAlias = <String, String>{
+    for (final MapEntry<String, String> entry in _aliases.entries)
+      normalise(entry.key): normalise(entry.value),
+  };
 
   /// Drops amounts, units, and preparation words, leaving what the thing is.
   static String _stripQualifiers(String key) => key

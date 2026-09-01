@@ -2,10 +2,24 @@ import 'package:hearth/domain/units/density.dart';
 import 'package:test/test.dart';
 
 void main() {
+  hyphenTests();
+
   group('normalise', () {
     test('lowercases, strips punctuation, collapses whitespace', () {
       expect(DensityTable.normalise('  Olive   Oil, '), 'olive oil');
-      expect(DensityTable.normalise('All-Purpose Flour'), 'all-purpose flour');
+    });
+
+    test('and reads a hyphen as the space it stands in for', () {
+      // This expectation used to be the opposite — the hyphen was kept — and
+      // that is precisely what left "extra-virgin olive oil" with no density
+      // while "extra virgin olive oil" had one. The table's own keys go
+      // through the same call, so both sides agree however an entry is
+      // written.
+      expect(DensityTable.normalise('All-Purpose Flour'), 'all purpose flour');
+      expect(
+        DensityTable.normalise('Extra-Virgin Olive Oil'),
+        DensityTable.normalise('extra virgin olive oil'),
+      );
     });
   });
 
@@ -71,5 +85,27 @@ void main() {
     ]) {
       expect(DensityTable.lookup(alias), isNotNull, reason: 'alias "$alias"');
     }
+  });
+}
+
+/// A hyphen separates rather than binds (spec §4).
+void hyphenTests() {
+  test('a hyphenated qualifier is still a qualifier', () {
+    // "extra-virgin" arrived as one word and missed the qualifier list that
+    // "extra virgin" walks straight through, so half the ways a recipe spells
+    // olive oil had no density at all — and no density means an ingredient
+    // that cannot cross between cups and grams.
+    expect(DensityTable.lookup('extra-virgin olive oil'), closeTo(0.918, 1e-9));
+    expect(
+      DensityTable.lookup('extra-virgin olive oil'),
+      DensityTable.lookup('extra virgin olive oil'),
+    );
+  });
+
+  test('and a hyphen does not make something a food it is not', () {
+    // The guard the whole lookup exists for: splitting must not turn an
+    // unknown thing into a known one.
+    expect(DensityTable.lookup('cauliflower-rice'), isNull);
+    expect(DensityTable.lookup('almond-flour'), isNull);
   });
 }
