@@ -6,6 +6,7 @@ import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/units/unit.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/fixtures.dart';
@@ -78,9 +79,11 @@ Future<HearthDatabase> openScanner(
   Map<String, NutritionMatch> answers = const <String, NutritionMatch>{},
   List<NutritionMatch> searchResults = const <NutritionMatch>[],
   LabelReader? labelReader,
+  bool cameraAvailable = false,
 }) async {
   final HearthDatabase db = await pumpHearthApp(
     tester,
+    cameraAvailable: cameraAvailable,
     nutritionSources: <NutritionSource>[
       _StubSource(answers, searchResults: searchResults),
     ],
@@ -337,6 +340,36 @@ void main() {
     await typeBarcode(tester, '5000157024671');
 
     expect(find.text('Read the label'), findsNothing);
+  });
+
+  testWidgets('the offer under the live viewfinder can actually be pressed', (
+    WidgetTester tester,
+  ) async {
+    // It could not, and looked perfect. mobile_scanner wraps whatever
+    // `overlayBuilder` returns in an IgnorePointer whenever `tapToFocus` is
+    // on, so the button was painted over the preview and swallowed every tap
+    // — no error, no feedback, nothing. It has to live above the scanner
+    // rather than inside its overlay, and that is what this pins.
+    await openScanner(
+      tester,
+      cameraAvailable: true,
+      labelReader: FakeLabelReader(),
+    );
+
+    final Finder offer = find.text('No barcode? Read the label');
+    expect(offer, findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(MobileScanner), matching: offer),
+      findsNothing,
+      reason: 'inside the scanner it is drawn but never tappable',
+    );
+
+    await tester.tap(offer);
+    await pumpFrames(tester);
+    await tester.tap(find.text('Take a photo'));
+    await pumpFrames(tester, frames: 10);
+
+    expect(find.text('New food'), findsOneWidget);
   });
 
   testWidgets('a code that is not a product says so before looking anywhere', (

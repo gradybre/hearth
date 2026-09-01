@@ -329,17 +329,42 @@ class _CameraView extends StatelessWidget {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final Rect frame = _frameFor(constraints.biggest);
-        return MobileScanner(
-          controller: controller,
-          onDetect: onDetect,
-          scanWindow: frame,
-          // Close-up labels in dim kitchen or pantry light are exactly where
-          // autofocus struggles most; letting a tap re-focus costs nothing.
-          tapToFocus: true,
-          errorBuilder: (BuildContext context, MobileScannerException error) =>
-              _CameraUnavailable(onTypeInstead: onTypeInstead),
-          overlayBuilder: (BuildContext context, BoxConstraints _) =>
-              _Viewfinder(frame: frame, onReadLabel: onReadLabel),
+        return Stack(
+          children: <Widget>[
+            Positioned.fill(
+              child: MobileScanner(
+                controller: controller,
+                onDetect: onDetect,
+                scanWindow: frame,
+                // Close-up labels in dim kitchen or pantry light are exactly
+                // where autofocus struggles most; letting a tap re-focus
+                // costs nothing.
+                tapToFocus: true,
+                errorBuilder: (
+                  BuildContext context,
+                  MobileScannerException error,
+                ) => _CameraUnavailable(onTypeInstead: onTypeInstead),
+                overlayBuilder: (BuildContext context, BoxConstraints _) =>
+                    _Viewfinder(frame: frame),
+              ),
+            ),
+            // Deliberately outside the scanner's own overlay. mobile_scanner
+            // wraps whatever `overlayBuilder` returns in an IgnorePointer
+            // whenever `tapToFocus` is on — reasonable, since an overlay is
+            // usually a viewfinder — so a button put there is painted
+            // perfectly and can never be pressed. It has to sit above the
+            // scanner instead, where taps reach it and everything it does not
+            // cover still falls through to tap-to-focus.
+            Positioned(
+              left: 0,
+              right: 0,
+              top: frame.bottom + HearthSpacing.lg,
+              child: _BelowTheFrame(
+                controller: controller,
+                onReadLabel: onReadLabel,
+              ),
+            ),
+          ],
         );
       },
     );
@@ -363,10 +388,9 @@ class _CameraView extends StatelessWidget {
 /// an instruction below in words — the shape carries the idea, but §6.3 still
 /// applies, so it is never the only thing saying it.
 class _Viewfinder extends StatelessWidget {
-  const _Viewfinder({required this.frame, this.onReadLabel});
+  const _Viewfinder({required this.frame});
 
   final Rect frame;
-  final VoidCallback? onReadLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -384,51 +408,71 @@ class _Viewfinder extends StatelessWidget {
             ),
           ),
         ),
-        Positioned(
-          left: 0,
-          right: 0,
-          top: frame.bottom + HearthSpacing.lg,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: HearthSpacing.xl),
-            child: Column(
-              children: <Widget>[
-                ExcludeSemantics(
-                  child: Text(
-                    'Line up the barcode inside the frame',
-                    textAlign: TextAlign.center,
-                    style: context.text.body.copyWith(
-                      color: Colors.white,
-                      shadows: const <Shadow>[
-                        Shadow(blurRadius: 6, color: Colors.black87),
-                      ],
-                    ),
+      ],
+    );
+  }
+}
+
+/// The words under the frame, and the way out when there is no barcode at all.
+///
+/// Hidden while the camera is failing: [_CameraUnavailable] has that whole
+/// area then, and instructions for a preview nobody can see would be painted
+/// straight over the explanation of why.
+class _BelowTheFrame extends StatelessWidget {
+  const _BelowTheFrame({required this.controller, this.onReadLabel});
+
+  final MobileScannerController controller;
+  final VoidCallback? onReadLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<MobileScannerState>(
+      valueListenable: controller,
+      builder: (BuildContext context, MobileScannerState state, Widget? _) {
+        if (state.error != null) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: HearthSpacing.xl),
+          child: Column(
+            children: <Widget>[
+              // The shape carries the idea, but §6.3 still applies, so it is
+              // never the only thing saying it. Excluded from semantics all
+              // the same: it describes a preview a screen reader user cannot
+              // see, and the barcode field's own semantics carry the workflow.
+              ExcludeSemantics(
+                child: Text(
+                  'Line up the barcode inside the frame',
+                  textAlign: TextAlign.center,
+                  style: context.text.body.copyWith(
+                    color: Colors.white,
+                    shadows: const <Shadow>[
+                      Shadow(blurRadius: 6, color: Colors.black87),
+                    ],
                   ),
                 ),
-                // Offered here rather than only after a miss: a torn or
-                // missing barcode never gets as far as a miss, and this is
-                // where somebody holding one is standing. Not excluded from
-                // semantics as the guidance above it is — the frame is
-                // decoration, but this is a control (§6.3).
-                if (onReadLabel case final VoidCallback read) ...<Widget>[
-                  const SizedBox(height: HearthSpacing.sm),
-                  SizedBox(
-                    height: HearthTouch.minTarget,
-                    child: TextButton.icon(
-                      onPressed: read,
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor: Colors.black54,
-                      ),
-                      icon: const Icon(Icons.document_scanner_outlined),
-                      label: const Text('No barcode? Read the label'),
+              ),
+              // Offered here rather than only after a miss: a torn or missing
+              // barcode never gets as far as a miss, and this is where
+              // somebody holding one is standing.
+              if (onReadLabel case final VoidCallback read) ...<Widget>[
+                const SizedBox(height: HearthSpacing.sm),
+                SizedBox(
+                  height: HearthTouch.minTarget,
+                  child: TextButton.icon(
+                    onPressed: read,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.black54,
                     ),
+                    icon: const Icon(Icons.document_scanner_outlined),
+                    label: const Text('No barcode? Read the label'),
                   ),
-                ],
+                ),
               ],
-            ),
+            ],
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 }
