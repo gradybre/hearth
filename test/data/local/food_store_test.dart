@@ -94,6 +94,19 @@ void main() {
       expect((await store.byId('food-chicken'))!.isDefault, isFalse);
     });
 
+    test('a food confirmed as genuinely zero comes back confirmed', () async {
+      // Same trail as isDefault: the domain model, the row, and three mappers
+      // that each restate every field. `updatedAt` was silently dropped by
+      // exactly that shape of code.
+      await store.upsert(chicken().asZeroCalorie(), updatedAt: now);
+      expect((await store.byId('food-chicken'))!.isZeroCalorie, isTrue);
+    });
+
+    test('and one that is not stays unconfirmed', () async {
+      await store.upsert(chicken(), updatedAt: now);
+      expect((await store.byId('food-chicken'))!.isZeroCalorie, isFalse);
+    });
+
     test('serving option order is preserved', () async {
       await store.upsert(chicken(), updatedAt: now);
       final Food loaded = (await store.byId('food-chicken'))!;

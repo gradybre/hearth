@@ -163,10 +163,16 @@ class NutritionLookup {
     return (terms.where(haystack.contains).length * 40) ~/ terms.length;
   }
 
+  /// Whether a result carries numbers worth logging.
+  ///
+  /// A food the household has confirmed is genuinely zero counts as usable:
+  /// black coffee has nothing to show and is not thereby a worse answer than
+  /// the half-filled import beneath it.
   static int _usable(NutritionMatch match) =>
-      match.food.servingOptions.any(
-        (ServingOption option) => !option.macros.isZero,
-      )
+      match.food.isZeroCalorie ||
+          match.food.servingOptions.any(
+            (ServingOption option) => !option.macros.isZero,
+          )
       ? 1
       : 0;
 

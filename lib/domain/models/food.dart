@@ -82,6 +82,7 @@ class Food {
     this.gramsPerMillilitre,
     this.macrosOverridden = false,
     this.isDefault = false,
+    this.isZeroCalorie = false,
     this.isDeleted = false,
     this.updatedAt,
   });
@@ -121,6 +122,20 @@ class Food {
   /// line that names no variant is answered by a short menu rather than a
   /// guess — see [FoodConcept].
   final bool isDefault;
+
+  /// Confirmed to carry no macros at all — black coffee, sparkling water, a
+  /// zero-calorie sweetener (spec §5.5).
+  ///
+  /// The distinction this exists to draw: a food whose macros are all zero is
+  /// *usually* a half-filled import, and [needsAttention] is right to say so.
+  /// But some foods really are zero, and without a way to say which, the
+  /// warning could never be cleared — it would sit on the black coffee for
+  /// ever, and a warning that cannot be cleared is one that stops being read.
+  ///
+  /// Only ever set deliberately. Inferring it from "the user saved this" would
+  /// give the same answer for a food somebody saved without noticing the
+  /// numbers were missing, which is the exact case the warning is for.
+  final bool isZeroCalorie;
 
   /// Foods are soft-deleted so historical logs keep resolving (spec §4).
   final bool isDeleted;
@@ -190,9 +205,14 @@ class Food {
   /// list while contributing nothing to a day's numbers. Crowd-sourced
   /// imports land in this state often enough to be worth filtering for
   /// deliberately (spec §5.5), which is the whole point of surfacing it.
+  ///
+  /// Unless [isZeroCalorie] says the zeros are the answer. A food with no
+  /// serving at all is still flagged either way: there is nothing to log,
+  /// whatever its macros would have been.
   bool get needsAttention =>
       servingOptions.isEmpty ||
-      servingOptions.every((ServingOption o) => o.macros.isZero);
+      (!isZeroCalorie &&
+          servingOptions.every((ServingOption o) => o.macros.isZero));
 
   /// The serving option to offer first — the first declared one.
   ServingOption? get defaultServing =>

@@ -76,6 +76,7 @@ Future<void> openRecipeWith(
 
 void main() {
   sweepTests();
+  zeroCalorieTests();
 
   group('marking a food', () {
     testWidgets('the editor offers it, and it survives a save', (
@@ -323,6 +324,110 @@ void sweepTests() {
             (RecipeIngredientRow r) => r.id == 'ing-beef',
           );
       expect(beefRow.foodId, isNull);
+    });
+  });
+}
+
+/// Confirming a food really is zero, rather than missing its numbers
+/// (spec §5.5).
+void zeroCalorieTests() {
+  Future<void> openNewFood(WidgetTester tester) async {
+    await tester.tap(find.text('Foods').last);
+    await pumpFrames(tester);
+    await tester.tap(find.byTooltip('Add a food by hand'));
+    await pumpFrames(tester);
+  }
+
+  group('the zero-calorie confirmation', () {
+    testWidgets('is offered when a food has nothing on it', (
+      WidgetTester tester,
+    ) async {
+      await pumpHearthApp(tester);
+      await openNewFood(tester);
+
+      // A blank draft opens on 100 g with no macros, which is exactly the
+      // state where "is that zero, or is it missing?" is a real question.
+      expect(find.text('This really is 0 calories'), findsOneWidget);
+    });
+
+    testWidgets('and hidden once the food has real numbers', (
+      WidgetTester tester,
+    ) async {
+      await pumpHearthApp(tester);
+      await openNewFood(tester);
+
+      // The macro fields carry their label above them rather than inside, so
+      // the field is reached through the labelled widget it belongs to.
+      await tester.enterText(
+        find
+            .descendant(
+              of: find
+                  .ancestor(
+                    of: find.text('kcal'),
+                    matching: find.byType(Column),
+                  )
+                  .first,
+              matching: find.byType(TextField),
+            )
+            .first,
+        '120',
+      );
+      await pumpFrames(tester);
+
+      expect(find.text('This really is 0 calories'), findsNothing);
+    });
+
+    testWidgets('survives the save, so the warning stays cleared', (
+      WidgetTester tester,
+    ) async {
+      final HearthDatabase db = await pumpHearthApp(tester);
+      await openNewFood(tester);
+
+      await tester.enterText(find.byType(TextField).first, 'Black coffee');
+      await pumpFrames(tester);
+      await tester.tap(find.text('This really is 0 calories'));
+      await pumpFrames(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await pumpFrames(tester, frames: 12);
+
+      final List<FoodRow> rows = await db.select(db.foods).get();
+      expect(rows.single.name, 'Black coffee');
+      expect(rows.single.isZeroCalorie, isTrue);
+    });
+
+    testWidgets('an unconfirmed empty food is still flagged in the list', (
+      WidgetTester tester,
+    ) async {
+      await openFoods(tester, <Food>[
+        aFood(
+          'Mystery import',
+          id: 'food-mystery',
+          servingOptions: <ServingOption>[
+            aServing(amount: 100, unit: Units.gram, macros: Macros.zero),
+          ],
+        ),
+      ]);
+      await tester.tap(find.text('Needs attention'));
+      await pumpFrames(tester);
+
+      expect(find.text('Mystery import'), findsOneWidget);
+    });
+
+    testWidgets('and a confirmed one is not', (WidgetTester tester) async {
+      await openFoods(tester, <Food>[
+        aFood(
+          'Black coffee',
+          id: 'food-coffee',
+          isZeroCalorie: true,
+          servingOptions: <ServingOption>[
+            aServing(amount: 1, unit: Units.cup, macros: Macros.zero),
+          ],
+        ),
+      ]);
+      await tester.tap(find.text('Needs attention'));
+      await pumpFrames(tester);
+
+      expect(find.text('Black coffee'), findsNothing);
     });
   });
 }

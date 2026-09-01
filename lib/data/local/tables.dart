@@ -123,6 +123,10 @@ class Foods extends Table {
 
   /// A standing choice, matched to recipe lines naming the same thing (§5.3).
   BoolColumn get isDefault => boolean().withDefault(const Constant(false))();
+
+  /// Confirmed to carry no macros — black coffee, sparkling water (§5.5).
+  BoolColumn get isZeroCalorie =>
+      boolean().withDefault(const Constant(false))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get updatedAt => dateTime()();
 

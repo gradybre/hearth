@@ -284,6 +284,30 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
               ],
             ),
             const SizedBox(height: HearthSpacing.lg),
+            // Only when there is something to confirm. A food with real
+            // numbers on it has no zeros to vouch for, and offering the
+            // question anyway would invite somebody to answer it wrongly.
+            if (_draft.looksZeroCalorie) ...<Widget>[
+              SwitchListTile.adaptive(
+                value: _draft.isZeroCalorie,
+                onChanged: (bool on) =>
+                    setState(() => _draft = _draft.copyWith(isZeroCalorie: on)),
+                title: Text(
+                  'This really is 0 calories',
+                  style: context.text.body,
+                ),
+                subtitle: Text(
+                  'Black coffee, sparkling water, a zero-calorie sweetener. '
+                  'Without this, a food with nothing on it is treated as one '
+                  'whose numbers are missing.',
+                  style: context.text.metadata.copyWith(
+                    color: colors.textMuted,
+                  ),
+                ),
+                contentPadding: EdgeInsets.zero,
+              ),
+              const SizedBox(height: HearthSpacing.lg),
+            ],
             // A standing choice, not a one-off correction. Marking it here
             // rather than from the library is deliberate: this is the screen
             // where you have just decided what this food *is*.

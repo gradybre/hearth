@@ -128,6 +128,7 @@ class FoodDraft {
     this.existingId,
     this.source = FoodSource.manual,
     this.isDefault = false,
+    this.isZeroCalorie = false,
   });
 
   factory FoodDraft.blank() => const FoodDraft(
@@ -144,6 +145,7 @@ class FoodDraft {
     existingId: food.id,
     source: food.source,
     isDefault: food.isDefault,
+    isZeroCalorie: food.isZeroCalorie,
     servings: <ServingDraft>[
       for (final ServingOption option in food.servingOptions)
         ServingDraft(
@@ -183,6 +185,7 @@ class FoodDraft {
       barcode: mapped.barcode,
       source: food.source,
       isDefault: mapped.isDefault,
+      isZeroCalorie: mapped.isZeroCalorie,
       servings: <ServingDraft>[
         for (final ServingDraft serving in mapped.servings)
           ServingDraft(
@@ -272,6 +275,7 @@ class FoodDraft {
       existingId: existingId,
       source: source,
       isDefault: isDefault,
+      isZeroCalorie: isZeroCalorie,
       servings: <ServingDraft>[...kept, ...added],
     );
   }
@@ -287,6 +291,9 @@ class FoodDraft {
   /// One of the household's standing choices (spec §5.3).
   final bool isDefault;
 
+  /// Confirmed to carry no macros, rather than missing them (spec §5.5).
+  final bool isZeroCalorie;
+
   bool get isEditing => existingId != null;
 
   String? get nameError => name.trim().isEmpty ? 'A food needs a name.' : null;
@@ -295,6 +302,14 @@ class FoodDraft {
       usableServings.isEmpty ? 'Add at least one serving size.' : null;
 
   bool get isValid => nameError == null && servingsError == null;
+
+  /// Whether this draft has servings and none of them carry a macro.
+  ///
+  /// The state where "is that zero, or is it missing?" is a real question —
+  /// and the only state where asking it is worth the room.
+  bool get looksZeroCalorie =>
+      usableServings.isNotEmpty &&
+      usableServings.every((ServingDraft s) => s.macros.isZero);
 
   List<ServingDraft> get usableServings =>
       servings.where((ServingDraft s) => s.isUsable).toList(growable: false);
@@ -309,6 +324,7 @@ class FoodDraft {
       barcode: barcode.trim().isEmpty ? null : barcode.trim(),
       source: source,
       isDefault: isDefault,
+      isZeroCalorie: isZeroCalorie,
       servingOptions: <ServingOption>[
         for (final ServingDraft serving in usableServings)
           ServingOption(
@@ -328,6 +344,7 @@ class FoodDraft {
     String? barcode,
     List<ServingDraft>? servings,
     bool? isDefault,
+    bool? isZeroCalorie,
   }) => FoodDraft(
     name: name ?? this.name,
     brand: brand ?? this.brand,
@@ -337,6 +354,7 @@ class FoodDraft {
     existingId: existingId,
     source: source,
     isDefault: isDefault ?? this.isDefault,
+    isZeroCalorie: isZeroCalorie ?? this.isZeroCalorie,
   );
 
   /// A zero macro reopens as an empty field, not a literal "0".

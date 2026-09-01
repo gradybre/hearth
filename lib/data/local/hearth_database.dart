@@ -44,7 +44,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -100,6 +100,11 @@ class HearthDatabase extends _$HearthDatabase {
         // cannot drop a NOT NULL in place, so the table is rebuilt — which
         // also installs the CHECK that replaces the constraint.
         await m.alterTable(TableMigration(ingredientMatches));
+      }
+      // v12 lets a food say its zeros are the answer rather than a gap, so
+      // the black coffee stops being flagged for ever (spec §5.5).
+      if (from < 12) {
+        await m.addColumn(foods, foods.isZeroCalorie);
       }
     },
     beforeOpen: (OpeningDetails details) async {

@@ -94,6 +94,7 @@ abstract final class SyncPayload {
     source: FoodMapper.sourceFromSql('${json['source'] ?? 'manual'}'),
     macrosOverridden: json['macros_overridden'] == true,
     isDefault: json['is_default'] == true,
+    isZeroCalorie: json['is_zero_calorie'] == true,
     isDeleted: json['is_deleted'] == true,
     updatedAt: updatedAt(json),
     servingOptions: <ServingOption>[

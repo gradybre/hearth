@@ -3365,6 +3365,21 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _isZeroCalorieMeta = const VerificationMeta(
+    'isZeroCalorie',
+  );
+  @override
+  late final GeneratedColumn<bool> isZeroCalorie = GeneratedColumn<bool>(
+    'is_zero_calorie',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_zero_calorie" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _isDeletedMeta = const VerificationMeta(
     'isDeleted',
   );
@@ -3403,6 +3418,7 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
     source,
     macrosOverridden,
     isDefault,
+    isZeroCalorie,
     isDeleted,
     updatedAt,
   ];
@@ -3488,6 +3504,15 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
         isDefault.isAcceptableOrUnknown(data['is_default']!, _isDefaultMeta),
       );
     }
+    if (data.containsKey('is_zero_calorie')) {
+      context.handle(
+        _isZeroCalorieMeta,
+        isZeroCalorie.isAcceptableOrUnknown(
+          data['is_zero_calorie']!,
+          _isZeroCalorieMeta,
+        ),
+      );
+    }
     if (data.containsKey('is_deleted')) {
       context.handle(
         _isDeletedMeta,
@@ -3551,6 +3576,10 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
         DriftSqlType.bool,
         data['${effectivePrefix}is_default'],
       )!,
+      isZeroCalorie: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_zero_calorie'],
+      )!,
       isDeleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
@@ -3583,6 +3612,9 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
 
   /// A standing choice, matched to recipe lines naming the same thing (§5.3).
   final bool isDefault;
+
+  /// Confirmed to carry no macros — black coffee, sparkling water (§5.5).
+  final bool isZeroCalorie;
   final bool isDeleted;
   final DateTime updatedAt;
   const FoodRow({
@@ -3596,6 +3628,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     required this.source,
     required this.macrosOverridden,
     required this.isDefault,
+    required this.isZeroCalorie,
     required this.isDeleted,
     required this.updatedAt,
   });
@@ -3622,6 +3655,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     map['source'] = Variable<String>(source);
     map['macros_overridden'] = Variable<bool>(macrosOverridden);
     map['is_default'] = Variable<bool>(isDefault);
+    map['is_zero_calorie'] = Variable<bool>(isZeroCalorie);
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -3649,6 +3683,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       source: Value(source),
       macrosOverridden: Value(macrosOverridden),
       isDefault: Value(isDefault),
+      isZeroCalorie: Value(isZeroCalorie),
       isDeleted: Value(isDeleted),
       updatedAt: Value(updatedAt),
     );
@@ -3672,6 +3707,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       source: serializer.fromJson<String>(json['source']),
       macrosOverridden: serializer.fromJson<bool>(json['macrosOverridden']),
       isDefault: serializer.fromJson<bool>(json['isDefault']),
+      isZeroCalorie: serializer.fromJson<bool>(json['isZeroCalorie']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -3690,6 +3726,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       'source': serializer.toJson<String>(source),
       'macrosOverridden': serializer.toJson<bool>(macrosOverridden),
       'isDefault': serializer.toJson<bool>(isDefault),
+      'isZeroCalorie': serializer.toJson<bool>(isZeroCalorie),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -3706,6 +3743,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     String? source,
     bool? macrosOverridden,
     bool? isDefault,
+    bool? isZeroCalorie,
     bool? isDeleted,
     DateTime? updatedAt,
   }) => FoodRow(
@@ -3721,6 +3759,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     source: source ?? this.source,
     macrosOverridden: macrosOverridden ?? this.macrosOverridden,
     isDefault: isDefault ?? this.isDefault,
+    isZeroCalorie: isZeroCalorie ?? this.isZeroCalorie,
     isDeleted: isDeleted ?? this.isDeleted,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -3742,6 +3781,9 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
           ? data.macrosOverridden.value
           : this.macrosOverridden,
       isDefault: data.isDefault.present ? data.isDefault.value : this.isDefault,
+      isZeroCalorie: data.isZeroCalorie.present
+          ? data.isZeroCalorie.value
+          : this.isZeroCalorie,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -3760,6 +3802,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
           ..write('source: $source, ')
           ..write('macrosOverridden: $macrosOverridden, ')
           ..write('isDefault: $isDefault, ')
+          ..write('isZeroCalorie: $isZeroCalorie, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -3778,6 +3821,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     source,
     macrosOverridden,
     isDefault,
+    isZeroCalorie,
     isDeleted,
     updatedAt,
   );
@@ -3795,6 +3839,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
           other.source == this.source &&
           other.macrosOverridden == this.macrosOverridden &&
           other.isDefault == this.isDefault &&
+          other.isZeroCalorie == this.isZeroCalorie &&
           other.isDeleted == this.isDeleted &&
           other.updatedAt == this.updatedAt);
 }
@@ -3810,6 +3855,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
   final Value<String> source;
   final Value<bool> macrosOverridden;
   final Value<bool> isDefault;
+  final Value<bool> isZeroCalorie;
   final Value<bool> isDeleted;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -3824,6 +3870,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     this.source = const Value.absent(),
     this.macrosOverridden = const Value.absent(),
     this.isDefault = const Value.absent(),
+    this.isZeroCalorie = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -3839,6 +3886,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     this.source = const Value.absent(),
     this.macrosOverridden = const Value.absent(),
     this.isDefault = const Value.absent(),
+    this.isZeroCalorie = const Value.absent(),
     this.isDeleted = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -3856,6 +3904,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     Expression<String>? source,
     Expression<bool>? macrosOverridden,
     Expression<bool>? isDefault,
+    Expression<bool>? isZeroCalorie,
     Expression<bool>? isDeleted,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -3872,6 +3921,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
       if (source != null) 'source': source,
       if (macrosOverridden != null) 'macros_overridden': macrosOverridden,
       if (isDefault != null) 'is_default': isDefault,
+      if (isZeroCalorie != null) 'is_zero_calorie': isZeroCalorie,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -3889,6 +3939,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     Value<String>? source,
     Value<bool>? macrosOverridden,
     Value<bool>? isDefault,
+    Value<bool>? isZeroCalorie,
     Value<bool>? isDeleted,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -3904,6 +3955,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
       source: source ?? this.source,
       macrosOverridden: macrosOverridden ?? this.macrosOverridden,
       isDefault: isDefault ?? this.isDefault,
+      isZeroCalorie: isZeroCalorie ?? this.isZeroCalorie,
       isDeleted: isDeleted ?? this.isDeleted,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -3943,6 +3995,9 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     if (isDefault.present) {
       map['is_default'] = Variable<bool>(isDefault.value);
     }
+    if (isZeroCalorie.present) {
+      map['is_zero_calorie'] = Variable<bool>(isZeroCalorie.value);
+    }
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
@@ -3968,6 +4023,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
           ..write('source: $source, ')
           ..write('macrosOverridden: $macrosOverridden, ')
           ..write('isDefault: $isDefault, ')
+          ..write('isZeroCalorie: $isZeroCalorie, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -12255,6 +12311,7 @@ typedef $$FoodsTableCreateCompanionBuilder = FoodsCompanion Function({
   Value<String> source,
   Value<bool> macrosOverridden,
   Value<bool> isDefault,
+  Value<bool> isZeroCalorie,
   Value<bool> isDeleted,
   required DateTime updatedAt,
   Value<int> rowid,
@@ -12270,6 +12327,7 @@ typedef $$FoodsTableUpdateCompanionBuilder = FoodsCompanion Function({
   Value<String> source,
   Value<bool> macrosOverridden,
   Value<bool> isDefault,
+  Value<bool> isZeroCalorie,
   Value<bool> isDeleted,
   Value<DateTime> updatedAt,
   Value<int> rowid,
@@ -12381,6 +12439,11 @@ class $$FoodsTableFilterComposer
 
   ColumnFilters<bool> get isDefault => $composableBuilder(
     column: $table.isDefault,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isZeroCalorie => $composableBuilder(
+    column: $table.isZeroCalorie,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -12504,6 +12567,11 @@ class $$FoodsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isZeroCalorie => $composableBuilder(
+    column: $table.isZeroCalorie,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
@@ -12559,6 +12627,11 @@ class $$FoodsTableAnnotationComposer
 
   GeneratedColumn<bool> get isDefault =>
       $composableBuilder(column: $table.isDefault, builder: (column) => column);
+
+  GeneratedColumn<bool> get isZeroCalorie => $composableBuilder(
+    column: $table.isZeroCalorie,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
@@ -12660,6 +12733,7 @@ class $$FoodsTableTableManager
                 Value<String> source = const Value.absent(),
                 Value<bool> macrosOverridden = const Value.absent(),
                 Value<bool> isDefault = const Value.absent(),
+                Value<bool> isZeroCalorie = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -12674,6 +12748,7 @@ class $$FoodsTableTableManager
                 source: source,
                 macrosOverridden: macrosOverridden,
                 isDefault: isDefault,
+                isZeroCalorie: isZeroCalorie,
                 isDeleted: isDeleted,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -12690,6 +12765,7 @@ class $$FoodsTableTableManager
                 Value<String> source = const Value.absent(),
                 Value<bool> macrosOverridden = const Value.absent(),
                 Value<bool> isDefault = const Value.absent(),
+                Value<bool> isZeroCalorie = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -12704,6 +12780,7 @@ class $$FoodsTableTableManager
                 source: source,
                 macrosOverridden: macrosOverridden,
                 isDefault: isDefault,
+                isZeroCalorie: isZeroCalorie,
                 isDeleted: isDeleted,
                 updatedAt: updatedAt,
                 rowid: rowid,
