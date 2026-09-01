@@ -101,8 +101,14 @@ class FoodConcept {
       working = working.replaceAll(phrase.key, phrase.value);
     }
 
+    // Hyphens separate, they do not vanish. Deleting one made "low-sodium"
+    // a single word "lowsodium" while "low sodium" stayed two, so a saved
+    // "Low Sodium Soy Sauce" could never meet a recipe line that spelled it
+    // with the hyphen. The phrase pass above has already collapsed the
+    // hyphenated kinds Hearth knows, so "non-fat" is "nonfat" before it gets
+    // here and only the ordinary hyphens are left to split.
     return <String>[
-      for (final String raw in working.split(RegExp(r'[\s,()]+')))
+      for (final String raw in working.split(RegExp(r'[\s,()\-–—]+')))
         if (_clean(raw) case final String token when token.isNotEmpty) token,
     ];
   }

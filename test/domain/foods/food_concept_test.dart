@@ -6,6 +6,8 @@ bool answers(String food, String line) =>
     FoodConcept.of(food).covers(FoodConcept.of(line));
 
 void main() {
+  hyphenTests();
+
   group('one product named several ways', () {
     // Brendan's own example, in his own words: "96/4 ground beef, 96% ground
     // beef, 96% lean ground beef … would all match a recipe calling for 96/4,
@@ -163,6 +165,57 @@ void main() {
       );
 
       expect(plain.distanceFrom(line), lessThan(branded.distanceFrom(line)));
+    });
+  });
+}
+
+/// A hyphen is a space, not a letter (spec §5.3).
+void hyphenTests() {
+  group('the same name written two ways', () {
+    test('a hyphenated qualifier reads as the words it joins', () {
+      // Brendan's report: a saved default "Kikkoman's Low Sodium Soy Sauce"
+      // did not pre-populate a recipe line reading "low-sodium soy sauce".
+      // The hyphen was being deleted rather than split on, so the line said
+      // "lowsodium" and the food said "low" and "sodium" — one word against
+      // two, which can never meet.
+      expect(
+        answers("Kikkoman's Low Sodium Soy Sauce", 'low-sodium soy sauce'),
+        isTrue,
+      );
+      expect(
+        answers("Kikkoman's Low Sodium Soy Sauce", 'low sodium soy sauce'),
+        isTrue,
+      );
+      expect(answers('Low-Sodium Soy Sauce', 'low sodium soy sauce'), isTrue);
+    });
+
+    test('and both spellings are the same concept', () {
+      expect(
+        FoodConcept.of('low-sodium soy sauce'),
+        FoodConcept.of('low sodium soy sauce'),
+      );
+      expect(
+        FoodConcept.of('sugar-free syrup'),
+        FoodConcept.of('sugar free syrup'),
+      );
+    });
+
+    test('a kind Hearth knows is still one word, not two', () {
+      // "non-fat" must not become the base words "non" and "fat" — it is a
+      // kind of milk, and splitting it would stop non-fat milk being milk.
+      expect(FoodConcept.of('non-fat milk').base, <String>{'milk'});
+      expect(FoodConcept.of('non-fat milk').variants, <String>{'nonfat'});
+      expect(
+        FoodConcept.of('extra-virgin olive oil'),
+        FoodConcept.of('extra virgin olive oil'),
+      );
+      expect(answers('non-fat milk', 'skim milk'), isTrue);
+      expect(answers('whole-wheat flour', 'whole wheat flour'), isTrue);
+    });
+
+    test('a grade written with a hyphen is still a grade', () {
+      expect(answers('96/4 ground beef', '96% lean ground-beef'), isTrue);
+      expect(answers('96/4 ground beef', '88% ground-beef'), isFalse);
     });
   });
 }

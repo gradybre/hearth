@@ -336,6 +336,20 @@ void defaultFoodTests() {
     });
   });
 
+  test('a hyphen in the recipe does not hide the default', () {
+    // Brendan's report end to end: the food is saved as "Kikkoman's Low
+    // Sodium Soy Sauce" and the recipe line reads "low-sodium soy sauce".
+    final MatchSuggestion? suggestion = IngredientMatcher.suggest(
+      ingredientName: 'low-sodium soy sauce',
+      library: <Food>[
+        aFood("Kikkoman's Low Sodium Soy Sauce", id: 'food-soy').asDefault(),
+      ],
+    );
+
+    expect(suggestion!.foodId, 'food-soy');
+    expect(suggestion.origin, MatchOrigin.defaultFood);
+  });
+
   test('the closest fit leads the menu', () {
     // Both answer "ground beef"; the one carrying fewer words nobody asked
     // for is the better opening offer.
