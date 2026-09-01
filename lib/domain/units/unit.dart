@@ -207,6 +207,111 @@ abstract final class Units {
     aliases: <String>['pinches'],
   );
 
+  // ── Count: the words on packets ───────────────────────────────────────────
+  //
+  // A tub of protein powder is sold by the scoop, a cereal bar by the bar, and
+  // cream cheese by the package. Offering only `item` meant a food's serving
+  // was labelled with a word nobody uses, or the word was dropped and the
+  // serving with it.
+  //
+  // Curated rather than free text, deliberately: `unitId` is persisted, synced
+  // and matched against, so a typed-in unit would be a string nothing can
+  // convert, compare, or ever tidy up. Adding another is one entry here.
+  //
+  // "Serving" is deliberately not among them. Every word here names something
+  // you can hold; "1 serving" names only itself, and `ServingFormat` already
+  // refuses it as a phrase for exactly that reason.
+  //
+  // None of these converts to any other — [UnitConverter] refuses to cross
+  // into or out of count, and that is what makes "1 scoop" and "10 oz" of the
+  // same food two facts rather than a contradiction. The pairing is what
+  // states the scoop's weight; a label giving both is the only place that fact
+  // exists.
+  static const Unit scoop = Unit(
+    id: 'scoop',
+    label: 'scoop',
+    kind: UnitKind.count,
+    toCanonical: 1,
+    aliases: <String>['scoops'],
+  );
+  static const Unit bar = Unit(
+    id: 'bar',
+    label: 'bar',
+    kind: UnitKind.count,
+    toCanonical: 1,
+    aliases: <String>['bars'],
+  );
+  static const Unit package = Unit(
+    id: 'package',
+    label: 'package',
+    kind: UnitKind.count,
+    toCanonical: 1,
+    aliases: <String>['packages', 'pkg', 'pack', 'packs'],
+  );
+  static const Unit packet = Unit(
+    id: 'packet',
+    label: 'packet',
+    kind: UnitKind.count,
+    toCanonical: 1,
+    aliases: <String>['packets', 'sachet', 'sachets'],
+  );
+  static const Unit container = Unit(
+    id: 'container',
+    label: 'container',
+    kind: UnitKind.count,
+    toCanonical: 1,
+    aliases: <String>['containers', 'tub', 'tubs'],
+  );
+  static const Unit bottle = Unit(
+    id: 'bottle',
+    label: 'bottle',
+    kind: UnitKind.count,
+    toCanonical: 1,
+    aliases: <String>['bottles'],
+  );
+  static const Unit can = Unit(
+    id: 'can',
+    label: 'can',
+    kind: UnitKind.count,
+    toCanonical: 1,
+    aliases: <String>['cans', 'tin', 'tins'],
+  );
+  static const Unit piece = Unit(
+    id: 'piece',
+    label: 'piece',
+    kind: UnitKind.count,
+    toCanonical: 1,
+    aliases: <String>['pieces'],
+  );
+  static const Unit patty = Unit(
+    id: 'patty',
+    label: 'patty',
+    kind: UnitKind.count,
+    toCanonical: 1,
+    aliases: <String>['patties'],
+  );
+  static const Unit stick = Unit(
+    id: 'stick',
+    label: 'stick',
+    kind: UnitKind.count,
+    toCanonical: 1,
+    aliases: <String>['sticks'],
+  );
+  static const Unit square = Unit(
+    id: 'square',
+    label: 'square',
+    kind: UnitKind.count,
+    toCanonical: 1,
+    aliases: <String>['squares'],
+  );
+  static const Unit tortilla = Unit(
+    id: 'tortilla',
+    label: 'tortilla',
+    kind: UnitKind.count,
+    toCanonical: 1,
+    aliases: <String>['tortillas'],
+  );
+
   /// Every known unit.
   static const List<Unit> all = <Unit>[
     tsp,
@@ -226,6 +331,18 @@ abstract final class Units {
     clove,
     slice,
     pinch,
+    scoop,
+    bar,
+    package,
+    packet,
+    container,
+    bottle,
+    can,
+    piece,
+    patty,
+    stick,
+    square,
+    tortilla,
   ];
 
   /// The canonical unit for a kind — the unit amounts are stored in.

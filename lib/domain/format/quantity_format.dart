@@ -36,6 +36,18 @@ abstract final class QuantityFormat {
     'clove': 'cloves',
     'slice': 'slices',
     'pinch': 'pinches',
+    'scoop': 'scoops',
+    'bar': 'bars',
+    'package': 'packages',
+    'packet': 'packets',
+    'container': 'containers',
+    'bottle': 'bottles',
+    'can': 'cans',
+    'piece': 'pieces',
+    'patty': 'patties',
+    'stick': 'sticks',
+    'square': 'squares',
+    'tortilla': 'tortillas',
   };
 
   /// Formats [quantity] for display, choosing the unit automatically.

@@ -307,6 +307,10 @@ class _MacroTile extends StatelessWidget {
     MacroKind.fat: 'fat',
   };
 
+  /// What the target is measured in, when it is not the macro's own word.
+  static String _unit(MacroKind kind) =>
+      kind == MacroKind.calories ? 'kcal' : 'g';
+
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
@@ -323,9 +327,14 @@ class _MacroTile extends StatelessWidget {
       amount: amount,
     );
     final Color barColor = macro.isOver ? colors.overAccent : colors.accent;
+    // What the remainder is a remainder *of*. Quiet, because the number that
+    // decides what to eat next is the one above it — but present, because
+    // "142 left" says nothing on its own about whether the day is going well,
+    // and the answer was a tap away in a sheet.
+    final String target = 'of ${macro.target.round()} ${_unit(macro.kind)}';
 
     return Semantics(
-      label: '${_labels[macro.kind]}: ${indicator.semanticLabel}',
+      label: '${_labels[macro.kind]}: ${indicator.semanticLabel}, $target',
       excludeSemantics: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -355,6 +364,12 @@ class _MacroTile extends StatelessWidget {
               backgroundColor: colors.progressTrack,
               valueColor: AlwaysStoppedAnimation<Color>(barColor),
             ),
+          ),
+          const SizedBox(height: HearthSpacing.xxs),
+          Text(
+            target,
+            style: text.metadata.copyWith(color: colors.textMuted),
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

@@ -216,14 +216,16 @@ void main() {
       expect(parsed.name, 'Onions Frozen Chopped Unprepared');
     });
 
-    test('a container word with no size after it is not stepped over', () {
-      // Only skipped when a pack size really does follow — otherwise "2 cans
-      // tomatoes" would quietly lose the cans and stay a count of two
-      // anyway, having thrown away a word for nothing.
+    test('a container word with no size after it is the unit', () {
+      // The pack-size skip only applies when a size really does follow. With
+      // none, "cans" is not a word to throw away and not a word to leave
+      // stranded in the name — it is what two of them are two of. (It kept
+      // the name before, because there was no `can` unit for it to become.)
       final ParsedIngredient parsed = IngredientParser.parse('2 cans tomatoes');
 
-      expect(parsed.quantity!.amountIn(Units.item), 2);
-      expect(parsed.name, 'cans tomatoes');
+      expect(parsed.quantity!.amountIn(Units.can), 2);
+      expect(parsed.quantity!.preferredUnit, Units.can);
+      expect(parsed.name, 'tomatoes');
     });
 
     test('a fraction pair with no container word is still a range', () {

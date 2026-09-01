@@ -20,6 +20,7 @@ import 'package:hearth/domain/cooking/cook_session.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/food_profile.dart';
 import 'package:hearth/domain/models/recipe.dart';
+import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/recent_log.dart';
 import 'package:hearth/domain/planning/week.dart';
@@ -49,6 +50,7 @@ Future<HearthDatabase> pumpHearthApp(
   Stream<List<Recipe>>? recipeStream,
   List<Food> foods = const <Food>[],
   List<MealPlanEntry> entries = const <MealPlanEntry>[],
+  MacroTargets? targets,
   Set<String> favorites = const <String>{},
   List<CookTimer> timers = const <CookTimer>[],
   Map<String, String> photos = const <String, String>{},
@@ -146,6 +148,10 @@ Future<HearthDatabase> pumpHearthApp(
         // Same reasoning as the libraries: fake async cannot drive sqlite, so
         // the planner's day is fed directly.
         dayEntriesProvider.overrideWith((Ref ref) async => entries),
+        // Same reasoning again: the targets live in sqlite, and a day with
+        // none is a different screen entirely — the one that asks you to set
+        // some — so a test about the tiles has to be able to say there are.
+        dayTargetsProvider.overrideWith((Ref ref) async => targets),
         planChangesProvider.overrideWith(
           (Ref ref) => const Stream<void>.empty(),
         ),

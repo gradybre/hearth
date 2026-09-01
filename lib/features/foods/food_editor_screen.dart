@@ -56,22 +56,39 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
   bool _saving = false;
   bool _showErrors = false;
 
-  /// Units offered for a serving size. Deliberately short: these cover how
-  /// packets and recipes actually describe a portion.
-  static final List<Unit> _servingUnits = <Unit>[
-    Units.gram,
-    Units.kilogram,
-    Units.ounce,
-    Units.pound,
-    Units.millilitre,
-    Units.litre,
-    Units.tsp,
-    Units.tbsp,
-    Units.cup,
-    Units.flOz,
-    Units.item,
-    Units.slice,
-  ];
+  /// Units offered for a serving size, in groups.
+  ///
+  /// Grouped rather than listed flat because the third group is the reason it
+  /// grew: a tub of protein powder is sold by the scoop and a cereal box by
+  /// the bar, and a packet word buried below `fl oz` is a packet word nobody
+  /// finds. Weights first — most labels lead with one.
+  static final Map<String, List<Unit>> _servingUnits = <String, List<Unit>>{
+    'Weight': <Unit>[Units.gram, Units.kilogram, Units.ounce, Units.pound],
+    'Volume': <Unit>[
+      Units.millilitre,
+      Units.litre,
+      Units.tsp,
+      Units.tbsp,
+      Units.cup,
+      Units.flOz,
+    ],
+    'Packets and pieces': <Unit>[
+      Units.item,
+      Units.slice,
+      Units.piece,
+      Units.scoop,
+      Units.bar,
+      Units.patty,
+      Units.square,
+      Units.stick,
+      Units.tortilla,
+      Units.package,
+      Units.packet,
+      Units.container,
+      Units.bottle,
+      Units.can,
+    ],
+  };
 
   FoodDraft _applyInitialLabel(FoodDraft draft) => widget.initialLabel == null
       ? draft
@@ -408,7 +425,7 @@ class _ServingRow extends StatelessWidget {
   });
 
   final ServingDraft serving;
-  final List<Unit> units;
+  final Map<String, List<Unit>> units;
   final bool canRemove;
   final ValueChanged<ServingDraft> onChanged;
   final VoidCallback onRemove;
@@ -469,13 +486,28 @@ class _ServingRow extends StatelessWidget {
                         ),
                         dropdownColor: colors.surfaceElevated,
                         items: <DropdownMenuItem<String>>[
-                          for (final Unit unit in units)
+                          for (final MapEntry<String, List<Unit>> group
+                              in units.entries) ...<DropdownMenuItem<String>>[
+                            // A heading, not a choice — disabled so it cannot
+                            // be picked, and skipped by the keyboard for the
+                            // same reason.
                             DropdownMenuItem<String>(
-                              value: unit.id,
+                              enabled: false,
                               child: Text(
-                                unit.label.isEmpty ? 'item' : unit.label,
+                                group.key,
+                                style: context.text.metadata.copyWith(
+                                  color: colors.textMuted,
+                                ),
                               ),
                             ),
+                            for (final Unit unit in group.value)
+                              DropdownMenuItem<String>(
+                                value: unit.id,
+                                child: Text(
+                                  unit.label.isEmpty ? 'item' : unit.label,
+                                ),
+                              ),
+                          ],
                         ],
                         onChanged: (String? value) {
                           if (value == null) return;

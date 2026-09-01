@@ -53,6 +53,8 @@ Future<void> openRecipe(
 }
 
 void main() {
+  combinedIngredientsTests();
+
   group('nutrition per serving', () {
     testWidgets('a fully matched recipe shows its numbers', (
       WidgetTester tester,
@@ -214,6 +216,109 @@ void main() {
       // StepAmounts is always in the tree and renders nothing when it has
       // nothing to say, so the icon is what marks a line actually appearing.
       expect(find.byIcon(Icons.straighten), findsNothing);
+    });
+  });
+}
+
+/// Reading the ingredients as one list rather than three.
+///
+/// Two teaspoons of cumin in the beef and two in the sauce is four teaspoons
+/// to buy, and adding that up by eye is the thing this removes.
+void combinedIngredientsTests() {
+  Recipe ragu() => aRecipe(
+    id: 'recipe-ragu',
+    title: 'Beef ragu bowl',
+    servings: 4,
+    sections: <RecipeSection>[
+      aSection(
+        id: 'sec-beef',
+        name: 'Beef',
+        sortOrder: 0,
+        ingredients: <RecipeIngredient>[
+          anIngredient(
+            'ground cumin',
+            amount: 2,
+            unit: Units.tsp,
+            sectionId: 'sec-beef',
+          ),
+        ],
+        steps: <RecipeStep>[
+          aStep('Brown the beef', sectionId: 'sec-beef', stepNumber: 1),
+        ],
+      ),
+      aSection(
+        id: 'sec-sauce',
+        name: 'Sauce',
+        sortOrder: 1,
+        ingredients: <RecipeIngredient>[
+          anIngredient(
+            'ground cumin',
+            amount: 2,
+            unit: Units.tsp,
+            sectionId: 'sec-sauce',
+          ),
+        ],
+        steps: <RecipeStep>[
+          aStep('Whisk the sauce', sectionId: 'sec-sauce', stepNumber: 2),
+        ],
+      ),
+    ],
+  );
+
+  group('combining the ingredients', () {
+    testWidgets('the same thing in two sections adds up', (
+      WidgetTester tester,
+    ) async {
+      await openRecipe(tester, ragu());
+
+      // As written: two lines of two.
+      expect(find.text('2 tsp'), findsNWidgets(2));
+
+      await tester.tap(find.text('Combined'));
+      await pumpFrames(tester);
+
+      expect(find.text('1⅓ tbsp'), findsOneWidget);
+      expect(find.text('2 tsp'), findsNothing);
+    });
+
+    testWidgets('the method stays grouped, because cooking is', (
+      WidgetTester tester,
+    ) async {
+      // Combining the ingredients is a way of reading the list. The steps
+      // belong to their sections — cook-along reads a step's amounts out of
+      // the section it is in.
+      await openRecipe(tester, ragu());
+      await tester.tap(find.text('Combined'));
+      await pumpFrames(tester);
+
+      expect(find.text('Beef'), findsOneWidget);
+      expect(find.text('Sauce'), findsOneWidget);
+      expect(find.textContaining('Brown the beef'), findsOneWidget);
+      expect(find.textContaining('Whisk the sauce'), findsOneWidget);
+    });
+
+    testWidgets('it composes with scaling rather than fighting it', (
+      WidgetTester tester,
+    ) async {
+      await openRecipe(tester, ragu());
+      await tester.tap(find.text('Combined'));
+      await pumpFrames(tester);
+      // Double the recipe: four teaspoons becomes eight.
+      await tester.tap(find.text('2×'));
+      await pumpFrames(tester);
+
+      expect(find.text('2⅔ tbsp'), findsOneWidget);
+    });
+
+    testWidgets('a recipe with one section is not offered the choice', (
+      WidgetTester tester,
+    ) async {
+      // There is nothing to combine, and a switch between a list and the same
+      // list is a decision nobody should be asked to make.
+      await openRecipe(tester, shortRibs());
+
+      expect(find.text('Combined'), findsNothing);
+      expect(find.text('By section'), findsNothing);
     });
   });
 }

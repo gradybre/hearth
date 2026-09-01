@@ -147,8 +147,8 @@ abstract final class IngredientConsolidator {
   ) {
     final String displayName = entries.first.ingredient.name;
 
-    // Sum within each unit kind first — that part is always exact.
-    final Map<UnitKind, Quantity> byKind = <UnitKind, Quantity>{};
+    // Sum within each bucket first — that part is always exact.
+    final Map<String, Quantity> byBucket = <String, Quantity>{};
     bool hasUnquantified = false;
     for (final _Entry entry in entries) {
       final Quantity? quantity = entry.ingredient.quantity;
@@ -156,12 +156,13 @@ abstract final class IngredientConsolidator {
         hasUnquantified = true;
         continue;
       }
-      final Quantity? existing = byKind[quantity.kind];
-      byKind[quantity.kind] = existing == null ? quantity : existing + quantity;
+      final String bucket = _bucketFor(quantity);
+      final Quantity? existing = byBucket[bucket];
+      byBucket[bucket] = existing == null ? quantity : existing + quantity;
     }
 
     final List<Quantity> quantities = _unify(
-      byKind,
+      byBucket,
       displayName,
       densityLookup,
       system,
@@ -182,38 +183,53 @@ abstract final class IngredientConsolidator {
     );
   }
 
-  /// Reduces per-kind totals to one quantity where density allows, and leaves
-  /// them side by side where it doesn't.
+  /// What may be added to what.
+  ///
+  /// Volume and mass each pool into one running total, because everything
+  /// inside a kind converts exactly. Counts do not: a clove and a head are
+  /// both "1 item" canonically and adding them gives a number that describes
+  /// neither, so each counted unit keeps its own bucket. [UnitConverter] has
+  /// always refused to convert a count in either direction; this is the
+  /// consolidator agreeing with it.
+  static String _bucketFor(Quantity quantity) => quantity.kind == UnitKind.count
+      ? 'count:${quantity.preferredUnit?.id ?? Units.item.id}'
+      : quantity.kind.name;
+
+  static const String _volume = 'volume';
+  static const String _mass = 'mass';
+
+  /// Reduces the buckets to one quantity where density allows, and leaves them
+  /// side by side where it doesn't.
   static List<Quantity> _unify(
-    Map<UnitKind, Quantity> byKind,
+    Map<String, Quantity> byBucket,
     String displayName,
     DensityLookup densityLookup,
     UnitSystem system,
   ) {
-    if (byKind.isEmpty) return const <Quantity>[];
-    if (byKind.length == 1) {
+    if (byBucket.isEmpty) return const <Quantity>[];
+    if (byBucket.length == 1) {
       return <Quantity>[
-        UnitConverter.normalise(byKind.values.first, system: system),
+        UnitConverter.normalise(byBucket.values.first, system: system),
       ];
     }
 
     final double? density = densityLookup(displayName);
-    final bool hasVolume = byKind.containsKey(UnitKind.volume);
-    final bool hasMass = byKind.containsKey(UnitKind.mass);
+    final bool hasVolume = byBucket.containsKey(_volume);
+    final bool hasMass = byBucket.containsKey(_mass);
 
     if (density != null && hasVolume && hasMass) {
       // Weight is the more useful unit at the shop, so collapse into grams.
       final ConversionResult converted = UnitConverter.crossKind(
-        byKind[UnitKind.volume]!,
+        byBucket[_volume]!,
         UnitKind.mass,
         gramsPerMillilitre: density,
       );
       if (converted.isExact) {
-        final Quantity merged = byKind[UnitKind.mass]! + converted.quantity;
-        final Map<UnitKind, Quantity> rest = <UnitKind, Quantity>{
-          ...byKind,
-          UnitKind.mass: merged,
-        }..remove(UnitKind.volume);
+        final Quantity merged = byBucket[_mass]! + converted.quantity;
+        final Map<String, Quantity> rest = <String, Quantity>{
+          ...byBucket,
+          _mass: merged,
+        }..remove(_volume);
         return <Quantity>[
           for (final Quantity q in rest.values)
             UnitConverter.normalise(q, system: system),
@@ -224,7 +240,7 @@ abstract final class IngredientConsolidator {
     // Counts never convert, and without a density neither does volume<->mass.
     // List them together rather than inventing a total (spec §5.7).
     return <Quantity>[
-      for (final Quantity q in byKind.values)
+      for (final Quantity q in byBucket.values)
         UnitConverter.normalise(q, system: system),
     ];
   }

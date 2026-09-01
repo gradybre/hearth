@@ -1,5 +1,6 @@
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/recipes/ingredient_consolidator.dart';
+import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 import 'package:test/test.dart';
 
@@ -11,6 +12,8 @@ ConsolidatedIngredient _byName(
 ) => list.firstWhere((ConsolidatedIngredient c) => c.displayName == name);
 
 void main() {
+  countTests();
+
   group('stage one: section flatten (spec §5.2)', () {
     Recipe twoSections() => aRecipe(
       id: 'recipe-a',
@@ -261,6 +264,150 @@ void main() {
           ]);
       expect(merged, hasLength(1));
       expect(merged.single.displayName, 'butter');
+    });
+  });
+}
+
+/// Counted things, which cannot be added across their units.
+///
+/// Two cloves of garlic and a slice of bread are three things, and there is no
+/// number that means both. `UnitConverter` has always refused this conversion
+/// in either direction; the consolidator summed straight into the *kind*, so
+/// it produced "3 items" and lost which three.
+void countTests() {
+  group('counted units are only summed with their own kind of thing', () {
+    test('one thing counted two ways is two lines, not one sum', () {
+      // Garlic by the clove in the marinade and by the head in the roast.
+      // Both are counts, so both landed in the same bucket and came out as
+      // "3 items" — a number that means neither.
+      final Recipe recipe = aRecipe(
+        id: 'r',
+        servings: 2,
+        sections: <RecipeSection>[
+          aSection(
+            id: 'a',
+            name: 'Marinade',
+            sortOrder: 0,
+            ingredients: <RecipeIngredient>[
+              anIngredient(
+                'garlic',
+                amount: 2,
+                unit: Units.clove,
+                sectionId: 'a',
+              ),
+            ],
+          ),
+          aSection(
+            id: 'b',
+            name: 'Roast',
+            sortOrder: 1,
+            ingredients: <RecipeIngredient>[
+              anIngredient(
+                'garlic',
+                amount: 1,
+                unit: Units.item,
+                sectionId: 'b',
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final ConsolidatedIngredient garlic = _byName(
+        IngredientConsolidator.flatten(recipe),
+        'garlic',
+      );
+
+      expect(garlic.quantities, hasLength(2));
+      expect(garlic.isMixedUnit, isTrue);
+      expect(
+        garlic.quantities.map((Quantity q) => q.preferredUnit),
+        containsAll(<Unit>[Units.clove, Units.item]),
+      );
+    });
+
+    test('the same thing in the same unit still adds up', () {
+      // The behaviour being protected: garlic in the marinade and garlic in
+      // the sauce is one line at the shop.
+      final Recipe recipe = aRecipe(
+        id: 'r',
+        servings: 2,
+        sections: <RecipeSection>[
+          aSection(
+            id: 'a',
+            name: 'Marinade',
+            sortOrder: 0,
+            ingredients: <RecipeIngredient>[
+              anIngredient(
+                'garlic',
+                amount: 2,
+                unit: Units.clove,
+                sectionId: 'a',
+              ),
+            ],
+          ),
+          aSection(
+            id: 'b',
+            name: 'Sauce',
+            sortOrder: 1,
+            ingredients: <RecipeIngredient>[
+              anIngredient(
+                'garlic',
+                amount: 3,
+                unit: Units.clove,
+                sectionId: 'b',
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final List<ConsolidatedIngredient> flat = IngredientConsolidator.flatten(
+        recipe,
+      );
+
+      expect(
+        _byName(flat, 'garlic').quantities.single.amountIn(Units.clove),
+        5,
+      );
+    });
+
+    test('a counted line and a weighed one sit side by side', () {
+      // Neither can be turned into the other, and §5.7 is explicit that both
+      // are then listed rather than guessed at.
+      final Recipe recipe = aRecipe(
+        id: 'r',
+        servings: 2,
+        sections: <RecipeSection>[
+          aSection(
+            id: 'a',
+            name: 'Main',
+            sortOrder: 0,
+            ingredients: <RecipeIngredient>[
+              anIngredient(
+                'tomatoes',
+                amount: 2,
+                unit: Units.item,
+                sectionId: 'a',
+              ),
+              anIngredient(
+                'tomatoes',
+                amount: 200,
+                unit: Units.gram,
+                sectionId: 'a',
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final ConsolidatedIngredient tomatoes = _byName(
+        IngredientConsolidator.flatten(recipe),
+        'tomatoes',
+      );
+
+      expect(tomatoes.isMixedUnit, isTrue);
+      expect(tomatoes.quantities, hasLength(2));
     });
   });
 }

@@ -26,6 +26,7 @@ FoodDraft draft({String name = 'Greek yogurt', List<ServingDraft>? servings}) =>
 void main() {
   fromLookupTests();
   withLabelTests();
+  packetServingTests();
 
   group('validation', () {
     test('a name is required', () {
@@ -523,6 +524,67 @@ void withLabelTests() {
       expect(serving.protein, '7');
       expect(serving.carbs, '1');
       expect(serving.fat, '9');
+    });
+  });
+}
+
+/// A packet that names its own portion, and its weight, in one line.
+///
+/// "1 Scoop (30 g)" is two facts: the serving people actually measure, and
+/// what it weighs. Keeping only the grams leaves a tub you cannot log by the
+/// scoop; keeping only the scoop leaves a number nothing can convert. The pair
+/// is what makes either useful.
+void packetServingTests() {
+  group('a label that states a packet unit and a weight', () {
+    test('both arrive, with the packet word intact', () {
+      const LabelReading reading = LabelReading(
+        servings: <LabelServing>[
+          LabelServing(
+            amount: 1,
+            unitId: 'scoop',
+            kcal: 120,
+            proteinG: 24,
+            carbG: 3,
+            fatG: 1,
+          ),
+          LabelServing(
+            amount: 30,
+            unitId: 'g',
+            kcal: 120,
+            proteinG: 24,
+            carbG: 3,
+            fatG: 1,
+          ),
+        ],
+      );
+
+      final FoodDraft merged = FoodDraft.blank().withLabel(reading);
+
+      expect(merged.servings, hasLength(2));
+      expect(merged.servings.first.unitId, 'scoop');
+      expect(merged.servings.first.amount, '1');
+      expect(merged.servings.last.unitId, 'g');
+      expect(merged.servings.last.amount, '30');
+      // Same portion, so the same macros — that is what makes the pair a
+      // statement about weight rather than two different servings.
+      expect(merged.servings.first.kcal, merged.servings.last.kcal);
+    });
+
+    test('the packet word survives the round trip to a food', () {
+      final FoodDraft merged = FoodDraft.blank()
+          .copyWith(name: 'Whey protein')
+          .withLabel(
+            const LabelReading(
+              servings: <LabelServing>[
+                LabelServing(amount: 1, unitId: 'scoop', kcal: 120),
+              ],
+            ),
+          );
+
+      final Food food = merged.toFood(idFactory: sequentialIds());
+
+      expect(food.servingOptions.single.amount.preferredUnit, Units.scoop);
+      expect(food.servingOptions.single.label, '1 scoop');
     });
   });
 }

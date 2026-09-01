@@ -10,6 +10,7 @@ import '../../app/theme/hearth_typography.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
+import '../../domain/recipes/ingredient_consolidator.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/recipes/recipe_scaler.dart';
 import 'collections_sheet.dart';
@@ -109,8 +110,13 @@ class _RecipeBody extends StatefulWidget {
 class _RecipeBodyState extends State<_RecipeBody> {
   double? _target;
 
-  /// Scaling is a way of *reading* the recipe, not an edit of it — nothing is
-  /// written, and reopening the recipe shows it as written (spec §5.2).
+  /// Whether the ingredients are shown summed rather than by section.
+  ///
+  /// The same kind of state as [_target], and for the same reason: scaling and
+  /// combining are both ways of *reading* the recipe, not edits of it —
+  /// nothing is written, and reopening shows it as written (spec §5.2).
+  bool _combined = false;
+
   double get _targetServings => _target ?? widget.recipe.servings;
 
   @override
@@ -192,7 +198,40 @@ class _RecipeBodyState extends State<_RecipeBody> {
           // An ungrouped recipe is unchanged — ingredients, then Directions —
           // because a single default section is visually transparent and must
           // never make a simple recipe look organised.
-          if (recipe.isGrouped)
+          // Only where there is something to combine. A recipe with one
+          // section would offer a choice between a list and the same list.
+          if (recipe.isGrouped) ...<Widget>[
+            _IngredientView(
+              combined: _combined,
+              onChanged: (bool value) => setState(() => _combined = value),
+            ),
+            const SizedBox(height: HearthSpacing.lg),
+          ],
+          if (recipe.isGrouped && _combined) ...<Widget>[
+            Text('Ingredients', style: text.sectionHeader),
+            const SizedBox(height: HearthSpacing.md),
+            // Optional lines included, unlike the shopping list and the macro
+            // total: a cook reading the list still has to see the chilli they
+            // may or may not add.
+            for (final ConsolidatedIngredient line
+                in IngredientConsolidator.flatten(
+                  recipe,
+                  includeOptional: true,
+                ))
+              _CombinedRow(line: line),
+            const SizedBox(height: HearthSpacing.xl),
+            // Method stays grouped either way. The sections are how the
+            // cooking reads — and cook-along depends on a step knowing which
+            // section's amounts it is talking about.
+            for (final RecipeSection section in recipe.orderedSections)
+              if (section.steps.isNotEmpty) ...<Widget>[
+                Text(section.name, style: text.sectionHeader),
+                const SizedBox(height: HearthSpacing.md),
+                for (final RecipeStep step in section.orderedSteps)
+                  _StepRow(step: step, section: section, recipe: recipe),
+                const SizedBox(height: HearthSpacing.xl),
+              ],
+          ] else if (recipe.isGrouped)
             for (final RecipeSection section
                 in recipe.orderedSections) ...<Widget>[
               Text(section.name, style: text.sectionHeader),
@@ -238,6 +277,77 @@ class _RecipeBodyState extends State<_RecipeBody> {
       if (recipe.cuisine != null) recipe.cuisine!,
     ];
     return parts.join('  ·  ');
+  }
+}
+
+/// How the ingredients are being read: as the recipe groups them, or summed.
+class _IngredientView extends StatelessWidget {
+  const _IngredientView({required this.combined, required this.onChanged});
+
+  final bool combined;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<bool>(
+      segments: const <ButtonSegment<bool>>[
+        ButtonSegment<bool>(value: false, label: Text('By section')),
+        ButtonSegment<bool>(value: true, label: Text('Combined')),
+      ],
+      selected: <bool>{combined},
+      showSelectedIcon: false,
+      onSelectionChanged: (Set<bool> selected) => onChanged(selected.first),
+    );
+  }
+}
+
+/// One ingredient with every section's share of it added up.
+///
+/// Usually one amount. More than one when the same thing was written in units
+/// that cannot be reconciled — 2 tbsp of butter in the sauce and 50 g in the
+/// dough with no density known — and §5.7 is explicit that both are then shown
+/// rather than guessed at.
+class _CombinedRow extends StatelessWidget {
+  const _CombinedRow({required this.line});
+
+  final ConsolidatedIngredient line;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final HearthTextStyles text = context.text;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: HearthSpacing.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SizedBox(
+            width: 92,
+            child: Text(
+              line.quantities.map(QuantityFormat.format).join(' + '),
+              style: text.ingredient,
+            ),
+          ),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: <InlineSpan>[
+                  TextSpan(text: line.displayName, style: text.ingredient),
+                  // The total understates what the recipe needs, and saying so
+                  // is the difference between a number and a wrong number.
+                  if (line.hasUnquantified)
+                    TextSpan(
+                      text: '  plus some to taste',
+                      style: text.metadata.copyWith(color: colors.textMuted),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

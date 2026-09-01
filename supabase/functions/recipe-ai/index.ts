@@ -202,10 +202,14 @@ does. A rough number that is honest about being rough beats a silent zero.`;
 /// One serving of one food, as a Nutrition Facts panel states it.
 ///
 /// The unit is an enum rather than free text so the model cannot answer in
-/// something the app then silently drops — "serving", "portion", "scoop" all
-/// arrive as words Hearth has no conversion for, and a serving that vanishes
-/// between the photo and the review screen is worse than one that was never
-/// offered.
+/// something the app then silently drops: a serving that vanishes between the
+/// photo and the review screen is worse than one that was never offered.
+///
+/// The list now carries the words that are printed on packets — scoop, bar,
+/// patty, package. It used not to, and a tub reading "1 Scoop (30 g)" came
+/// back as "1 item", which is the same portion described by a word nobody
+/// uses. Every one of these names something you can hold; "serving" and
+/// "portion" are still absent, because they name only themselves.
 const LABEL_TOOL = {
   name: 'nutrition_label',
   description: "Return what the food's label states.",
@@ -226,14 +230,39 @@ const LABEL_TOOL = {
           'reading "Serving size 1oz (28g/about 1/4 cup)" is three ways of ' +
           'saying one portion: return the ounces and the cups as two ' +
           'entries with identical macros. Do not return the grams as well ' +
-          'when an ounce figure is given for the same portion.',
+          'when an ounce figure is given for the same portion. When the ' +
+          'label names a packet unit and a weight — "1 Scoop (30g)", "1 Bar ' +
+          '(45g)" — return both, with identical macros: together they are ' +
+          'the only statement of what that scoop or bar weighs.',
         items: {
           type: 'object',
           properties: {
             amount: { type: 'number', description: 'How much. 0.25 for 1/4.' },
             unit: {
               type: 'string',
-              enum: ['g', 'ml', 'oz', 'lb', 'cup', 'tbsp', 'tsp', 'item'],
+              enum: [
+                'g',
+                'ml',
+                'oz',
+                'lb',
+                'cup',
+                'tbsp',
+                'tsp',
+                'item',
+                'slice',
+                'piece',
+                'scoop',
+                'bar',
+                'patty',
+                'square',
+                'stick',
+                'tortilla',
+                'package',
+                'packet',
+                'container',
+                'bottle',
+                'can',
+              ],
             },
             kcal: { type: 'number' },
             protein_g: { type: 'number' },
