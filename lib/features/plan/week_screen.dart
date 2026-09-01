@@ -6,7 +6,7 @@ import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
-import '../../app/theme/hearth_typography.dart';
+import '../../app/widgets/macro_rings.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
@@ -15,6 +15,7 @@ import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/week.dart';
 import 'entry_resolver.dart';
+import 'week_strip.dart';
 
 /// The weekly summary: per-day totals for the four tracked macros (spec §5.6).
 ///
@@ -25,7 +26,6 @@ class WeekScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final HearthColors colors = context.colors;
     final DateTime selected = ref.watch(selectedDateProvider);
     final List<DateTime> days = weekOf(selected);
     final MacroTargets? targets = ref.watch(dayTargetsProvider).value;
@@ -64,35 +64,125 @@ class WeekScreen extends ConsumerWidget {
             ),
         };
 
+        final Map<DateTime, int> counts = <DateTime, int>{
+          for (final DateTime day in days)
+            day: (byDay[day] ?? const <MealPlanEntry>[]).length,
+        };
+        final Macros selectedEaten = eaten[selected] ?? Macros.zero;
+
         return ListView(
           padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, gutter * 3),
           children: <Widget>[
             _WeekHeader(days: days),
             const SizedBox(height: HearthSpacing.lg),
-            _WeekTotals(eaten: eaten.values, targets: targets),
-            const SizedBox(height: HearthSpacing.xl),
-            for (final DateTime day in days)
-              _DayRow(
-                day: day,
-                eaten: eaten[day] ?? Macros.zero,
-                targets: targets,
-                isSelected: day == selected,
-                entryCount: (byDay[day] ?? const <MealPlanEntry>[]).length,
-                onTap: () {
-                  ref.read(selectedDateProvider.notifier).select(day);
-                  ref.read(planViewProvider.notifier).show(PlanView.day);
-                },
-              ),
-            const SizedBox(height: HearthSpacing.lg),
-            Center(
-              child: Text(
-                'Tap a day to log into it.',
-                style: context.text.metadata.copyWith(color: colors.textMuted),
-              ),
+            // The week in one row. Selecting stays here rather than dropping
+            // into the day: the point of a strip is to be able to look across
+            // the week without leaving it.
+            WeekStrip(
+              days: days,
+              selected: selected,
+              eaten: eaten,
+              entryCounts: counts,
+              targets: targets,
+              onSelect: (DateTime day) =>
+                  ref.read(selectedDateProvider.notifier).select(day),
             ),
+            const SizedBox(height: HearthSpacing.lg),
+            _SelectedDay(
+              day: selected,
+              eaten: selectedEaten,
+              targets: targets,
+              entryCount: counts[selected] ?? 0,
+              onOpen: () =>
+                  ref.read(planViewProvider.notifier).show(PlanView.day),
+            ),
+            const SizedBox(height: HearthSpacing.lg),
+            _WeekTotals(eaten: eaten.values, targets: targets),
           ],
         );
       },
+    );
+  }
+}
+
+/// The day the strip is pointing at, and the way into logging it.
+///
+/// The rings are the same widget the day view uses, so the same four numbers
+/// cannot come to read two different ways on two screens.
+class _SelectedDay extends StatelessWidget {
+  const _SelectedDay({
+    required this.day,
+    required this.eaten,
+    required this.targets,
+    required this.entryCount,
+    required this.onOpen,
+  });
+
+  final DateTime day;
+  final Macros eaten;
+  final MacroTargets? targets;
+  final int entryCount;
+  final VoidCallback onOpen;
+
+  static const List<String> _weekdays = <String>[
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
+  ];
+
+  String get _title => isSameDay(day, DateTime.now())
+      ? 'Today'
+      : '${_weekdays[day.weekday - 1]} ${shortDate(day)}';
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(child: Text(_title, style: context.text.sectionHeader)),
+              Text(
+                entryCount == 0
+                    ? 'nothing logged'
+                    : '$entryCount ${entryCount == 1 ? 'item' : 'items'}',
+                style: context.text.metadata.copyWith(color: colors.textMuted),
+              ),
+            ],
+          ),
+          const SizedBox(height: HearthSpacing.md),
+          if (targets == null)
+            Text(
+              'No targets set for this week.',
+              style: context.text.body.copyWith(color: colors.textSecondary),
+            )
+          else
+            MacroRings(
+              progress: DayProgress.from(consumed: eaten, targets: targets!),
+            ),
+          const SizedBox(height: HearthSpacing.lg),
+          SizedBox(
+            width: double.infinity,
+            // Height left to Material, which pads its own tap target to 48.
+            // HearthTouch.minTarget is 44 — the iOS figure, and the one this
+            // app is written to — but Android's guideline asks for 48 and the
+            // §6.3 sweep checks both.
+            child: FilledButton(
+              onPressed: onOpen,
+              // The strip no longer navigates, so the way in has to be said
+              // out loud rather than left as a thing you discover.
+              child: const Text('Open this day'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -275,161 +365,6 @@ class _MacroRow extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-}
-
-class _DayRow extends StatelessWidget {
-  const _DayRow({
-    required this.day,
-    required this.eaten,
-    required this.targets,
-    required this.isSelected,
-    required this.entryCount,
-    required this.onTap,
-  });
-
-  final DateTime day;
-  final Macros eaten;
-  final MacroTargets? targets;
-  final bool isSelected;
-  final int entryCount;
-  final VoidCallback onTap;
-
-  static const List<String> _weekdays = <String>[
-    'Mon',
-    'Tue',
-    'Wed',
-    'Thu',
-    'Fri',
-    'Sat',
-    'Sun',
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    final HearthTextStyles text = context.text;
-    final bool isToday = isSameDay(day, DateTime.now());
-    final bool logged = !eaten.isZero;
-
-    final MacroProgress? calories = targets == null
-        ? null
-        : DayProgress.from(consumed: eaten, targets: targets!).calories;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
-      child: Semantics(
-        button: true,
-        selected: isSelected,
-        onTap: onTap,
-        label:
-            '${_weekdays[day.weekday - 1]} ${shortDate(day)}. '
-            '${logged ? '${eaten.kcal.round()} calories logged' : 'nothing logged'}'
-            '${isToday ? '. Today.' : ''}',
-        excludeSemantics: true,
-        child: Material(
-          color: isSelected ? colors.surfaceSunken : colors.surface,
-          borderRadius: BorderRadius.circular(HearthRadius.md),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(HearthRadius.md),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(HearthRadius.md),
-                border: Border.all(
-                  color: isSelected ? colors.outlineStrong : colors.outline,
-                ),
-              ),
-              padding: const EdgeInsets.all(HearthSpacing.md),
-              child: Row(
-                children: <Widget>[
-                  SizedBox(
-                    // Wide enough for "Today" and a date beneath it.
-                    width: 64,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          // Today is marked by the word and by weight, never
-                          // by colour alone (spec §6.3) — and it takes the
-                          // weekday's place rather than the date's, so every
-                          // row still says which day it is.
-                          isToday ? 'Today' : _weekdays[day.weekday - 1],
-                          style: text.ingredient.copyWith(
-                            fontWeight: isToday
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                          ),
-                        ),
-                        Text(
-                          shortDate(day),
-                          style: text.metadata.copyWith(
-                            color: colors.textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          logged
-                              ? '${eaten.kcal.round()} kcal'
-                              : 'nothing logged',
-                          style: text.ingredient.copyWith(
-                            color: logged
-                                ? colors.textPrimary
-                                : colors.textMuted,
-                          ),
-                        ),
-                        if (logged) ...<Widget>[
-                          const SizedBox(height: HearthSpacing.xxs),
-                          Text(
-                            'P ${eaten.proteinG.round()}  '
-                            'C ${eaten.carbG.round()}  '
-                            'F ${eaten.fatG.round()}',
-                            style: text.metadata.copyWith(
-                              color: colors.textMuted,
-                            ),
-                          ),
-                        ],
-                        if (calories != null) ...<Widget>[
-                          const SizedBox(height: HearthSpacing.sm),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(
-                              HearthRadius.sm,
-                            ),
-                            child: LinearProgressIndicator(
-                              value: calories.barFill,
-                              minHeight: 5,
-                              backgroundColor: colors.progressTrack,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                calories.isOver
-                                    ? colors.overAccent
-                                    : colors.accent,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  if (entryCount > 0) ...<Widget>[
-                    const SizedBox(width: HearthSpacing.sm),
-                    Text(
-                      '$entryCount',
-                      style: text.metadata.copyWith(color: colors.textMuted),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

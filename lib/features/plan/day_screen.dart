@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app/a11y/accessibility.dart';
 import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
+import '../../app/widgets/macro_rings.dart';
 import '../../app/widgets/swipe_to_delete.dart';
 import '../../data/repositories/plan_repository.dart';
 import '../../domain/models/food.dart';
@@ -249,7 +249,6 @@ class _RemainingCard extends ConsumerWidget {
       consumed: eaten,
       targets: targets!,
     );
-    final int columns = A11y.macroColumns(context);
 
     return _Card(
       onTap: () => showMacroTargetsSheet(context),
@@ -258,9 +257,10 @@ class _RemainingCard extends ConsumerWidget {
         children: <Widget>[
           Row(
             children: <Widget>[
-              Expanded(
-                child: Text('Left today', style: context.text.sectionHeader),
-              ),
+              // The rings lead with what has been eaten, so the card is no
+              // longer "what is left" and does not say so. What is left is
+              // under each ring, and only when it is worth saying.
+              Expanded(child: Text('Today', style: context.text.sectionHeader)),
               if (!planned.isZero)
                 Text(
                   '${planned.kcal.round()} kcal still planned',
@@ -271,106 +271,7 @@ class _RemainingCard extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: HearthSpacing.md),
-          LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-              const double spacing = HearthSpacing.md;
-              final double itemWidth =
-                  (constraints.maxWidth - spacing * (columns - 1)) / columns;
-              return Wrap(
-                spacing: spacing,
-                runSpacing: spacing,
-                children: <Widget>[
-                  for (final MacroProgress macro in progress.all)
-                    SizedBox(
-                      width: itemWidth,
-                      child: _MacroTile(macro: macro),
-                    ),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MacroTile extends StatelessWidget {
-  const _MacroTile({required this.macro});
-
-  final MacroProgress macro;
-
-  static const Map<MacroKind, String> _labels = <MacroKind, String>{
-    MacroKind.calories: 'kcal',
-    MacroKind.protein: 'protein',
-    MacroKind.carbs: 'carbs',
-    MacroKind.fat: 'fat',
-  };
-
-  /// What the target is measured in, when it is not the macro's own word.
-  static String _unit(MacroKind kind) =>
-      kind == MacroKind.calories ? 'kcal' : 'g';
-
-  @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    final HearthTextStyles text = context.text;
-
-    final TargetState state = switch (macro.state) {
-      MacroProgressState.under => TargetState.under,
-      MacroProgressState.met => TargetState.met,
-      MacroProgressState.over => TargetState.over,
-    };
-    final String amount = '${macro.remaining.abs().round()}';
-    final TargetIndicator indicator = TargetIndicator.forState(
-      state,
-      amount: amount,
-    );
-    final Color barColor = macro.isOver ? colors.overAccent : colors.accent;
-    // What the remainder is a remainder *of*. Quiet, because the number that
-    // decides what to eat next is the one above it — but present, because
-    // "142 left" says nothing on its own about whether the day is going well,
-    // and the answer was a tap away in a sheet.
-    final String target = 'of ${macro.target.round()} ${_unit(macro.kind)}';
-
-    return Semantics(
-      label: '${_labels[macro.kind]}: ${indicator.semanticLabel}, $target',
-      excludeSemantics: true,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Text(amount, style: text.macroReadout),
-          const SizedBox(height: HearthSpacing.xxs),
-          Row(
-            children: <Widget>[
-              Icon(indicator.icon, size: 14, color: colors.textMuted),
-              const SizedBox(width: HearthSpacing.xxs),
-              Flexible(
-                child: Text(
-                  '${_labels[macro.kind]} ${macro.isOver ? 'over' : 'left'}',
-                  style: text.metadata.copyWith(color: colors.textMuted),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: HearthSpacing.sm),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(HearthRadius.sm),
-            child: LinearProgressIndicator(
-              value: macro.barFill,
-              minHeight: 6,
-              backgroundColor: colors.progressTrack,
-              valueColor: AlwaysStoppedAnimation<Color>(barColor),
-            ),
-          ),
-          const SizedBox(height: HearthSpacing.xxs),
-          Text(
-            target,
-            style: text.metadata.copyWith(color: colors.textMuted),
-            overflow: TextOverflow.ellipsis,
-          ),
+          MacroRings(progress: progress),
         ],
       ),
     );
