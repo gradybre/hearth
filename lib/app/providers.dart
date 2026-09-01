@@ -39,6 +39,7 @@ import '../data/remote/supabase_remote_gateway.dart';
 import '../data/repositories/collection_repository.dart';
 import '../data/repositories/food_profile_repository.dart';
 import '../data/repositories/food_repository.dart';
+import '../data/repositories/ingredient_match_repository.dart';
 import '../data/repositories/plan_repository.dart';
 import '../data/repositories/recipe_repository.dart';
 import '../data/sync/library_sync.dart';
@@ -182,6 +183,21 @@ final Provider<IngredientMatchStore> ingredientMatchStoreProvider =
       (Ref ref) => IngredientMatchStore(ref.watch(databaseProvider)),
     );
 
+/// Remembered ingredient answers, queued for the household (spec §5.3, §7.1).
+///
+/// The store writes locally; this is what makes the answer reach the other
+/// phone. Everything that records one goes through here — a correction made
+/// on one device is a correction made for the kitchen, not for a handset.
+final Provider<IngredientMatchRepository> ingredientMatchRepositoryProvider =
+    Provider<IngredientMatchRepository>(
+      (Ref ref) => IngredientMatchRepository(
+        database: ref.watch(databaseProvider),
+        store: ref.watch(ingredientMatchStoreProvider),
+        queue: ref.watch(pendingWriteStoreProvider),
+        householdId: ref.watch(currentHouseholdIdProvider),
+      ),
+    );
+
 /// Every remembered ingredient-string to food mapping for this household,
 /// keyed by normalised string (spec §5.3).
 final FutureProvider<Map<String, String>> rememberedMatchesProvider =
@@ -189,9 +205,7 @@ final FutureProvider<Map<String, String>> rememberedMatchesProvider =
       // Re-read when the food library changes, so a deleted food stops being
       // suggested.
       ref.watch(foodLibraryProvider);
-      return ref
-          .watch(ingredientMatchStoreProvider)
-          .allFor(ref.watch(currentHouseholdIdProvider));
+      return ref.watch(ingredientMatchRepositoryProvider).allFor();
     });
 
 /// What this household says needs no food at all — salt, pepper, a spice
@@ -202,9 +216,7 @@ final FutureProvider<Map<String, String>> rememberedMatchesProvider =
 /// to make the built-ins work; a row only appears when somebody says something.
 final FutureProvider<NoMatchRules> noMatchRulesProvider =
     FutureProvider<NoMatchRules>(
-      (Ref ref) => ref
-          .watch(ingredientMatchStoreProvider)
-          .noMatchRules(ref.watch(currentHouseholdIdProvider)),
+      (Ref ref) => ref.watch(ingredientMatchRepositoryProvider).noMatchRules(),
     );
 
 /// The food most often matched to each ingredient name, across every recipe

@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../domain/foods/no_match_rule.dart';
 import '../../domain/text/text_normaliser.dart';
@@ -15,12 +16,25 @@ class IngredientMatchStore {
 
   final HearthDatabase _db;
 
+  /// The row id for a wording, derived rather than random.
+  ///
+  /// Both phones in a household will decide "evoo means olive oil" on their
+  /// own, and a random id each would make two rows for one wording — which the
+  /// unique key then refuses on whichever device syncs second, permanently.
+  /// Deriving the id from the pair the unique key is on means both arrive at
+  /// the same row and the later write simply updates it.
+  static String idFor(String householdId, String ingredientString) =>
+      const Uuid().v5(
+        Namespace.url.value,
+        'hearth:ingredient-match:$householdId:'
+        '${normaliseKey(ingredientString)}',
+      );
+
   /// Records a confirmed match, replacing any earlier one for the same string.
   Future<void> remember({
     required String householdId,
     required String ingredientString,
     required String foodId,
-    required String id,
     required DateTime updatedAt,
   }) async {
     final String key = normaliseKey(ingredientString);
@@ -30,7 +44,7 @@ class IngredientMatchStore {
         .into(_db.ingredientMatches)
         .insert(
           IngredientMatchesCompanion.insert(
-            id: id,
+            id: idFor(householdId, key),
             householdId: householdId,
             ingredientString: key,
             foodId: Value<String?>(foodId),
@@ -38,6 +52,7 @@ class IngredientMatchStore {
           ),
           onConflict: DoUpdate(
             (_) => IngredientMatchesCompanion(
+              id: Value<String>(idFor(householdId, key)),
               foodId: Value<String?>(foodId),
               needsNoMatch: const Value<bool>(false),
               updatedAt: Value<DateTime>(updatedAt),
@@ -101,7 +116,6 @@ class IngredientMatchStore {
   Future<void> rememberNoMatch({
     required String householdId,
     required String ingredientString,
-    required String id,
     required DateTime updatedAt,
   }) async {
     final String key = normaliseKey(ingredientString);
@@ -111,16 +125,18 @@ class IngredientMatchStore {
         .into(_db.ingredientMatches)
         .insert(
           IngredientMatchesCompanion.insert(
-            id: id,
+            id: idFor(householdId, key),
             householdId: householdId,
             ingredientString: key,
             needsNoMatch: const Value<bool>(true),
             updatedAt: updatedAt,
           ),
           onConflict: DoUpdate(
-            (_) => const IngredientMatchesCompanion(
-              foodId: Value<String?>(null),
-              needsNoMatch: Value<bool>(true),
+            (_) => IngredientMatchesCompanion(
+              id: Value<String>(idFor(householdId, key)),
+              foodId: const Value<String?>(null),
+              needsNoMatch: const Value<bool>(true),
+              updatedAt: Value<DateTime>(updatedAt),
             ),
             target: <Column<Object>>[
               _db.ingredientMatches.householdId,
@@ -156,7 +172,6 @@ class IngredientMatchStore {
   Future<void> rememberNeedsMatch({
     required String householdId,
     required String ingredientString,
-    required String id,
     required DateTime updatedAt,
   }) async {
     final String key = normaliseKey(ingredientString);
@@ -166,15 +181,17 @@ class IngredientMatchStore {
         .into(_db.ingredientMatches)
         .insert(
           IngredientMatchesCompanion.insert(
-            id: id,
+            id: idFor(householdId, key),
             householdId: householdId,
             ingredientString: key,
             updatedAt: updatedAt,
           ),
           onConflict: DoUpdate(
-            (_) => const IngredientMatchesCompanion(
-              foodId: Value<String?>(null),
-              needsNoMatch: Value<bool>(false),
+            (_) => IngredientMatchesCompanion(
+              id: Value<String>(idFor(householdId, key)),
+              foodId: const Value<String?>(null),
+              needsNoMatch: const Value<bool>(false),
+              updatedAt: Value<DateTime>(updatedAt),
             ),
             target: <Column<Object>>[
               _db.ingredientMatches.householdId,

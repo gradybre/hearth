@@ -4,7 +4,8 @@ import '../remote/remote_gateway.dart';
 import 'remote_rows.dart';
 import 'sync_engine.dart';
 
-/// Brings down the flat tables: plans, logs, targets, cookbooks (spec §7.1).
+/// Brings down the flat tables: plans, logs, targets, cookbooks, and the
+/// household's remembered ingredient answers (spec §7.1).
 ///
 /// Recipes and foods need whole-aggregate handling and have their own path.
 /// Everything else is one row per record, which makes this the ordinary case
@@ -51,6 +52,9 @@ class RecordSync {
           (table: 'macro_targets', apply: _rows.applyTargets),
           (table: 'collections', apply: _rows.applyCollection),
           (table: 'food_profiles', apply: _rows.applyFoodProfile),
+          // After foods: a match points at one, and a foreign key does not
+          // care that the food arrived two milliseconds earlier.
+          (table: 'ingredient_matches', apply: _rows.applyIngredientMatch),
         ]) {
       final PullResult result = await _pullTable(spec.table, spec.apply);
       applied += result.applied;

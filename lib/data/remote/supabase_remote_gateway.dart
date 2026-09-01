@@ -36,6 +36,18 @@ class SupabaseRemoteGateway implements RemoteGateway {
     'recipe_collections': <String>['collection_id', 'recipe_id'],
   };
 
+  /// Tables whose upsert must resolve on a unique constraint rather than on
+  /// the primary key.
+  ///
+  /// `ingredient_matches` is unique on (household, wording), and two phones
+  /// can decide the same wording independently. Their rows now share a derived
+  /// id so they agree, but a row written before that — or by an older build —
+  /// would otherwise be refused for ever by the unique index rather than
+  /// updating the row already there.
+  static const Map<String, String> upsertConflictTargets = <String, String>{
+    'ingredient_matches': 'household_id,ingredient_string',
+  };
+
   /// What identifies a row on the way *in*, when it is not `id`.
   ///
   /// The food profile is one row per user and the server keys it that way, so
@@ -85,7 +97,8 @@ class SupabaseRemoteGateway implements RemoteGateway {
     final ({String function, String parameter})? aggregate =
         aggregateFunctions[table];
     if (aggregate == null) {
-      await _client.from(table).upsert(payload);
+      final String? onConflict = upsertConflictTargets[table];
+      await _client.from(table).upsert(payload, onConflict: onConflict);
       return;
     }
     await _client.rpc<void>(

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 
+import '../../domain/text/text_normaliser.dart';
 import '../local/hearth_database.dart';
 import '../remote/supabase_remote_gateway.dart';
 
@@ -119,6 +120,59 @@ class RemoteRows {
           updatedAt: _time(json['updated_at']),
         ),
       );
+
+  /// A remembered answer for an ingredient wording (spec §5.3).
+  ///
+  /// Upserted on the wording rather than on the id: the id is derived from the
+  /// wording now, but a row written before that could still be carrying a
+  /// random one, and inserting beside it would break the unique index on a
+  /// device that has done nothing wrong.
+  Future<void> applyIngredientMatch(Map<String, Object?> json) async {
+    final String key = normaliseKey('${json['ingredient_string'] ?? ''}');
+    if (key.isEmpty) return;
+
+    // A match naming a food this device has not got is skipped rather than
+    // inserted. Foods are pulled before records so this is rare, but the row
+    // has a foreign key onto them and a failure here would abort the whole
+    // table's pull over one row. Nothing is lost by skipping: a match to a
+    // food that is not here is already ignored by the matcher, which only
+    // suggests foods the library actually holds.
+    final String? foodId = json['food_id'] as String?;
+    if (foodId != null) {
+      final List<QueryRow> known = await _db
+          .customSelect(
+            'select 1 from foods where id = ?',
+            variables: <Variable<Object>>[Variable<String>(foodId)],
+          )
+          .get();
+      if (known.isEmpty) return;
+    }
+
+    await _db
+        .into(_db.ingredientMatches)
+        .insert(
+          IngredientMatchesCompanion.insert(
+            id: '${json['id']}',
+            householdId: '${json['household_id']}',
+            ingredientString: key,
+            foodId: Value<String?>(foodId),
+            needsNoMatch: Value<bool>(json['needs_no_match'] == true),
+            updatedAt: _time(json['updated_at']),
+          ),
+          onConflict: DoUpdate(
+            (_) => IngredientMatchesCompanion(
+              id: Value<String>('${json['id']}'),
+              foodId: Value<String?>(foodId),
+              needsNoMatch: Value<bool>(json['needs_no_match'] == true),
+              updatedAt: Value<DateTime>(_time(json['updated_at'])),
+            ),
+            target: <Column<Object>>[
+              _db.ingredientMatches.householdId,
+              _db.ingredientMatches.ingredientString,
+            ],
+          ),
+        );
+  }
 
   // ── Membership, which has no timestamps to compare ────────────────────────
 

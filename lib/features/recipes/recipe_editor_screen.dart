@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
@@ -10,7 +9,7 @@ import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
 import '../../data/adapters/label_reader.dart';
 import '../../data/adapters/recipe_ai.dart';
-import '../../data/local/ingredient_match_store.dart';
+import '../../data/repositories/ingredient_match_repository.dart';
 import '../../domain/foods/no_match_rule.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
@@ -209,17 +208,10 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
 
     // Remembered like any other correction, so the same ingredient string is
     // never looked up twice (spec §5.3).
-    final String household = ref.read(currentHouseholdIdProvider);
     for (final MapEntry<String, String> entry in applied.entries) {
       await ref
-          .read(ingredientMatchStoreProvider)
-          .remember(
-            householdId: household,
-            ingredientString: entry.key,
-            foodId: entry.value,
-            id: const Uuid().v4(),
-            updatedAt: DateTime.now(),
-          );
+          .read(ingredientMatchRepositoryProvider)
+          .remember(ingredientString: entry.key, foodId: entry.value);
     }
     ref.invalidate(rememberedMatchesProvider);
   }
@@ -311,25 +303,16 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       }
     });
 
-    final IngredientMatchStore store = ref.read(ingredientMatchStoreProvider);
-    final String household = ref.read(currentHouseholdIdProvider);
+    final IngredientMatchRepository matches = ref.read(
+      ingredientMatchRepositoryProvider,
+    );
     if (marked) {
-      await store.rememberNoMatch(
-        householdId: household,
-        ingredientString: ingredient.name,
-        id: const Uuid().v4(),
-        updatedAt: DateTime.now(),
-      );
+      await matches.rememberNoMatch(ingredient.name);
     } else {
       // Not `forget`: taking the mark off one of the seasonings Hearth ships
       // knowing about has to be recorded, or the built-in would simply put it
       // back on the next build.
-      await store.rememberNeedsMatch(
-        householdId: household,
-        ingredientString: ingredient.name,
-        id: const Uuid().v4(),
-        updatedAt: DateTime.now(),
-      );
+      await matches.rememberNeedsMatch(ingredient.name);
     }
     ref.invalidate(noMatchRulesProvider);
     ref.invalidate(rememberedMatchesProvider);
@@ -361,23 +344,13 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       _matches = next;
     });
 
+    final IngredientMatchRepository matches = ref.read(
+      ingredientMatchRepositoryProvider,
+    );
     if (chosen != clearFoodSentinel) {
-      await ref
-          .read(ingredientMatchStoreProvider)
-          .remember(
-            householdId: ref.read(currentHouseholdIdProvider),
-            ingredientString: ingredient.name,
-            foodId: chosen,
-            id: const Uuid().v4(),
-            updatedAt: DateTime.now(),
-          );
+      await matches.remember(ingredientString: ingredient.name, foodId: chosen);
     } else {
-      await ref
-          .read(ingredientMatchStoreProvider)
-          .forget(
-            householdId: ref.read(currentHouseholdIdProvider),
-            ingredientString: ingredient.name,
-          );
+      await matches.forget(ingredient.name);
     }
     ref.invalidate(rememberedMatchesProvider);
   }
@@ -1022,9 +995,13 @@ class _IngredientRow extends StatelessWidget {
       ),
       // Not "not counted": that reads as a gap being tolerated. This line was
       // never going to have a food, and saying so is the whole point.
+      //
+      // Carries the accent a matched line carries, because it is the same
+      // kind of answer: this row is *settled*. Muted put it with the unmatched
+      // ones and made a finished row look like an unfinished one.
       IngredientMacroStatus.noMatchNeeded => (
-        icon: Icons.grass_outlined,
-        colour: colors.textMuted,
+        icon: Icons.grass,
+        colour: colors.accent,
         text: 'seasoning — no match needed',
       ),
       IngredientMacroStatus.noFoodMatch => (

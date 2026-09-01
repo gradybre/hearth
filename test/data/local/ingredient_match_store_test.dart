@@ -32,14 +32,15 @@ void main() {
 
   noMatchTests(() => db, () => matches, now);
 
-  Future<void> remember(String text, String foodId, {String id = 'm1'}) =>
-      matches.remember(
-        householdId: household,
-        ingredientString: text,
-        foodId: foodId,
-        id: id,
-        updatedAt: now,
-      );
+  // No id: the store derives one from the household and the wording, so two
+  // phones deciding the same thing land on the same row rather than on two
+  // the unique index will not accept.
+  Future<void> remember(String text, String foodId) => matches.remember(
+    householdId: household,
+    ingredientString: text,
+    foodId: foodId,
+    updatedAt: now,
+  );
 
   test('a remembered match is found again', () async {
     await remember('evoo', 'food-oil');
@@ -69,7 +70,9 @@ void main() {
 
   test('correcting a match replaces the earlier one', () async {
     await remember('evoo', 'food-oil');
-    await remember('evoo', 'food-butter', id: 'm2');
+    // Same wording, so the same derived id: the correction replaces the row
+    // rather than sitting beside it.
+    await remember('evoo', 'food-butter');
 
     expect(
       await matches.rememberedFoodId(
@@ -129,7 +132,6 @@ void noMatchTests(
   Future<void> markNoMatch(String wording) => matches().rememberNoMatch(
     householdId: 'household-1',
     ingredientString: wording,
-    id: 'row-$wording',
     updatedAt: now,
   );
 
@@ -158,7 +160,6 @@ void noMatchTests(
       await matches().rememberNeedsMatch(
         householdId: 'household-1',
         ingredientString: 'water',
-        id: 'row-water',
         updatedAt: now,
       );
       final NoMatchRules rules = await matches().noMatchRules('household-1');
@@ -185,7 +186,6 @@ void noMatchTests(
         householdId: 'household-1',
         ingredientString: 'fish sauce',
         foodId: 'food-1',
-        id: 'row-2',
         updatedAt: now,
       );
 
@@ -212,7 +212,6 @@ void noMatchTests(
         householdId: 'household-1',
         ingredientString: 'fish sauce',
         foodId: 'food-1',
-        id: 'row-1',
         updatedAt: now,
       );
       await markNoMatch('fish sauce');

@@ -26,6 +26,8 @@ void main() {
 
   tearDown(() => db.close());
 
+  ingredientMatchTests(() => db);
+
   group('a logged meal arrives from another device', () {
     Map<String, Object?> entry({
       String id = 'entry-1',
@@ -234,6 +236,99 @@ void main() {
       );
 
       expect(await db.select(db.recipeFavorites).get(), hasLength(1));
+    });
+  });
+}
+
+/// Ingredient answers arriving from the other phone (spec §5.3, §7.1).
+void ingredientMatchTests(HearthDatabase Function() database) {
+  Map<String, Object?> row({
+    String id = 'match-1',
+    String wording = 'evoo',
+    String? foodId = 'food-oil',
+    bool needsNoMatch = false,
+  }) => <String, Object?>{
+    'id': id,
+    'household_id': 'household-1',
+    'ingredient_string': wording,
+    'food_id': foodId,
+    'needs_no_match': needsNoMatch,
+    'updated_at': '2026-08-31T12:00:00Z',
+  };
+
+  Future<void> seedOil() => database()
+      .into(database().foods)
+      .insert(
+        FoodsCompanion.insert(
+          id: 'food-oil',
+          name: 'Olive oil',
+          updatedAt: DateTime.utc(2026, 8, 31),
+        ),
+      );
+
+  group('an ingredient match from the server', () {
+    test('lands as a match', () async {
+      await seedOil();
+      await RemoteRows(database()).applyIngredientMatch(row());
+
+      final IngredientMatchRow saved = await database()
+          .select(database().ingredientMatches)
+          .getSingle();
+      expect(saved.ingredientString, 'evoo');
+      expect(saved.foodId, 'food-oil');
+      expect(saved.needsNoMatch, isFalse);
+    });
+
+    test('or as a seasoning, with no food', () async {
+      await RemoteRows(database()).applyIngredientMatch(
+        row(wording: 'salt', foodId: null, needsNoMatch: true),
+      );
+
+      final IngredientMatchRow saved = await database()
+          .select(database().ingredientMatches)
+          .getSingle();
+      expect(saved.needsNoMatch, isTrue);
+      expect(saved.foodId, isNull);
+    });
+
+    test(
+      'naming a food this device has not got is skipped, not thrown',
+      () async {
+        // Foods are pulled before records so this is rare, but the row has a
+        // foreign key onto them and a failure would abort the whole table's
+        // pull over one row. A match to a food that is not here is useless
+        // anyway — the matcher only ever suggests foods the library holds.
+        await RemoteRows(database()).applyIngredientMatch(row());
+        expect(
+          await database().select(database().ingredientMatches).get(),
+          isEmpty,
+        );
+      },
+    );
+
+    test('replaces the local answer for the same wording', () async {
+      await seedOil();
+      // Upserted on the wording rather than the id: a row written before ids
+      // were derived could still carry a random one, and inserting beside it
+      // would break the unique index on a device that did nothing wrong.
+      await RemoteRows(database()).applyIngredientMatch(row(id: 'old-random'));
+      await RemoteRows(database()).applyIngredientMatch(
+        row(id: 'derived', foodId: null, needsNoMatch: true),
+      );
+
+      final IngredientMatchRow saved = await database()
+          .select(database().ingredientMatches)
+          .getSingle();
+      expect(saved.id, 'derived');
+      expect(saved.needsNoMatch, isTrue);
+    });
+
+    test('a wording that normalises to nothing is ignored', () async {
+      await RemoteRows(database()).applyIngredientMatch(row(wording: '  '));
+      expect(
+        await database().select(database().ingredientMatches).get(),
+        isEmpty,
+      );
     });
   });
 }

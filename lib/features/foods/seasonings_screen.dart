@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../data/repositories/ingredient_match_repository.dart';
 import '../../domain/foods/no_match_rule.dart';
 
 /// Everything marked as needing no food, in one place (spec §5.3).
@@ -26,30 +26,15 @@ class SeasoningsScreen extends ConsumerWidget {
     String wording, {
     required bool marked,
   }) async {
-    final String household = ref.read(currentHouseholdIdProvider);
-    final String id = const Uuid().v4();
-    final DateTime now = DateTime.now();
-
+    final IngredientMatchRepository matches = ref.read(
+      ingredientMatchRepositoryProvider,
+    );
     if (marked) {
-      await ref
-          .read(ingredientMatchStoreProvider)
-          .rememberNoMatch(
-            householdId: household,
-            ingredientString: wording,
-            id: id,
-            updatedAt: now,
-          );
+      await matches.rememberNoMatch(wording);
     } else {
       // Recorded rather than forgotten: taking one of the built-ins back off
       // has to leave a trace, or the shipped list would simply reapply it.
-      await ref
-          .read(ingredientMatchStoreProvider)
-          .rememberNeedsMatch(
-            householdId: household,
-            ingredientString: wording,
-            id: id,
-            updatedAt: now,
-          );
+      await matches.rememberNeedsMatch(wording);
     }
     ref.invalidate(noMatchRulesProvider);
     ref.invalidate(rememberedMatchesProvider);
