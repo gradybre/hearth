@@ -46,6 +46,17 @@ Future<HearthDatabase> openFoods(
   return db;
 }
 
+/// Taps a filter chip, scrolling the row to it first.
+///
+/// The chip row is a horizontal scroll view and is wider than a phone, so a
+/// chip further along it is off screen and a plain tap silently misses.
+Future<void> tapChip(WidgetTester tester, String label) async {
+  await tester.ensureVisible(find.text(label));
+  await pumpFrames(tester);
+  await tester.tap(find.text(label));
+  await pumpFrames(tester);
+}
+
 void main() {
   _selectingTests();
 
@@ -411,8 +422,7 @@ void _selectingTests() {
       await openFoods(tester, foods: mixedLibrary());
       await pumpFrames(tester);
 
-      await tester.tap(find.text('Has barcode'));
-      await pumpFrames(tester);
+      await tapChip(tester, 'Has barcode');
 
       expect(find.byType(FoodCard), findsOneWidget);
       expect(find.text('Zzz newest'), findsOneWidget);
@@ -423,8 +433,7 @@ void _selectingTests() {
     ) async {
       await openFoods(tester, foods: mixedLibrary());
       await pumpFrames(tester);
-      await tester.tap(find.text('Has barcode'));
-      await pumpFrames(tester);
+      await tapChip(tester, 'Has barcode');
 
       expect(find.text('Clear 1 filter'), findsOneWidget);
 

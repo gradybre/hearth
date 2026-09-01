@@ -22,6 +22,7 @@ Future<String?> showFoodPicker(
   BuildContext context, {
   required String ingredientName,
   String? currentFoodId,
+  List<Food> defaults = const <Food>[],
 }) => showModalBottomSheet<String>(
   context: context,
   isScrollControlled: true,
@@ -29,6 +30,7 @@ Future<String?> showFoodPicker(
   builder: (BuildContext context) => _FoodPickerSheet(
     ingredientName: ingredientName,
     currentFoodId: currentFoodId,
+    defaults: defaults,
   ),
 );
 
@@ -36,10 +38,22 @@ Future<String?> showFoodPicker(
 const String clearFoodSentinel = '__clear__';
 
 class _FoodPickerSheet extends ConsumerStatefulWidget {
-  const _FoodPickerSheet({required this.ingredientName, this.currentFoodId});
+  const _FoodPickerSheet({
+    required this.ingredientName,
+    this.currentFoodId,
+    this.defaults = const <Food>[],
+  });
 
   final String ingredientName;
   final String? currentFoodId;
+
+  /// The household's defaults that answer this line, when more than one does.
+  ///
+  /// A recipe asking for "milk" against a fridge holding whole, 2% and
+  /// non-fat has genuinely not said which, so the answer is these three at
+  /// the top of the list rather than a guess — and everything else on this
+  /// sheet is still here for adding a different one as usual (spec §5.3).
+  final List<Food> defaults;
 
   @override
   ConsumerState<_FoodPickerSheet> createState() => _FoodPickerSheetState();
@@ -253,6 +267,9 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
                             ],
                           );
                         }
+                        final Set<String> defaultIds = <String>{
+                          for (final Food food in widget.defaults) food.id,
+                        };
                         return ListView(
                           controller: controller,
                           padding: const EdgeInsets.fromLTRB(
@@ -262,16 +279,36 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
                             HearthSpacing.xl,
                           ),
                           children: <Widget>[
-                            for (final Food food in visible) ...<Widget>[
-                              _FoodOption(
-                                food: food,
-                                selected: food.id == widget.currentFoodId,
-                                onEdit: food.id == widget.currentFoodId
-                                    ? () => _editFood(food.id)
-                                    : null,
+                            if (widget.defaults.isNotEmpty) ...<Widget>[
+                              _GroupLabel(
+                                text:
+                                    'Your defaults for '
+                                    '"${widget.ingredientName}"',
                               ),
-                              const SizedBox(height: HearthSpacing.sm),
+                              for (final Food food
+                                  in widget.defaults) ...<Widget>[
+                                _FoodOption(
+                                  food: food,
+                                  selected: food.id == widget.currentFoodId,
+                                  onEdit: food.id == widget.currentFoodId
+                                      ? () => _editFood(food.id)
+                                      : null,
+                                ),
+                                const SizedBox(height: HearthSpacing.sm),
+                              ],
+                              const _GroupLabel(text: 'Everything else'),
                             ],
+                            for (final Food food in visible)
+                              if (!defaultIds.contains(food.id)) ...<Widget>[
+                                _FoodOption(
+                                  food: food,
+                                  selected: food.id == widget.currentFoodId,
+                                  onEdit: food.id == widget.currentFoodId
+                                      ? () => _editFood(food.id)
+                                      : null,
+                                ),
+                                const SizedBox(height: HearthSpacing.sm),
+                              ],
                             // A food found out there is saved first, then used
                             // as this line's match — same review as any other
                             // route into the library (CLAUDE.md rule 4).
@@ -290,6 +327,22 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
           ),
     );
   }
+}
+
+/// A heading above a run of options.
+class _GroupLabel extends StatelessWidget {
+  const _GroupLabel({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: HearthSpacing.xs),
+    child: Text(
+      text,
+      style: context.text.metadata.copyWith(color: context.colors.textMuted),
+    ),
+  );
 }
 
 class _FoodOption extends StatelessWidget {

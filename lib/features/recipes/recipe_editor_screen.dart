@@ -105,12 +105,15 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
 
   /// Applies remembered matches to any line that has none.
   ///
-  /// Only remembered matches are applied silently — they are decisions this
-  /// household already made. A best guess is offered in the picker instead of
-  /// being assumed, because a wrong macro is worse than a missing one
-  /// (spec §5.3).
-  void _autoApplyRemembered(Map<String, String> remembered) {
-    if (remembered.isEmpty) return;
+  /// Only defaults and remembered matches are applied silently — both are
+  /// decisions this household already made. A best guess is offered in the
+  /// picker instead of being assumed, because a wrong macro is worse than a
+  /// missing one (spec §5.3).
+  ///
+  /// Lines that already carry a food are skipped, so this only ever fills a
+  /// blank. Nothing anybody matched, or deliberately unmatched, is
+  /// second-guessed.
+  void _autoApplyTrustedMatches(Map<String, String> remembered) {
     final Map<String, String> next = <String, String>{..._matches};
     bool changed = false;
 
@@ -228,16 +231,27 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
             ingredientName: ingredient.name,
             library: _foods.values.toList(growable: false),
             // Not `remembered` here: a remembered match is already applied
-            // by `_autoApplyRemembered` before the row can even be tapped, so
+            // by `_autoApplyTrustedMatches` before the row can even be tapped, so
             // `current` would already be set — passing it again would just
             // re-offer a match the user may have deliberately unmatched.
             previouslyUsed: ref.read(mostUsedFoodsProvider),
+          );
+
+    // Several defaults answering one line is the case worth showing rather
+    // than resolving: "milk" against whole, 2% and non-fat has genuinely not
+    // said which. One default never reaches here — it was applied already.
+    final List<Food> defaults = current != null
+        ? const <Food>[]
+        : IngredientMatcher.defaultsFor(
+            ingredient.name,
+            _foods.values.toList(growable: false),
           );
 
     final String? chosen = await showFoodPicker(
       context,
       ingredientName: ingredient.name,
       currentFoodId: current ?? suggestion?.foodId,
+      defaults: defaults.length > 1 ? defaults : const <Food>[],
     );
     await _applyMatch(ingredient, chosen);
   }
@@ -470,7 +484,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
           in ref.watch(foodLibraryProvider).value ?? const <Food>[])
         food.id: food,
     };
-    _autoApplyRemembered(
+    _autoApplyTrustedMatches(
       ref.watch(rememberedMatchesProvider).value ?? const <String, String>{},
     );
 

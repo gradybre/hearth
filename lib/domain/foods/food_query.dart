@@ -33,6 +33,7 @@ class FoodFilter {
     this.storeTags = const <String>{},
     this.needsAttention = false,
     this.hasBarcode = false,
+    this.isDefault = false,
     this.sort = FoodSort.recent,
   });
 
@@ -51,6 +52,9 @@ class FoodFilter {
   /// generics like "white onion".
   final bool hasBarcode;
 
+  /// Only the household's standing choices (spec §5.3).
+  final bool isDefault;
+
   /// Ordering. Not a filter — it hides nothing — so it stays out of
   /// [activeCount] and survives a "clear filters".
   final FoodSort sort;
@@ -62,13 +66,15 @@ class FoodFilter {
       sources.isEmpty &&
       storeTags.isEmpty &&
       !needsAttention &&
-      !hasBarcode;
+      !hasBarcode &&
+      !isDefault;
 
   int get activeCount =>
       sources.length +
       storeTags.length +
       (needsAttention ? 1 : 0) +
-      (hasBarcode ? 1 : 0);
+      (hasBarcode ? 1 : 0) +
+      (isDefault ? 1 : 0);
 
   FoodFilter copyWith({
     String? text,
@@ -76,6 +82,7 @@ class FoodFilter {
     Set<String>? storeTags,
     bool? needsAttention,
     bool? hasBarcode,
+    bool? isDefault,
     FoodSort? sort,
   }) => FoodFilter(
     text: text ?? this.text,
@@ -83,6 +90,7 @@ class FoodFilter {
     storeTags: storeTags ?? this.storeTags,
     needsAttention: needsAttention ?? this.needsAttention,
     hasBarcode: hasBarcode ?? this.hasBarcode,
+    isDefault: isDefault ?? this.isDefault,
     sort: sort ?? this.sort,
   );
 
@@ -132,6 +140,7 @@ abstract final class FoodSearch {
 
     if (filter.needsAttention && !food.needsAttention) return false;
     if (filter.hasBarcode && (food.barcode ?? '').isEmpty) return false;
+    if (filter.isDefault && !food.isDefault) return false;
 
     return true;
   }

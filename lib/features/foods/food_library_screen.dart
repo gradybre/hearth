@@ -378,11 +378,29 @@ class FoodCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Text(
-                        food.brand == null
-                            ? food.name
-                            : '${food.name}  ·  ${food.brand}',
-                        style: text.ingredient,
+                      Row(
+                        children: <Widget>[
+                          // Icon and word together, never colour alone
+                          // (§6.3) — and in front of the name, because
+                          // "which of these did I choose" is what the eye is
+                          // scanning this column for.
+                          if (food.isDefault) ...<Widget>[
+                            Icon(
+                              Icons.push_pin,
+                              size: 14,
+                              color: colors.accent,
+                            ),
+                            const SizedBox(width: HearthSpacing.xxs),
+                          ],
+                          Flexible(
+                            child: Text(
+                              food.brand == null
+                                  ? food.name
+                                  : '${food.name}  ·  ${food.brand}',
+                              style: text.ingredient,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: HearthSpacing.xxs),
                       Text(
@@ -409,9 +427,13 @@ class FoodCard extends StatelessWidget {
 
   static String _summary(Food food) {
     final ServingOption? serving = food.defaultServing;
-    if (serving == null) return 'No serving size yet';
+    if (serving == null) {
+      return food.isDefault
+          ? 'Default  ·  no serving size yet'
+          : 'No serving size yet';
+    }
     final String portion = QuantityFormat.formatAsAuthored(serving.amount);
-    return 'per $portion  ·  '
+    return '${food.isDefault ? 'Default  ·  ' : ''}per $portion  ·  '
         'P ${serving.macros.proteinG.round()}  '
         'C ${serving.macros.carbG.round()}  '
         'F ${serving.macros.fatG.round()}';

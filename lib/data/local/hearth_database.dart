@@ -44,7 +44,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -86,6 +86,11 @@ class HearthDatabase extends _$HearthDatabase {
       // v8 ties a timer to its step, so a step can only ever have one.
       if (from < 8) {
         await m.addColumn(cookTimers, cookTimers.stepId);
+      }
+      // v10 marks a food as one of the household's standing choices, so a
+      // recipe line naming the same thing matches itself (spec §5.3).
+      if (from < 10) {
+        await m.addColumn(foods, foods.isDefault);
       }
     },
     beforeOpen: (OpeningDetails details) async {

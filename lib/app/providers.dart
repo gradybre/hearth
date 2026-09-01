@@ -362,6 +362,7 @@ class FoodFilterController extends Notifier<FoodFilter> {
       state = state.copyWith(needsAttention: !state.needsAttention);
   void toggleHasBarcode() =>
       state = state.copyWith(hasBarcode: !state.hasBarcode);
+  void toggleDefaults() => state = state.copyWith(isDefault: !state.isDefault);
   void setSort(FoodSort sort) => state = state.copyWith(sort: sort);
 
   /// Keeps the typed text and the sort, for the same reasons as the recipe

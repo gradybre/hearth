@@ -11,6 +11,7 @@ import '../../app/widgets/swipe_to_delete.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
+import '../../domain/recipes/default_sweep.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/recipes/recipe_query.dart';
 import 'macro_stats_row.dart';
@@ -81,53 +82,72 @@ class RecipeLibraryScreen extends ConsumerWidget {
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (Object error, StackTrace stack) =>
               _LibraryError(error: error, gutter: gutter),
-          data: (List<Recipe> recipes) => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              // Outside the empty/non-empty branch on purpose. The household
-              // control used to live only in the populated case, which hid it
-              // from exactly the person who needs it — someone with an empty
-              // library, about to share a code.
-              Padding(
-                padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Text('Recipes', style: context.text.recipeTitle),
-                    ),
-                    // The household lives behind the library rather than in a
-                    // settings pillar of its own: it is a thing you set up
-                    // once and then forget (spec §5.1).
-                    IconButton(
-                      icon: const Icon(Icons.people_outline),
-                      tooltip: 'Household',
-                      onPressed: () => context.push('/household'),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: HearthSpacing.md),
-              if (hasLibrary) ...<Widget>[
-                RecipeFilterBar(gutter: gutter),
-                const SizedBox(height: HearthSpacing.md),
-              ],
-              Expanded(
-                child: recipes.isEmpty
-                    ? _EmptyLibrary(gutter: gutter)
-                    : (shown.value ?? const <Recipe>[]).isEmpty
-                    ? _NoMatches(
-                        gutter: gutter,
-                        filter: filter,
-                        onClear: () =>
-                            ref.read(recipeFilterProvider.notifier).clearAll(),
-                      )
-                    : _RecipeList(
-                        recipes: shown.value ?? const <Recipe>[],
-                        gutter: gutter,
+          data: (List<Recipe> recipes) {
+            // Computed here rather than in the header so the button knows
+            // whether it would find anything before it is offered.
+            final bool sweepable = DefaultSweep.proposals(
+              recipes: recipes,
+              library: ref.watch(foodLibraryProvider).value ?? const <Food>[],
+            ).isNotEmpty;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                // Outside the empty/non-empty branch on purpose. The household
+                // control used to live only in the populated case, which hid it
+                // from exactly the person who needs it — someone with an empty
+                // library, about to share a code.
+                Padding(
+                  padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
+                  child: Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text('Recipes', style: context.text.recipeTitle),
                       ),
-              ),
-            ],
-          ),
+                      // Only when there is something to sweep. A button that
+                      // can only ever say "nothing to do" is a button that
+                      // teaches people not to press it.
+                      if (sweepable)
+                        IconButton(
+                          icon: const Icon(Icons.push_pin_outlined),
+                          tooltip: 'Apply defaults to unmatched ingredients',
+                          onPressed: () => context.push('/recipe/defaults'),
+                        ),
+                      // The household lives behind the library rather than in a
+                      // settings pillar of its own: it is a thing you set up
+                      // once and then forget (spec §5.1).
+                      IconButton(
+                        icon: const Icon(Icons.people_outline),
+                        tooltip: 'Household',
+                        onPressed: () => context.push('/household'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: HearthSpacing.md),
+                if (hasLibrary) ...<Widget>[
+                  RecipeFilterBar(gutter: gutter),
+                  const SizedBox(height: HearthSpacing.md),
+                ],
+                Expanded(
+                  child: recipes.isEmpty
+                      ? _EmptyLibrary(gutter: gutter)
+                      : (shown.value ?? const <Recipe>[]).isEmpty
+                      ? _NoMatches(
+                          gutter: gutter,
+                          filter: filter,
+                          onClear: () => ref
+                              .read(recipeFilterProvider.notifier)
+                              .clearAll(),
+                        )
+                      : _RecipeList(
+                          recipes: shown.value ?? const <Recipe>[],
+                          gutter: gutter,
+                        ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

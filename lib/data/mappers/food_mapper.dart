@@ -39,6 +39,7 @@ abstract final class FoodMapper {
     gramsPerMillilitre: food.gramsPerMillilitre,
     source: sourceFromSql(food.source),
     macrosOverridden: food.macrosOverridden,
+    isDefault: food.isDefault,
     isDeleted: food.isDeleted,
     updatedAt: food.updatedAt,
     servingOptions: <ServingOption>[
@@ -77,6 +78,7 @@ abstract final class FoodMapper {
         gramsPerMillilitre: Value<double?>(food.gramsPerMillilitre),
         source: Value<String>(sourceToSql(food.source)),
         macrosOverridden: Value<bool>(food.macrosOverridden),
+        isDefault: Value<bool>(food.isDefault),
         isDeleted: Value<bool>(food.isDeleted),
         updatedAt: updatedAt,
       );
@@ -118,6 +120,7 @@ abstract final class FoodMapper {
     'grams_per_millilitre': food.gramsPerMillilitre,
     'source': sourceToSql(food.source),
     'macros_overridden': food.macrosOverridden,
+    'is_default': food.isDefault,
     'is_deleted': food.isDeleted,
     'updated_at': updatedAt.toIso8601String(),
     'serving_options': <Map<String, Object?>>[

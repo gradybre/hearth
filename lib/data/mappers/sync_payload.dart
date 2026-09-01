@@ -92,6 +92,7 @@ abstract final class SyncPayload {
     gramsPerMillilitre: _double(json['grams_per_millilitre']),
     source: FoodMapper.sourceFromSql('${json['source'] ?? 'manual'}'),
     macrosOverridden: json['macros_overridden'] == true,
+    isDefault: json['is_default'] == true,
     isDeleted: json['is_deleted'] == true,
     updatedAt: updatedAt(json),
     servingOptions: <ServingOption>[

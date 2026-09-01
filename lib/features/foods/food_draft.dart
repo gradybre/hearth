@@ -127,6 +127,7 @@ class FoodDraft {
     this.barcode = '',
     this.existingId,
     this.source = FoodSource.manual,
+    this.isDefault = false,
   });
 
   factory FoodDraft.blank() => const FoodDraft(
@@ -142,6 +143,7 @@ class FoodDraft {
     barcode: food.barcode ?? '',
     existingId: food.id,
     source: food.source,
+    isDefault: food.isDefault,
     servings: <ServingDraft>[
       for (final ServingOption option in food.servingOptions)
         ServingDraft(
@@ -180,6 +182,7 @@ class FoodDraft {
       storeTag: mapped.storeTag,
       barcode: mapped.barcode,
       source: food.source,
+      isDefault: mapped.isDefault,
       servings: <ServingDraft>[
         for (final ServingDraft serving in mapped.servings)
           ServingDraft(
@@ -268,6 +271,7 @@ class FoodDraft {
       barcode: barcode,
       existingId: existingId,
       source: source,
+      isDefault: isDefault,
       servings: <ServingDraft>[...kept, ...added],
     );
   }
@@ -279,6 +283,9 @@ class FoodDraft {
   final List<ServingDraft> servings;
   final String? existingId;
   final FoodSource source;
+
+  /// One of the household's standing choices (spec §5.3).
+  final bool isDefault;
 
   bool get isEditing => existingId != null;
 
@@ -301,6 +308,7 @@ class FoodDraft {
       storeTag: storeTag.trim().isEmpty ? null : storeTag.trim(),
       barcode: barcode.trim().isEmpty ? null : barcode.trim(),
       source: source,
+      isDefault: isDefault,
       servingOptions: <ServingOption>[
         for (final ServingDraft serving in usableServings)
           ServingOption(
@@ -319,6 +327,7 @@ class FoodDraft {
     String? storeTag,
     String? barcode,
     List<ServingDraft>? servings,
+    bool? isDefault,
   }) => FoodDraft(
     name: name ?? this.name,
     brand: brand ?? this.brand,
@@ -327,6 +336,7 @@ class FoodDraft {
     servings: servings ?? this.servings,
     existingId: existingId,
     source: source,
+    isDefault: isDefault ?? this.isDefault,
   );
 
   /// A number as a person would write it back into the field.

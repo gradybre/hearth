@@ -48,6 +48,14 @@ class FoodFilterBar extends ConsumerWidget {
                 ],
                 onChanged: control.setSort,
               ),
+              // First of the chips: "which of these did I actually choose"
+              // is the question this list is most often asked.
+              _Chip(
+                label: 'Defaults',
+                icon: Icons.push_pin_outlined,
+                selected: filter.isDefault,
+                onTap: control.toggleDefaults,
+              ),
               _Chip(
                 label: 'Needs attention',
                 icon: Icons.error_outline,

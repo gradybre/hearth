@@ -5,6 +5,8 @@ import 'package:test/test.dart';
 import '../../support/fixtures.dart';
 
 void main() {
+  defaultFoodTests();
+
   final Food oliveOil = aFoodPer100g('Olive oil', kcal: 884, id: 'food-oil');
   final Food chicken = aFoodPer100g(
     'Chicken breast',
@@ -209,5 +211,140 @@ void main() {
       expect(mostUsed['olive oil'], 'food-oil');
       expect(mostUsed['chicken breast'], 'food-chicken');
     });
+  });
+}
+
+/// Defaults: the household's standing choices (spec §5.3).
+void defaultFoodTests() {
+  Food beef({String name = 'Maverick Ranch 96/4 Ground Beef'}) =>
+      aFood(name, id: 'food-beef').asDefault();
+
+  group('a default answers a line that names the same thing', () {
+    test('applied without asking, because it was chosen deliberately', () {
+      final MatchSuggestion? suggestion = IngredientMatcher.suggest(
+        ingredientName: 'lean ground beef',
+        library: <Food>[beef()],
+      );
+
+      expect(suggestion!.foodId, 'food-beef');
+      expect(suggestion.origin, MatchOrigin.defaultFood);
+      expect(suggestion.isTrusted, isTrue);
+    });
+
+    test('a food that is not marked default does not get the tier', () {
+      final MatchSuggestion? suggestion = IngredientMatcher.suggest(
+        ingredientName: 'lean ground beef',
+        library: <Food>[aFood('Maverick Ranch 96/4 Ground Beef', id: 'f1')],
+      );
+
+      expect(suggestion?.origin, isNot(MatchOrigin.defaultFood));
+    });
+
+    test('a deleted default is not offered', () {
+      expect(
+        IngredientMatcher.defaultsFor('ground beef', <Food>[
+          beef().withDeleted(),
+        ]),
+        isEmpty,
+      );
+    });
+
+    test('a grade the line contradicts is not a default for it', () {
+      expect(
+        IngredientMatcher.defaultsFor('88% ground beef', <Food>[beef()]),
+        isEmpty,
+      );
+    });
+  });
+
+  group('a default outranks a remembered match', () {
+    test('on a line neither has claimed yet', () {
+      // Marking a default is a deliberate act. A remembered match is recorded
+      // automatically every time anybody picks anything, so when the two
+      // disagree the deliberate one is the newer, broader statement.
+      final MatchSuggestion? suggestion = IngredientMatcher.suggest(
+        ingredientName: 'ground beef',
+        library: <Food>[
+          beef(),
+          aFood('Old beef', id: 'food-old'),
+        ],
+        remembered: <String, String>{'ground beef': 'food-old'},
+      );
+
+      expect(suggestion!.foodId, 'food-beef');
+      expect(suggestion.origin, MatchOrigin.defaultFood);
+    });
+
+    test('but a remembered match still wins where no default answers', () {
+      final MatchSuggestion? suggestion = IngredientMatcher.suggest(
+        ingredientName: 'oyster sauce',
+        library: <Food>[
+          beef(),
+          aFood('Oyster sauce', id: 'food-oyster'),
+        ],
+        remembered: <String, String>{'oyster sauce': 'food-oyster'},
+      );
+
+      expect(suggestion!.origin, MatchOrigin.remembered);
+    });
+  });
+
+  group('several defaults answering one line is a menu, not a tie', () {
+    List<Food> milks() => <Food>[
+      aFood('Whole milk', id: 'milk-whole').asDefault(),
+      aFood('2% milk', id: 'milk-2').asDefault(),
+      aFood('Non-fat milk', id: 'milk-0').asDefault(),
+    ];
+
+    test('nothing is applied, because the line has not said which', () {
+      // Brendan's own case: a recipe asking for "milk" against a fridge
+      // holding three has genuinely not said which one.
+      expect(
+        IngredientMatcher.suggest(
+          ingredientName: 'milk',
+          library: milks(),
+        )?.origin,
+        isNot(MatchOrigin.defaultFood),
+      );
+    });
+
+    test('all of them are offered, so the caller can show the choice', () {
+      expect(
+        IngredientMatcher.defaultsFor('milk', milks()).map((Food f) => f.id),
+        <String>{'milk-whole', 'milk-2', 'milk-0'},
+      );
+    });
+
+    test('a line that does say which resolves to one of them', () {
+      final MatchSuggestion? suggestion = IngredientMatcher.suggest(
+        ingredientName: '1 cup whole milk',
+        library: milks(),
+      );
+
+      expect(suggestion!.foodId, 'milk-whole');
+      expect(suggestion.origin, MatchOrigin.defaultFood);
+    });
+
+    test('and skim resolves to the non-fat one, however it is spelled', () {
+      expect(
+        IngredientMatcher.suggest(
+          ingredientName: 'skim milk',
+          library: milks(),
+        )!.foodId,
+        'milk-0',
+      );
+    });
+  });
+
+  test('the closest fit leads the menu', () {
+    // Both answer "ground beef"; the one carrying fewer words nobody asked
+    // for is the better opening offer.
+    final List<Food> found = IngredientMatcher.defaultsFor(
+      'ground beef',
+      <Food>[beef(), aFood('96/4 ground beef', id: 'food-plain').asDefault()],
+    );
+
+    expect(found.first.id, 'food-plain');
+    expect(found, hasLength(2));
   });
 }

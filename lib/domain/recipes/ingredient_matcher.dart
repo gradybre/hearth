@@ -1,10 +1,19 @@
 import 'package:meta/meta.dart';
 
+import '../foods/food_concept.dart';
 import '../models/food.dart';
 import '../text/text_normaliser.dart';
 
 /// Where a suggested food came from, so the UI can say why (spec §5.3).
 enum MatchOrigin {
+  /// A food the household marked as one of the things it actually buys, whose
+  /// name says the same thing the line does. Trusted outright, and ranked
+  /// above a remembered match: marking a default is a deliberate act, while a
+  /// remembered match is recorded automatically every time anybody picks
+  /// anything. When the two disagree the deliberate one is the newer, broader
+  /// statement of what this household eats.
+  defaultFood,
+
   /// A correction this household made before. Trusted outright — the whole
   /// point of remembering is that the same fix is never made twice.
   remembered,
@@ -26,9 +35,10 @@ class MatchSuggestion {
   final String foodId;
   final MatchOrigin origin;
 
-  /// Remembered corrections are applied without asking; anything weaker is a
-  /// suggestion the user confirms.
-  bool get isTrusted => origin == MatchOrigin.remembered;
+  /// Defaults and remembered corrections are applied without asking; anything
+  /// weaker is a suggestion the user confirms.
+  bool get isTrusted =>
+      origin == MatchOrigin.defaultFood || origin == MatchOrigin.remembered;
 
   @override
   bool operator ==(Object other) =>
@@ -76,6 +86,19 @@ abstract final class IngredientMatcher {
         .map((Food f) => f.id)
         .toSet();
 
+    // Only when the household has said exactly one thing. Several defaults
+    // answering the same line is not a tie to break — a recipe asking for
+    // "milk" against a fridge holding whole, 2% and non-fat has genuinely not
+    // said which, and picking one would be a coin flip wearing a suggestion's
+    // clothes. The caller offers the menu instead (see [defaultsFor]).
+    final List<Food> defaults = defaultsFor(ingredientName, library);
+    if (defaults.length == 1) {
+      return MatchSuggestion(
+        foodId: defaults.single.id,
+        origin: MatchOrigin.defaultFood,
+      );
+    }
+
     final String? rememberedId = remembered[key];
     if (rememberedId != null && known.contains(rememberedId)) {
       return MatchSuggestion(
@@ -93,6 +116,28 @@ abstract final class IngredientMatcher {
     }
 
     return _bestGuess(key, library);
+  }
+
+  /// Every default food whose name says what [ingredientName] asks for,
+  /// closest fit first (spec §5.3).
+  ///
+  /// Empty is the ordinary answer — most lines have no default. One is a
+  /// match. More than one is the ambiguity worth showing: those are the
+  /// options to offer, and they are already the household's own foods, so the
+  /// menu is short and every item on it is one they chose.
+  static List<Food> defaultsFor(String ingredientName, List<Food> library) {
+    final FoodConcept line = FoodConcept.of(ingredientName);
+    if (line.isEmpty) return const <Food>[];
+
+    final List<(Food, int)> matched = <(Food, int)>[
+      for (final Food food in library)
+        if (food.isDefault && !food.isDeleted)
+          if (FoodConcept.of('${food.name} ${food.brand ?? ''}')
+              case final FoodConcept c when c.covers(line))
+            (food, c.distanceFrom(line)),
+    ]..sort(((Food, int) a, (Food, int) b) => a.$2.compareTo(b.$2));
+
+    return <Food>[for (final (Food, int) entry in matched) entry.$1];
   }
 
   /// An exact normalised name match, or a single unambiguous partial one.

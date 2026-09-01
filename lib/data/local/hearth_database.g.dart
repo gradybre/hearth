@@ -3293,6 +3293,21 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _isDefaultMeta = const VerificationMeta(
+    'isDefault',
+  );
+  @override
+  late final GeneratedColumn<bool> isDefault = GeneratedColumn<bool>(
+    'is_default',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_default" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _isDeletedMeta = const VerificationMeta(
     'isDeleted',
   );
@@ -3330,6 +3345,7 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
     gramsPerMillilitre,
     source,
     macrosOverridden,
+    isDefault,
     isDeleted,
     updatedAt,
   ];
@@ -3409,6 +3425,12 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
         ),
       );
     }
+    if (data.containsKey('is_default')) {
+      context.handle(
+        _isDefaultMeta,
+        isDefault.isAcceptableOrUnknown(data['is_default']!, _isDefaultMeta),
+      );
+    }
     if (data.containsKey('is_deleted')) {
       context.handle(
         _isDeletedMeta,
@@ -3468,6 +3490,10 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
         DriftSqlType.bool,
         data['${effectivePrefix}macros_overridden'],
       )!,
+      isDefault: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_default'],
+      )!,
       isDeleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
@@ -3497,6 +3523,9 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
   final double? gramsPerMillilitre;
   final String source;
   final bool macrosOverridden;
+
+  /// A standing choice, matched to recipe lines naming the same thing (§5.3).
+  final bool isDefault;
   final bool isDeleted;
   final DateTime updatedAt;
   const FoodRow({
@@ -3509,6 +3538,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     this.gramsPerMillilitre,
     required this.source,
     required this.macrosOverridden,
+    required this.isDefault,
     required this.isDeleted,
     required this.updatedAt,
   });
@@ -3534,6 +3564,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     }
     map['source'] = Variable<String>(source);
     map['macros_overridden'] = Variable<bool>(macrosOverridden);
+    map['is_default'] = Variable<bool>(isDefault);
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -3560,6 +3591,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
           : Value(gramsPerMillilitre),
       source: Value(source),
       macrosOverridden: Value(macrosOverridden),
+      isDefault: Value(isDefault),
       isDeleted: Value(isDeleted),
       updatedAt: Value(updatedAt),
     );
@@ -3582,6 +3614,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       ),
       source: serializer.fromJson<String>(json['source']),
       macrosOverridden: serializer.fromJson<bool>(json['macrosOverridden']),
+      isDefault: serializer.fromJson<bool>(json['isDefault']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -3599,6 +3632,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       'gramsPerMillilitre': serializer.toJson<double?>(gramsPerMillilitre),
       'source': serializer.toJson<String>(source),
       'macrosOverridden': serializer.toJson<bool>(macrosOverridden),
+      'isDefault': serializer.toJson<bool>(isDefault),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -3614,6 +3648,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     Value<double?> gramsPerMillilitre = const Value.absent(),
     String? source,
     bool? macrosOverridden,
+    bool? isDefault,
     bool? isDeleted,
     DateTime? updatedAt,
   }) => FoodRow(
@@ -3628,6 +3663,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
         : this.gramsPerMillilitre,
     source: source ?? this.source,
     macrosOverridden: macrosOverridden ?? this.macrosOverridden,
+    isDefault: isDefault ?? this.isDefault,
     isDeleted: isDeleted ?? this.isDeleted,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -3648,6 +3684,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       macrosOverridden: data.macrosOverridden.present
           ? data.macrosOverridden.value
           : this.macrosOverridden,
+      isDefault: data.isDefault.present ? data.isDefault.value : this.isDefault,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -3665,6 +3702,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
           ..write('gramsPerMillilitre: $gramsPerMillilitre, ')
           ..write('source: $source, ')
           ..write('macrosOverridden: $macrosOverridden, ')
+          ..write('isDefault: $isDefault, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -3682,6 +3720,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     gramsPerMillilitre,
     source,
     macrosOverridden,
+    isDefault,
     isDeleted,
     updatedAt,
   );
@@ -3698,6 +3737,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
           other.gramsPerMillilitre == this.gramsPerMillilitre &&
           other.source == this.source &&
           other.macrosOverridden == this.macrosOverridden &&
+          other.isDefault == this.isDefault &&
           other.isDeleted == this.isDeleted &&
           other.updatedAt == this.updatedAt);
 }
@@ -3712,6 +3752,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
   final Value<double?> gramsPerMillilitre;
   final Value<String> source;
   final Value<bool> macrosOverridden;
+  final Value<bool> isDefault;
   final Value<bool> isDeleted;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -3725,6 +3766,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     this.gramsPerMillilitre = const Value.absent(),
     this.source = const Value.absent(),
     this.macrosOverridden = const Value.absent(),
+    this.isDefault = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -3739,6 +3781,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     this.gramsPerMillilitre = const Value.absent(),
     this.source = const Value.absent(),
     this.macrosOverridden = const Value.absent(),
+    this.isDefault = const Value.absent(),
     this.isDeleted = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -3755,6 +3798,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     Expression<double>? gramsPerMillilitre,
     Expression<String>? source,
     Expression<bool>? macrosOverridden,
+    Expression<bool>? isDefault,
     Expression<bool>? isDeleted,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -3770,6 +3814,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
         'grams_per_millilitre': gramsPerMillilitre,
       if (source != null) 'source': source,
       if (macrosOverridden != null) 'macros_overridden': macrosOverridden,
+      if (isDefault != null) 'is_default': isDefault,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -3786,6 +3831,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     Value<double?>? gramsPerMillilitre,
     Value<String>? source,
     Value<bool>? macrosOverridden,
+    Value<bool>? isDefault,
     Value<bool>? isDeleted,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -3800,6 +3846,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
       gramsPerMillilitre: gramsPerMillilitre ?? this.gramsPerMillilitre,
       source: source ?? this.source,
       macrosOverridden: macrosOverridden ?? this.macrosOverridden,
+      isDefault: isDefault ?? this.isDefault,
       isDeleted: isDeleted ?? this.isDeleted,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -3836,6 +3883,9 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     if (macrosOverridden.present) {
       map['macros_overridden'] = Variable<bool>(macrosOverridden.value);
     }
+    if (isDefault.present) {
+      map['is_default'] = Variable<bool>(isDefault.value);
+    }
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
@@ -3860,6 +3910,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
           ..write('gramsPerMillilitre: $gramsPerMillilitre, ')
           ..write('source: $source, ')
           ..write('macrosOverridden: $macrosOverridden, ')
+          ..write('isDefault: $isDefault, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -12056,6 +12107,7 @@ typedef $$FoodsTableCreateCompanionBuilder = FoodsCompanion Function({
   Value<double?> gramsPerMillilitre,
   Value<String> source,
   Value<bool> macrosOverridden,
+  Value<bool> isDefault,
   Value<bool> isDeleted,
   required DateTime updatedAt,
   Value<int> rowid,
@@ -12070,6 +12122,7 @@ typedef $$FoodsTableUpdateCompanionBuilder = FoodsCompanion Function({
   Value<double?> gramsPerMillilitre,
   Value<String> source,
   Value<bool> macrosOverridden,
+  Value<bool> isDefault,
   Value<bool> isDeleted,
   Value<DateTime> updatedAt,
   Value<int> rowid,
@@ -12176,6 +12229,11 @@ class $$FoodsTableFilterComposer
 
   ColumnFilters<bool> get macrosOverridden => $composableBuilder(
     column: $table.macrosOverridden,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDefault => $composableBuilder(
+    column: $table.isDefault,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -12294,6 +12352,11 @@ class $$FoodsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isDefault => $composableBuilder(
+    column: $table.isDefault,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
@@ -12346,6 +12409,9 @@ class $$FoodsTableAnnotationComposer
     column: $table.macrosOverridden,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get isDefault =>
+      $composableBuilder(column: $table.isDefault, builder: (column) => column);
 
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
@@ -12446,6 +12512,7 @@ class $$FoodsTableTableManager
                 Value<double?> gramsPerMillilitre = const Value.absent(),
                 Value<String> source = const Value.absent(),
                 Value<bool> macrosOverridden = const Value.absent(),
+                Value<bool> isDefault = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -12459,6 +12526,7 @@ class $$FoodsTableTableManager
                 gramsPerMillilitre: gramsPerMillilitre,
                 source: source,
                 macrosOverridden: macrosOverridden,
+                isDefault: isDefault,
                 isDeleted: isDeleted,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -12474,6 +12542,7 @@ class $$FoodsTableTableManager
                 Value<double?> gramsPerMillilitre = const Value.absent(),
                 Value<String> source = const Value.absent(),
                 Value<bool> macrosOverridden = const Value.absent(),
+                Value<bool> isDefault = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -12487,6 +12556,7 @@ class $$FoodsTableTableManager
                 gramsPerMillilitre: gramsPerMillilitre,
                 source: source,
                 macrosOverridden: macrosOverridden,
+                isDefault: isDefault,
                 isDeleted: isDeleted,
                 updatedAt: updatedAt,
                 rowid: rowid,

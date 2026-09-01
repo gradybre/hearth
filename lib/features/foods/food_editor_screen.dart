@@ -283,7 +283,24 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: HearthSpacing.xl),
+            const SizedBox(height: HearthSpacing.lg),
+            // A standing choice, not a one-off correction. Marking it here
+            // rather than from the library is deliberate: this is the screen
+            // where you have just decided what this food *is*.
+            SwitchListTile.adaptive(
+              value: _draft.isDefault,
+              onChanged: (bool on) =>
+                  setState(() => _draft = _draft.copyWith(isDefault: on)),
+              title: Text('Use this by default', style: context.text.body),
+              subtitle: Text(
+                'Recipes calling for this will match it on their own. Several '
+                'kinds of one thing can each be a default — whole and 2% milk '
+                'both — and a recipe that does not say which will ask.',
+                style: context.text.metadata.copyWith(color: colors.textMuted),
+              ),
+              contentPadding: EdgeInsets.zero,
+            ),
+            const SizedBox(height: HearthSpacing.lg),
             Row(
               children: <Widget>[
                 Expanded(

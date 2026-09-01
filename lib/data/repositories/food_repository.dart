@@ -116,6 +116,7 @@ class FoodRepository {
     barcode: food.barcode,
     gramsPerMillilitre: food.gramsPerMillilitre,
     macrosOverridden: food.macrosOverridden,
+    isDefault: food.isDefault,
     isDeleted: food.isDeleted,
     updatedAt: food.updatedAt,
   );

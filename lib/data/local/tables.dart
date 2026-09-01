@@ -116,6 +116,9 @@ class Foods extends Table {
   TextColumn get source => text().withDefault(const Constant('manual'))();
   BoolColumn get macrosOverridden =>
       boolean().withDefault(const Constant(false))();
+
+  /// A standing choice, matched to recipe lines naming the same thing (§5.3).
+  BoolColumn get isDefault => boolean().withDefault(const Constant(false))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get updatedAt => dateTime()();
 

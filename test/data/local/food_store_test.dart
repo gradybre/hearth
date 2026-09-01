@@ -74,6 +74,26 @@ void main() {
       );
     });
 
+    test('a food marked default comes back marked', () async {
+      // The mark travels through the domain model, the row, and three
+      // mappers, every one of which restates every field. `updatedAt` was
+      // silently dropped by exactly that shape of code, and nothing noticed
+      // until a sort came to depend on it.
+      await store.upsert(chicken().asDefault(), updatedAt: now);
+      expect((await store.byId('food-chicken'))!.isDefault, isTrue);
+    });
+
+    test('and a food that is not marked stays unmarked', () async {
+      await store.upsert(chicken(), updatedAt: now);
+      expect((await store.byId('food-chicken'))!.isDefault, isFalse);
+    });
+
+    test('unmarking one sticks', () async {
+      await store.upsert(chicken().asDefault(), updatedAt: now);
+      await store.upsert(chicken(), updatedAt: now);
+      expect((await store.byId('food-chicken'))!.isDefault, isFalse);
+    });
+
     test('serving option order is preserved', () async {
       await store.upsert(chicken(), updatedAt: now);
       final Food loaded = (await store.byId('food-chicken'))!;

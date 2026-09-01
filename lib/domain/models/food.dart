@@ -81,6 +81,7 @@ class Food {
     this.barcode,
     this.gramsPerMillilitre,
     this.macrosOverridden = false,
+    this.isDefault = false,
     this.isDeleted = false,
     this.updatedAt,
   });
@@ -111,6 +112,15 @@ class Food {
   /// True once the user has corrected the source's numbers. Their correction
   /// wins for all future use (spec §4, "User overrides win").
   final bool macrosOverridden;
+
+  /// One of the household's standing choices, matched to recipe lines that
+  /// name the same thing (spec §5.3).
+  ///
+  /// Not one per food concept: whole, 2% and non-fat milk can all be defaults
+  /// at once. What tells them apart is the variant in the name, and a recipe
+  /// line that names no variant is answered by a short menu rather than a
+  /// guess — see [FoodConcept].
+  final bool isDefault;
 
   /// Foods are soft-deleted so historical logs keep resolving (spec §4).
   final bool isDeleted;

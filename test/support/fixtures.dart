@@ -148,6 +148,7 @@ Food aFood(
   double? gramsPerMillilitre,
   FoodSource source = FoodSource.manual,
   DateTime? updatedAt,
+  bool isDefault = false,
 }) => Food(
   id: id ?? _id('food'),
   name: name,
@@ -157,6 +158,7 @@ Food aFood(
   gramsPerMillilitre: gramsPerMillilitre,
   source: source,
   updatedAt: updatedAt,
+  isDefault: isDefault,
 );
 
 /// A food defined per 100 g, the usual shape of an Open Food Facts record.
@@ -190,6 +192,7 @@ extension FoodTestCopies on Food {
   Food withBarcode(String barcode) => _copy(barcode: barcode);
   Food withStoreTag(String tag) => _copy(storeTag: tag);
   Food withDeleted() => _copy(isDeleted: true);
+  Food asDefault() => _copy(isDefault: true);
 
   Food _copy({
     Object? householdId = _unset,
@@ -197,6 +200,7 @@ extension FoodTestCopies on Food {
     String? barcode,
     String? storeTag,
     bool? isDeleted,
+    bool? isDefault,
   }) => Food(
     id: id,
     name: name,
@@ -210,6 +214,7 @@ extension FoodTestCopies on Food {
     barcode: barcode ?? this.barcode,
     gramsPerMillilitre: gramsPerMillilitre,
     macrosOverridden: macrosOverridden,
+    isDefault: isDefault ?? this.isDefault,
     isDeleted: isDeleted ?? this.isDeleted,
     updatedAt: updatedAt,
   );
