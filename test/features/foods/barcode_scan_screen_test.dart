@@ -52,6 +52,27 @@ NutritionMatch aMatch({double confidence = 0.95}) => NutritionMatch(
   ),
 );
 
+/// A hit the database has a name for and no numbers — the everyday Open Food
+/// Facts answer, and the one the old panel could only apologise for.
+NutritionMatch anEmptyMatch() => NutritionMatch(
+  source: FoodSource.openFoodFacts,
+  confidence: 0.5,
+  food: aFood(
+    'Digestive biscuits',
+    id: 'off:5000157024671',
+    barcode: '5000157024671',
+    source: FoodSource.openFoodFacts,
+    servingOptions: <ServingOption>[
+      aServing(
+        id: 'off:5000157024671:100g',
+        amount: 100,
+        unit: Units.gram,
+        macros: Macros.zero,
+      ),
+    ],
+  ),
+);
+
 Future<HearthDatabase> openScanner(
   WidgetTester tester, {
   Map<String, NutritionMatch> answers = const <String, NutritionMatch>{},
@@ -240,6 +261,82 @@ void main() {
 
     expect(find.text('Read the label'), findsNothing);
     expect(find.text('Add it by hand'), findsOneWidget);
+  });
+
+  testWidgets('a packet with no barcode at all can still be read', (
+    WidgetTester tester,
+  ) async {
+    // The gap the scanner had: a torn wrapper or a deli tub never reaches a
+    // miss, because there is no number to look up. Both other ways in — the
+    // camera and this field — need one.
+    await openScanner(tester, labelReader: FakeLabelReader());
+
+    expect(find.text('No barcode? Read the label'), findsOneWidget);
+
+    await tester.tap(find.text('No barcode? Read the label'));
+    await pumpFrames(tester);
+    await tester.tap(find.text('Take a photo'));
+    await pumpFrames(tester, frames: 10);
+
+    // The same editor as every other way in, because nothing reaches the
+    // library unreviewed (CLAUDE.md rule 4). "New food" rather than "Check
+    // and save": there is no barcode on this one, which is the whole reason
+    // it came this way.
+    expect(find.text('New food'), findsOneWidget);
+    expect(
+      find.widgetWithText(TextField, 'Shredded Sharp Cheddar Cheese'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('with no backend to read labels, the offer is absent', (
+    WidgetTester tester,
+  ) async {
+    // A camera that leads nowhere is worse than no camera.
+    await openScanner(tester);
+
+    expect(find.text('No barcode? Read the label'), findsNothing);
+  });
+
+  testWidgets('a hit with no numbers offers the packet in your hand', (
+    WidgetTester tester,
+  ) async {
+    // Open Food Facts answers with a name and no macros constantly. The panel
+    // could only say "this looks incomplete" — with the box being held.
+    await openScanner(
+      tester,
+      answers: <String, NutritionMatch>{'5000157024671': anEmptyMatch()},
+      labelReader: FakeLabelReader(),
+    );
+    await typeBarcode(tester, '5000157024671');
+
+    expect(find.textContaining('looks incomplete'), findsOneWidget);
+    await tester.tap(find.text('Read the label'));
+    await pumpFrames(tester);
+    await tester.tap(find.text('Take a photo'));
+    await pumpFrames(tester, frames: 10);
+
+    // What the lookup got right is kept — the name it knew, and the barcode,
+    // so the next scan of this packet finds it — and the label supplies the
+    // numbers it did not have.
+    expect(
+      find.widgetWithText(TextField, 'Digestive biscuits'),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(TextField, '110'), findsWidgets);
+  });
+
+  testWidgets('a hit that already has its numbers does not', (
+    WidgetTester tester,
+  ) async {
+    await openScanner(
+      tester,
+      answers: <String, NutritionMatch>{'5000157024671': aMatch()},
+      labelReader: FakeLabelReader(),
+    );
+    await typeBarcode(tester, '5000157024671');
+
+    expect(find.text('Read the label'), findsNothing);
   });
 
   testWidgets('a code that is not a product says so before looking anywhere', (

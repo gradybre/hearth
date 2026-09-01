@@ -94,6 +94,56 @@ class _BarcodeScanScreenState extends ConsumerState<BarcodeScanScreen> {
     }
   }
 
+  /// Reads a packet's label when there is no barcode to read at all.
+  ///
+  /// A torn wrapper, a deli tub, a multipack split open — the scanner's other
+  /// two ways in both need a number, and this is the case where there is none
+  /// to type. §5.5's chain ends at manual entry; this is that end of it with
+  /// the typing removed, and it lands in the same editor to be checked
+  /// (CLAUDE.md rule 4).
+  Future<void> _readLabelWithNoBarcode() async {
+    // The system camera is about to take over the screen, and two cameras
+    // competing for the device is a stall the user reads as a freeze.
+    await _pauseCamera();
+    if (!mounted) return;
+
+    final LabelReading? reading = await showReadLabelSheet(context);
+    if (!mounted) return;
+    if (reading == null) {
+      await _resumeCamera();
+      return;
+    }
+
+    final String? saved = await context.push<String>(
+      '/food/new',
+      extra: FoodDraft.blank().withLabel(reading),
+    );
+    if (!mounted) return;
+    if (widget.pickFood && saved != null) {
+      Navigator.of(context).pop(saved);
+      return;
+    }
+    await _resumeCamera();
+  }
+
+  Future<void> _pauseCamera() async {
+    try {
+      await _camera?.stop();
+    } on Object {
+      // Stopping a camera that was never running is not a failure worth
+      // showing anyone.
+    }
+  }
+
+  Future<void> _resumeCamera() async {
+    if (_typing) return;
+    try {
+      await _camera?.start();
+    } on Object {
+      // Same: the preview coming back is a nicety, not the flow.
+    }
+  }
+
   void _submitTyped() {
     final String value = _typed.text.trim();
     if (value.isEmpty) return;
@@ -134,11 +184,17 @@ class _BarcodeScanScreenState extends ConsumerState<BarcodeScanScreen> {
                       controller: _typed,
                       onSubmit: _submitTyped,
                       cameraAvailable: _cameraIsPossible,
+                      onReadLabel: canReadLabels(ref)
+                          ? _readLabelWithNoBarcode
+                          : null,
                     )
                   : _CameraView(
                       controller: _camera!,
                       onDetect: _onDetect,
                       onTypeInstead: () => setState(() => _typing = true),
+                      onReadLabel: canReadLabels(ref)
+                          ? _readLabelWithNoBarcode
+                          : null,
                     ),
             ),
             _ResultPanel(
@@ -164,11 +220,15 @@ class _TypeItIn extends StatelessWidget {
     required this.controller,
     required this.onSubmit,
     required this.cameraAvailable,
+    this.onReadLabel,
   });
 
   final TextEditingController controller;
   final VoidCallback onSubmit;
   final bool cameraAvailable;
+
+  /// Null when this build cannot read labels at all — see [canReadLabels].
+  final VoidCallback? onReadLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -219,6 +279,20 @@ class _TypeItIn extends StatelessWidget {
                   child: const Text('Look it up'),
                 ),
               ),
+              // The one case neither the camera nor this field can answer: a
+              // packet whose barcode is torn off, or that never had one. Both
+              // other ways in need a number, and here there is none to give.
+              if (onReadLabel case final VoidCallback read) ...<Widget>[
+                const SizedBox(height: HearthSpacing.md),
+                SizedBox(
+                  height: HearthTouch.minTarget,
+                  child: TextButton.icon(
+                    onPressed: read,
+                    icon: const Icon(Icons.document_scanner_outlined),
+                    label: const Text('No barcode? Read the label'),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -240,11 +314,15 @@ class _CameraView extends StatelessWidget {
     required this.controller,
     required this.onDetect,
     required this.onTypeInstead,
+    this.onReadLabel,
   });
 
   final MobileScannerController controller;
   final void Function(BarcodeCapture) onDetect;
   final VoidCallback onTypeInstead;
+
+  /// Null when this build cannot read labels at all — see [canReadLabels].
+  final VoidCallback? onReadLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -261,7 +339,7 @@ class _CameraView extends StatelessWidget {
           errorBuilder: (BuildContext context, MobileScannerException error) =>
               _CameraUnavailable(onTypeInstead: onTypeInstead),
           overlayBuilder: (BuildContext context, BoxConstraints _) =>
-              _Viewfinder(frame: frame),
+              _Viewfinder(frame: frame, onReadLabel: onReadLabel),
         );
       },
     );
@@ -285,9 +363,10 @@ class _CameraView extends StatelessWidget {
 /// an instruction below in words — the shape carries the idea, but §6.3 still
 /// applies, so it is never the only thing saying it.
 class _Viewfinder extends StatelessWidget {
-  const _Viewfinder({required this.frame});
+  const _Viewfinder({required this.frame, this.onReadLabel});
 
   final Rect frame;
+  final VoidCallback? onReadLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -309,23 +388,43 @@ class _Viewfinder extends StatelessWidget {
           left: 0,
           right: 0,
           top: frame.bottom + HearthSpacing.lg,
-          child: ExcludeSemantics(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: HearthSpacing.xl,
-                ),
-                child: Text(
-                  'Line up the barcode inside the frame',
-                  textAlign: TextAlign.center,
-                  style: context.text.body.copyWith(
-                    color: Colors.white,
-                    shadows: const <Shadow>[
-                      Shadow(blurRadius: 6, color: Colors.black87),
-                    ],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: HearthSpacing.xl),
+            child: Column(
+              children: <Widget>[
+                ExcludeSemantics(
+                  child: Text(
+                    'Line up the barcode inside the frame',
+                    textAlign: TextAlign.center,
+                    style: context.text.body.copyWith(
+                      color: Colors.white,
+                      shadows: const <Shadow>[
+                        Shadow(blurRadius: 6, color: Colors.black87),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+                // Offered here rather than only after a miss: a torn or
+                // missing barcode never gets as far as a miss, and this is
+                // where somebody holding one is standing. Not excluded from
+                // semantics as the guidance above it is — the frame is
+                // decoration, but this is a control (§6.3).
+                if (onReadLabel case final VoidCallback read) ...<Widget>[
+                  const SizedBox(height: HearthSpacing.sm),
+                  SizedBox(
+                    height: HearthTouch.minTarget,
+                    child: TextButton.icon(
+                      onPressed: read,
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: Colors.black54,
+                      ),
+                      icon: const Icon(Icons.document_scanner_outlined),
+                      label: const Text('No barcode? Read the label'),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
@@ -709,7 +808,7 @@ class _Searching extends StatelessWidget {
 }
 
 /// A hit, with where it came from and whether to trust it.
-class _Found extends StatelessWidget {
+class _Found extends ConsumerWidget {
   const _Found({
     required this.match,
     required this.pickFood,
@@ -722,10 +821,24 @@ class _Found extends StatelessWidget {
   final VoidCallback onDiscard;
   final VoidCallback onReviewed;
 
+  /// Whether the packet in your hand can say more than the database just did.
+  ///
+  /// Open Food Facts answers with a name and no numbers constantly, and the
+  /// old panel could only say so: "this entry looks incomplete, check the
+  /// numbers", with the box being held and no way to point a camera at it.
+  ///
+  /// Only for a stranger's entry. A food already in the library has its own
+  /// id, and reading a label into a *new* draft would file a second copy of
+  /// something the household already keeps — its editor has the same button,
+  /// which is where that correction belongs.
+  bool get _labelWouldHelp =>
+      !match.fromLibrary &&
+      (match.food.needsAttention || match.isLowConfidence);
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final HearthColors colors = context.colors;
-    final ServingOption first = match.food.servingOptions.first;
+    final ServingOption? first = match.food.defaultServing;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -751,12 +864,14 @@ class _Found extends StatelessWidget {
             _SourceBadge(source: match.source, fromLibrary: match.fromLibrary),
           ],
         ),
-        const SizedBox(height: HearthSpacing.sm),
-        Text(
-          '${first.label} · ${first.macros.kcal.round()} kcal · '
-          '${first.macros.proteinG.round()} g protein',
-          style: context.text.body.copyWith(color: colors.textSecondary),
-        ),
+        if (first != null) ...<Widget>[
+          const SizedBox(height: HearthSpacing.sm),
+          Text(
+            '${first.label} · ${first.macros.kcal.round()} kcal · '
+            '${first.macros.proteinG.round()} g protein',
+            style: context.text.body.copyWith(color: colors.textSecondary),
+          ),
+        ],
         if (match.isLowConfidence) ...<Widget>[
           const SizedBox(height: HearthSpacing.md),
           // Flagged, never silently accepted: a wrong macro corrupts a day's
@@ -786,6 +901,18 @@ class _Found extends StatelessWidget {
           ),
         ],
         const SizedBox(height: HearthSpacing.md),
+        if (_labelWouldHelp && canReadLabels(ref)) ...<Widget>[
+          SizedBox(
+            width: double.infinity,
+            height: HearthTouch.minTarget,
+            child: OutlinedButton.icon(
+              onPressed: () => _readLabel(context),
+              icon: const Icon(Icons.document_scanner_outlined),
+              label: const Text('Read the label'),
+            ),
+          ),
+          const SizedBox(height: HearthSpacing.sm),
+        ],
         Row(
           children: <Widget>[
             Expanded(
@@ -842,10 +969,23 @@ class _Found extends StatelessWidget {
     onReviewed();
   }
 
-  Future<void> _review(BuildContext context) async {
+  /// Keeps what the database got right and lets the packet supply the rest.
+  ///
+  /// Starting from the lookup rather than from blank: the name, brand, and
+  /// barcode are usually the part it had, and the numbers are the part it did
+  /// not. [FoodDraft.withLabel] fills blanks only, so nothing the database
+  /// knew is overwritten by the photo.
+  Future<void> _readLabel(BuildContext context) async {
+    final LabelReading? reading = await showReadLabelSheet(context);
+    if (reading == null || !context.mounted) return;
+    await _review(context, reading: reading);
+  }
+
+  Future<void> _review(BuildContext context, {LabelReading? reading}) async {
+    final FoodDraft draft = FoodDraft.fromLookup(match.food);
     final String? saved = await context.push<String>(
       '/food/new',
-      extra: FoodDraft.fromLookup(match.food),
+      extra: reading == null ? draft : draft.withLabel(reading),
     );
     if (!context.mounted) return;
     if (pickFood && saved != null) {

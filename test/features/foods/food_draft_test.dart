@@ -365,6 +365,46 @@ void withLabelTests() {
   }) => LabelReading(servings: servings, name: name, brand: brand);
 
   group('FoodDraft.withLabel', () {
+    test('a row the source left empty gives way to the label', () {
+      // Open Food Facts answers with a name and no numbers constantly, and
+      // that is exactly when somebody reaches for the camera. Keeping the
+      // empty row would leave "100 g · 0 kcal" sitting above two rows read
+      // off the packet, for the user to notice and delete.
+      final FoodDraft merged = const FoodDraft(
+        name: 'Shredded cheddar',
+        servings: <ServingDraft>[
+          ServingDraft(amount: '100', kcal: '0', protein: '0', carbs: '0'),
+        ],
+      ).withLabel(reading());
+
+      expect(merged.servings, hasLength(2));
+      expect(merged.servings.first.unitId, 'oz');
+    });
+
+    test('unless the food really is zero, in which case it stays', () {
+      // A confirmed zero is an answer, not a gap (see Food.isZeroCalorie), and
+      // a label that says nothing new must not delete it.
+      final FoodDraft merged = const FoodDraft(
+        name: 'Black coffee',
+        isZeroCalorie: true,
+        servings: <ServingDraft>[
+          ServingDraft(amount: '240', unitId: 'ml', kcal: '0'),
+        ],
+      ).withLabel(reading());
+
+      expect(merged.servings, hasLength(3));
+      expect(merged.servings.first.amount, '240');
+    });
+
+    test('and a label with nothing to say never empties the draft', () {
+      final FoodDraft merged = const FoodDraft(
+        name: 'Shredded cheddar',
+        servings: <ServingDraft>[ServingDraft(amount: '100', kcal: '0')],
+      ).withLabel(const LabelReading(servings: <LabelServing>[]));
+
+      expect(merged.servings, hasLength(1));
+    });
+
     test('the weight and the volume of one portion both arrive', () {
       // The whole reason this exists. Brendan's Kirkland cheddar says
       // "1oz (28g/about 1/4 cup)"; those two rows together are the only

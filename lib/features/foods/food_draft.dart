@@ -49,6 +49,13 @@ class ServingDraft {
   /// Not the same as [isBlank]: this one has "100" in it, which is a default
   /// rather than an answer. Anything typed into it — a macro, a different
   /// amount, another unit — makes it the user's and it is kept.
+  /// A row that states a portion and nothing about what is in it.
+  ///
+  /// Not the same as [isUntouchedStarter], which is only ever Hearth's own
+  /// opening row. This is what a source hands over when it knows the packet
+  /// exists and nothing else — a real amount with four zeroes after it.
+  bool get hasNoMacros => macros.isZero;
+
   bool get isUntouchedStarter =>
       id == null &&
       amount == '100' &&
@@ -245,9 +252,16 @@ class FoodDraft {
   /// reason: this lands on a screen the user is being asked to *check*, and
   /// digits that look measured invite trust they have not earned.
   FoodDraft withLabel(LabelReading reading) {
+    // A row with a portion and no macros is a gap, not an answer — unless the
+    // household has said this food really is zero, which is the one case where
+    // four zeroes are the measurement. Only ever dropped when the label has
+    // something to put in its place.
+    final bool replaceEmptyRows = !isZeroCalorie && reading.servings.isNotEmpty;
+
     final List<ServingDraft> kept = <ServingDraft>[
       for (final ServingDraft serving in servings)
-        if (!serving.isUntouchedStarter) serving,
+        if (!serving.isUntouchedStarter)
+          if (!replaceEmptyRows || !serving.hasNoMacros) serving,
     ];
 
     final List<ServingDraft> added = <ServingDraft>[];
