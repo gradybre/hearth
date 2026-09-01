@@ -12,9 +12,12 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../data/adapters/label_reader.dart';
 import '../../data/adapters/nutrition_source.dart';
+import '../../domain/foods/produce_plu.dart';
 import '../../domain/models/food.dart';
 import 'barcode_lookup_controller.dart';
+import 'external_food_results.dart';
 import 'food_draft.dart';
+import 'food_search_controller.dart';
 import 'read_label_sheet.dart';
 
 /// Scanning a barcode to add or log a food (spec §5.5).
@@ -183,8 +186,11 @@ class _TypeItIn extends StatelessWidget {
               const SizedBox(height: HearthSpacing.sm),
               Text(
                 cameraAvailable
-                    ? 'For a torn label, or when the camera will not settle.'
-                    : 'This device has no camera to scan with.',
+                    ? 'For a torn label, or when the camera will not settle. '
+                          'A produce sticker works here too — type its four '
+                          'or five digits.'
+                    : 'This device has no camera to scan with. A produce '
+                          "sticker's four or five digits work here too.",
                 style: context.text.body.copyWith(color: colors.textSecondary),
               ),
               const SizedBox(height: HearthSpacing.lg),
@@ -195,8 +201,8 @@ class _TypeItIn extends StatelessWidget {
                 onSubmitted: (_) => onSubmit(),
                 style: context.text.body,
                 decoration: InputDecoration(
-                  labelText: 'Barcode',
-                  hintText: '5000157024671',
+                  labelText: 'Barcode or produce code',
+                  hintText: '5000157024671, or 4011',
                   filled: true,
                   fillColor: colors.surface,
                   border: OutlineInputBorder(
@@ -501,6 +507,23 @@ class _ResultPanel extends ConsumerWidget {
             secondaryLabel: 'Try again',
             onSecondary: onRetry,
           ),
+          ProduceFound(:final ProduceItem produce) => _Produce(
+            produce: produce,
+            pickFood: pickFood,
+            onClear: onClear,
+          ),
+          ProduceUnknown(:final String code) => _Message(
+            icon: Icons.help_outline,
+            title: 'Produce code $code is not one I know',
+            detail:
+                'The sticker codes are a long list and this one is not in it '
+                'yet. Add the food by hand and Hearth will keep it against '
+                'this code.',
+            actionLabel: 'Add it by hand',
+            onAction: () => _addByHand(context, code),
+            secondaryLabel: 'Try again',
+            onSecondary: onRetry,
+          ),
           BarcodeFound(:final NutritionMatch match) => _Found(
             match: match,
             pickFood: pickFood,
@@ -552,6 +575,112 @@ class _ResultPanel extends ConsumerWidget {
       return;
     }
     onClear();
+  }
+}
+
+/// A produce code, resolved to what it names (spec §5.5).
+///
+/// It stops at the name on purpose. A PLU identifies a commodity, not a
+/// product — 4011 is "bananas", not anybody's particular bananas — so there
+/// are no macros to show and nothing to save yet. The name is what goes out to
+/// the sources, and the household picks from what comes back.
+class _Produce extends ConsumerStatefulWidget {
+  const _Produce({
+    required this.produce,
+    required this.pickFood,
+    required this.onClear,
+  });
+
+  final ProduceItem produce;
+  final bool pickFood;
+  final VoidCallback onClear;
+
+  @override
+  ConsumerState<_Produce> createState() => _ProduceState();
+}
+
+class _ProduceState extends ConsumerState<_Produce> {
+  @override
+  void initState() {
+    super.initState();
+    // The code has already said what it is, so the search for it runs without
+    // being asked for — there is no second question to put to the user here.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(foodSearchProvider.notifier).search(widget.produce.name);
+      }
+    });
+  }
+
+  /// A food saved from here carries the sticker's code, so typing it again
+  /// finds this one first — the same property a barcode has (§5.5).
+  Future<void> _addByHand() async {
+    final String? saved = await context.push<String>(
+      '/food/new',
+      extra: FoodDraft.forBarcode(widget.produce.code)
+          .copyWith(name: widget.produce.label),
+    );
+    if (!mounted) return;
+    if (widget.pickFood && saved != null) {
+      Navigator.of(context).pop(saved);
+      return;
+    }
+    widget.onClear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Icon(Icons.eco_outlined, size: 18, color: colors.textSecondary),
+            const SizedBox(width: HearthSpacing.sm),
+            Expanded(
+              child: Text(
+                widget.produce.label,
+                style: context.text.sectionHeader,
+              ),
+            ),
+            Text(
+              'Produce code ${widget.produce.code}',
+              style: context.text.metadata.copyWith(color: colors.textMuted),
+            ),
+          ],
+        ),
+        const SizedBox(height: HearthSpacing.xs),
+        Text(
+          'A sticker says what the food is, not whose it is. Pick the closest '
+          'match, or add it yourself.',
+          style: context.text.body.copyWith(color: colors.textSecondary),
+        ),
+        // Bounded: this sits in a panel over a camera, and the results are a
+        // shortlist rather than a library to browse.
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 280),
+          child: SingleChildScrollView(
+            child: ExternalFoodResults(
+              query: widget.produce.name,
+              onSaved: widget.pickFood
+                  ? (String id) => Navigator.of(context).pop(id)
+                  : (String id) => widget.onClear(),
+            ),
+          ),
+        ),
+        const SizedBox(height: HearthSpacing.sm),
+        SizedBox(
+          width: double.infinity,
+          height: HearthTouch.minTarget,
+          child: OutlinedButton(
+            onPressed: _addByHand,
+            child: const Text('Add it by hand'),
+          ),
+        ),
+      ],
+    );
   }
 }
 

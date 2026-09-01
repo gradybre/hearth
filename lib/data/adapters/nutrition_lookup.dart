@@ -38,6 +38,20 @@ class NutritionLookup {
     return null;
   }
 
+  /// The household's own library only, by barcode.
+  ///
+  /// For codes that mean something here and nothing outside — a produce PLU
+  /// saved against a food is this household's decision about what 4011 means
+  /// to them, and asking the internet about the number would fetch an
+  /// unrelated product rather than a better answer.
+  Future<NutritionMatch?> fromLibraryByBarcode(String barcode) async {
+    for (final NutritionSource source in sources) {
+      final NutritionMatch? match = await source.byBarcode(barcode);
+      if (match != null && match.fromLibrary) return match;
+    }
+    return null;
+  }
+
   /// Search results from every source, the household's own first.
   ///
   /// Every source is asked at once and each gets a guaranteed share of the
