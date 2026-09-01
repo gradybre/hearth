@@ -5,6 +5,7 @@ import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../domain/planning/day_format.dart';
 import '../../domain/planning/week.dart';
 
 /// Picks several days at once.
@@ -169,9 +170,9 @@ class _DayPickerSheetState extends ConsumerState<_DayPickerSheet> {
     final DateTime today = dayKey(DateTime.now());
     final int delta = day.difference(today).inDays;
     final String weekday = _weekdays[day.weekday - 1];
-    if (delta == 0) return '$weekday ${day.day} · today';
-    if (delta == 1) return '$weekday ${day.day} · tomorrow';
-    return '$weekday ${day.day}';
+    if (delta == 0) return '$weekday ${shortDate(day)} · today';
+    if (delta == 1) return '$weekday ${shortDate(day)} · tomorrow';
+    return '$weekday ${shortDate(day)}';
   }
 }
 

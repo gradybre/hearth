@@ -7,6 +7,8 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
+import '../../app/widgets/swipe_to_delete.dart';
+import '../../data/repositories/plan_repository.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
@@ -422,11 +424,112 @@ class _SlotSection extends ConsumerWidget {
   }
 }
 
+/// One thing on the plate, and the three things you can do with it.
+///
+/// The gestures are the whole point of the day view: confirming a meal is the
+/// thing you do most, so it is the plainest gesture there is.
+///
+///  * **Tap** logs it, or takes the log back. One tap either way — a meal
+///    confirmed by mistake should cost exactly what confirming it cost.
+///  * **Swipe** removes it, with the undo every other list in the app offers.
+///  * **Long press** opens the rest: the portion, and a second way to remove.
+///
+/// Editing the portion used to be what a tap did, which put the commonest
+/// action behind a sheet and a second tap.
 class _EntryRow extends ConsumerWidget {
   const _EntryRow({required this.entry, required this.date});
 
   final ResolvedEntry entry;
   final DateTime date;
+
+  /// Confirms this entry as eaten, or puts it back to planned.
+  ///
+  /// Logging recomputes from the library rather than trusting anything stored
+  /// on the row: repeating a meal should record what that food is now, and
+  /// the snapshot is taken at this moment (§4).
+  Future<void> _toggleLogged(WidgetRef ref) async {
+    final PlanRepository plans = ref.read(planRepositoryProvider);
+    if (entry.entry.isLogged) {
+      await plans.unlogEntry(entry.entry.id);
+    } else {
+      await plans.logEntry(
+        entry.entry.id,
+        liveMacros: entry.perServing,
+        label: entry.label,
+      );
+    }
+    ref.invalidate(dayEntriesProvider);
+    ref.invalidate(recentLogsProvider);
+  }
+
+  Future<void> _remove(WidgetRef ref) async {
+    await ref.read(planRepositoryProvider).removeEntry(entry.entry.id);
+    ref.invalidate(dayEntriesProvider);
+  }
+
+  /// Puts back what a swipe took away.
+  ///
+  /// A new row rather than the same one — the delete is real, not a flag —
+  /// but with the portion and, for a logged meal, the frozen numbers it had.
+  /// Undo has to give back what was there, not a fresh planned copy of it.
+  Future<void> _restore(WidgetRef ref) async {
+    await ref
+        .read(planRepositoryProvider)
+        .add(
+          date: date,
+          slot: entry.entry.slot,
+          refType: entry.entry.refType,
+          refId: entry.entry.refId,
+          servings: entry.entry.servings,
+          loggedMacros: entry.entry.isLogged
+              ? entry.entry.macroSnapshot?.macros
+              : null,
+          label: entry.entry.isLogged ? entry.label : null,
+        );
+    ref.invalidate(dayEntriesProvider);
+  }
+
+  Future<void> _showOptions(BuildContext context, WidgetRef ref) async {
+    final _EntryAction? choice = await showModalBottomSheet<_EntryAction>(
+      context: context,
+      backgroundColor: context.colors.surface,
+      builder: (BuildContext context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.all(HearthSpacing.lg),
+              child: Text(entry.label, style: context.text.sectionHeader),
+            ),
+            ListTile(
+              leading: Icon(Icons.tune, color: context.colors.textSecondary),
+              title: Text('Edit portion', style: context.text.body),
+              onTap: () => Navigator.of(context).pop(_EntryAction.editPortion),
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_outline, color: context.colors.error),
+              title: Text('Remove from this day', style: context.text.body),
+              onTap: () => Navigator.of(context).pop(_EntryAction.remove),
+            ),
+            const SizedBox(height: HearthSpacing.sm),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !context.mounted) return;
+
+    switch (choice) {
+      case _EntryAction.editPortion:
+        await showLogSheet(
+          context,
+          date: date,
+          slot: entry.entry.slot,
+          existing: entry,
+        );
+      case _EntryAction.remove:
+        await _remove(ref);
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -436,51 +539,67 @@ class _EntryRow extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
-      child: Material(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(HearthRadius.md),
-        child: InkWell(
-          onTap: () => showLogSheet(
-            context,
-            date: date,
-            slot: entry.entry.slot,
-            existing: entry,
-          ),
-          borderRadius: BorderRadius.circular(HearthRadius.md),
-          child: Container(
-            decoration: BoxDecoration(
+      child: SwipeToDelete(
+        name: entry.label,
+        onDelete: () => _remove(ref),
+        onRestore: () => _restore(ref),
+        child: Semantics(
+          button: true,
+          label:
+              '${entry.label}. ${_detail(entry, logged)}. '
+              '${logged ? 'Tap to unlog' : 'Tap to log'}.',
+          onTap: () => _toggleLogged(ref),
+          onLongPress: () => _showOptions(context, ref),
+          excludeSemantics: true,
+          child: Material(
+            color: colors.surface,
+            borderRadius: BorderRadius.circular(HearthRadius.md),
+            child: InkWell(
+              onTap: () => _toggleLogged(ref),
+              onLongPress: () => _showOptions(context, ref),
               borderRadius: BorderRadius.circular(HearthRadius.md),
-              border: Border.all(color: colors.outline),
-            ),
-            padding: const EdgeInsets.all(HearthSpacing.md),
-            child: Row(
-              children: <Widget>[
-                // Logged versus planned is carried by an icon and a word, not
-                // by colour alone (spec §6.3).
-                Icon(
-                  logged ? Icons.check_circle : Icons.radio_button_unchecked,
-                  size: 20,
-                  color: logged ? colors.accent : colors.textMuted,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(HearthRadius.md),
+                  border: Border.all(color: colors.outline),
                 ),
-                const SizedBox(width: HearthSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(entry.label, style: text.ingredient),
-                      const SizedBox(height: HearthSpacing.xxs),
-                      Text(
-                        _detail(entry, logged),
-                        style: text.metadata.copyWith(color: colors.textMuted),
+                padding: const EdgeInsets.all(HearthSpacing.md),
+                child: Row(
+                  children: <Widget>[
+                    // Logged versus planned is carried by an icon and a word,
+                    // not by colour alone (spec §6.3).
+                    Icon(
+                      logged
+                          ? Icons.check_circle
+                          : Icons.radio_button_unchecked,
+                      size: 20,
+                      color: logged ? colors.accent : colors.textMuted,
+                    ),
+                    const SizedBox(width: HearthSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(entry.label, style: text.ingredient),
+                          const SizedBox(height: HearthSpacing.xxs),
+                          Text(
+                            _detail(entry, logged),
+                            style: text.metadata.copyWith(
+                              color: colors.textMuted,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                    Text(
+                      '${entry.contribution.kcal.round()}',
+                      style: text.ingredient.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  '${entry.contribution.kcal.round()}',
-                  style: text.ingredient.copyWith(color: colors.textSecondary),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -491,7 +610,7 @@ class _EntryRow extends ConsumerWidget {
   static String _detail(ResolvedEntry entry, bool logged) {
     final String portion = _portion(entry.entry.servings);
     if (entry.isUncostable) return 'planned · no longer in your library';
-    if (logged) return 'logged · $portion';
+    if (logged) return 'logged · $portion · tap to undo';
     return 'planned · $portion · tap to log';
   }
 
@@ -502,6 +621,9 @@ class _EntryRow extends ConsumerWidget {
     return servings == 1 ? '1 serving' : '$amount servings';
   }
 }
+
+/// What a long press offers.
+enum _EntryAction { editPortion, remove }
 
 class _Card extends StatelessWidget {
   const _Card({required this.child, this.onTap});

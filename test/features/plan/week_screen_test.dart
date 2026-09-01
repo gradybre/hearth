@@ -46,17 +46,38 @@ void main() {
       await openPlan(tester);
       await showWeek(tester);
 
-      for (final String day in <String>[
-        'Mon',
-        'Tue',
-        'Wed',
-        'Thu',
-        'Fri',
-        'Sat',
-        'Sun',
-      ]) {
-        expect(find.text(day), findsOneWidget, reason: day);
+      // Identified by date rather than by weekday name: today's row says
+      // "Today" where the others say "Mon", which is the point of the label.
+      final DateTime now = DateTime.now();
+      final DateTime monday = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: now.weekday - 1));
+
+      for (int i = 0; i < 7; i++) {
+        final DateTime day = monday.add(Duration(days: i));
+        expect(
+          find.text('${day.month}/${day.day}'),
+          findsOneWidget,
+          reason: 'day $i',
+        );
       }
+      expect(find.text('Today'), findsOneWidget);
+    });
+
+    testWidgets('a date says which month it is in', (
+      WidgetTester tester,
+    ) async {
+      // Brendan's report: the list showed a bare "1", which is unreadable in
+      // a week that straddles two months — the row above it might be the
+      // 30th of August.
+      await openPlan(tester);
+      await showWeek(tester);
+
+      final DateTime now = DateTime.now();
+      expect(find.text('${now.month}/${now.day}'), findsOneWidget);
+      expect(find.text('${now.day}'), findsNothing);
     });
 
     testWidgets('an empty week says so rather than showing zeros', (

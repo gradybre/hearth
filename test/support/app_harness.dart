@@ -10,9 +10,11 @@ import 'package:hearth/data/adapters/nutrition_lookup.dart';
 import 'package:hearth/data/adapters/nutrition_source.dart';
 import 'package:hearth/data/adapters/photo_picker.dart';
 import 'package:hearth/data/adapters/recipe_ai.dart';
+import 'package:hearth/data/auth/local_auth_gateway.dart';
 import 'package:hearth/data/local/collection_store.dart';
 import 'package:hearth/data/local/food_store.dart';
 import 'package:hearth/data/local/hearth_database.dart';
+import 'package:hearth/data/local/plan_store.dart';
 import 'package:hearth/data/local/recipe_store.dart';
 import 'package:hearth/domain/cooking/cook_session.dart';
 import 'package:hearth/domain/models/food.dart';
@@ -20,6 +22,7 @@ import 'package:hearth/domain/models/food_profile.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/recent_log.dart';
+import 'package:hearth/domain/planning/week.dart';
 import 'package:hearth/main.dart';
 
 import 'fake_kitchen.dart';
@@ -80,6 +83,24 @@ Future<HearthDatabase> pumpHearthApp(
   // exists" the moment a test opens it.
   for (final Recipe recipe in recipes) {
     await RecipeStore(db).upsert(recipe, updatedAt: DateTime(2026));
+  }
+
+  // Plan entries are handed to the UI through the override below, but acting
+  // on one — logging it, removing it — goes through the repository, which
+  // reads the real database. An entry that existed only in the override would
+  // make every gesture a silent no-op.
+  if (entries.isNotEmpty) {
+    final PlanStore plans = PlanStore(db);
+    final DateTime today = dayKey(DateTime.now());
+    await plans.ensureDay(
+      userId: LocalAuthGateway.account.userId,
+      date: today,
+      idFactory: () => entries.first.dayId,
+      updatedAt: DateTime(2026),
+    );
+    for (final MealPlanEntry entry in entries) {
+      await plans.upsertEntry(entry, updatedAt: DateTime(2026));
+    }
   }
 
   await tester.pumpWidget(

@@ -10,6 +10,7 @@ import '../../app/theme/hearth_typography.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
+import '../../domain/planning/day_format.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/week.dart';
@@ -323,7 +324,7 @@ class _DayRow extends StatelessWidget {
         selected: isSelected,
         onTap: onTap,
         label:
-            '${_weekdays[day.weekday - 1]} ${day.day}. '
+            '${_weekdays[day.weekday - 1]} ${shortDate(day)}. '
             '${logged ? '${eaten.kcal.round()} calories logged' : 'nothing logged'}'
             '${isToday ? '. Today.' : ''}',
         excludeSemantics: true,
@@ -344,22 +345,25 @@ class _DayRow extends StatelessWidget {
               child: Row(
                 children: <Widget>[
                   SizedBox(
-                    width: 56,
+                    // Wide enough for "Today" and a date beneath it.
+                    width: 64,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
                         Text(
-                          _weekdays[day.weekday - 1],
+                          // Today is marked by the word and by weight, never
+                          // by colour alone (spec §6.3) — and it takes the
+                          // weekday's place rather than the date's, so every
+                          // row still says which day it is.
+                          isToday ? 'Today' : _weekdays[day.weekday - 1],
                           style: text.ingredient.copyWith(
-                            // Today is marked by weight and a label, not by
-                            // colour alone (spec §6.3).
                             fontWeight: isToday
                                 ? FontWeight.w600
                                 : FontWeight.w400,
                           ),
                         ),
                         Text(
-                          isToday ? 'today' : '${day.day}',
+                          shortDate(day),
                           style: text.metadata.copyWith(
                             color: colors.textMuted,
                           ),

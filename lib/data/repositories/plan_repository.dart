@@ -210,6 +210,24 @@ class PlanRepository {
     });
   }
 
+  /// Puts a logged entry back to planned (spec §5.6).
+  ///
+  /// The counterpart of [logEntry], and the other half of a tap: confirming a
+  /// meal is one tap, so taking it back has to be one too.
+  Future<MealPlanEntry?> unlogEntry(String entryId) async {
+    final DateTime now = _now();
+
+    return _db.transaction(() async {
+      final MealPlanEntry? existing = await _store.entryById(entryId);
+      if (existing == null || !existing.isLogged) return null;
+
+      final MealPlanEntry planned = existing.unlog();
+      await _store.upsertEntry(planned, updatedAt: now);
+      await _queueEntry(planned, now);
+      return planned;
+    });
+  }
+
   Future<void> removeEntry(String entryId) async {
     final DateTime now = _now();
     await _db.transaction(() async {

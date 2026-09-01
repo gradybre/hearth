@@ -118,6 +118,28 @@ class MealPlanEntry {
     );
   }
 
+  /// Puts this entry back to merely planned.
+  ///
+  /// The snapshot goes with it. §4 freezes a snapshot so that *editing a
+  /// recipe* can never rewrite a past day — it does not freeze the day
+  /// against its owner, and someone saying "I did not eat that after all" is
+  /// the owner correcting their own record. Leaving the numbers behind would
+  /// keep a meal in the day's history that the day no longer claims happened.
+  MealPlanEntry unlog() => MealPlanEntry(
+    id: id,
+    dayId: dayId,
+    slot: slot,
+    refType: refType,
+    refId: refId,
+    servings: servings,
+    // Unlogging a thing that was never planned still leaves it on the day —
+    // it is on the plate list either way, and losing the row entirely is
+    // what the delete gesture is for.
+    isPlanned: true,
+    loggedAt: null,
+    macroSnapshot: null,
+  );
+
   /// The macros this entry contributes to a day.
   ///
   /// A logged entry always answers from its snapshot — never from the current
