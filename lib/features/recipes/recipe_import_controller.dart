@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../data/adapters/photo_picker.dart';
 import '../../data/adapters/recipe_ai.dart';
+import '../../data/adapters/shared_content.dart';
+import '../../domain/recipes/shared_link.dart';
 import 'recipe_draft.dart';
 
 /// What the import produced, on its way to the editor.
@@ -35,21 +37,40 @@ class RecipeImportResult {
 /// renders belongs in the state.
 @immutable
 sealed class RecipeImportState {
-  const RecipeImportState({this.images = const <PickedPhoto>[], this.url = ''});
+  const RecipeImportState({
+    this.images = const <PickedPhoto>[],
+    this.url = '',
+    this.text = '',
+  });
 
   final List<PickedPhoto> images;
   final String url;
 
-  bool get hasSomethingToRead => images.isNotEmpty || url.trim().isNotEmpty;
+  /// A recipe shared as words rather than as a page — the usual shape of an
+  /// Instagram DM, where the whole thing arrives as a message.
+  final String text;
+
+  /// Why a shared link cannot be read, when that is known before trying.
+  ///
+  /// Instagram and TikTok serve a login wall to anything that is not a
+  /// signed-in browser, so the fetch would come back with no caption in it.
+  /// Saying so up front beats spending a round trip to find out (see
+  /// [SharedLink]).
+  String? get linkProblem => SharedLink.of(url).unreadableBecause;
+
+  bool get hasSomethingToRead =>
+      images.isNotEmpty ||
+      text.trim().isNotEmpty ||
+      (url.trim().isNotEmpty && linkProblem == null);
 }
 
 /// Waiting on the user — nothing chosen yet, or something chosen and not sent.
 class RecipeImportIdle extends RecipeImportState {
-  const RecipeImportIdle({super.images, super.url});
+  const RecipeImportIdle({super.images, super.url, super.text});
 }
 
 class RecipeImportReading extends RecipeImportState {
-  const RecipeImportReading(this.what, {super.images, super.url});
+  const RecipeImportReading(this.what, {super.images, super.url, super.text});
 
   /// What is being read, for something honest to put on screen.
   final String what;
@@ -71,6 +92,7 @@ class RecipeImportFailed extends RecipeImportState {
     required this.canRetry,
     super.images,
     super.url,
+    super.text,
   });
 
   final String message;
@@ -89,6 +111,7 @@ class RecipeImportController extends Notifier<RecipeImportState> {
 
   final List<PickedPhoto> _images = <PickedPhoto>[];
   String _url = '';
+  String _text = '';
   int _run = 0;
 
   /// Beyond this an image is not a screenshot, and the function will refuse it
@@ -140,8 +163,56 @@ class RecipeImportController extends Notifier<RecipeImportState> {
     state = _idle();
   }
 
+  void setText(String value) {
+    _text = value;
+    state = _idle();
+  }
+
+  /// Takes what another app handed over (spec §5.3).
+  ///
+  /// Added to whatever is already queued rather than replacing it: sharing a
+  /// second screenshot of the same recipe is the point of the ten-image
+  /// limit, and a share that wiped the first one would make that impossible.
+  void addShared(SharedContent content) {
+    for (final Uint8List bytes in content.images) {
+      if (_images.length >= maxImages) break;
+      if (bytes.lengthInBytes > maxImageBytes) continue;
+      _images.add(PickedPhoto(bytes: bytes, extension: _extensionOf(bytes)));
+    }
+    if (content.url.trim().isNotEmpty) _url = content.url.trim();
+    if (content.text.trim().isNotEmpty) {
+      _text = _text.trim().isEmpty
+          ? content.text.trim()
+          : '${_text.trim()}\n\n${content.text.trim()}';
+    }
+    state = _idle();
+  }
+
+  /// What the bytes are, read from their own first few bytes.
+  ///
+  /// A share extension hands over data, not a filename, and the media type is
+  /// what the API is told — guessing jpg for a PNG makes the whole request
+  /// fail at the far end for a reason nobody could see.
+  static String _extensionOf(Uint8List bytes) {
+    if (bytes.length >= 8 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return 'png';
+    }
+    if (bytes.length >= 12 &&
+        bytes[4] == 0x66 &&
+        bytes[5] == 0x74 &&
+        bytes[6] == 0x79 &&
+        bytes[7] == 0x70) {
+      return 'heic';
+    }
+    return 'jpg';
+  }
+
   Future<void> read() async {
-    if (_images.isEmpty && _url.trim().isEmpty) return;
+    if (!state.hasSomethingToRead) return;
 
     final int run = ++_run;
     final RecipeAiSource? ai = ref.read(recipeAiProvider);
@@ -154,7 +225,12 @@ class RecipeImportController extends Notifier<RecipeImportState> {
       return;
     }
 
-    state = RecipeImportReading(_describeWork(), images: images, url: _url);
+    state = RecipeImportReading(
+      _describeWork(),
+      images: images,
+      url: _url,
+      text: _text,
+    );
 
     try {
       final AiRecipe recipe = await ai.extract(
@@ -163,6 +239,7 @@ class RecipeImportController extends Notifier<RecipeImportState> {
             AiImage(bytes: photo.bytes, mediaType: _mediaTypeOf(photo)),
         ],
         url: _url.trim().isEmpty ? null : _url.trim(),
+        text: _text.trim().isEmpty ? null : _text.trim(),
       );
 
       if (_run != run) return;
@@ -198,11 +275,13 @@ class RecipeImportController extends Notifier<RecipeImportState> {
     _run++;
     _images.clear();
     _url = '';
+    _text = '';
     state = _idle();
   }
 
   /// A fresh instance every time, carrying the current queue.
-  RecipeImportIdle _idle() => RecipeImportIdle(images: images, url: _url);
+  RecipeImportIdle _idle() =>
+      RecipeImportIdle(images: images, url: _url, text: _text);
 
   RecipeImportFailed _failed(String message, {required bool canRetry}) =>
       RecipeImportFailed(
@@ -210,6 +289,7 @@ class RecipeImportController extends Notifier<RecipeImportState> {
         canRetry: canRetry,
         images: images,
         url: _url,
+        text: _text,
       );
 
   /// What the user has queued up.

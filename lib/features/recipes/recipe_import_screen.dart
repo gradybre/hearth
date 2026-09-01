@@ -8,6 +8,7 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../data/adapters/photo_picker.dart';
 import '../../data/adapters/recipe_ai.dart';
+import '../../data/adapters/shared_content.dart';
 import 'ai_recipe_mapper.dart';
 import 'recipe_import_controller.dart';
 
@@ -18,7 +19,11 @@ import 'recipe_import_controller.dart';
 /// back opens in the editor to be read before it is saved; nothing is written
 /// on the strength of an extraction alone (CLAUDE.md rule 4).
 class RecipeImportScreen extends ConsumerStatefulWidget {
-  const RecipeImportScreen({super.key});
+  const RecipeImportScreen({this.shared, super.key});
+
+  /// What another app handed over, when the screen was opened by a share
+  /// rather than by tapping Import (spec §5.3).
+  final SharedContent? shared;
 
   @override
   ConsumerState<RecipeImportScreen> createState() => _RecipeImportScreenState();
@@ -26,6 +31,7 @@ class RecipeImportScreen extends ConsumerStatefulWidget {
 
 class _RecipeImportScreenState extends ConsumerState<RecipeImportScreen> {
   final TextEditingController _url = TextEditingController();
+  final TextEditingController _text = TextEditingController();
 
   /// Whether the review screen is already open for this extraction.
   ///
@@ -35,8 +41,25 @@ class _RecipeImportScreenState extends ConsumerState<RecipeImportScreen> {
   bool _reviewing = false;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.shared case final SharedContent shared) {
+      // After the first frame: the controller is a Riverpod notifier and
+      // writing to it during initState would rebuild a widget that is still
+      // being built.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(recipeImportProvider.notifier).addShared(shared);
+        _url.text = shared.url;
+        _text.text = shared.text;
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _url.dispose();
+    _text.dispose();
     super.dispose();
   }
 
@@ -67,6 +90,7 @@ class _RecipeImportScreenState extends ConsumerState<RecipeImportScreen> {
 
       controller.reset();
       _url.clear();
+      _text.clear();
       if (mounted) Navigator.of(context).maybePop();
     } finally {
       _reviewing = false;
@@ -181,6 +205,40 @@ class _RecipeImportScreenState extends ConsumerState<RecipeImportScreen> {
               style: context.text.body,
               decoration: InputDecoration(
                 hintText: 'https://…',
+                filled: true,
+                fillColor: colors.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(HearthRadius.md),
+                  borderSide: BorderSide(color: colors.outline),
+                ),
+              ),
+            ),
+            // Said before a round trip is spent finding out. Instagram and
+            // TikTok serve a login wall to anything that is not a signed-in
+            // browser, so the page comes back with no caption in it — and
+            // "that did not work" would send someone to try it again.
+            if (state.linkProblem case final String problem) ...<Widget>[
+              const SizedBox(height: HearthSpacing.md),
+              _CannotRead(problem: problem),
+            ],
+            const SizedBox(height: HearthSpacing.xl),
+            Text('From shared text', style: context.text.sectionHeader),
+            const SizedBox(height: HearthSpacing.sm),
+            Text(
+              'A recipe sent as a message — paste or share it here.',
+              style: context.text.metadata.copyWith(color: colors.textMuted),
+            ),
+            const SizedBox(height: HearthSpacing.sm),
+            TextField(
+              controller: _text,
+              enabled: !busy,
+              maxLines: 6,
+              minLines: 3,
+              keyboardType: TextInputType.multiline,
+              onChanged: controller.setText,
+              style: context.text.body,
+              decoration: InputDecoration(
+                hintText: '2 lb ground beef…',
                 filled: true,
                 fillColor: colors.surface,
                 border: OutlineInputBorder(
@@ -353,6 +411,54 @@ class _Failed extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// A link Hearth already knows it cannot read, and the way round it.
+///
+/// Not an error — nothing has failed yet, and nothing needs to. It is the one
+/// piece of UI whose whole job is to be honest about a limit and then be
+/// useful anyway: a screenshot of the caption goes through the same reader
+/// that §5.3 already calls the primary migration path.
+class _CannotRead extends StatelessWidget {
+  const _CannotRead({required this.problem});
+
+  final String problem;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surfaceSunken,
+        borderRadius: BorderRadius.circular(HearthRadius.md),
+        border: Border.all(color: colors.outline),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(HearthSpacing.md),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            // Never colour alone (§6.3) — and this is information rather than
+            // a warning, so it says so with a camera rather than a triangle.
+            Icon(
+              Icons.photo_camera_outlined,
+              size: 18,
+              color: colors.textMuted,
+            ),
+            const SizedBox(width: HearthSpacing.sm),
+            Expanded(
+              child: Text(
+                problem,
+                style: context.text.metadata.copyWith(
+                  color: colors.textSecondary,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

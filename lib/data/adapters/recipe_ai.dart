@@ -146,9 +146,12 @@ abstract interface class RecipeAiSource {
   ///
   /// Several images are pages of *one* recipe, not several — that is the
   /// MacrosFirst migration path, where a recipe spans two or three screens.
+  /// [text] is a recipe somebody pasted or shared as words — the usual shape
+  /// of an Instagram DM, where the whole thing arrives as a message.
   Future<AiRecipe> extract({
     List<AiImage> images = const <AiImage>[],
     String? url,
+    String? text,
   });
 
   /// Writes or revises a recipe from a conversation (spec §5.4).

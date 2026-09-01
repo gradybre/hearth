@@ -6,6 +6,7 @@ import 'app/bootstrap.dart';
 import 'app/providers.dart';
 import 'app/router.dart';
 import 'app/theme/hearth_theme.dart';
+import 'data/adapters/shared_content.dart';
 import 'data/auth/auth_gateway.dart';
 import 'features/account/sign_in_screen.dart';
 
@@ -34,6 +35,17 @@ class _HearthAppState extends ConsumerState<HearthApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Something shared from another app. Listened for here rather than in a
+    // screen because a share extension runs while Hearth is closed: by the
+    // time anything is on screen the payload is already waiting, and the app
+    // has to go and meet it.
+    ref.listen<AsyncValue<SharedContent>>(sharedContentProvider, (
+      AsyncValue<SharedContent>? _,
+      AsyncValue<SharedContent> next,
+    ) {
+      if (next.value case final SharedContent shared) _open(shared);
+    });
+
     // An unconfigured build goes straight in. Hearth is offline-first and
     // usable alone (spec §5.1), so "no backend" means "no sync yet", not a
     // locked door.
@@ -55,6 +67,21 @@ class _HearthAppState extends ConsumerState<HearthApp> {
     // An error here is a session that could not be resolved, so the way
     // forward is to sign in again rather than to sit on a spinner.
     return account.value == null ? _plain(const SignInScreen()) : _routed();
+  }
+
+  /// Takes a share to the import screen, which reviews before it saves.
+  ///
+  /// Nothing arrives in the library on the strength of a share alone
+  /// (CLAUDE.md rule 4) — this is a faster way to the same review screen, not
+  /// a way around it. Dropped on the floor while signed out, because there is
+  /// no household to import into yet and the payload would be waiting again
+  /// on the next launch anyway.
+  void _open(SharedContent shared) {
+    final bool signedIn =
+        !ref.read(supabaseReadyProvider) ||
+        ref.read(accountProvider).value != null;
+    if (!signedIn) return;
+    _router.push('/recipe/import', extra: shared);
   }
 
   Widget _routed() => MaterialApp.router(

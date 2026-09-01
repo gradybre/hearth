@@ -23,11 +23,13 @@ class EdgeFunctionRecipeAi implements RecipeAiSource {
   Future<AiRecipe> extract({
     List<AiImage> images = const <AiImage>[],
     String? url,
+    String? text,
   }) {
     final String trimmed = (url ?? '').trim();
-    if (images.isEmpty && trimmed.isEmpty) {
+    final String words = (text ?? '').trim();
+    if (images.isEmpty && trimmed.isEmpty && words.isEmpty) {
       throw const RecipeAiException(
-        'Choose a photo or paste a link first.',
+        'Choose a photo, paste a link, or share the recipe text first.',
         isRetryable: false,
       );
     }
@@ -40,6 +42,7 @@ class EdgeFunctionRecipeAi implements RecipeAiSource {
             'data:${image.mediaType};base64,${base64Encode(image.bytes)}',
         ],
       if (trimmed.isNotEmpty) 'url': trimmed,
+      if (words.isNotEmpty) 'text': words,
     });
   }
 

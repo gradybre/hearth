@@ -334,6 +334,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     mode?: string;
     images?: string[];
     url?: string;
+    text?: string;
     messages?: { role?: string; text?: string }[];
     profile?: Record<string, unknown>;
   };
@@ -360,7 +361,11 @@ Deno.serve(async (request: Request): Promise<Response> => {
     }
 
     const content = mode === 'extract'
-      ? await extractContent(body.images ?? [], (body.url ?? '').trim())
+      ? await extractContent(
+        body.images ?? [],
+        (body.url ?? '').trim(),
+        (body.text ?? '').trim(),
+      )
       : generateContent(body.messages ?? [], body.profile ?? {});
 
     const system = mode === 'extract' ? EXTRACT_PROMPT : GENERATE_PROMPT;
@@ -383,15 +388,23 @@ Deno.serve(async (request: Request): Promise<Response> => {
 async function extractContent(
   images: string[],
   url: string,
+  text: string,
 ): Promise<unknown[]> {
-  if (images.length === 0 && !url) {
-    throw new Error('bad request: give images or a url');
+  if (images.length === 0 && !url && !text) {
+    throw new Error('bad request: give images, a url, or some text');
   }
 
   const content: unknown[] = imageBlocks(images);
 
   if (url) {
     content.push({ type: 'text', text: await fetchPage(url) });
+  }
+
+  // Shared straight from a message. An Instagram creator who answers
+  // "recipe" with a DM sends the whole thing as words, and those words need
+  // no fetching and no photograph of themselves.
+  if (text) {
+    content.push({ type: 'text', text: text.slice(0, MAX_URL_BYTES) });
   }
 
   content.push({

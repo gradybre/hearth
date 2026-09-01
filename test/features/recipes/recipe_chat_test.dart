@@ -28,6 +28,7 @@ class FakeAi implements RecipeAiSource {
   Future<AiRecipe> extract({
     List<AiImage> images = const <AiImage>[],
     String? url,
+    String? text,
   }) async => throw UnimplementedError();
 
   @override

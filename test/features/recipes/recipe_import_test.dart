@@ -22,15 +22,18 @@ class FakeAi implements RecipeAiSource {
   int extractCalls = 0;
   List<AiImage> lastImages = const <AiImage>[];
   String? lastUrl;
+  String? lastText;
 
   @override
   Future<AiRecipe> extract({
     List<AiImage> images = const <AiImage>[],
     String? url,
+    String? text,
   }) async {
     extractCalls++;
     lastImages = images;
     lastUrl = url;
+    lastText = text;
     if (error != null) throw error!;
     return answer!;
   }

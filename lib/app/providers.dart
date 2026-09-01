@@ -16,7 +16,9 @@ import '../data/adapters/nutrition_source.dart';
 import '../data/adapters/open_food_facts_source.dart';
 import '../data/adapters/photo_picker.dart';
 import '../data/adapters/platform_kitchen_devices.dart';
+import '../data/adapters/platform_shared_content.dart';
 import '../data/adapters/recipe_ai.dart';
+import '../data/adapters/shared_content.dart';
 import '../data/adapters/usda_nutrition_source.dart';
 import '../data/auth/account_cache.dart';
 import '../data/auth/auth_gateway.dart';
@@ -709,6 +711,33 @@ final Provider<LabelReader?> labelReaderProvider = Provider<LabelReader?>(
       ? EdgeFunctionLabelReader(Supabase.instance.client)
       : null,
 );
+
+/// Where content shared from another app arrives (spec §5.3).
+///
+/// Only iOS has a share sheet Hearth is part of; everywhere else the honest
+/// implementation is one that never emits, so nothing above has to ask which
+/// platform it is on before listening.
+final Provider<SharedContentSource> sharedContentSourceProvider =
+    Provider<SharedContentSource>((Ref ref) {
+      if (!PlatformSharedContent.isSupported) return const NoSharedContent();
+      final PlatformSharedContent source = PlatformSharedContent();
+      return source;
+    });
+
+/// Everything shared into Hearth, whether it arrived while the app was open
+/// or was waiting on disk before it started.
+///
+/// The two cases are genuinely different — a share extension runs in its own
+/// process and often while Hearth is not running at all — and neither is the
+/// special one, so both come down the same stream.
+final StreamProvider<SharedContent> sharedContentProvider =
+    StreamProvider<SharedContent>((Ref ref) async* {
+      final SharedContentSource source = ref.watch(sharedContentSourceProvider);
+      if (await source.pending() case final SharedContent waiting) {
+        yield waiting;
+      }
+      yield* source.incoming;
+    });
 
 final Provider<NutritionLookup> nutritionLookupProvider =
     Provider<NutritionLookup>((Ref ref) {

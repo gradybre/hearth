@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../data/adapters/label_reader.dart';
+import '../data/adapters/shared_content.dart';
 import '../features/account/food_profile_screen.dart';
 import '../features/account/household_screen.dart';
 import '../features/foods/barcode_scan_screen.dart';
@@ -65,7 +66,13 @@ GoRouter buildRouter() => GoRouter(
     GoRoute(
       path: '/recipe/import',
       builder: (BuildContext context, GoRouterState state) =>
-          const RecipeImportScreen(),
+          // `extra` carries what another app shared, when the screen was
+          // opened by a share rather than by tapping Import.
+          RecipeImportScreen(
+            shared: state.extra is SharedContent
+                ? state.extra! as SharedContent
+                : null,
+          ),
     ),
     GoRoute(
       path: '/recipe/new',

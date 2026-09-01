@@ -9,7 +9,9 @@ import 'package:hearth/data/adapters/label_reader.dart';
 import 'package:hearth/data/adapters/nutrition_lookup.dart';
 import 'package:hearth/data/adapters/nutrition_source.dart';
 import 'package:hearth/data/adapters/photo_picker.dart';
+import 'package:hearth/data/adapters/platform_shared_content.dart';
 import 'package:hearth/data/adapters/recipe_ai.dart';
+import 'package:hearth/data/adapters/shared_content.dart';
 import 'package:hearth/data/auth/local_auth_gateway.dart';
 import 'package:hearth/data/local/collection_store.dart';
 import 'package:hearth/data/local/food_store.dart';
@@ -60,6 +62,7 @@ Future<HearthDatabase> pumpHearthApp(
   RecipeAiSource? recipeAi,
   LabelReader? labelReader,
   PhotoPicker? photoPicker,
+  SharedContentSource? sharedContent,
   FoodProfile? foodProfile,
 }) async {
   tester.view.physicalSize = size;
@@ -137,6 +140,11 @@ Future<HearthDatabase> pumpHearthApp(
         ),
         if (photoPicker != null)
           photoPickerProvider.overrideWithValue(photoPicker),
+        // A share sheet cannot be driven from a widget test, and the flow
+        // above the seam is the part worth testing anyway.
+        sharedContentSourceProvider.overrideWithValue(
+          sharedContent ?? const NoSharedContent(),
+        ),
         // A stream can be supplied instead of a fixed list, for the tests that
         // need the library to actually change — a deletion, say.
         recipeLibraryProvider.overrideWith(
