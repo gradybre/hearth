@@ -31,63 +31,163 @@ abstract final class StepIngredients {
     'to',
   };
 
+  /// Words that name what a recipe is *making* rather than what goes into it.
+  ///
+  /// Nearly every recipe says "until the sauce is thick" at some point, and
+  /// it means the pan, not the bottle. So an ingredient whose head noun is one
+  /// of these has to be named more fully — "soy sauce" — before a step counts
+  /// as mentioning it. Without that, a beef and broccoli recipe put "1⅛ cups
+  /// low-sodium soy sauce" beside the step that whisks cornstarch into water.
+  static const Set<String> _preparations = <String>{
+    'batter',
+    'dough',
+    'dressing',
+    'filling',
+    'glaze',
+    'marinade',
+    'sauce',
+    'topping',
+  };
+
   /// The ingredients of [section] that [step] appears to use, in the order
   /// the section lists them.
   ///
   /// Only quantified ingredients: "salt to taste" has no amount to show, and
   /// a step mentioning salt is not helped by being told so.
+  /// [elsewhere] lets a step reach an ingredient another section holds, when
+  /// no section holds two of that name.
+  ///
+  /// Section scoping is right and stays the rule: two teaspoons of cumin in
+  /// the sauce and two in the rub must read as two in each place. But an
+  /// import can put a step and its ingredient in different sections — the
+  /// recipe Brendan photographed whisks cornstarch in the sauce section while
+  /// listing the cornstarch under "Finishing and assembly" — and scoping then
+  /// hides the very number the step needs. A name that appears in exactly one
+  /// section cannot be ambiguous, so reaching for it costs nothing the
+  /// scoping was protecting.
   static List<RecipeIngredient> forStep(
     RecipeStep step,
+    RecipeSection section, {
+    List<RecipeSection> elsewhere = const <RecipeSection>[],
+  }) {
+    final List<String> words = <String>[
+      for (final String word in normaliseKey(step.text).split(' '))
+        if (word.isNotEmpty) word,
+    ];
+    if (words.isEmpty) return const <RecipeIngredient>[];
+
+    final List<RecipeIngredient> candidates = <RecipeIngredient>[
+      ...section.ingredients,
+      ..._unambiguousElsewhere(section, elsewhere),
+    ];
+
+    // Every ingredient's best evidence, as a run of the step's own words.
+    final Map<String, _Mention> found = <String, _Mention>{};
+    for (final RecipeIngredient ingredient in candidates) {
+      if (ingredient.quantity == null) continue;
+      final _Mention? mention = _bestMention(words, ingredient.name);
+      if (mention != null) found[ingredient.id] = mention;
+    }
+
+    // Where two ingredients claim the same words, the longer claim is the
+    // real one. "Red pepper flakes" covers all three of its words, so the
+    // bell peppers' lone "pepper" inside it is not a second mention — it is
+    // the same three words being read twice.
+    final List<_Mention> claims = found.values.toList(growable: false);
+    return <RecipeIngredient>[
+      for (final RecipeIngredient ingredient in candidates)
+        if (found[ingredient.id] case final _Mention mine)
+          if (!claims.any((_Mention other) => other.beats(mine))) ingredient,
+    ];
+  }
+
+  /// Ingredients from other sections whose name nothing else shares.
+  ///
+  /// A name held by two sections is exactly the ambiguity scoping exists for,
+  /// so it stays out of reach. One held by one section is simply somewhere
+  /// else in the same recipe.
+  static List<RecipeIngredient> _unambiguousElsewhere(
     RecipeSection section,
+    List<RecipeSection> all,
   ) {
-    final String haystack = normaliseKey(step.text);
-    if (haystack.isEmpty) return const <RecipeIngredient>[];
+    final Map<String, int> sectionsPerName = <String, int>{};
+    for (final RecipeSection other in all) {
+      for (final String name in <String>{
+        for (final RecipeIngredient i in other.ingredients)
+          normaliseKey(i.name),
+      }) {
+        sectionsPerName[name] = (sectionsPerName[name] ?? 0) + 1;
+      }
+    }
 
     return <RecipeIngredient>[
-      for (final RecipeIngredient ingredient in section.ingredients)
-        if (ingredient.quantity != null && _mentions(haystack, ingredient))
-          ingredient,
+      for (final RecipeSection other in all)
+        if (other.id != section.id)
+          for (final RecipeIngredient ingredient in other.ingredients)
+            if (sectionsPerName[normaliseKey(ingredient.name)] == 1) ingredient,
     ];
   }
 
-  /// Whether a step's text refers to this ingredient.
+  /// The longest run of [words] that names [ingredientName], or null.
   ///
-  /// Keyed on the head noun — the last significant word of the name, since
-  /// English puts it last. "Ground beef" is beef, "yellow onion" is onion,
-  /// and a step saying "add the onion" means the yellow one because it is
-  /// the only onion this section has. Matching on *any* word instead would
-  /// tie "ground beef" to a step about ground cumin.
-  static bool _mentions(String haystack, RecipeIngredient ingredient) {
-    final String? head = _headNoun(ingredient.name);
-    if (head == null) return false;
-    return _containsWord(haystack, head);
+  /// Anchored at the head noun and grown leftwards: English puts the head
+  /// last, so "low-sodium soy sauce" is looked for as "soy sauce" before
+  /// "sauce", and "unsalted beef broth" can only ever be found as a broth —
+  /// which is why a step saying "stir the beef in" means the ground beef and
+  /// nothing else.
+  static _Mention? _bestMention(List<String> words, String ingredientName) {
+    final List<String> name = <String>[
+      for (final String word in normaliseKey(ingredientName).split(' '))
+        if (word.length >= 3 && !_tooCommon.contains(word)) _singular(word),
+    ];
+    if (name.isEmpty) return null;
+
+    // A word for the dish itself has to be qualified to count.
+    final int shortest = _preparations.contains(name.last) ? 2 : 1;
+    if (name.length < shortest) return null;
+
+    for (int length = name.length; length >= shortest; length--) {
+      final List<String> phrase = name.sublist(name.length - length);
+      final int at = _indexOfPhrase(words, phrase);
+      if (at >= 0) return _Mention(start: at, length: length);
+    }
+    return null;
   }
 
-  /// The last word of a name worth matching on, or null when there is none.
-  static String? _headNoun(String name) {
-    final List<String> words = <String>[
-      for (final String word in normaliseKey(name).split(' '))
-        if (word.length >= 3 && !_tooCommon.contains(word)) word,
-    ];
-    if (words.isEmpty) return null;
-
-    // Singularised so "2 eggs" is found by a step that says "the egg", and
-    // vice versa. Only the plain -s: -es and -ies rules would turn
-    // "molasses" into "molasse" and cost more than they buy.
-    return _singular(words.last);
+  /// Where [phrase] appears in [words] as consecutive whole words, or -1.
+  static int _indexOfPhrase(List<String> words, List<String> phrase) {
+    for (int i = 0; i + phrase.length <= words.length; i++) {
+      bool all = true;
+      for (int j = 0; j < phrase.length; j++) {
+        if (_singular(words[i + j]) != phrase[j]) {
+          all = false;
+          break;
+        }
+      }
+      if (all) return i;
+    }
+    return -1;
   }
 
   static String _singular(String word) =>
       word.length > 3 && word.endsWith('s') && !word.endsWith('ss')
       ? word.substring(0, word.length - 1)
       : word;
+}
 
-  /// Whether [word] appears in [haystack] as a whole word, give or take a
-  /// trailing plural.
-  static bool _containsWord(String haystack, String word) {
-    for (final String candidate in haystack.split(' ')) {
-      if (_singular(candidate) == word) return true;
-    }
-    return false;
-  }
+/// Where in a step an ingredient was found, and how much of it was named.
+///
+/// Length is the evidence: three words beat one, and the loser is not a
+/// second ingredient but the same words read twice.
+class _Mention {
+  const _Mention({required this.start, required this.length});
+
+  final int start;
+  final int length;
+
+  int get end => start + length;
+
+  /// Whether this claim covers [other]'s words and says more than it does.
+  bool beats(_Mention other) =>
+      length > other.length && start <= other.start && end >= other.end;
 }

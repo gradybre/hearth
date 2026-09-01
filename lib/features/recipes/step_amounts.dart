@@ -19,17 +19,31 @@ import '../../domain/recipes/step_ingredients.dart';
 /// reference it is, and stays right when the recipe is scaled — the
 /// quantities come from the scaled ingredients, not from the text.
 class StepAmounts extends StatelessWidget {
-  const StepAmounts({required this.step, required this.section, super.key});
+  const StepAmounts({
+    required this.step,
+    required this.section,
+    this.recipe,
+    super.key,
+  });
 
   final RecipeStep step;
 
-  /// The step's own section — never the whole recipe. Two teaspoons in the
-  /// sauce and two in the rub must read as two in each place.
+  /// The step's own section, which is where its amounts come from first. Two
+  /// teaspoons in the sauce and two in the rub must read as two in each place.
   final RecipeSection section;
+
+  /// The rest of the recipe, so a step can still find an ingredient an import
+  /// filed under a different heading — but only where that name appears in
+  /// one section and cannot be ambiguous.
+  final Recipe? recipe;
 
   @override
   Widget build(BuildContext context) {
-    final List<RecipeIngredient> used = StepIngredients.forStep(step, section);
+    final List<RecipeIngredient> used = StepIngredients.forStep(
+      step,
+      section,
+      elsewhere: recipe?.sections ?? const <RecipeSection>[],
+    );
     if (used.isEmpty) return const SizedBox.shrink();
 
     final HearthColors colors = context.colors;

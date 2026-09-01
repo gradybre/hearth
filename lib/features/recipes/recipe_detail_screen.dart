@@ -202,7 +202,7 @@ class _RecipeBodyState extends State<_RecipeBody> {
               if (section.steps.isNotEmpty) ...<Widget>[
                 const SizedBox(height: HearthSpacing.md),
                 for (final RecipeStep step in section.orderedSteps)
-                  _StepRow(step: step, section: section),
+                  _StepRow(step: step, section: section, recipe: recipe),
               ],
               const SizedBox(height: HearthSpacing.xl),
             ]
@@ -218,7 +218,7 @@ class _RecipeBodyState extends State<_RecipeBody> {
               // it can say how much of anything it uses.
               for (final RecipeSection section in recipe.orderedSections)
                 for (final RecipeStep step in section.orderedSteps)
-                  _StepRow(step: step, section: section),
+                  _StepRow(step: step, section: section, recipe: recipe),
             ],
           ],
           if (scaled != null && scaled.hasWarnings) ...<Widget>[
@@ -293,10 +293,18 @@ class _IngredientRow extends StatelessWidget {
 }
 
 class _StepRow extends StatelessWidget {
-  const _StepRow({required this.step, required this.section});
+  const _StepRow({
+    required this.step,
+    required this.section,
+    required this.recipe,
+  });
 
   final RecipeStep step;
   final RecipeSection section;
+
+  /// Carried so a step can still find an ingredient an import filed under a
+  /// different heading — see [StepAmounts.recipe].
+  final Recipe recipe;
 
   @override
   Widget build(BuildContext context) {
@@ -323,7 +331,7 @@ class _StepRow extends StatelessWidget {
                   step.text,
                   style: text.body.copyWith(color: colors.textSecondary),
                 ),
-                StepAmounts(step: step, section: section),
+                StepAmounts(step: step, section: section, recipe: recipe),
               ],
             ),
           ),

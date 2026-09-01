@@ -74,11 +74,17 @@ const RECIPE_TOOL = {
             },
             ingredients_text: {
               type: 'string',
-              description: 'One ingredient per line, as written.',
+              description:
+                'One ingredient per line, as written. Every ingredient a ' +
+                "step in THIS section uses belongs here, even if the source " +
+                'printed it under another heading.',
             },
             directions_text: {
               type: 'string',
-              description: 'One step per line, without step numbers.',
+              description:
+                'One step per line, without step numbers, in the order they ' +
+                'are performed. A step belongs to the section whose ' +
+                'ingredients it uses.',
             },
           },
           required: ['ingredients_text', 'directions_text'],
@@ -146,6 +152,23 @@ recipe rather than returning the first.
 Keep each ingredient line as written, including the quantity and any prep note
 ("3 cloves garlic, minced"). Keep directions as prose, one step per line, with
 no numbering.
+
+Sections have to hold together, because the app shows each step beside the
+amounts from its own section:
+
+- put a step in the section whose ingredients it uses, and put those
+  ingredients in that same section. A step that whisks cornstarch belongs with
+  the cornstarch, wherever the source happened to print it;
+- order the steps within a section the way they are performed, and order the
+  sections the way they are worked through. Marinating the beef comes before
+  serving it, whatever order the page listed things in;
+- only split into sections where the source really has separate components,
+  and never leave a section holding steps from a different part of the recipe.
+
+A line that explains rather than instructs — "this keeps lean beef from going
+grainy", "the sauce will thicken as it cools" — is not a step. Attach it to
+the end of the step it explains, in the same line, or leave it out. A numbered
+instruction the cook cannot do is one more thing to read and nothing to do.
 
 If something is genuinely unreadable or ambiguous — a quantity that could be
 1/2 or 12, a line cut off at the edge — transcribe your best reading AND list
