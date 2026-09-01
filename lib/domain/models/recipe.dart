@@ -21,6 +21,7 @@ class RecipeIngredient {
     this.prepNote,
     this.foodId,
     this.isOptional = false,
+    this.needsNoMatch = false,
   });
 
   final String id;
@@ -49,6 +50,14 @@ class RecipeIngredient {
   /// list, deliberately — not a data gap (spec §5.2).
   final bool isOptional;
 
+  /// Marked as a line that will never have a food behind it — salt, pepper, a
+  /// spice (spec §5.3).
+  ///
+  /// Not the same as [isOptional], which is what the recipe's own words said.
+  /// Salt in a bread recipe is not optional; it simply has no macros to count,
+  /// and saying "optional" to quiet a warning would misreport the recipe.
+  final bool needsNoMatch;
+
   final int sortOrder;
 
   bool get isQuantified => quantity != null;
@@ -58,6 +67,7 @@ class RecipeIngredient {
     String? sectionId,
     String? foodId,
     int? sortOrder,
+    bool? needsNoMatch,
   }) => RecipeIngredient(
     id: id,
     sectionId: sectionId ?? this.sectionId,
@@ -68,6 +78,7 @@ class RecipeIngredient {
     prepNote: prepNote,
     foodId: foodId ?? this.foodId,
     isOptional: isOptional,
+    needsNoMatch: needsNoMatch ?? this.needsNoMatch,
   );
 
   @override

@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 
+import '../../domain/foods/no_match_rule.dart';
 import '../../domain/text/text_normaliser.dart';
 import 'hearth_database.dart';
 
@@ -32,12 +33,13 @@ class IngredientMatchStore {
             id: id,
             householdId: householdId,
             ingredientString: key,
-            foodId: foodId,
+            foodId: Value<String?>(foodId),
             updatedAt: updatedAt,
           ),
           onConflict: DoUpdate(
             (_) => IngredientMatchesCompanion(
-              foodId: Value<String>(foodId),
+              foodId: Value<String?>(foodId),
+              needsNoMatch: const Value<bool>(false),
               updatedAt: Value<DateTime>(updatedAt),
             ),
             target: <Column<Object>>[
@@ -80,15 +82,111 @@ class IngredientMatchStore {
   }
 
   /// Every remembered match for the household, keyed by normalised string.
+  ///
+  /// Rows answering "nothing to match" are not matches and are left out; they
+  /// come back from [noMatchRules] instead.
   Future<Map<String, String>> allFor(String householdId) async {
-    final List<IngredientMatchRow> rows =
-        await (_db.select(_db.ingredientMatches)..where(
-              ($IngredientMatchesTable t) => t.householdId.equals(householdId),
-            ))
-            .get();
+    final List<IngredientMatchRow> rows = await _rowsFor(householdId);
     return <String, String>{
       for (final IngredientMatchRow row in rows)
-        row.ingredientString: row.foodId,
+        if (row.foodId case final String foodId) row.ingredientString: foodId,
     };
   }
+
+  /// Records that a wording needs no food at all — salt, pepper, a spice
+  /// (spec §5.3).
+  ///
+  /// The same row a food match would occupy, because it is the same question
+  /// with the other answer, and the unique key keeps a wording to one of them.
+  Future<void> rememberNoMatch({
+    required String householdId,
+    required String ingredientString,
+    required String id,
+    required DateTime updatedAt,
+  }) async {
+    final String key = normaliseKey(ingredientString);
+    if (key.isEmpty) return;
+
+    await _db
+        .into(_db.ingredientMatches)
+        .insert(
+          IngredientMatchesCompanion.insert(
+            id: id,
+            householdId: householdId,
+            ingredientString: key,
+            needsNoMatch: const Value<bool>(true),
+            updatedAt: updatedAt,
+          ),
+          onConflict: DoUpdate(
+            (_) => const IngredientMatchesCompanion(
+              foodId: Value<String?>(null),
+              needsNoMatch: Value<bool>(true),
+            ),
+            target: <Column<Object>>[
+              _db.ingredientMatches.householdId,
+              _db.ingredientMatches.ingredientString,
+            ],
+          ),
+        );
+  }
+
+  /// What this household has said about which wordings need no food.
+  ///
+  /// Marked wordings are its own [rememberNoMatch] rows. Unmarked ones are
+  /// rows that answer neither a food nor no-match, which is how disagreeing
+  /// with a built-in is recorded — the seed list is shipped rather than
+  /// written into anybody's data, so an opinion about it has to be a row of
+  /// its own.
+  Future<NoMatchRules> noMatchRules(String householdId) async {
+    final List<IngredientMatchRow> rows = await _rowsFor(householdId);
+    return NoMatchRules(
+      marked: <String>{
+        for (final IngredientMatchRow row in rows)
+          if (row.needsNoMatch) row.ingredientString,
+      },
+      unmarked: <String>{
+        for (final IngredientMatchRow row in rows)
+          if (!row.needsNoMatch && row.foodId == null) row.ingredientString,
+      },
+    );
+  }
+
+  /// Records that a wording needs an ordinary match after all — turning a
+  /// built-in seasoning back off.
+  Future<void> rememberNeedsMatch({
+    required String householdId,
+    required String ingredientString,
+    required String id,
+    required DateTime updatedAt,
+  }) async {
+    final String key = normaliseKey(ingredientString);
+    if (key.isEmpty) return;
+
+    await _db
+        .into(_db.ingredientMatches)
+        .insert(
+          IngredientMatchesCompanion.insert(
+            id: id,
+            householdId: householdId,
+            ingredientString: key,
+            updatedAt: updatedAt,
+          ),
+          onConflict: DoUpdate(
+            (_) => const IngredientMatchesCompanion(
+              foodId: Value<String?>(null),
+              needsNoMatch: Value<bool>(false),
+            ),
+            target: <Column<Object>>[
+              _db.ingredientMatches.householdId,
+              _db.ingredientMatches.ingredientString,
+            ],
+          ),
+        );
+  }
+
+  Future<List<IngredientMatchRow>> _rowsFor(String householdId) =>
+      (_db.select(_db.ingredientMatches)..where(
+            ($IngredientMatchesTable t) => t.householdId.equals(householdId),
+          ))
+          .get();
 }

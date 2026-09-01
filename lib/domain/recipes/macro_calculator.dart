@@ -18,6 +18,13 @@ enum IngredientMacroStatus {
   /// Salt to taste, garnish — excluded on purpose, not a gap.
   optionalExcluded,
 
+  /// Marked as a line that will never have a food: salt, pepper, a spice.
+  ///
+  /// Kept apart from [optionalExcluded] because the recipe page prints that
+  /// one as the word "optional", and salt in a bread recipe is not optional.
+  /// Both contribute nothing; only one of them is a claim about the recipe.
+  noMatchNeeded,
+
   /// No quantity on the line, so nothing can be computed.
   noQuantity,
 
@@ -49,6 +56,7 @@ class IngredientMacros {
   bool get isDataGap => switch (status) {
     IngredientMacroStatus.resolved => false,
     IngredientMacroStatus.optionalExcluded => false,
+    IngredientMacroStatus.noMatchNeeded => false,
     IngredientMacroStatus.noQuantity => true,
     IngredientMacroStatus.noFoodMatch => true,
     IngredientMacroStatus.unconvertible => true,
@@ -155,6 +163,16 @@ abstract final class MacroCalculator {
         ingredient: ingredient,
         macros: Macros.zero,
         status: IngredientMacroStatus.optionalExcluded,
+      );
+    }
+    // Before the quantity check, deliberately: "salt to taste" has no amount
+    // either, and reporting it as a missing quantity would be the same
+    // permanent, unfixable warning by another name.
+    if (ingredient.needsNoMatch) {
+      return IngredientMacros(
+        ingredient: ingredient,
+        macros: Macros.zero,
+        status: IngredientMacroStatus.noMatchNeeded,
       );
     }
 

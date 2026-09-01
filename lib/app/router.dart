@@ -8,6 +8,7 @@ import '../features/foods/barcode_scan_screen.dart';
 import '../features/foods/food_draft.dart';
 import '../features/foods/food_editor_screen.dart';
 import '../features/foods/food_library_screen.dart';
+import '../features/foods/seasonings_screen.dart';
 import '../features/placeholder_screen.dart';
 import '../features/plan/plan_screen.dart';
 import '../features/recipes/default_sweep_screen.dart';
@@ -88,6 +89,11 @@ GoRouter buildRouter() => GoRouter(
               RecipeEditorScreen(recipeId: state.pathParameters['id']),
         ),
       ],
+    ),
+    GoRoute(
+      path: '/food/seasonings',
+      builder: (BuildContext context, GoRouterState state) =>
+          const SeasoningsScreen(),
     ),
     GoRoute(
       path: '/food/scan',

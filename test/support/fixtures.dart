@@ -15,6 +15,7 @@ RecipeIngredient anIngredient(
   Unit? unit,
   String sectionId = _defaultSectionId,
   bool optional = false,
+  bool needsNoMatch = false,
   String? foodId,
   String? prepNote,
   int sortOrder = 0,
@@ -26,6 +27,7 @@ RecipeIngredient anIngredient(
   quantity: amount == null || unit == null ? null : Quantity.of(amount, unit),
   prepNote: prepNote,
   foodId: foodId,
+  needsNoMatch: needsNoMatch,
   isOptional: optional,
   sortOrder: sortOrder,
 );

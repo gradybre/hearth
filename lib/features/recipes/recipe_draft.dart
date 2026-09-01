@@ -74,6 +74,7 @@ class RecipeDraft {
     this.notes,
     this.existingId,
     this.matches = const <String, String>{},
+    this.noMatch = const <String>{},
   });
 
   final String title;
@@ -97,6 +98,11 @@ class RecipeDraft {
   /// editing the text above it — retyping a quantity should not silently drop
   /// the food you attached.
   final Map<String, String> matches;
+
+  /// Lines marked as needing no food at all — salt, pepper, a spice
+  /// (spec §5.3). Keyed the same way as [matches], and for the same reason:
+  /// the mark has to survive the text above it being edited.
+  final Set<String> noMatch;
 
   bool get isEditing => existingId != null;
 
@@ -144,6 +150,10 @@ class RecipeDraft {
   /// The food attached to an ingredient line, if any.
   String? foodIdFor(String ingredientName) =>
       matches[normaliseKey(ingredientName)];
+
+  /// Whether this line has been marked as needing no food.
+  bool needsNoMatchFor(String ingredientName) =>
+      noMatch.contains(normaliseKey(ingredientName));
 
   /// Attaches a food to every line with this name.
   RecipeDraft withMatch(String ingredientName, String? foodId) {
@@ -230,6 +240,7 @@ class RecipeDraft {
             prepNote: ingredients[i].prepNote,
             foodId: foodIdFor(ingredients[i].name),
             isOptional: ingredients[i].isOptional,
+            needsNoMatch: needsNoMatchFor(ingredients[i].name),
             sortOrder: i,
           ),
       ],
@@ -285,6 +296,12 @@ class RecipeDraft {
     tags: recipe.tags,
     notes: recipe.notes,
     existingId: recipe.id,
+    noMatch: <String>{
+      for (final RecipeIngredient ingredient in recipe.allIngredients)
+        if (ingredient.needsNoMatch)
+          if (normaliseKey(ingredient.name).isNotEmpty)
+            normaliseKey(ingredient.name),
+    },
     // Keyed by the stored name *and* by whatever the current parser makes of
     // the raw line, because those are not always the same string.
     //
@@ -327,18 +344,40 @@ class RecipeDraft {
     notes: notes ?? this.notes,
     existingId: existingId,
     matches: matches,
+    noMatch: noMatch,
   );
 
-  RecipeDraft _copyWithMatches(Map<String, String> next) => RecipeDraft(
-    title: title,
-    servings: servings,
-    sections: sections,
-    prepMinutes: prepMinutes,
-    cookMinutes: cookMinutes,
-    cuisine: cuisine,
-    tags: tags,
-    notes: notes,
-    existingId: existingId,
-    matches: next,
-  );
+  /// This draft with [name] marked as needing no food, or unmarked.
+  ///
+  /// Keyed by name like [withMatch], so every line saying "salt" changes
+  /// together and the mark survives the text above it being edited.
+  RecipeDraft withNoMatch(String ingredientName, {required bool marked}) {
+    final String key = normaliseKey(ingredientName);
+    if (key.isEmpty) return this;
+    final Set<String> next = <String>{...noMatch};
+    if (marked) {
+      next.add(key);
+    } else {
+      next.remove(key);
+    }
+    return _copy(noMatch: next);
+  }
+
+  RecipeDraft _copyWithMatches(Map<String, String> next) =>
+      _copy(matches: next);
+
+  RecipeDraft _copy({Map<String, String>? matches, Set<String>? noMatch}) =>
+      RecipeDraft(
+        title: title,
+        servings: servings,
+        sections: sections,
+        prepMinutes: prepMinutes,
+        cookMinutes: cookMinutes,
+        cuisine: cuisine,
+        tags: tags,
+        notes: notes,
+        existingId: existingId,
+        matches: matches ?? this.matches,
+        noMatch: noMatch ?? this.noMatch,
+      );
 }

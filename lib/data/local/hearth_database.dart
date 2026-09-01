@@ -44,7 +44,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -91,6 +91,15 @@ class HearthDatabase extends _$HearthDatabase {
       // recipe line naming the same thing matches itself (spec §5.3).
       if (from < 10) {
         await m.addColumn(foods, foods.isDefault);
+      }
+      // v11 marks a line as needing no food at all — salt, pepper, a spice —
+      // so it stops being counted among the gaps (spec §5.3).
+      if (from < 11) {
+        await m.addColumn(recipeIngredients, recipeIngredients.needsNoMatch);
+        // `food_id` becomes nullable and gains a companion flag. SQLite
+        // cannot drop a NOT NULL in place, so the table is rebuilt — which
+        // also installs the CHECK that replaces the constraint.
+        await m.alterTable(TableMigration(ingredientMatches));
       }
     },
     beforeOpen: (OpeningDetails details) async {

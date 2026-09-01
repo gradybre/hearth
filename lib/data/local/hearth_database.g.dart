@@ -1252,6 +1252,21 @@ class $RecipeIngredientsTable extends RecipeIngredients
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _needsNoMatchMeta = const VerificationMeta(
+    'needsNoMatch',
+  );
+  @override
+  late final GeneratedColumn<bool> needsNoMatch = GeneratedColumn<bool>(
+    'needs_no_match',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("needs_no_match" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _sortOrderMeta = const VerificationMeta(
     'sortOrder',
   );
@@ -1277,6 +1292,7 @@ class $RecipeIngredientsTable extends RecipeIngredients
     quantityUnit,
     prepNote,
     isOptional,
+    needsNoMatch,
     sortOrder,
   ];
   @override
@@ -1371,6 +1387,15 @@ class $RecipeIngredientsTable extends RecipeIngredients
         isOptional.isAcceptableOrUnknown(data['is_optional']!, _isOptionalMeta),
       );
     }
+    if (data.containsKey('needs_no_match')) {
+      context.handle(
+        _needsNoMatchMeta,
+        needsNoMatch.isAcceptableOrUnknown(
+          data['needs_no_match']!,
+          _needsNoMatchMeta,
+        ),
+      );
+    }
     if (data.containsKey('sort_order')) {
       context.handle(
         _sortOrderMeta,
@@ -1430,6 +1455,10 @@ class $RecipeIngredientsTable extends RecipeIngredients
         DriftSqlType.bool,
         data['${effectivePrefix}is_optional'],
       )!,
+      needsNoMatch: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}needs_no_match'],
+      )!,
       sortOrder: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
@@ -1460,6 +1489,10 @@ class RecipeIngredientRow extends DataClass
   final String? quantityUnit;
   final String? prepNote;
   final bool isOptional;
+
+  /// A line that will never have a food behind it: salt, pepper, a spice
+  /// (spec §5.3). Distinct from [isOptional], which is what the recipe said.
+  final bool needsNoMatch;
   final int sortOrder;
   const RecipeIngredientRow({
     required this.id,
@@ -1473,6 +1506,7 @@ class RecipeIngredientRow extends DataClass
     this.quantityUnit,
     this.prepNote,
     required this.isOptional,
+    required this.needsNoMatch,
     required this.sortOrder,
   });
   @override
@@ -1501,6 +1535,7 @@ class RecipeIngredientRow extends DataClass
       map['prep_note'] = Variable<String>(prepNote);
     }
     map['is_optional'] = Variable<bool>(isOptional);
+    map['needs_no_match'] = Variable<bool>(needsNoMatch);
     map['sort_order'] = Variable<int>(sortOrder);
     return map;
   }
@@ -1530,6 +1565,7 @@ class RecipeIngredientRow extends DataClass
           ? const Value.absent()
           : Value(prepNote),
       isOptional: Value(isOptional),
+      needsNoMatch: Value(needsNoMatch),
       sortOrder: Value(sortOrder),
     );
   }
@@ -1553,6 +1589,7 @@ class RecipeIngredientRow extends DataClass
       quantityUnit: serializer.fromJson<String?>(json['quantityUnit']),
       prepNote: serializer.fromJson<String?>(json['prepNote']),
       isOptional: serializer.fromJson<bool>(json['isOptional']),
+      needsNoMatch: serializer.fromJson<bool>(json['needsNoMatch']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
     );
   }
@@ -1571,6 +1608,7 @@ class RecipeIngredientRow extends DataClass
       'quantityUnit': serializer.toJson<String?>(quantityUnit),
       'prepNote': serializer.toJson<String?>(prepNote),
       'isOptional': serializer.toJson<bool>(isOptional),
+      'needsNoMatch': serializer.toJson<bool>(needsNoMatch),
       'sortOrder': serializer.toJson<int>(sortOrder),
     };
   }
@@ -1587,6 +1625,7 @@ class RecipeIngredientRow extends DataClass
     Value<String?> quantityUnit = const Value.absent(),
     Value<String?> prepNote = const Value.absent(),
     bool? isOptional,
+    bool? needsNoMatch,
     int? sortOrder,
   }) => RecipeIngredientRow(
     id: id ?? this.id,
@@ -1602,6 +1641,7 @@ class RecipeIngredientRow extends DataClass
     quantityUnit: quantityUnit.present ? quantityUnit.value : this.quantityUnit,
     prepNote: prepNote.present ? prepNote.value : this.prepNote,
     isOptional: isOptional ?? this.isOptional,
+    needsNoMatch: needsNoMatch ?? this.needsNoMatch,
     sortOrder: sortOrder ?? this.sortOrder,
   );
   RecipeIngredientRow copyWithCompanion(RecipeIngredientsCompanion data) {
@@ -1625,6 +1665,9 @@ class RecipeIngredientRow extends DataClass
       isOptional: data.isOptional.present
           ? data.isOptional.value
           : this.isOptional,
+      needsNoMatch: data.needsNoMatch.present
+          ? data.needsNoMatch.value
+          : this.needsNoMatch,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
     );
   }
@@ -1643,6 +1686,7 @@ class RecipeIngredientRow extends DataClass
           ..write('quantityUnit: $quantityUnit, ')
           ..write('prepNote: $prepNote, ')
           ..write('isOptional: $isOptional, ')
+          ..write('needsNoMatch: $needsNoMatch, ')
           ..write('sortOrder: $sortOrder')
           ..write(')'))
         .toString();
@@ -1661,6 +1705,7 @@ class RecipeIngredientRow extends DataClass
     quantityUnit,
     prepNote,
     isOptional,
+    needsNoMatch,
     sortOrder,
   );
   @override
@@ -1678,6 +1723,7 @@ class RecipeIngredientRow extends DataClass
           other.quantityUnit == this.quantityUnit &&
           other.prepNote == this.prepNote &&
           other.isOptional == this.isOptional &&
+          other.needsNoMatch == this.needsNoMatch &&
           other.sortOrder == this.sortOrder);
 }
 
@@ -1693,6 +1739,7 @@ class RecipeIngredientsCompanion extends UpdateCompanion<RecipeIngredientRow> {
   final Value<String?> quantityUnit;
   final Value<String?> prepNote;
   final Value<bool> isOptional;
+  final Value<bool> needsNoMatch;
   final Value<int> sortOrder;
   final Value<int> rowid;
   const RecipeIngredientsCompanion({
@@ -1707,6 +1754,7 @@ class RecipeIngredientsCompanion extends UpdateCompanion<RecipeIngredientRow> {
     this.quantityUnit = const Value.absent(),
     this.prepNote = const Value.absent(),
     this.isOptional = const Value.absent(),
+    this.needsNoMatch = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1722,6 +1770,7 @@ class RecipeIngredientsCompanion extends UpdateCompanion<RecipeIngredientRow> {
     this.quantityUnit = const Value.absent(),
     this.prepNote = const Value.absent(),
     this.isOptional = const Value.absent(),
+    this.needsNoMatch = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -1740,6 +1789,7 @@ class RecipeIngredientsCompanion extends UpdateCompanion<RecipeIngredientRow> {
     Expression<String>? quantityUnit,
     Expression<String>? prepNote,
     Expression<bool>? isOptional,
+    Expression<bool>? needsNoMatch,
     Expression<int>? sortOrder,
     Expression<int>? rowid,
   }) {
@@ -1755,6 +1805,7 @@ class RecipeIngredientsCompanion extends UpdateCompanion<RecipeIngredientRow> {
       if (quantityUnit != null) 'quantity_unit': quantityUnit,
       if (prepNote != null) 'prep_note': prepNote,
       if (isOptional != null) 'is_optional': isOptional,
+      if (needsNoMatch != null) 'needs_no_match': needsNoMatch,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1772,6 +1823,7 @@ class RecipeIngredientsCompanion extends UpdateCompanion<RecipeIngredientRow> {
     Value<String?>? quantityUnit,
     Value<String?>? prepNote,
     Value<bool>? isOptional,
+    Value<bool>? needsNoMatch,
     Value<int>? sortOrder,
     Value<int>? rowid,
   }) {
@@ -1787,6 +1839,7 @@ class RecipeIngredientsCompanion extends UpdateCompanion<RecipeIngredientRow> {
       quantityUnit: quantityUnit ?? this.quantityUnit,
       prepNote: prepNote ?? this.prepNote,
       isOptional: isOptional ?? this.isOptional,
+      needsNoMatch: needsNoMatch ?? this.needsNoMatch,
       sortOrder: sortOrder ?? this.sortOrder,
       rowid: rowid ?? this.rowid,
     );
@@ -1828,6 +1881,9 @@ class RecipeIngredientsCompanion extends UpdateCompanion<RecipeIngredientRow> {
     if (isOptional.present) {
       map['is_optional'] = Variable<bool>(isOptional.value);
     }
+    if (needsNoMatch.present) {
+      map['needs_no_match'] = Variable<bool>(needsNoMatch.value);
+    }
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
@@ -1851,6 +1907,7 @@ class RecipeIngredientsCompanion extends UpdateCompanion<RecipeIngredientRow> {
           ..write('quantityUnit: $quantityUnit, ')
           ..write('prepNote: $prepNote, ')
           ..write('isOptional: $isOptional, ')
+          ..write('needsNoMatch: $needsNoMatch, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -6151,12 +6208,27 @@ class $IngredientMatchesTable extends IngredientMatches
   late final GeneratedColumn<String> foodId = GeneratedColumn<String>(
     'food_id',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.string,
-    requiredDuringInsert: true,
+    requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
       'REFERENCES foods (id) ON DELETE CASCADE',
     ),
+  );
+  static const VerificationMeta _needsNoMatchMeta = const VerificationMeta(
+    'needsNoMatch',
+  );
+  @override
+  late final GeneratedColumn<bool> needsNoMatch = GeneratedColumn<bool>(
+    'needs_no_match',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("needs_no_match" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
   );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
@@ -6175,6 +6247,7 @@ class $IngredientMatchesTable extends IngredientMatches
     householdId,
     ingredientString,
     foodId,
+    needsNoMatch,
     updatedAt,
   ];
   @override
@@ -6221,8 +6294,15 @@ class $IngredientMatchesTable extends IngredientMatches
         _foodIdMeta,
         foodId.isAcceptableOrUnknown(data['food_id']!, _foodIdMeta),
       );
-    } else if (isInserting) {
-      context.missing(_foodIdMeta);
+    }
+    if (data.containsKey('needs_no_match')) {
+      context.handle(
+        _needsNoMatchMeta,
+        needsNoMatch.isAcceptableOrUnknown(
+          data['needs_no_match']!,
+          _needsNoMatchMeta,
+        ),
+      );
     }
     if (data.containsKey('updated_at')) {
       context.handle(
@@ -6260,6 +6340,10 @@ class $IngredientMatchesTable extends IngredientMatches
       foodId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}food_id'],
+      ),
+      needsNoMatch: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}needs_no_match'],
       )!,
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
@@ -6282,13 +6366,24 @@ class IngredientMatchRow extends DataClass
   /// The normalised ingredient string — the same key the density lookup and
   /// consolidation use, so they all agree on what counts as "the same thing".
   final String ingredientString;
-  final String foodId;
+
+  /// Null when the answer is [needsNoMatch] rather than a food.
+  final String? foodId;
+
+  /// The other answer this row can carry: nothing to match, because the line
+  /// is salt (spec §5.3).
+  ///
+  /// One table rather than two, because "what does this wording resolve to?"
+  /// is one question — and the unique key below already guarantees one answer
+  /// per wording. Two tables could disagree about the same string.
+  final bool needsNoMatch;
   final DateTime updatedAt;
   const IngredientMatchRow({
     required this.id,
     required this.householdId,
     required this.ingredientString,
-    required this.foodId,
+    this.foodId,
+    required this.needsNoMatch,
     required this.updatedAt,
   });
   @override
@@ -6297,7 +6392,10 @@ class IngredientMatchRow extends DataClass
     map['id'] = Variable<String>(id);
     map['household_id'] = Variable<String>(householdId);
     map['ingredient_string'] = Variable<String>(ingredientString);
-    map['food_id'] = Variable<String>(foodId);
+    if (!nullToAbsent || foodId != null) {
+      map['food_id'] = Variable<String>(foodId);
+    }
+    map['needs_no_match'] = Variable<bool>(needsNoMatch);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -6307,7 +6405,10 @@ class IngredientMatchRow extends DataClass
       id: Value(id),
       householdId: Value(householdId),
       ingredientString: Value(ingredientString),
-      foodId: Value(foodId),
+      foodId: foodId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(foodId),
+      needsNoMatch: Value(needsNoMatch),
       updatedAt: Value(updatedAt),
     );
   }
@@ -6321,7 +6422,8 @@ class IngredientMatchRow extends DataClass
       id: serializer.fromJson<String>(json['id']),
       householdId: serializer.fromJson<String>(json['householdId']),
       ingredientString: serializer.fromJson<String>(json['ingredientString']),
-      foodId: serializer.fromJson<String>(json['foodId']),
+      foodId: serializer.fromJson<String?>(json['foodId']),
+      needsNoMatch: serializer.fromJson<bool>(json['needsNoMatch']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -6332,7 +6434,8 @@ class IngredientMatchRow extends DataClass
       'id': serializer.toJson<String>(id),
       'householdId': serializer.toJson<String>(householdId),
       'ingredientString': serializer.toJson<String>(ingredientString),
-      'foodId': serializer.toJson<String>(foodId),
+      'foodId': serializer.toJson<String?>(foodId),
+      'needsNoMatch': serializer.toJson<bool>(needsNoMatch),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -6341,13 +6444,15 @@ class IngredientMatchRow extends DataClass
     String? id,
     String? householdId,
     String? ingredientString,
-    String? foodId,
+    Value<String?> foodId = const Value.absent(),
+    bool? needsNoMatch,
     DateTime? updatedAt,
   }) => IngredientMatchRow(
     id: id ?? this.id,
     householdId: householdId ?? this.householdId,
     ingredientString: ingredientString ?? this.ingredientString,
-    foodId: foodId ?? this.foodId,
+    foodId: foodId.present ? foodId.value : this.foodId,
+    needsNoMatch: needsNoMatch ?? this.needsNoMatch,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   IngredientMatchRow copyWithCompanion(IngredientMatchesCompanion data) {
@@ -6360,6 +6465,9 @@ class IngredientMatchRow extends DataClass
           ? data.ingredientString.value
           : this.ingredientString,
       foodId: data.foodId.present ? data.foodId.value : this.foodId,
+      needsNoMatch: data.needsNoMatch.present
+          ? data.needsNoMatch.value
+          : this.needsNoMatch,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -6371,14 +6479,21 @@ class IngredientMatchRow extends DataClass
           ..write('householdId: $householdId, ')
           ..write('ingredientString: $ingredientString, ')
           ..write('foodId: $foodId, ')
+          ..write('needsNoMatch: $needsNoMatch, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, householdId, ingredientString, foodId, updatedAt);
+  int get hashCode => Object.hash(
+    id,
+    householdId,
+    ingredientString,
+    foodId,
+    needsNoMatch,
+    updatedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -6387,6 +6502,7 @@ class IngredientMatchRow extends DataClass
           other.householdId == this.householdId &&
           other.ingredientString == this.ingredientString &&
           other.foodId == this.foodId &&
+          other.needsNoMatch == this.needsNoMatch &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -6394,7 +6510,8 @@ class IngredientMatchesCompanion extends UpdateCompanion<IngredientMatchRow> {
   final Value<String> id;
   final Value<String> householdId;
   final Value<String> ingredientString;
-  final Value<String> foodId;
+  final Value<String?> foodId;
+  final Value<bool> needsNoMatch;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const IngredientMatchesCompanion({
@@ -6402,6 +6519,7 @@ class IngredientMatchesCompanion extends UpdateCompanion<IngredientMatchRow> {
     this.householdId = const Value.absent(),
     this.ingredientString = const Value.absent(),
     this.foodId = const Value.absent(),
+    this.needsNoMatch = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -6409,19 +6527,20 @@ class IngredientMatchesCompanion extends UpdateCompanion<IngredientMatchRow> {
     required String id,
     required String householdId,
     required String ingredientString,
-    required String foodId,
+    this.foodId = const Value.absent(),
+    this.needsNoMatch = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        householdId = Value(householdId),
        ingredientString = Value(ingredientString),
-       foodId = Value(foodId),
        updatedAt = Value(updatedAt);
   static Insertable<IngredientMatchRow> custom({
     Expression<String>? id,
     Expression<String>? householdId,
     Expression<String>? ingredientString,
     Expression<String>? foodId,
+    Expression<bool>? needsNoMatch,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -6430,6 +6549,7 @@ class IngredientMatchesCompanion extends UpdateCompanion<IngredientMatchRow> {
       if (householdId != null) 'household_id': householdId,
       if (ingredientString != null) 'ingredient_string': ingredientString,
       if (foodId != null) 'food_id': foodId,
+      if (needsNoMatch != null) 'needs_no_match': needsNoMatch,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -6439,7 +6559,8 @@ class IngredientMatchesCompanion extends UpdateCompanion<IngredientMatchRow> {
     Value<String>? id,
     Value<String>? householdId,
     Value<String>? ingredientString,
-    Value<String>? foodId,
+    Value<String?>? foodId,
+    Value<bool>? needsNoMatch,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -6448,6 +6569,7 @@ class IngredientMatchesCompanion extends UpdateCompanion<IngredientMatchRow> {
       householdId: householdId ?? this.householdId,
       ingredientString: ingredientString ?? this.ingredientString,
       foodId: foodId ?? this.foodId,
+      needsNoMatch: needsNoMatch ?? this.needsNoMatch,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -6468,6 +6590,9 @@ class IngredientMatchesCompanion extends UpdateCompanion<IngredientMatchRow> {
     if (foodId.present) {
       map['food_id'] = Variable<String>(foodId.value);
     }
+    if (needsNoMatch.present) {
+      map['needs_no_match'] = Variable<bool>(needsNoMatch.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -6484,6 +6609,7 @@ class IngredientMatchesCompanion extends UpdateCompanion<IngredientMatchRow> {
           ..write('householdId: $householdId, ')
           ..write('ingredientString: $ingredientString, ')
           ..write('foodId: $foodId, ')
+          ..write('needsNoMatch: $needsNoMatch, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -10327,6 +10453,7 @@ typedef $$RecipeIngredientsTableCreateCompanionBuilder =
       Value<String?> quantityUnit,
       Value<String?> prepNote,
       Value<bool> isOptional,
+      Value<bool> needsNoMatch,
       Value<int> sortOrder,
       Value<int> rowid,
     });
@@ -10343,6 +10470,7 @@ typedef $$RecipeIngredientsTableUpdateCompanionBuilder =
       Value<String?> quantityUnit,
       Value<String?> prepNote,
       Value<bool> isOptional,
+      Value<bool> needsNoMatch,
       Value<int> sortOrder,
       Value<int> rowid,
     });
@@ -10437,6 +10565,11 @@ class $$RecipeIngredientsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<bool> get needsNoMatch => $composableBuilder(
+    column: $table.needsNoMatch,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
     builder: (column) => ColumnFilters(column),
@@ -10525,6 +10658,11 @@ class $$RecipeIngredientsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get needsNoMatch => $composableBuilder(
+    column: $table.needsNoMatch,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
     builder: (column) => ColumnOrderings(column),
@@ -10601,6 +10739,11 @@ class $$RecipeIngredientsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get needsNoMatch => $composableBuilder(
+    column: $table.needsNoMatch,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
 
@@ -10672,6 +10815,7 @@ class $$RecipeIngredientsTableTableManager
                 Value<String?> quantityUnit = const Value.absent(),
                 Value<String?> prepNote = const Value.absent(),
                 Value<bool> isOptional = const Value.absent(),
+                Value<bool> needsNoMatch = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RecipeIngredientsCompanion(
@@ -10686,6 +10830,7 @@ class $$RecipeIngredientsTableTableManager
                 quantityUnit: quantityUnit,
                 prepNote: prepNote,
                 isOptional: isOptional,
+                needsNoMatch: needsNoMatch,
                 sortOrder: sortOrder,
                 rowid: rowid,
               ),
@@ -10702,6 +10847,7 @@ class $$RecipeIngredientsTableTableManager
                 Value<String?> quantityUnit = const Value.absent(),
                 Value<String?> prepNote = const Value.absent(),
                 Value<bool> isOptional = const Value.absent(),
+                Value<bool> needsNoMatch = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RecipeIngredientsCompanion.insert(
@@ -10716,6 +10862,7 @@ class $$RecipeIngredientsTableTableManager
                 quantityUnit: quantityUnit,
                 prepNote: prepNote,
                 isOptional: isOptional,
+                needsNoMatch: needsNoMatch,
                 sortOrder: sortOrder,
                 rowid: rowid,
               ),
@@ -14114,7 +14261,8 @@ typedef $$IngredientMatchesTableCreateCompanionBuilder =
       required String id,
       required String householdId,
       required String ingredientString,
-      required String foodId,
+      Value<String?> foodId,
+      Value<bool> needsNoMatch,
       required DateTime updatedAt,
       Value<int> rowid,
     });
@@ -14123,7 +14271,8 @@ typedef $$IngredientMatchesTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> householdId,
       Value<String> ingredientString,
-      Value<String> foodId,
+      Value<String?> foodId,
+      Value<bool> needsNoMatch,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -14144,9 +14293,9 @@ final class $$IngredientMatchesTableReferences
   static $FoodsTable _foodIdTable(_$HearthDatabase db) =>
       db.foods.createAlias('ingredient_matches__food_id__foods__id');
 
-  $$FoodsTableProcessedTableManager get foodId {
-    final $_column = $_itemColumn<String>('food_id')!;
-
+  $$FoodsTableProcessedTableManager? get foodId {
+    final $_column = $_itemColumn<String>('food_id');
+    if ($_column == null) return null;
     final manager = $$FoodsTableTableManager(
       $_db,
       $_db.foods,
@@ -14180,6 +14329,11 @@ class $$IngredientMatchesTableFilterComposer
 
   ColumnFilters<String> get ingredientString => $composableBuilder(
     column: $table.ingredientString,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get needsNoMatch => $composableBuilder(
+    column: $table.needsNoMatch,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -14236,6 +14390,11 @@ class $$IngredientMatchesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get needsNoMatch => $composableBuilder(
+    column: $table.needsNoMatch,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -14284,6 +14443,11 @@ class $$IngredientMatchesTableAnnotationComposer
 
   GeneratedColumn<String> get ingredientString => $composableBuilder(
     column: $table.ingredientString,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get needsNoMatch => $composableBuilder(
+    column: $table.needsNoMatch,
     builder: (column) => column,
   );
 
@@ -14350,7 +14514,8 @@ class $$IngredientMatchesTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> householdId = const Value.absent(),
                 Value<String> ingredientString = const Value.absent(),
-                Value<String> foodId = const Value.absent(),
+                Value<String?> foodId = const Value.absent(),
+                Value<bool> needsNoMatch = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => IngredientMatchesCompanion(
@@ -14358,6 +14523,7 @@ class $$IngredientMatchesTableTableManager
                 householdId: householdId,
                 ingredientString: ingredientString,
                 foodId: foodId,
+                needsNoMatch: needsNoMatch,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -14366,7 +14532,8 @@ class $$IngredientMatchesTableTableManager
                 required String id,
                 required String householdId,
                 required String ingredientString,
-                required String foodId,
+                Value<String?> foodId = const Value.absent(),
+                Value<bool> needsNoMatch = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => IngredientMatchesCompanion.insert(
@@ -14374,6 +14541,7 @@ class $$IngredientMatchesTableTableManager
                 householdId: householdId,
                 ingredientString: ingredientString,
                 foodId: foodId,
+                needsNoMatch: needsNoMatch,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),

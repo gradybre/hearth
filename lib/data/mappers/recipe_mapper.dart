@@ -91,6 +91,7 @@ abstract final class RecipeMapper {
         prepNote: row.prepNote,
         foodId: row.foodId,
         isOptional: row.isOptional,
+        needsNoMatch: row.needsNoMatch,
         sortOrder: row.sortOrder,
       );
 
@@ -145,6 +146,7 @@ abstract final class RecipeMapper {
               ),
               prepNote: Value<String?>(ingredient.prepNote),
               isOptional: Value<bool>(ingredient.isOptional),
+              needsNoMatch: Value<bool>(ingredient.needsNoMatch),
               sortOrder: Value<int>(ingredient.sortOrder),
             ),
       ];
@@ -214,6 +216,7 @@ abstract final class RecipeMapper {
             'quantity_unit': QuantityMapper.unitToSql(ingredient.quantity),
             'prep_note': ingredient.prepNote,
             'is_optional': ingredient.isOptional,
+            'needs_no_match': ingredient.needsNoMatch,
             'sort_order': ingredient.sortOrder,
           },
     ],

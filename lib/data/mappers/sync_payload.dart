@@ -63,6 +63,7 @@ abstract final class SyncPayload {
                     prepNote: i['prep_note'] as String?,
                     foodId: i['food_id'] as String?,
                     isOptional: i['is_optional'] == true,
+                    needsNoMatch: i['needs_no_match'] == true,
                     sortOrder: _int(i['sort_order']) ?? 0,
                   ),
             ],

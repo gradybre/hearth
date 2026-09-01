@@ -1,8 +1,10 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/data/local/food_store.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/data/local/ingredient_match_store.dart';
+import 'package:hearth/domain/foods/no_match_rule.dart';
 
 import '../../support/fixtures.dart';
 
@@ -27,6 +29,8 @@ void main() {
   });
 
   tearDown(() => db.close());
+
+  noMatchTests(() => db, () => matches, now);
 
   Future<void> remember(String text, String foodId, {String id = 'm1'}) =>
       matches.remember(
@@ -109,5 +113,140 @@ void main() {
   test('an empty string is never remembered', () async {
     await remember('   ', 'food-oil');
     expect(await matches.allFor(household), isEmpty);
+  });
+}
+
+/// Wordings that need no food at all (spec §5.3).
+///
+/// Shares the file's own database rather than opening a second one: two
+/// `HearthDatabase` instances in one test file is what drift's
+/// multiple-databases warning is about, and the warning was right.
+void noMatchTests(
+  HearthDatabase Function() database,
+  IngredientMatchStore Function() matches,
+  DateTime now,
+) {
+  Future<void> markNoMatch(String wording) => matches().rememberNoMatch(
+    householdId: 'household-1',
+    ingredientString: wording,
+    id: 'row-$wording',
+    updatedAt: now,
+  );
+
+  group('one row, three answers', () {
+    test('a wording marked as needing no food comes back marked', () async {
+      await markNoMatch('fish sauce');
+      final NoMatchRules rules = await matches().noMatchRules('household-1');
+
+      expect(rules.marked, contains('fish sauce'));
+      expect(rules.covers('fish sauce'), isTrue);
+    });
+
+    test('it is not a food match, so it stays out of that map', () async {
+      await markNoMatch('salt');
+      expect(await matches().allFor('household-1'), isEmpty);
+      expect(
+        await matches().rememberedFoodId(
+          householdId: 'household-1',
+          ingredientString: 'salt',
+        ),
+        isNull,
+      );
+    });
+
+    test('a built-in turned back off is a row answering neither', () async {
+      await matches().rememberNeedsMatch(
+        householdId: 'household-1',
+        ingredientString: 'water',
+        id: 'row-water',
+        updatedAt: now,
+      );
+      final NoMatchRules rules = await matches().noMatchRules('household-1');
+
+      expect(rules.unmarked, contains('water'));
+      expect(rules.covers('water'), isFalse);
+      expect(rules.covers('salt'), isTrue, reason: 'the rest still stand');
+    });
+  });
+
+  group('a wording keeps one answer', () {
+    test('a food match replaces a no-match rule', () async {
+      await database()
+          .into(database().foods)
+          .insert(
+            FoodsCompanion.insert(
+              id: 'food-1',
+              name: 'Fish sauce',
+              updatedAt: now,
+            ),
+          );
+      await markNoMatch('fish sauce');
+      await matches().remember(
+        householdId: 'household-1',
+        ingredientString: 'fish sauce',
+        foodId: 'food-1',
+        id: 'row-2',
+        updatedAt: now,
+      );
+
+      expect(await matches().allFor('household-1'), <String, String>{
+        'fish sauce': 'food-1',
+      });
+      expect(
+        (await matches().noMatchRules('household-1')).marked,
+        isNot(contains('fish sauce')),
+      );
+    });
+
+    test('and a no-match rule replaces a food match', () async {
+      await database()
+          .into(database().foods)
+          .insert(
+            FoodsCompanion.insert(
+              id: 'food-1',
+              name: 'Fish sauce',
+              updatedAt: now,
+            ),
+          );
+      await matches().remember(
+        householdId: 'household-1',
+        ingredientString: 'fish sauce',
+        foodId: 'food-1',
+        id: 'row-1',
+        updatedAt: now,
+      );
+      await markNoMatch('fish sauce');
+
+      expect(await matches().allFor('household-1'), isEmpty);
+      expect(
+        (await matches().noMatchRules('household-1')).marked,
+        contains('fish sauce'),
+      );
+    });
+
+    test('the database refuses a row claiming both', () async {
+      // The CHECK that replaced the NOT NULL. A row answering a food *and*
+      // no-match is a bug, and this is where it stops.
+      await database()
+          .into(database().foods)
+          .insert(
+            FoodsCompanion.insert(id: 'food-1', name: 'Salt', updatedAt: now),
+          );
+      await expectLater(
+        database()
+            .into(database().ingredientMatches)
+            .insert(
+              IngredientMatchesCompanion.insert(
+                id: 'bad',
+                householdId: 'household-1',
+                ingredientString: 'salt',
+                foodId: const Value<String?>('food-1'),
+                needsNoMatch: const Value<bool>(true),
+                updatedAt: now,
+              ),
+            ),
+        throwsA(anything),
+      );
+    });
   });
 }

@@ -37,6 +37,9 @@ Future<String?> showFoodPicker(
 /// Returned by the sheet to mean "detach the food from this line".
 const String clearFoodSentinel = '__clear__';
 
+/// Returned by the sheet to mean "this line was never going to have a food".
+const String noMatchNeededSentinel = '__no_match__';
+
 class _FoodPickerSheet extends ConsumerStatefulWidget {
   const _FoodPickerSheet({
     required this.ingredientName,
@@ -206,7 +209,23 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
                             color: colors.textMuted,
                           ),
                         ),
-                        const SizedBox(height: HearthSpacing.md),
+                        const SizedBox(height: HearthSpacing.sm),
+                        // Salt has nothing to match and never will. Offered
+                        // here because here is where the line is nagging, and
+                        // it is remembered, so the next recipe starts quiet.
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: () =>
+                                Navigator.of(context)
+                                    .pop(noMatchNeededSentinel),
+                            icon: const Icon(Icons.grass_outlined, size: 18),
+                            label: const Text(
+                              "Nothing to match — it's a seasoning",
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: HearthSpacing.sm),
                         Row(
                           children: <Widget>[
                             Expanded(

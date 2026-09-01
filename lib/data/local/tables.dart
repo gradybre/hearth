@@ -82,6 +82,10 @@ class RecipeIngredients extends Table {
   TextColumn get quantityUnit => text().nullable()();
   TextColumn get prepNote => text().nullable()();
   BoolColumn get isOptional => boolean().withDefault(const Constant(false))();
+
+  /// A line that will never have a food behind it: salt, pepper, a spice
+  /// (spec §5.3). Distinct from [isOptional], which is what the recipe said.
+  BoolColumn get needsNoMatch => boolean().withDefault(const Constant(false))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
 
   @override
@@ -238,8 +242,18 @@ class IngredientMatches extends Table {
   /// The normalised ingredient string — the same key the density lookup and
   /// consolidation use, so they all agree on what counts as "the same thing".
   TextColumn get ingredientString => text()();
+
+  /// Null when the answer is [needsNoMatch] rather than a food.
   TextColumn get foodId =>
-      text().references(Foods, #id, onDelete: KeyAction.cascade)();
+      text().nullable().references(Foods, #id, onDelete: KeyAction.cascade)();
+
+  /// The other answer this row can carry: nothing to match, because the line
+  /// is salt (spec §5.3).
+  ///
+  /// One table rather than two, because "what does this wording resolve to?"
+  /// is one question — and the unique key below already guarantees one answer
+  /// per wording. Two tables could disagree about the same string.
+  BoolColumn get needsNoMatch => boolean().withDefault(const Constant(false))();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
@@ -248,6 +262,19 @@ class IngredientMatches extends Table {
   @override
   List<Set<Column<Object>>> get uniqueKeys => <Set<Column<Object>>>[
     <Column<Object>>{householdId, ingredientString},
+  ];
+
+  /// Never both at once. The NOT NULL this replaces held since the first
+  /// migration, and a row claiming a food *and* no match is a bug the database
+  /// is the right place to catch.
+  ///
+  /// Neither *is* allowed, and means something: this household has looked at
+  /// this wording and said it needs an ordinary match — which is how a
+  /// built-in seasoning gets turned back off. Three answers, one row, and the
+  /// unique key below keeps a wording to one of them.
+  @override
+  List<String> get customConstraints => <String>[
+    'CHECK (NOT ((food_id IS NOT NULL) AND needs_no_match))',
   ];
 }
 

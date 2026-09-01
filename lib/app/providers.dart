@@ -47,6 +47,7 @@ import '../data/sync/remote_rows.dart';
 import '../data/sync/sync_engine.dart';
 import '../domain/cooking/cook_session.dart';
 import '../domain/foods/food_query.dart';
+import '../domain/foods/no_match_rule.dart';
 import '../domain/models/food.dart';
 import '../domain/models/food_profile.dart';
 import '../domain/models/macros.dart';
@@ -192,6 +193,19 @@ final FutureProvider<Map<String, String>> rememberedMatchesProvider =
           .watch(ingredientMatchStoreProvider)
           .allFor(ref.watch(currentHouseholdIdProvider));
     });
+
+/// What this household says needs no food at all — salt, pepper, a spice
+/// (spec §5.3).
+///
+/// Combines its own rows with the seasonings Hearth ships knowing about, and
+/// with the ones it has disagreed with. Nothing is written into anybody's data
+/// to make the built-ins work; a row only appears when somebody says something.
+final FutureProvider<NoMatchRules> noMatchRulesProvider =
+    FutureProvider<NoMatchRules>(
+      (Ref ref) => ref
+          .watch(ingredientMatchStoreProvider)
+          .noMatchRules(ref.watch(currentHouseholdIdProvider)),
+    );
 
 /// The food most often matched to each ingredient name, across every recipe
 /// in the library (spec §5.3's "previously-used" tier, applied household-wide

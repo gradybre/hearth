@@ -10,6 +10,8 @@ import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
 import '../../data/adapters/label_reader.dart';
 import '../../data/adapters/recipe_ai.dart';
+import '../../data/local/ingredient_match_store.dart';
+import '../../domain/foods/no_match_rule.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
@@ -28,7 +30,7 @@ import 'recipe_import_controller.dart';
 import 'recipe_photo.dart';
 
 /// The ways out of a line whose food cannot answer in its unit.
-enum _FixChoice { addServing, readLabel, pickAnother, scan, unmatch }
+enum _FixChoice { addServing, readLabel, pickAnother, scan, unmatch, noMatch }
 
 /// Create or edit a recipe (spec §5.2).
 ///
@@ -77,6 +79,11 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   /// Normalised ingredient name to food id, mirroring [RecipeDraft.matches].
   Map<String, String> _matches = <String, String>{};
 
+  /// Lines marked as needing no food at all. Held here rather than derived
+  /// from the household rules each build, so a mark made in this editor shows
+  /// before the store has been re-read.
+  Set<String> _noMatch = <String>{};
+
   /// Remembered matches already applied, so auto-apply runs once per string
   /// and never fights a user who has just unmatched something.
   final Set<String> _autoApplied = <String>{};
@@ -113,13 +120,30 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   /// Lines that already carry a food are skipped, so this only ever fills a
   /// blank. Nothing anybody matched, or deliberately unmatched, is
   /// second-guessed.
-  void _autoApplyTrustedMatches(Map<String, String> remembered) {
+  void _autoApplyTrustedMatches(
+    Map<String, String> remembered,
+    NoMatchRules noMatchRules,
+  ) {
     final Map<String, String> next = <String, String>{..._matches};
+    final Set<String> nextNoMatch = <String>{..._noMatch};
     bool changed = false;
 
     for (final ParsedIngredient ingredient in _draft.parsedIngredients) {
       final String key = normaliseKey(ingredient.name);
-      if (key.isEmpty || next.containsKey(key)) continue;
+      if (key.isEmpty) continue;
+
+      // Salt needs no food, and the household — or the list Hearth ships —
+      // has already said so. Applied before matching is even attempted,
+      // because there is nothing here to match.
+      if (!next.containsKey(key) &&
+          !nextNoMatch.contains(key) &&
+          noMatchRules.covers(ingredient.name)) {
+        nextNoMatch.add(key);
+        changed = true;
+        continue;
+      }
+      if (nextNoMatch.contains(key)) continue;
+      if (next.containsKey(key)) continue;
       if (_autoApplied.contains(key)) continue;
 
       final MatchSuggestion? suggestion = IngredientMatcher.suggest(
@@ -136,7 +160,12 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
 
     if (changed) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() => _matches = next);
+        if (mounted) {
+          setState(() {
+            _matches = next;
+            _noMatch = nextNoMatch;
+          });
+        }
       });
     }
   }
@@ -256,6 +285,56 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     await _applyMatch(ingredient, chosen);
   }
 
+  /// Marks a line as one that will never have a food — salt, a spice — or
+  /// takes the mark back off (spec §5.3).
+  ///
+  /// Both at once, deliberately: the draft changes so this recipe stops
+  /// nagging now, and the household remembers so the next recipe using the
+  /// same wording starts quiet. That is the whole of what Brendan asked for —
+  /// select it, and have it stick.
+  Future<void> _markNoMatch(
+    ParsedIngredient ingredient, {
+    required bool marked,
+  }) async {
+    if (!mounted) return;
+    final String key = normaliseKey(ingredient.name);
+    if (key.isEmpty) return;
+
+    setState(() {
+      _noMatch = <String>{..._noMatch};
+      if (marked) {
+        _noMatch.add(key);
+        // A line that needs no food cannot also be matched to one.
+        _matches = <String, String>{..._matches}..remove(key);
+      } else {
+        _noMatch.remove(key);
+      }
+    });
+
+    final IngredientMatchStore store = ref.read(ingredientMatchStoreProvider);
+    final String household = ref.read(currentHouseholdIdProvider);
+    if (marked) {
+      await store.rememberNoMatch(
+        householdId: household,
+        ingredientString: ingredient.name,
+        id: const Uuid().v4(),
+        updatedAt: DateTime.now(),
+      );
+    } else {
+      // Not `forget`: taking the mark off one of the seasonings Hearth ships
+      // knowing about has to be recorded, or the built-in would simply put it
+      // back on the next build.
+      await store.rememberNeedsMatch(
+        householdId: household,
+        ingredientString: ingredient.name,
+        id: const Uuid().v4(),
+        updatedAt: DateTime.now(),
+      );
+    }
+    ref.invalidate(noMatchRulesProvider);
+    ref.invalidate(rememberedMatchesProvider);
+  }
+
   /// Records what a line was matched to — or unmatched from.
   ///
   /// Shared by the picker, the scanner, and the unmatch action, because all
@@ -263,6 +342,10 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   /// remembered so the same correction is never made twice (spec §5.3).
   Future<void> _applyMatch(ParsedIngredient ingredient, String? chosen) async {
     if (chosen == null || !mounted) return;
+    if (chosen == noMatchNeededSentinel) {
+      await _markNoMatch(ingredient, marked: true);
+      return;
+    }
     final String key = normaliseKey(ingredient.name);
 
     setState(() {
@@ -353,6 +436,11 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
                     'Scan the packet instead',
                   ),
                   (_FixChoice.unmatch, Icons.link_off, 'Unmatch this line'),
+                  (
+                    _FixChoice.noMatch,
+                    Icons.grass_outlined,
+                    "Nothing to match — it's a seasoning",
+                  ),
                 ])
               ListTile(
                 leading: Icon(icon, color: context.colors.textSecondary),
@@ -380,6 +468,8 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
         );
       case _FixChoice.unmatch:
         await _applyMatch(ingredient, clearFoodSentinel);
+      case _FixChoice.noMatch:
+        await _markNoMatch(ingredient, marked: true);
     }
   }
 
@@ -400,6 +490,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     notes: _notes.text,
     existingId: _existingId,
     matches: _matches,
+    noMatch: _noMatch,
   );
 
   void _addSection() => setState(() {
@@ -451,6 +542,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       ..addAll(draft.sections.map(_SectionFields.from));
     _existingId = draft.existingId;
     _matches = draft.matches;
+    _noMatch = draft.noMatch;
     _loaded = true;
   }
 
@@ -486,6 +578,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     };
     _autoApplyTrustedMatches(
       ref.watch(rememberedMatchesProvider).value ?? const <String, String>{},
+      ref.watch(noMatchRulesProvider).value ?? NoMatchRules.none,
     );
 
     if (editing && !_loaded) {
@@ -653,6 +746,8 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
                   statusByName: statusByName,
                   onMatch: _matchIngredient,
                   onFix: _showFixOptions,
+                  onNoMatch: (ParsedIngredient i, bool marked) =>
+                      _markNoMatch(i, marked: marked),
                 ),
                 if (_unmatchedIn(i, draft) case final List<ParsedIngredient> u
                     when u.isNotEmpty) ...<Widget>[
@@ -817,6 +912,7 @@ class _IngredientPreview extends StatelessWidget {
     required this.statusByName,
     required this.onMatch,
     required this.onFix,
+    required this.onNoMatch,
   });
 
   final List<ParsedIngredient> ingredients;
@@ -831,6 +927,9 @@ class _IngredientPreview extends StatelessWidget {
 
   /// Offers the ways out of a line whose food cannot answer in its unit.
   final void Function(ParsedIngredient, Food) onFix;
+
+  /// Marks a line as needing no food, or takes the mark back off.
+  final void Function(ParsedIngredient, bool) onNoMatch;
 
   @override
   Widget build(BuildContext context) {
@@ -852,6 +951,7 @@ class _IngredientPreview extends StatelessWidget {
                 final Food? matched = foods[draft.foodIdFor(ingredient.name)];
                 if (matched != null) onFix(ingredient, matched);
               },
+              onNoMatch: (bool marked) => onNoMatch(ingredient, marked),
               colors: colors,
               text: text,
             ),
@@ -868,6 +968,7 @@ class _IngredientRow extends StatelessWidget {
     required this.status,
     required this.onMatch,
     required this.onFix,
+    required this.onNoMatch,
     required this.colors,
     required this.text,
   });
@@ -882,6 +983,9 @@ class _IngredientRow extends StatelessWidget {
 
   /// Tapped instead of [onMatch] when the food is attached but unusable.
   final VoidCallback onFix;
+
+  /// Marks the line as needing no food, or takes the mark back off.
+  final ValueChanged<bool> onNoMatch;
 
   final HearthColors colors;
   final HearthTextStyles text;
@@ -915,6 +1019,13 @@ class _IngredientRow extends StatelessWidget {
         icon: Icons.remove,
         colour: colors.textMuted,
         text: 'not counted',
+      ),
+      // Not "not counted": that reads as a gap being tolerated. This line was
+      // never going to have a food, and saying so is the whole point.
+      IngredientMacroStatus.noMatchNeeded => (
+        icon: Icons.grass_outlined,
+        colour: colors.textMuted,
+        text: 'seasoning — no match needed',
       ),
       IngredientMacroStatus.noFoodMatch => (
         icon: Icons.link_off,
@@ -1017,12 +1128,36 @@ class _IngredientRow extends StatelessWidget {
                   ],
                 ),
               ),
+              // Only where it could help. A line already matched to a food, or
+              // already excluded by the recipe's own words, does not want this
+              // and a control on every row would be noise on most of them.
+              if (_offersNoMatch)
+                IconButton(
+                  onPressed: () => onNoMatch(!_isNoMatch),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: _isNoMatch
+                      ? 'This does need a food after all'
+                      : 'Nothing to match — it is a seasoning',
+                  icon: Icon(
+                    _isNoMatch ? Icons.grass : Icons.grass_outlined,
+                    size: 18,
+                    color: _isNoMatch ? colors.accent : colors.textMuted,
+                  ),
+                ),
             ],
           ),
         ),
       ),
     );
   }
+
+  bool get _isNoMatch => status == IngredientMacroStatus.noMatchNeeded;
+
+  bool get _offersNoMatch =>
+      _isNoMatch ||
+      status == IngredientMacroStatus.noFoodMatch ||
+      status == IngredientMacroStatus.noQuantity ||
+      (status == null && food == null);
 }
 
 /// Per-serving and whole-recipe macros, updating as ingredients change

@@ -8,6 +8,8 @@ import 'package:test/test.dart';
 import '../../support/fixtures.dart';
 
 void main() {
+  noMatchNeededTests();
+
   group('single ingredient', () {
     test('scales the food serving to the ingredient amount', () {
       final Food chicken = aFoodPer100g(
@@ -426,5 +428,95 @@ void main() {
       macros: const Macros(kcal: 80, proteinG: 3),
     );
     expect(MacroCalculator.forServings(slice, 2.5).kcal, 200);
+  });
+}
+
+/// Lines marked as needing no food at all (spec §5.3).
+void noMatchNeededTests() {
+  Recipe withSalt({bool marked = true}) => aRecipe(
+    title: 'Bread',
+    servings: 1,
+    ingredients: <RecipeIngredient>[
+      anIngredient(
+        'flour',
+        amount: 500,
+        unit: Units.gram,
+        foodId: 'food-flour',
+      ),
+      anIngredient('salt', needsNoMatch: marked),
+    ],
+  );
+
+  Map<String, Food> flour() => <String, Food>{
+    'food-flour': aFoodPer100g('Flour', kcal: 364, id: 'food-flour'),
+  };
+
+  group('a seasoning line', () {
+    test('contributes nothing and says why', () {
+      final RecipeMacros macros = MacroCalculator.forRecipe(
+        withSalt(),
+        foods: flour(),
+      );
+      final IngredientMacros salt = macros.ingredients.last;
+
+      expect(salt.status, IngredientMacroStatus.noMatchNeeded);
+      expect(salt.macros, Macros.zero);
+      expect(macros.total.kcal, closeTo(1820, 1e-6));
+    });
+
+    test('is not a gap, so the recipe reads as complete', () {
+      // The whole point. A warning that is always on stops being read, and
+      // salt was going to keep it on for ever.
+      final RecipeMacros macros = MacroCalculator.forRecipe(
+        withSalt(),
+        foods: flour(),
+      );
+
+      expect(macros.isIncomplete, isFalse);
+      expect(macros.incompleteReason, isNull);
+      expect(macros.ingredientsMissingFood, isEmpty);
+      expect(macros.ingredientsWithoutQuantity, isEmpty);
+    });
+
+    test('and unmarked, the same line is a gap again', () {
+      final RecipeMacros macros = MacroCalculator.forRecipe(
+        withSalt(marked: false),
+        foods: flour(),
+      );
+
+      expect(macros.isIncomplete, isTrue);
+      expect(macros.incompleteReason, isNotNull);
+    });
+
+    test('beats the no-amount check, which salt would trip too', () {
+      // "Salt to taste" has no quantity either. Reporting it as a missing
+      // amount would be the same permanent warning wearing another label.
+      final RecipeMacros macros = MacroCalculator.forRecipe(
+        withSalt(),
+        foods: flour(),
+      );
+      expect(
+        macros.ingredients.last.status,
+        isNot(IngredientMacroStatus.noQuantity),
+      );
+    });
+
+    test('optional still means optional, and is still its own thing', () {
+      final RecipeMacros macros = MacroCalculator.forRecipe(
+        aRecipe(
+          title: 'Garnished',
+          servings: 1,
+          ingredients: <RecipeIngredient>[
+            anIngredient('parsley', optional: true),
+          ],
+        ),
+        foods: const <String, Food>{},
+      );
+
+      expect(
+        macros.ingredients.single.status,
+        IngredientMacroStatus.optionalExcluded,
+      );
+    });
   });
 }

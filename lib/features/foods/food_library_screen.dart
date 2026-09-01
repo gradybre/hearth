@@ -124,6 +124,17 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
           // bulk bins, a wrapper already torn open. §12 names food-data
           // coverage as the biggest threat to the success bar, and none of
           // the databases above cover any of those.
+          // Where a marking made in a recipe is undone. Small and out of the
+          // way: it is a list you visit when something is wrong, not daily.
+          FloatingActionButton.small(
+            heroTag: 'food-seasonings',
+            onPressed: () => context.push('/food/seasonings'),
+            backgroundColor: colors.surfaceElevated,
+            foregroundColor: colors.textPrimary,
+            tooltip: 'Seasonings that need no match',
+            child: const Icon(Icons.grass_outlined),
+          ),
+          const SizedBox(height: HearthSpacing.sm),
           if (canReadLabels(ref)) ...<Widget>[
             FloatingActionButton.small(
               heroTag: 'food-label',
