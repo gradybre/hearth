@@ -50,6 +50,13 @@ task seems to require breaking one.
 7. **External integrations sit behind interfaces.** Nutrition sources (OFF → USDA → manual) and
    the shopping/Walmart export are swappable adapters. Never call them directly from UI code.
 
+8. **A migration is not done until it is pushed.** `supabase db reset` proves the SQL is right;
+   it says nothing about the database the app actually talks to. Three migrations once sat
+   local-only: the phone kept writing `is_default`, the hosted `upsert_food` had never heard of
+   the column, and every pull quietly reverted it — three features silently broken while every
+   local check passed and every commit said "migration applied". Finish a schema change with
+   `supabase db push`, and confirm with `supabase migration list` that local and remote agree.
+
 ## Working style
 
 - **Plan Mode first for anything non-trivial.** Read the relevant spec section, propose the
@@ -100,6 +107,8 @@ colima start                          # start the container runtime first
 supabase start                        # local Postgres + Auth + Storage
 supabase db reset                     # re-apply all migrations from scratch
 supabase db diff -f <name>            # capture schema changes as a migration
+supabase migration list               # local vs hosted — they must agree
+supabase db push                      # apply migrations to the hosted project
 
 # Schema/RLS guards — run after any migration change
 docker exec -i supabase_db_hearth psql -U postgres -d postgres \

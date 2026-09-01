@@ -76,6 +76,7 @@ Future<void> openRecipeWith(
 
 void main() {
   sweepTests();
+  editingExistingTests();
   zeroCalorieTests();
 
   group('marking a food', () {
@@ -429,5 +430,82 @@ void zeroCalorieTests() {
 
       expect(find.text('Black coffee'), findsNothing);
     });
+  });
+}
+
+/// Editing an existing food, which is where Brendan hit it (spec §5.5).
+void editingExistingTests() {
+  testWidgets('marking an existing food default sticks through a save', (
+    WidgetTester tester,
+  ) async {
+    final HearthDatabase db = await pumpHearthApp(
+      tester,
+      // With a serving: a food without one fails validation and never
+      // reaches the save at all, which would make this test pass or fail for
+      // a reason that has nothing to do with the flag.
+      foods: <Food>[
+        aFood(
+          'Maverick Ranch 96/4 Ground Beef',
+          id: 'food-beef',
+          servingOptions: <ServingOption>[
+            aServing(
+              amount: 100,
+              unit: Units.gram,
+              macros: const Macros(kcal: 130),
+            ),
+          ],
+        ),
+      ],
+    );
+    await tester.tap(find.text('Foods').last);
+    await pumpFrames(tester);
+    await tester.tap(find.text('Maverick Ranch 96/4 Ground Beef'));
+    await pumpFrames(tester, frames: 12);
+
+    await tester.tap(find.text('Use this by default'));
+    await pumpFrames(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await pumpFrames(tester, frames: 12);
+
+    final FoodRow saved = await (db.select(
+      db.foods,
+    )..where(($FoodsTable f) => f.id.equals('food-beef'))).getSingle();
+    expect(saved.isDefault, isTrue);
+  });
+
+  testWidgets('and unmarking it sticks too', (WidgetTester tester) async {
+    final HearthDatabase db = await pumpHearthApp(
+      tester,
+      foods: <Food>[
+        aFood(
+          'Whole milk',
+          id: 'food-milk',
+          isDefault: true,
+          servingOptions: <ServingOption>[
+            aServing(
+              amount: 1,
+              unit: Units.cup,
+              macros: const Macros(kcal: 149),
+            ),
+          ],
+        ),
+      ],
+    );
+    await tester.tap(find.text('Foods').last);
+    await pumpFrames(tester);
+    // The editor reads the food through a provider, so it needs frames to
+    // get past its spinner before the switch is the food's own value.
+    await tester.tap(find.text('Whole milk'));
+    await pumpFrames(tester, frames: 12);
+
+    await tester.tap(find.text('Use this by default'));
+    await pumpFrames(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await pumpFrames(tester, frames: 12);
+
+    final FoodRow saved = await (db.select(
+      db.foods,
+    )..where(($FoodsTable f) => f.id.equals('food-milk'))).getSingle();
+    expect(saved.isDefault, isFalse);
   });
 }
