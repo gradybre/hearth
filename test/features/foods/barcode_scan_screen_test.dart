@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/data/adapters/label_reader.dart';
 import 'package:hearth/data/adapters/nutrition_source.dart';
@@ -370,6 +371,43 @@ void main() {
     await pumpFrames(tester, frames: 10);
 
     expect(find.text('New food'), findsOneWidget);
+  });
+
+  testWidgets('the scanner holds the screen still, and lets go after', (
+    WidgetTester tester,
+  ) async {
+    // Held over a packet, a phone sits between flat and upright and the
+    // accelerometer keeps changing its mind. Each flip relays out the frame,
+    // moves the scan window under a barcode that has not moved, and restarts
+    // the preview.
+    final List<Object?> asked = <Object?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (MethodCall call) async {
+        if (call.method == 'SystemChrome.setPreferredOrientations') {
+          asked.add(call.arguments);
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
+    await openScanner(tester, cameraAvailable: true);
+    expect(asked, <Object?>[
+      <String>['DeviceOrientation.portraitUp'],
+    ]);
+
+    // Released on the way out, and to the app's own supported set rather than
+    // to a list repeated here — that list already differs between iPhone and
+    // iPad, and Info.plist is the one place it is written down.
+    await tester.pageBack();
+    await pumpFrames(tester);
+    expect(asked.last, isEmpty);
   });
 
   testWidgets('a code that is not a product says so before looking anywhere', (

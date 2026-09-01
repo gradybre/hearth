@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -55,9 +57,29 @@ class _BarcodeScanScreenState extends ConsumerState<BarcodeScanScreen> {
   /// the camera mid-scan.
   late final bool _cameraIsPossible = ref.read(cameraScanningAvailableProvider);
 
+  /// Whether asking for an orientation is a question this platform answers.
+  ///
+  /// Desktop embedders do not implement it, and a MissingPluginException on
+  /// the way into a screen is a crash rather than a preference not honoured.
+  static bool get _rotationCanBeLocked =>
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.android;
+
   @override
   void initState() {
     super.initState();
+    // Held over a packet, a phone is somewhere between flat and upright and
+    // the accelerometer keeps changing its mind. Every flip relays out the
+    // frame, moves the scan window under a barcode that has not moved, and
+    // restarts the preview — so the one moment the camera needs to be still
+    // is the one where the screen is most likely to turn over.
+    if (_rotationCanBeLocked) {
+      unawaited(
+        SystemChrome.setPreferredOrientations(<DeviceOrientation>[
+          DeviceOrientation.portraitUp,
+        ]),
+      );
+    }
     if (_cameraIsPossible) {
       _camera = MobileScannerController(
         detectionSpeed: DetectionSpeed.noDuplicates,
@@ -78,6 +100,12 @@ class _BarcodeScanScreenState extends ConsumerState<BarcodeScanScreen> {
 
   @override
   void dispose() {
+    // Back to whatever Info.plist allows, rather than a list repeated here:
+    // an empty list means "the app's own supported set", which is one place
+    // to change it and already differs between iPhone and iPad.
+    if (_rotationCanBeLocked) {
+      unawaited(SystemChrome.setPreferredOrientations(<DeviceOrientation>[]));
+    }
     _typed.dispose();
     _camera?.dispose();
     super.dispose();
