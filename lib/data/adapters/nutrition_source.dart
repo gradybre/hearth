@@ -11,6 +11,7 @@ class NutritionMatch {
     required this.source,
     required this.confidence,
     this.fromLibrary = false,
+    this.isGeneric = false,
   });
 
   final Food food;
@@ -28,6 +29,15 @@ class NutritionMatch {
   /// already have this" — offering to save the second produces a duplicate of
   /// a food the user may already have corrected.
   final bool fromLibrary;
+
+  /// True when this is a plain ingredient rather than a packaged product.
+  ///
+  /// USDA keeps its curated whole foods — Foundation, SR Legacy, and the
+  /// survey set — apart from the million-odd branded labels, and the
+  /// difference is exactly the one a recipe cares about: an ingredient list
+  /// asks for cheddar cheese, not for a particular shop's packet of it. Only
+  /// a tiebreak, so a search that names a brand still gets that brand.
+  final bool isGeneric;
 
   /// 0..1. Anything the adapter is unsure of is flagged for review rather than
   /// silently accepted — a wrong match corrupts macros invisibly.

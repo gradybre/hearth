@@ -118,8 +118,21 @@ class UsdaNutritionSource implements NutritionSource {
       ),
       source: FoodSource.usda,
       confidence: _number(json['confidence']) ?? 0.5,
+      isGeneric: _genericDataTypes.contains(_text(json['data_type'])),
     );
   }
+
+  /// USDA's curated whole foods, as against its branded catalogue.
+  ///
+  /// Foundation and SR Legacy are the laboratory and legacy reference data;
+  /// the survey set is what FNDDS uses to describe what people actually eat.
+  /// None of them is a product on a shelf, which is what makes them the right
+  /// answer to a recipe's "red bell pepper".
+  static const Set<String> _genericDataTypes = <String>{
+    'Foundation',
+    'SR Legacy',
+    'Survey (FNDDS)',
+  };
 
   /// The pack's own serving, when the function found one in grams.
   ///

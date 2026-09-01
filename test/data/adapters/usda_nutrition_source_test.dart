@@ -25,25 +25,59 @@ UsdaNutritionSource sourceReturning(Map<String, Object?> payload) {
   return UsdaNutritionSource(client);
 }
 
-Map<String, Object?> aHit({String? servingLabel, double servingGrams = 28}) =>
+Map<String, Object?> aHit({
+  String? servingLabel,
+  double servingGrams = 28,
+  String? dataType,
+}) => <String, Object?>{
+  'matches': <Object?>[
     <String, Object?>{
-      'matches': <Object?>[
-        <String, Object?>{
-          'fdc_id': '123',
-          'name': 'Cheddar cheese',
-          'per_100g': <String, Object?>{
-            'kcal': 400,
-            'protein_g': 25,
-            'carb_g': 1.3,
-            'fat_g': 33,
-          },
-          'serving_grams': servingGrams,
-          'serving_label': ?servingLabel,
-        },
-      ],
-    };
+      'fdc_id': '123',
+      'name': 'Cheddar cheese',
+      'data_type': ?dataType,
+      'per_100g': <String, Object?>{
+        'kcal': 400,
+        'protein_g': 25,
+        'carb_g': 1.3,
+        'fat_g': 33,
+      },
+      'serving_grams': servingGrams,
+      'serving_label': ?servingLabel,
+    },
+  ],
+};
 
 void main() {
+  group('which side of USDA an answer came from', () {
+    // Two datasets in one API: a couple of thousand curated whole foods and
+    // about two million branded labels. Which one answered decides whether
+    // this is an ingredient or a packet, and only the function can say.
+    test('a curated food is a plain ingredient', () async {
+      final List<NutritionMatch> matches = await sourceReturning(
+        aHit(dataType: 'SR Legacy'),
+      ).search('cheddar');
+
+      expect(matches.single.isGeneric, isTrue);
+    });
+
+    test('a branded label is not', () async {
+      final List<NutritionMatch> matches = await sourceReturning(
+        aHit(dataType: 'Branded'),
+      ).search('cheddar');
+
+      expect(matches.single.isGeneric, isFalse);
+    });
+
+    test('a function that has not said yet is treated as a packet', () async {
+      // Fail towards the status quo: an older deployment says nothing, and
+      // nothing must not read as "this is the ingredient you wanted".
+      final List<NutritionMatch> matches = await sourceReturning(aHit())
+          .search('cheddar');
+
+      expect(matches.single.isGeneric, isFalse);
+    });
+  });
+
   test('the measure the box states leads, not the metric weight', () async {
     // The function reports the weight and states the household measure
     // separately. Keeping only the weight meant a food saved from here could

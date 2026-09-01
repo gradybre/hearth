@@ -66,6 +66,45 @@ void main() {
     expect(results.first.food.servingOptions, isNotEmpty);
   }, skip: skip);
 
+  test('a curated food says which side of USDA it came from', () async {
+    // The peppers were always in the answer; Hearth's own ranking is what put
+    // veggie chips above them. Ordering that correctly needs to know which
+    // results are ingredients and which are packets, and only the function
+    // can say — FDC's `dataType` is the field, and this is the seam it
+    // crosses.
+    final List<NutritionMatch> results = await usda.search(
+      'red bell pepper',
+      limit: 20,
+    );
+
+    expect(
+      results.where((NutritionMatch m) => m.isGeneric),
+      isNotEmpty,
+      reason: 'USDA has four Foundation entries for bell peppers alone',
+    );
+  }, skip: skip);
+
+  test(
+    'a curated food is not dropped for stating energy differently',
+    () async {
+      // USDA's Foundation set does not carry nutrient 208 at all — it states
+      // energy as Atwater general and specific factors instead. Requiring 208
+      // silently discarded every one of them, so the best data USDA has for a
+      // raw ingredient never reached the app, and a search for a bell pepper
+      // answered with veggie chips.
+      final List<NutritionMatch> results = await usda.search(
+        'red bell pepper',
+        limit: 20,
+      );
+
+      expect(
+        results.map((NutritionMatch m) => m.food.name),
+        contains('Peppers, bell, red, raw'),
+      );
+    },
+    skip: skip,
+  );
+
   test('an empty query never reaches the function', () async {
     expect(await usda.search('   '), isEmpty);
   }, skip: skip);

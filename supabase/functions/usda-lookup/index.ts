@@ -14,10 +14,20 @@
 const FDC = 'https://api.nal.usda.gov/fdc/v1';
 
 /// FDC nutrient numbers. The ids are stable; the names in the payload are not.
-const KCAL = '208';
 const PROTEIN = '203';
 const CARB = '205';
 const FAT = '204';
+
+/// Energy, in the order FDC prefers to state it.
+///
+/// 208 is the classic reported value and covers the branded catalogue. The
+/// curated Foundation foods do not carry it at all — they state energy as
+/// "Energy (Atwater General Factors)" and "(Specific Factors)" instead — so
+/// insisting on 208 silently discarded them, which is why a search for "red
+/// bell pepper" showed veggie chips and hummus while USDA's own four entries
+/// for raw bell peppers never appeared. General factors first: it is the
+/// familiar 4-4-9 arithmetic, and the one every other source here is quoting.
+const KCAL = ['208', '957', '958'];
 
 interface Macros {
   kcal: number;
@@ -31,6 +41,7 @@ interface Match {
   name: string;
   brand: string | null;
   barcode: string | null;
+  data_type: string | null;
   per_100g: Macros;
   serving_grams: number | null;
   serving_label: string | null;
@@ -135,6 +146,7 @@ function toMatch(food: any): Match | null {
     name,
     brand,
     barcode,
+    data_type: `${food?.dataType ?? ''}`.trim() || null,
     per_100g: per100g,
     serving_grams: gramsPerServing,
     serving_label: `${food?.householdServingFullText ?? ''}`.trim() || null,
@@ -161,7 +173,15 @@ function macrosOf(food: any): Macros | null {
     return null;
   };
 
-  const kcal = by(KCAL);
+  const firstOf = (numbers: string[]): number | null => {
+    for (const number of numbers) {
+      const value = by(number);
+      if (value !== null) return value;
+    }
+    return null;
+  };
+
+  const kcal = firstOf(KCAL);
   if (kcal === null) return null;
 
   return {

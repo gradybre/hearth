@@ -52,6 +52,7 @@ NutritionMatch match(Food food, {double confidence = 1}) =>
 
 void main() {
   searchTests();
+  redBellPepperTests();
 
   group('the chain stops at the first answer', () {
     test('the library wins, and nothing else is even asked', () async {
@@ -377,5 +378,127 @@ void searchTests() {
 
       expect(found, hasLength(1));
     });
+  });
+}
+
+/// Searching for a plain ingredient and being shown snack food.
+///
+/// These are the names Open Food Facts and USDA really returned for "red bell
+/// pepper", in the order they were shown: eight processed products above the
+/// vegetable. Every one of them genuinely contains the words that were typed,
+/// which is exactly why a name-similarity ranking put them on top.
+void redBellPepperTests() {
+  Food usda(String name, {String? brand, required String id}) => Food(
+    id: id,
+    name: name,
+    brand: brand,
+    source: FoodSource.usda,
+    servingOptions: <ServingOption>[
+      ServingOption(
+        id: '$id:100g',
+        label: '100 g',
+        amount: Quantity.of(100, Units.gram),
+        macros: const Macros(kcal: 100),
+      ),
+    ],
+  );
+
+  test('the vegetable comes before things made out of it', () async {
+    final StubSource source = StubSource(
+      'USDA',
+      results: <NutritionMatch>[
+        match(
+          usda(
+            'RED BELL PEPPER VEGGIE CHIPS, RED BELL PEPPER',
+            brand: "Brad's Raw Chips, LLC",
+            id: 'chips',
+          ),
+        ),
+        match(
+          usda(
+            'RED BELL PEPPER & BASIL COUSCOUS, RED BELL PEPPER & BASIL',
+            brand: 'Target Stores',
+            id: 'couscous',
+          ),
+        ),
+        match(
+          usda(
+            'Roasted Red Bell Pepper Strips',
+            brand: 'Mezzetta',
+            id: 'strips',
+          ),
+        ),
+        match(
+          usda(
+            'CREAMY RED BELL PEPPER SAUCE, CREAMY RED BELL PEPPER',
+            brand: 'Valley Fine Foods Company',
+            id: 'sauce',
+          ),
+        ),
+        match(
+          usda(
+            'ROASTED RED BELL PEPPER HUMMUS, ROASTED RED BELL PEPPER',
+            brand: 'Roots Organic Gourmet',
+            id: 'hummus',
+          ),
+        ),
+        match(
+          usda('FIORI, RED BELL PEPPER', brand: 'Harmons Inc', id: 'fiori'),
+        ),
+        match(usda('Peppers, red, cooked', id: 'cooked')),
+        match(usda('Peppers, bell, red, raw', id: 'raw')),
+        match(usda('Spices, pepper, red or cayenne', id: 'cayenne')),
+      ],
+    );
+
+    final List<NutritionMatch> found = await NutritionLookup(<NutritionSource>[
+      source,
+    ]).search('red bell pepper');
+
+    expect(found.map((NutritionMatch m) => m.food.id).take(2), <String>[
+      // Says every word that was typed, and is a pepper.
+      'raw',
+      // Says two of the three, and is also a pepper — which beats saying all
+      // three about a bag of crisps.
+      'cooked',
+    ]);
+    // Cayenne is a pepper too, but USDA files it as a spice and names it as
+    // one, so it stays where a spice belongs: down with the products, not
+    // between the vegetables.
+    expect(
+      found.map((NutritionMatch m) => m.food.id).take(2),
+      isNot(contains('cayenne')),
+    );
+  });
+
+  test('a plain ingredient breaks a tie with the packet of it', () async {
+    // Both are cheddar cheese, worded identically and equally well. A recipe
+    // asks for the ingredient, so that is what leads.
+    final StubSource source = StubSource(
+      'USDA',
+      results: <NutritionMatch>[
+        NutritionMatch(
+          food: usda(
+            'CHEDDAR CHEESE',
+            brand: 'Kirkland Signature',
+            id: 'packet',
+          ),
+          source: FoodSource.usda,
+          confidence: 0.9,
+        ),
+        NutritionMatch(
+          food: usda('Cheddar cheese', id: 'plain'),
+          source: FoodSource.usda,
+          confidence: 0.9,
+          isGeneric: true,
+        ),
+      ],
+    );
+
+    final List<NutritionMatch> found = await NutritionLookup(<NutritionSource>[
+      source,
+    ]).search('cheddar cheese');
+
+    expect(found.first.food.id, 'plain');
   });
 }
