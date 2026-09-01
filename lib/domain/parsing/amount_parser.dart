@@ -76,3 +76,40 @@ double? parseAmount(String raw) {
 
   return double.tryParse(text);
 }
+
+/// Writes a number back the way it would be typed — the inverse of
+/// [parseAmount], and its round-trip partner.
+///
+/// A ⅔ cup serving stored as a double is 0.6666666666666666, which is neither
+/// what anybody typed nor anything they would type over. Only the fractions a
+/// kitchen actually uses are recognised; anything else keeps its digits rather
+/// than being rounded into a number the user never entered.
+///
+/// Fractions are written "2/3" and "1 1/2" rather than as ⅔ and 1½ glyphs,
+/// because this is what goes *into an editable field*: a glyph is harder to
+/// correct than the characters a keyboard can produce. Read-only surfaces use
+/// `QuantityFormat`, which prefers the glyphs.
+String writeAmount(double value) {
+  if (value == value.roundToDouble()) return value.round().toString();
+
+  const Map<String, double> fractions = <String, double>{
+    '1/2': 0.5,
+    '1/3': 1 / 3,
+    '2/3': 2 / 3,
+    '1/4': 0.25,
+    '3/4': 0.75,
+    '1/8': 0.125,
+    '3/8': 0.375,
+    '5/8': 0.625,
+    '7/8': 0.875,
+  };
+
+  final double whole = value - value % 1;
+  final double fraction = value - whole;
+  for (final MapEntry<String, double> entry in fractions.entries) {
+    if ((fraction - entry.value).abs() < 1e-9) {
+      return whole == 0 ? entry.key : '${whole.round()} ${entry.key}';
+    }
+  }
+  return '$value';
+}

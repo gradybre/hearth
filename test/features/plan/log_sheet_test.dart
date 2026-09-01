@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/data/adapters/nutrition_source.dart';
+import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
@@ -61,13 +62,13 @@ NutritionMatch aMatch(
   ),
 );
 
-Future<void> openMealPicker(
+Future<HearthDatabase> openMealPicker(
   WidgetTester tester, {
   List<Food> foods = const <Food>[],
   List<Recipe> recipes = const <Recipe>[],
   List<NutritionSource> sources = const <NutritionSource>[],
 }) async {
-  await pumpHearthApp(
+  final HearthDatabase db = await pumpHearthApp(
     tester,
     foods: foods,
     recipes: recipes,
@@ -77,6 +78,7 @@ Future<void> openMealPicker(
   await pumpFrames(tester);
   await tester.tap(find.byTooltip('Add to breakfast'));
   await pumpFrames(tester);
+  return db;
 }
 
 /// Types into the picker's search field and waits out the typing pause.
@@ -87,6 +89,8 @@ Future<void> searchFor(WidgetTester tester, String query) async {
 }
 
 void main() {
+  portionTests();
+
   testWidgets('the meal picker reaches beyond the library', (
     WidgetTester tester,
   ) async {
@@ -256,5 +260,137 @@ void main() {
     await searchFor(tester, 'oikos');
 
     expect(find.textContaining('1 container'), findsOneWidget);
+  });
+}
+
+/// Typing a portion instead of tapping to it (spec §5.6).
+void portionTests() {
+  Food yogurt() => aFood(
+    'Greek yogurt',
+    id: 'food-yogurt',
+    servingOptions: <ServingOption>[
+      ServingOption(
+        id: 'serving-1',
+        label: '170 g',
+        amount: Quantity.of(170, Units.gram),
+        macros: const Macros(kcal: 100, proteinG: 17, carbG: 6),
+      ),
+    ],
+  );
+
+  /// Opens the sheet with the yogurt picked, so the portion row is on screen.
+  Future<HearthDatabase> pickYogurt(WidgetTester tester) async {
+    final HearthDatabase db = await openMealPicker(
+      tester,
+      foods: <Food>[yogurt()],
+    );
+    await tester.tap(find.text('Greek yogurt'));
+    await pumpFrames(tester);
+    return db;
+  }
+
+  Finder portionField() => find.widgetWithText(TextField, '1');
+
+  Future<void> typePortion(WidgetTester tester, String text) async {
+    await tester.enterText(find.byType(TextField).last, text);
+    await pumpFrames(tester);
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await pumpFrames(tester);
+  }
+
+  group('the portion', () {
+    testWidgets('is a field, not just a number between two buttons', (
+      WidgetTester tester,
+    ) async {
+      await pickYogurt(tester);
+      expect(portionField(), findsOneWidget);
+    });
+
+    testWidgets('takes a typed number, and the macros follow', (
+      WidgetTester tester,
+    ) async {
+      await pickYogurt(tester);
+      await typePortion(tester, '3');
+
+      // 100 kcal a serving, three servings.
+      expect(find.textContaining('300 kcal'), findsOneWidget);
+    });
+
+    testWidgets('takes a fraction, because a portion is written that way', (
+      WidgetTester tester,
+    ) async {
+      // No numeric pad on iOS carries both "." and "/", which is why the
+      // field takes the full keyboard and filters it.
+      await pickYogurt(tester);
+      await typePortion(tester, '1/2');
+
+      expect(find.textContaining('50 kcal'), findsOneWidget);
+    });
+
+    testWidgets('and a decimal', (WidgetTester tester) async {
+      await pickYogurt(tester);
+      await typePortion(tester, '1.5');
+
+      expect(find.textContaining('150 kcal'), findsOneWidget);
+    });
+
+    testWidgets('reads a fraction back the way it would be typed', (
+      WidgetTester tester,
+    ) async {
+      await pickYogurt(tester);
+      await typePortion(tester, '1/3');
+
+      // Not 0.3333333333333333, which is neither what was typed nor anything
+      // anybody would type over.
+      expect(find.widgetWithText(TextField, '1/3'), findsOneWidget);
+    });
+
+    testWidgets('reverts rather than logging a number nobody chose', (
+      WidgetTester tester,
+    ) async {
+      await pickYogurt(tester);
+      await typePortion(tester, '0');
+
+      expect(portionField(), findsOneWidget);
+      expect(find.textContaining('100 kcal'), findsOneWidget);
+    });
+
+    testWidgets('an empty field reverts too', (WidgetTester tester) async {
+      await pickYogurt(tester);
+      await typePortion(tester, '');
+
+      expect(portionField(), findsOneWidget);
+    });
+
+    testWidgets('the buttons still work, and the field shows what they did', (
+      WidgetTester tester,
+    ) async {
+      await pickYogurt(tester);
+      await tester.tap(find.byTooltip('Larger portion'));
+      await pumpFrames(tester);
+
+      expect(find.widgetWithText(TextField, '1 1/4'), findsOneWidget);
+      expect(find.textContaining('125 kcal'), findsOneWidget);
+    });
+
+    testWidgets('a typed portion is what gets logged', (
+      WidgetTester tester,
+    ) async {
+      final HearthDatabase db = await pickYogurt(tester);
+      await typePortion(tester, '2');
+      await tester.tap(find.text('Log it'));
+      await pumpFrames(tester, frames: 12);
+
+      // Read from the row rather than the day view: the harness feeds the
+      // day a fixed list, so a freshly written entry never reaches it.
+      final List<MealPlanEntryRow> rows = await db
+          .select(db.mealPlanEntries)
+          .get();
+      expect(rows.single.servings, 2);
+      expect(rows.single.isLogged, isTrue);
+      // The snapshot is frozen at log time (spec §4), so the doubled portion
+      // is in it rather than being recomputed later.
+      expect(rows.single.macroSnapshot, contains('200'));
+    });
   });
 }

@@ -148,7 +148,7 @@ class FoodDraft {
       for (final ServingOption option in food.servingOptions)
         ServingDraft(
           id: option.id,
-          amount: _trimNumber(
+          amount: writeAmount(
             option.amount.amountIn(
               option.amount.preferredUnit ??
                   Units.canonicalFor(option.amount.kind),
@@ -209,7 +209,7 @@ class FoodDraft {
   static String _rounded(String value, {int decimals = 1}) {
     final double? parsed = double.tryParse(value);
     if (parsed == null) return value;
-    return _trimNumber(double.parse(parsed.toStringAsFixed(decimals)));
+    return writeAmount(double.parse(parsed.toStringAsFixed(decimals)));
   }
 
   /// A food nobody had, carrying only the number that was scanned, so the next
@@ -250,7 +250,7 @@ class FoodDraft {
     final List<ServingDraft> added = <ServingDraft>[];
     for (final LabelServing read in reading.servings) {
       final ServingDraft candidate = ServingDraft(
-        amount: _trimNumber(read.amount),
+        amount: writeAmount(read.amount),
         unitId: read.unitId,
         kcal: _rounded('${read.kcal}', decimals: 0),
         protein: _rounded('${read.proteinG}'),
@@ -339,43 +339,11 @@ class FoodDraft {
     isDefault: isDefault ?? this.isDefault,
   );
 
-  /// A number as a person would write it back into the field.
-  ///
-  /// Fractions reopen as fractions: a ⅔ cup serving stored as a double comes
-  /// back as 0.6666666666666666 otherwise, which is neither what was typed
-  /// nor anything anyone would type. Only the fractions a kitchen actually
-  /// uses are recognised — anything else keeps its digits rather than being
-  /// rounded into a number the user did not enter.
-  static String _trimNumber(double value) {
-    if (value == value.roundToDouble()) return value.round().toString();
-
-    const Map<String, double> fractions = <String, double>{
-      '1/2': 0.5,
-      '1/3': 1 / 3,
-      '2/3': 2 / 3,
-      '1/4': 0.25,
-      '3/4': 0.75,
-      '1/8': 0.125,
-      '3/8': 0.375,
-      '5/8': 0.625,
-      '7/8': 0.875,
-    };
-
-    final double whole = value - value % 1;
-    final double fraction = value - whole;
-    for (final MapEntry<String, double> entry in fractions.entries) {
-      if ((fraction - entry.value).abs() < 1e-9) {
-        return whole == 0 ? entry.key : '${whole.round()} ${entry.key}';
-      }
-    }
-    return '$value';
-  }
-
   /// A zero macro reopens as an empty field, not a literal "0".
   ///
   /// Showing "0" made the field look filled in, and typing into it produced
   /// "0250" rather than "250" — the digits landed beside a value the user
   /// never entered. Empty also lets the hint do its job.
   static String _macroText(double value) =>
-      value == 0 ? '' : _trimNumber(value);
+      value == 0 ? '' : writeAmount(value);
 }

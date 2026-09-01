@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
@@ -8,6 +9,7 @@ import '../../app/theme/hearth_theme.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
+import '../../domain/parsing/amount_parser.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/recent_log.dart';
 import '../../domain/recipes/macro_calculator.dart';
@@ -494,9 +496,11 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
 
 /// The portion stepper (spec §5.6).
 ///
-/// Quarter steps because half and quarter servings are what actually come up;
-/// finer than that is false precision on a plate.
-class _PortionStepper extends StatelessWidget {
+/// Quarter steps because half and quarter servings are what actually come up.
+/// The number between them is a field, not a label: a third of a batch is
+/// three taps of a minus button and a tenth is not reachable at all, and
+/// "how much did you eat" is a question with an answer, not a slider.
+class _PortionStepper extends StatefulWidget {
   const _PortionStepper({required this.servings, required this.onChanged});
 
   final double servings;
@@ -505,11 +509,76 @@ class _PortionStepper extends StatelessWidget {
   static const double _step = 0.25;
 
   @override
+  State<_PortionStepper> createState() => _PortionStepperState();
+}
+
+class _PortionStepperState extends State<_PortionStepper> {
+  late final TextEditingController _field = TextEditingController(
+    text: writeAmount(widget.servings),
+  );
+  final FocusNode _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      // Typing over "1" and getting "12" is the classic annoyance, so the
+      // whole value is selected on arrival and replaced by the first digit.
+      if (_focus.hasFocus) {
+        _field.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _field.text.length,
+        );
+      } else {
+        _commit();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(_PortionStepper old) {
+    super.didUpdateWidget(old);
+    // The buttons change the value from outside, and that has to show. Not
+    // while the field has focus, though: rewriting text under a cursor moves
+    // it, and half-typed input is not a number to be corrected yet.
+    if (!_focus.hasFocus && widget.servings != old.servings) {
+      _field.text = writeAmount(widget.servings);
+    }
+  }
+
+  @override
+  void dispose() {
+    _field.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  /// Reads what was typed, or puts back what was there.
+  ///
+  /// A portion of zero is not a smaller portion, it is a deletion — and this
+  /// is not the control that deletes things. Anything unreadable reverts
+  /// rather than silently logging a number nobody chose.
+  void _commit() {
+    final double? typed = parseAmount(_field.text);
+    if (typed == null || typed <= 0) {
+      _field.text = writeAmount(widget.servings);
+      return;
+    }
+    _field.text = writeAmount(typed);
+    if (typed != widget.servings) widget.onChanged(typed);
+  }
+
+  void _step(double by) {
+    final double next = ((widget.servings + by) * 100).roundToDouble() / 100;
+    if (next <= 0) return;
+    _focus.unfocus();
+    _field.text = writeAmount(next);
+    widget.onChanged(next);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    final String label = servings == servings.roundToDouble()
-        ? servings.round().toString()
-        : servings.toString();
 
     return Row(
       children: <Widget>[
@@ -519,24 +588,47 @@ class _PortionStepper extends StatelessWidget {
         ),
         const Spacer(),
         IconButton(
-          onPressed: servings <= _step
+          onPressed: widget.servings <= _PortionStepper._step
               ? null
-              : () =>
-                    onChanged(((servings - _step) * 100).roundToDouble() / 100),
+              : () => _step(-_PortionStepper._step),
           tooltip: 'Smaller portion',
           icon: const Icon(Icons.remove_circle_outline),
         ),
         SizedBox(
-          width: 64,
-          child: Text(
-            label,
+          width: 76,
+          child: TextField(
+            controller: _field,
+            focusNode: _focus,
             textAlign: TextAlign.center,
             style: context.text.ingredient.copyWith(fontSize: 20),
+            // The full keyboard, filtered — no numeric pad on iOS carries
+            // both "." and "/", and a portion is written both ways. Same
+            // reasoning as the serving-size field in the food editor.
+            keyboardType: TextInputType.text,
+            inputFormatters: <TextInputFormatter>[
+              FilteringTextInputFormatter.allow(amountCharacters),
+            ],
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _focus.unfocus(),
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: HearthSpacing.sm,
+              ),
+              // An underline, so it reads as something you can type in
+              // rather than a number that happens to sit between two
+              // buttons.
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: colors.outline),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: colors.accent),
+              ),
+            ),
           ),
         ),
         IconButton(
-          onPressed: () =>
-              onChanged(((servings + _step) * 100).roundToDouble() / 100),
+          onPressed: () => _step(_PortionStepper._step),
           tooltip: 'Larger portion',
           icon: const Icon(Icons.add_circle_outline),
         ),
