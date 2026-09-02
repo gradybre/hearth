@@ -101,8 +101,8 @@ Core entities (Postgres tables, RLS-scoped):
 - **meal_plan_day** — id, user_id, date, notes
 - **meal_plan_entry** — id, meal_plan_day_id, meal_slot (breakfast/lunch/dinner/snack), ref_type (food/recipe), ref_id, servings, is_planned, is_logged, logged_at, **macro_snapshot** (kcal/protein/carb/fat + portion frozen at log time)
 - **macro_target** — id, user_id, week_start_date, kcal, protein_g, carb_g, fat_g
-- **shopping_list** — id, household_id, week_start_date, status
-- **shopping_list_item** — id, shopping_list_id, food_id/raw_name, aggregated_quantity, unit, store_tag, checked (on-hand), is_manual (non-recipe item), source_recipe_ids[]
+- **shopping_list** — id, household_id, from_date, to_date, status
+- **shopping_list_item** — id, shopping_list_id, food_id/raw_name, three quantities (`planned` from the recipes, `wanted` if edited, `on_hand`), unit, store_tag, checked, is_manual (non-recipe item), sort_order, source_recipe_ids[]
 
 **Sharing model:** recipes and foods are **household-scoped** (shared library). Meal plans, logs, macro targets, favorites, and the AI generation chat are **user-scoped** (private). Editing a shared recipe edits the shared copy (single source of truth), not a fork.
 
@@ -206,14 +206,18 @@ Core entities (Postgres tables, RLS-scoped):
 - **Backdating:** any day is editable (forgot to log yesterday, etc.); frozen snapshots keep past integrity intact.
 
 ### 5.7 Shopping List + Walmart Adapter
-- Build a week's shopping list from the planned recipes/foods.
+- Build a shopping list from the planned recipes/foods over **an adjustable date range**, defaulting to today through the next seven days. Not a calendar week: shopping on a Friday covers the weekend and the week after, and never lines up with one. Already-logged entries are excluded — something eaten was already bought.
 - **Aggregation:** two-stage. First, each recipe's sections are flattened to a single per-recipe ingredient total (duplicates across sections summed). Then duplicate ingredients across all the week's recipes combine into one line item. Optional/to-taste ingredients are excluded.
 - **Mixed-unit aggregation:** when the same ingredient appears in different units across recipes (2 tbsp + 50 g butter), convert to one sensible unit **when density is known**; otherwise list both quantities under a single line item.
 - **Units — recipe vs. purchase:** v1 aggregates and displays in **recipe units** (e.g., "3 tbsp olive oil"); the store hand-off communicates *what the week needs*, not a mapping to purchase sizes (e.g., "one 500 ml bottle"). Purchase-size mapping is a later refinement.
 - **Manual items:** arbitrary non-recipe items can be added to the list (paper towels, coffee) via `is_manual`.
+- **Seasonings are excluded by default.** Spices and salt are bought on their own rhythm, not per recipe; the existing `ingredient_match` "no match needed" rules already identify them. A toggle includes them for the shop where you do need them.
+- **Quantities are editable on the list without touching the recipe.** 1.5 lb of beef becomes 2 lb because that is how beef is sold. An edited line is marked as edited and keeps showing what the recipes called for, so a later rebuild changing the total is visible rather than silent.
+- **Ordering:** items can be dragged into the order you walk the shop in, and a new list inherits the last one's order — a hand-made order beats an aisle guessed from a name.
+- **Chat:** the list can be edited by asking — add an item, set a quantity, mark something as already had. Operations apply with an undo; nothing leaves the app until an export is tapped.
 - **Store tagging:** each food can carry a store tag (Costco / Publix / Walmart); tagging is flexible (single store or preference).
-- **Pantry:** lightweight — a check-off ("already have this") at list-build time that crosses off the **whole line** (not a quantity subtraction); not a maintained inventory. Quantity-level subtraction is a later refinement.
-- **Grouping:** list groups by store, and within a store by category/aisle.
+- **Pantry:** per line, how much you already have — 2 lb needed against 1 lb in the freezer buys 1 lb. The whole-line check-off is the same idea at full strength: ticking sets on-hand to the full amount. Still **not a maintained inventory** — on-hand belongs to a list, not to a fridge, and does not carry to the next list, because Hearth cannot see what you ate this week and a stale "you have 1 lb" is worse than asking again. *(Quantity-level subtraction was deferred in v0.8 and lifted at Brendan's request during phase 4.)*
+- **Grouping:** list groups by store; within a store, by the order you put the items in (see Ordering). Aisle/category grouping was considered and declined — an aisle guessed from a food's name is wrong often and correctable never.
 - **Big user-review touchpoint:** the list is fully editable before any export — add/remove, adjust quantities, check off on-hand items.
 - **Walmart export (realistic v1):** Walmart has **no public consumer cart API** (the transactional/AddToCart services exist but are partner-gated and not open to solo devs). So v1 export = deep-link each item into a Walmart search and/or one-tap "copy list." Built behind a swappable adapter interface so a true partner cart API (or Instacart, which does offer one) can slot in later without UI changes.
 
@@ -436,7 +440,7 @@ These share the household model and slot into the pillar navigation without a da
 - Whether to add **water/weight/exercise** tracking later (currently out of scope — food only).
 - Auth: add social login later, or keep email/password.
 - **Partial-serving log UX** — portion stepper approach to be refined against a live draft (Brendan to guide).
-- **Explicitly deferred (out of scope for v1):** micronutrients beyond the 4 macros; sugar / fiber / sodium tracking; water / weight / exercise logging; recipe ratings & reviews; purchase-size mapping for shopping; quantity-level pantry subtraction; voice control in cook-along; "cook from what I have" generation; whole-week AI plan generation; goal presets from body stats; leftovers/batch draw-down tracking; sub-recipes (a recipe used as an ingredient in another); recipe step/gallery photos; starter/seed recipes.
+- **Explicitly deferred (out of scope for v1):** micronutrients beyond the 4 macros; sugar / fiber / sodium tracking; water / weight / exercise logging; recipe ratings & reviews; purchase-size mapping for shopping; voice control in cook-along; "cook from what I have" generation; whole-week AI plan generation; goal presets from body stats; leftovers/batch draw-down tracking; sub-recipes (a recipe used as an ingredient in another); recipe step/gallery photos; starter/seed recipes.
 
 ---
 
