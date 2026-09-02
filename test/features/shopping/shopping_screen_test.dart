@@ -172,4 +172,35 @@ void main() {
 
     expect(find.byIcon(Icons.check_circle), findsOneWidget);
   });
+
+  testWidgets('the export says what it can do before you press it', (
+    WidgetTester tester,
+  ) async {
+    // Walmart has no public way for an app to fill a basket, and a button
+    // named after a shop that opens a search page instead should say so first.
+    await openShopping(tester, entries: <MealPlanEntry>[tonight()]);
+    await build(tester);
+
+    await tester.tap(find.text('Take it shopping'));
+    await pumpFrames(tester, frames: 10);
+
+    expect(find.text('Copy the list'), findsOneWidget);
+    expect(find.textContaining('no public way'), findsOneWidget);
+    expect(find.textContaining('1 item still to buy'), findsOneWidget);
+  });
+
+  testWidgets('and it leaves out what you have already ticked', (
+    WidgetTester tester,
+  ) async {
+    await openShopping(tester, entries: <MealPlanEntry>[tonight()]);
+    await build(tester);
+    await tester.tap(find.text('ground beef'));
+    await pumpFrames(tester, frames: 20);
+
+    await tester.tap(find.text('Take it shopping'));
+    await pumpFrames(tester, frames: 10);
+
+    expect(find.text('Everything on the list is ticked off.'), findsOneWidget);
+    expect(find.text('Copy the list'), findsNothing);
+  });
 }

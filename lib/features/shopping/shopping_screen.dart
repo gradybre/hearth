@@ -17,6 +17,7 @@ import '../../domain/shopping/shopping_line.dart';
 import '../../domain/shopping/shopping_list_builder.dart';
 import '../../domain/units/quantity.dart';
 import 'shopping_amount_sheet.dart';
+import 'shopping_export_sheet.dart';
 
 /// The shopping list (spec §5.7).
 ///
@@ -156,13 +157,23 @@ class _Body extends ConsumerWidget {
             ),
             const SizedBox(height: HearthSpacing.lg),
           ],
-        if (lines.isNotEmpty)
+        if (lines.isNotEmpty) ...<Widget>[
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => showShoppingExportSheet(context, lines),
+              icon: const Icon(Icons.ios_share),
+              label: const Text('Take it shopping'),
+            ),
+          ),
+          const SizedBox(height: HearthSpacing.md),
           Center(
             child: Text(
-              'Nothing is sent anywhere until you export it.',
+              'Nothing leaves the app until you tap that.',
               style: context.text.metadata.copyWith(color: colors.textMuted),
             ),
           ),
+        ],
       ],
     );
   }
