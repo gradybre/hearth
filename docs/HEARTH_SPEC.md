@@ -88,6 +88,12 @@ Core entities (Postgres tables, RLS-scoped):
 - **user** — id, email, display_name, household_id, units_preference (imperial/metric — per-user display)
 - **household** — id, name; links two+ users; owns the shared library
 - **recipe** — id, household_id, title, prep_time, cook_time, servings (yield — required), cuisine, tags[], source (manual / import / AI-generated), photo_url, notes, created_by, is_deleted (soft delete)
+  - `photo_url` holds an **object path** in the private `recipe-photos` bucket
+    (`<recipe_id>/<uuid>.<ext>`), not a URL — the bucket is private, so there is
+    no durable link to store. Keyed by recipe rather than by household because
+    `join_household` rewrites `household_id`, which would strand every photo.
+    Objects are immutable: replacing a photo writes a new one. Each device
+    keeps its own local cache row alongside (phase 5).
 - **recipe_section** — id, recipe_id, name (e.g., "Sauce", "Main", "Marinade"), sort_order; a recipe has one or more sections (default "Main" for simple recipes). Groups both ingredients and steps.
 - **recipe_ingredient** — id, recipe_id, section_id, food_id (nullable), raw_text, quantity, unit, prep_note (e.g., "minced"), is_optional (excluded from shopping list + macro math when true), sort_order
 - **recipe_step** — id, recipe_id, section_id, step_number, text, timer_seconds (nullable)
@@ -198,7 +204,12 @@ Core entities (Postgres tables, RLS-scoped):
 - **Portions are fully independent per person.** You and your partner each log your own amounts against your own targets; no shared portion math.
 - **Meal-prep assignment:** assign a specific recipe at a specific serving size to a meal slot across **multiple selected days at once** (e.g., "this batch is my dinner Mon/Tue/Wed") — one action, not adding it day by day. Distinct from copy-day (which copies a whole day's contents).
 - **Copy day:** to a single day, to multiple selected days, and as a repeating pattern (all three).
-- **Week templates:** save a good week's plan and reuse it (later phase).
+- **Week templates:** save a good week's plan and reuse it. **Built in phase 5.**
+  Entries are kept by weekday, not by date, so a template outlives the week it
+  came from. Applying is **additive** and reports how many meals it added — it
+  never clears a day first, because silently deleting a planned week is
+  unrecoverable. Applied meals arrive **planned, never logged**, the same rule
+  copy-day follows (§4).
 - **Fast entry:** recents, favorites, and "log again" surfaced in the logging flow for quick daily use. (Research: logging speed is the single biggest driver of whether a tracker gets used — "every extra tap is a tax you pay three times a day.")
 - **Planned → logged:** confirming a planned item as eaten is **one tap by default**, with the option to adjust the portion.
 - **Partial servings:** a portion stepper at log time (e.g., 0.5× a plated serving). *[Flagged for review — Brendan to refine this UX against a live draft.]*
@@ -273,6 +284,11 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
 
 ### 7.2 Sync
 - **Near-realtime** partner sync via Supabase Realtime (a recipe your partner adds appears on your device without a manual refresh). Acceptable to relax to refresh-on-open for v1 if it simplifies the first build.
+  - **Settled for v1: refresh-on-open, no Realtime socket.** Sync runs on
+    sign-in, on app resume, and after every local write, debounced, with no
+    polling timer. That is the relaxation this section already allows, and a
+    maintained socket buys little for two people who are rarely in the app at
+    the same moment. Revisit if that stops being true.
 
 ### 7.3 Notifications
 - **Cook timers** fire even when the app is backgrounded (local notifications).
