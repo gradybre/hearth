@@ -162,9 +162,15 @@ class _DayColumn extends StatelessWidget {
                   painter: _DateRingPainter(
                     fill: calories?.barFill ?? 0,
                     track: colors.progressTrack,
-                    fillColor: (calories?.isOver ?? false)
-                        ? colors.overAccent
-                        : colors.accent,
+                    // The same three tones the macro rings use, so a day reads
+                    // the same in the strip as it does when opened. Colour is
+                    // the only signal a 38pt ring has room for, which is why
+                    // it is never the only one on the day itself.
+                    fillColor: switch (calories?.tone) {
+                      null || MacroTone.neutral => colors.accent,
+                      MacroTone.good => colors.goodAccent,
+                      MacroTone.over => colors.overAccent,
+                    },
                   ),
                   child: Center(
                     child: Text(

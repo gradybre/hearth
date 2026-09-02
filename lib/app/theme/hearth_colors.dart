@@ -6,11 +6,21 @@ import 'package:flutter/material.dart';
 /// family, one neutral text family, one accent. Everything here is a member of
 /// one of those three families or a shade of them — resist adding a fifth hue.
 ///
-/// **Over/under macro states deliberately have no red/green pair.** Colour
-/// alone must never carry meaning (spec §6.3), and a traffic-light palette
-/// would both break the discipline above and read as the calorie-cop app
-/// Hearth is defined against. The state is carried by an icon and a label;
-/// [overAccent] only reinforces it.
+/// **Macro states do now carry a green and a red, and the exception is
+/// deliberate.** They were both terracotta to begin with — #A8480F against
+/// #8A3A0B, which is the same colour to most eyes, and in dark mode the
+/// "over" shade was actually the *lighter* of the two. The icon and the label
+/// were doing the entire job while the palette pretended to help.
+///
+/// So [goodAccent] and [overAccent] are a real pair now, chosen as a herb
+/// green and a brick red rather than a traffic light: this is a kitchen, not a
+/// dashboard, and Hearth is defined against the calorie cop. That is a fifth
+/// hue and a sixth; nothing else gets one.
+///
+/// Colour still never carries meaning alone (spec §6.3), and here that is not
+/// a formality. Simulated for deuteranopia the two collapse to nearly the same
+/// khaki — about 1.2:1 apart — so the check, the arrow, and the words beside
+/// them are the signal, and the colour is what makes it quick.
 @immutable
 class HearthColors extends ThemeExtension<HearthColors> {
   const HearthColors({
@@ -26,6 +36,7 @@ class HearthColors extends ThemeExtension<HearthColors> {
     required this.accent,
     required this.accentPressed,
     required this.onAccent,
+    required this.goodAccent,
     required this.overAccent,
     required this.progressTrack,
     required this.error,
@@ -46,7 +57,8 @@ class HearthColors extends ThemeExtension<HearthColors> {
     accent: Color(0xFFA8480F),
     accentPressed: Color(0xFF8A3A0B),
     onAccent: Color(0xFFFFFDF8),
-    overAccent: Color(0xFF8A3A0B),
+    goodAccent: Color(0xFF3F5F2E),
+    overAccent: Color(0xFFA81F2B),
     progressTrack: Color(0xFFE8DCC9),
     error: Color(0xFF8A2A17),
     onError: Color(0xFFFFFDF8),
@@ -72,7 +84,8 @@ class HearthColors extends ThemeExtension<HearthColors> {
     accent: Color(0xFFEE9B63),
     accentPressed: Color(0xFFF3B183),
     onAccent: Color(0xFF241109),
-    overAccent: Color(0xFFF0A878),
+    goodAccent: Color(0xFF8FB86A),
+    overAccent: Color(0xFFFF7A7A),
     progressTrack: Color(0xFF322A24),
     error: Color(0xFFF2A08F),
     onError: Color(0xFF241109),
@@ -113,6 +126,20 @@ class HearthColors extends ThemeExtension<HearthColors> {
   /// Text and icons drawn on [accent].
   final Color onAccent;
 
+  /// A macro sitting where you want it (spec §5.6's `MacroTone.good`).
+  ///
+  /// The one hue outside the warm family, and it earns the exception: the
+  /// palette is built on a single accent, so "normal" and "good" had nothing
+  /// to tell them apart. A herb green rather than a signalling green — this
+  /// is a kitchen, not a dashboard.
+  ///
+  /// **Never the only thing saying it** (§6.3). Simulated for deuteranopia,
+  /// this and [overAccent] collapse to almost the same khaki — about 1.2:1
+  /// apart — so the check, the arrow and the words beside them are not
+  /// decoration around the colour, they are the signal, and the colour is the
+  /// decoration.
+  final Color goodAccent;
+
   /// Reinforces an over-target macro state. Never the only signal.
   final Color overAccent;
 
@@ -141,6 +168,7 @@ class HearthColors extends ThemeExtension<HearthColors> {
     Color? accent,
     Color? accentPressed,
     Color? onAccent,
+    Color? goodAccent,
     Color? overAccent,
     Color? progressTrack,
     Color? error,
@@ -158,6 +186,7 @@ class HearthColors extends ThemeExtension<HearthColors> {
     accent: accent ?? this.accent,
     accentPressed: accentPressed ?? this.accentPressed,
     onAccent: onAccent ?? this.onAccent,
+    goodAccent: goodAccent ?? this.goodAccent,
     overAccent: overAccent ?? this.overAccent,
     progressTrack: progressTrack ?? this.progressTrack,
     error: error ?? this.error,
@@ -180,6 +209,7 @@ class HearthColors extends ThemeExtension<HearthColors> {
       accent: Color.lerp(accent, other.accent, t)!,
       accentPressed: Color.lerp(accentPressed, other.accentPressed, t)!,
       onAccent: Color.lerp(onAccent, other.onAccent, t)!,
+      goodAccent: Color.lerp(goodAccent, other.goodAccent, t)!,
       overAccent: Color.lerp(overAccent, other.overAccent, t)!,
       progressTrack: Color.lerp(progressTrack, other.progressTrack, t)!,
       error: Color.lerp(error, other.error, t)!,

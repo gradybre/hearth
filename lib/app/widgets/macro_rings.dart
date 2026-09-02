@@ -88,11 +88,6 @@ class _MacroRing extends StatelessWidget {
     final HearthColors colors = context.colors;
     final HearthTextStyles text = context.text;
 
-    final TargetState state = switch (macro.state) {
-      MacroProgressState.under => TargetState.under,
-      MacroProgressState.met => TargetState.met,
-      MacroProgressState.over => TargetState.over,
-    };
     final String eaten = macro.consumed.round().toString();
     // No unit inside the ring — the label above it already says which macro
     // this is, and the two words together would not fit without shrinking the
@@ -109,14 +104,26 @@ class _MacroRing extends StatelessWidget {
       maxWidth,
     );
 
-    final TargetIndicator? indicator = state == TargetState.under
-        ? null
-        : TargetIndicator.forState(
-            state,
-            amount: state == TargetState.over
-                ? macro.remaining.abs().round().toString()
-                : null,
-          );
+    // Driven by tone rather than by position, so that passing a protein
+    // target reads as an achievement rather than a warning. Neutral says
+    // nothing at all: a part-filled ring already says "still going", and
+    // repeating it under all four rings every day is noise.
+    final TargetIndicator? indicator = switch (macro.tone) {
+      MacroTone.neutral => null,
+      MacroTone.good => TargetIndicator.forState(TargetState.met),
+      MacroTone.over => TargetIndicator.forState(
+        TargetState.over,
+        amount: macro.remaining.abs().round().toString(),
+      ),
+    };
+    final Color toneColor = switch (macro.tone) {
+      MacroTone.neutral => colors.accent,
+      MacroTone.good => colors.goodAccent,
+      // The arc up to the target stays green — you did land on it — and only
+      // the lap past it is red. The overshoot is then visible as a shape and
+      // not only as a hue.
+      MacroTone.over => colors.goodAccent,
+    };
 
     return Semantics(
       label:
@@ -137,10 +144,17 @@ class _MacroRing extends StatelessWidget {
             child: CustomPaint(
               painter: _RingPainter(
                 fill: macro.barFill,
+                // Only ever set past a ceiling — see MacroTone.
+                overflow: macro.tone == MacroTone.over
+                    ? (macro.fraction - 1).clamp(0.0, 1.0).toDouble()
+                    : 0,
                 track: colors.progressTrack,
                 // Colour reinforces the state; the icon and words below carry
-                // it (§6.3).
-                fillColor: macro.isOver ? colors.overAccent : colors.accent,
+                // it (§6.3), which here is not a formality — this pair is a
+                // green and a red, and they are near-identical to a
+                // deuteranope.
+                fillColor: toneColor,
+                overflowColor: colors.overAccent,
               ),
               child: Center(
                 child: Padding(
@@ -198,14 +212,22 @@ class _MacroRing extends StatelessWidget {
 class _RingPainter extends CustomPainter {
   const _RingPainter({
     required this.fill,
+    required this.overflow,
     required this.track,
     required this.fillColor,
+    required this.overflowColor,
   });
 
   /// 0..1, already clamped by [MacroProgress.barFill].
   final double fill;
+
+  /// How far past the target this went, as a second lap of the ring. Zero
+  /// unless the macro is over a ceiling.
+  final double overflow;
+
   final Color track;
   final Color fillColor;
+  final Color overflowColor;
 
   /// Thick enough to read at arm's length on a worktop, thin enough to leave
   /// the numbers room.
@@ -244,9 +266,29 @@ class _RingPainter extends CustomPainter {
         ..strokeWidth = _stroke
         ..strokeCap = StrokeCap.round,
     );
+
+    if (overflow <= 0) return;
+    // A second lap over the first, from the top again. Overshoot becomes a
+    // shape — a short arc riding on a full ring — rather than a hue swap that
+    // a colour-blind reader would never see.
+    canvas.drawArc(
+      bounds,
+      -math.pi / 2,
+      math.pi * 2 * overflow,
+      false,
+      Paint()
+        ..color = overflowColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _stroke
+        ..strokeCap = StrokeCap.round,
+    );
   }
 
   @override
   bool shouldRepaint(covariant _RingPainter old) =>
-      old.fill != fill || old.fillColor != fillColor || old.track != track;
+      old.fill != fill ||
+      old.overflow != overflow ||
+      old.fillColor != fillColor ||
+      old.overflowColor != overflowColor ||
+      old.track != track;
 }

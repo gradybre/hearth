@@ -81,31 +81,63 @@ void main() {
     expect(find.textContaining('over'), findsNothing);
   });
 
+  Future<void> openLogged(
+    WidgetTester tester, {
+    required double kcal,
+    required double proteinG,
+  }) => openToday(
+    tester,
+    foods: <Food>[chicken(kcal: kcal, proteinG: proteinG)],
+    entries: <MealPlanEntry>[
+      const MealPlanEntry(
+        id: 'entry-1',
+        dayId: 'day-1',
+        slot: MealSlot.dinner,
+        refType: PlanRefType.food,
+        refId: 'food-chicken',
+        servings: 1,
+      ).log(
+        liveMacros: Macros(kcal: kcal, proteinG: proteinG),
+        at: DateTime.now(),
+        label: 'Roast chicken',
+      ),
+    ],
+  );
+
+  testWidgets('nine tenths of the way is already good news', (
+    WidgetTester tester,
+  ) async {
+    // 2160 of 2400. Landing exactly on a target is luck, and a day that only
+    // turns encouraging at the last mouthful encourages nobody.
+    await openLogged(tester, kcal: 2200, proteinG: 0);
+
+    expect(find.text('on target'), findsOneWidget);
+  });
+
+  testWidgets('passing a protein target is an achievement, not a warning', (
+    WidgetTester tester,
+  ) async {
+    // The case the whole tone idea exists for. 200 g of a 180 g target is
+    // over, and it is exactly what you were trying to do — so it reads the
+    // same as hitting it, while calories at 2200 of 2400 read good too.
+    await openLogged(tester, kcal: 2200, proteinG: 200);
+
+    expect(find.text('on target'), findsNWidgets(2));
+    expect(find.textContaining('over'), findsNothing);
+  });
+
   testWidgets('over target, it says so in words as well as colour', (
     WidgetTester tester,
   ) async {
     // §6.3: never colour alone. Going over is the one state worth
     // interrupting for, so it is the one that gets an icon and a word.
-    await openToday(
-      tester,
-      foods: <Food>[chicken(kcal: 3000, proteinG: 300)],
-      entries: <MealPlanEntry>[
-        const MealPlanEntry(
-          id: 'entry-1',
-          dayId: 'day-1',
-          slot: MealSlot.dinner,
-          refType: PlanRefType.food,
-          refId: 'food-chicken',
-          servings: 1,
-        ).log(
-          liveMacros: const Macros(kcal: 3000, proteinG: 300),
-          at: DateTime.now(),
-          label: 'Roast chicken',
-        ),
-      ],
-    );
+    await openLogged(tester, kcal: 3000, proteinG: 300);
 
-    expect(find.textContaining('over'), findsWidgets);
+    // Calories are past a ceiling and say so; protein is past a floor and
+    // reads as done. Colour could not tell those two apart on its own —
+    // simulated for deuteranopia the green and the red are about 1.2:1 apart.
+    expect(find.text('600 over'), findsOneWidget);
+    expect(find.text('on target'), findsOneWidget);
   });
 
   testWidgets('a screen reader hears the amount and the target', (
