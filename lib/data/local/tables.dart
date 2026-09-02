@@ -311,6 +311,68 @@ class Collections extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
 
+/// A shopping list, for a stretch of days rather than a week (spec §5.7).
+///
+/// A range and not a week because the shop happens on a Friday for a period
+/// covering the weekend and the week after, and never lines up with a calendar
+/// week.
+@DataClassName('ShoppingListRow')
+class ShoppingLists extends Table {
+  TextColumn get id => text()();
+  TextColumn get householdId => text()();
+  DateTimeColumn get fromDate => dateTime()();
+  DateTimeColumn get toDate => dateTime()();
+  TextColumn get status => text().withDefault(const Constant('draft'))();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
+/// One line of a list, carrying three amounts (spec §5.7).
+///
+/// What the recipes call for, what the shopper decided to buy instead, and
+/// what is already in the cupboard — each decided by someone different, and
+/// the line has to be able to show its own arithmetic.
+@DataClassName('ShoppingItemRow')
+class ShoppingListItems extends Table {
+  TextColumn get id => text()();
+  TextColumn get listId => text()();
+
+  /// What duplicates are matched on, so a line survives a rebuild by being
+  /// recognised rather than by being in the same place.
+  TextColumn get itemKey => text()();
+  TextColumn get foodId => text().nullable()();
+  TextColumn get name => text()();
+
+  RealColumn get plannedCanonical => real().nullable()();
+  TextColumn get plannedKind => text().nullable()();
+  TextColumn get plannedUnit => text().nullable()();
+
+  RealColumn get wantedCanonical => real().nullable()();
+  TextColumn get wantedKind => text().nullable()();
+  TextColumn get wantedUnit => text().nullable()();
+
+  RealColumn get onHandCanonical => real().nullable()();
+  TextColumn get onHandKind => text().nullable()();
+  TextColumn get onHandUnit => text().nullable()();
+
+  BoolColumn get checked => boolean().withDefault(const Constant(false))();
+  BoolColumn get isManual => boolean().withDefault(const Constant(false))();
+  BoolColumn get hasUnquantified =>
+      boolean().withDefault(const Constant(false))();
+  TextColumn get storeTag => text().nullable()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  /// Comma-separated, like the other places this cache stores a small list —
+  /// it is only ever read back whole.
+  TextColumn get sourceRecipeIds => text().withDefault(const Constant(''))();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
 /// Membership: a recipe can live in several collections at once (spec §5.2).
 @DataClassName('RecipeCollectionRow')
 class RecipeCollections extends Table {

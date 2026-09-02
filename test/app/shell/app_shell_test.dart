@@ -74,7 +74,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
 
       expect(find.text('Your library is empty'), findsNothing);
-      expect(find.textContaining('grouped by store'), findsOneWidget);
+      // The real shopping list, since phase 4 — it used to be the honest
+      // placeholder, and its copy is what this asserted.
+      expect(find.text('Shopping for'), findsOneWidget);
     });
 
     testWidgets('sections keep their state across tab switches', (

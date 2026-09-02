@@ -35,6 +35,8 @@ part 'hearth_database.g.dart';
     CookSessions,
     RecipePhotos,
     PendingWrites,
+    ShoppingLists,
+    ShoppingListItems,
   ],
 )
 class HearthDatabase extends _$HearthDatabase {
@@ -44,7 +46,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -105,6 +107,12 @@ class HearthDatabase extends _$HearthDatabase {
       // the black coffee stops being flagged for ever (spec §5.5).
       if (from < 12) {
         await m.addColumn(foods, foods.isZeroCalorie);
+      }
+      // v13 is the shopping list (spec §5.7, phase 4). Additive: the cached
+      // library and plan are untouched, so no re-sync is needed to upgrade.
+      if (from < 13) {
+        await m.createTable(shoppingLists);
+        await m.createTable(shoppingListItems);
       }
     },
     beforeOpen: (OpeningDetails details) async {

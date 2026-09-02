@@ -10,7 +10,6 @@ import '../features/foods/food_draft.dart';
 import '../features/foods/food_editor_screen.dart';
 import '../features/foods/food_library_screen.dart';
 import '../features/foods/seasonings_screen.dart';
-import '../features/placeholder_screen.dart';
 import '../features/plan/plan_screen.dart';
 import '../features/recipes/default_sweep_screen.dart';
 import '../features/recipes/recipe_chat_screen.dart';
@@ -19,6 +18,7 @@ import '../features/recipes/recipe_editor_screen.dart';
 import '../features/recipes/recipe_import_controller.dart';
 import '../features/recipes/recipe_import_screen.dart';
 import '../features/recipes/recipe_library_screen.dart';
+import '../features/shopping/shopping_screen.dart';
 import 'shell/app_shell.dart';
 import 'shell/destinations.dart';
 
@@ -179,13 +179,7 @@ class _ShellHost extends StatelessWidget {
         children: const <Widget>[
           RecipeLibraryScreen(),
           PlanScreen(),
-          PlaceholderScreen(
-            title: 'Shopping',
-            description:
-                'A list built from the week\'s plan, grouped by store and '
-                'editable before any export.',
-            phase: 'Phase 4',
-          ),
+          ShoppingScreen(),
           FoodLibraryScreen(),
         ],
       ),

@@ -163,6 +163,14 @@ Future<HearthDatabase> pumpHearthApp(
         planChangesProvider.overrideWith(
           (Ref ref) => const Stream<void>.empty(),
         ),
+        // Same reasoning, and it bit before it was written: the shopping list
+        // watches sqlite for changes, and a live subscription fake async can
+        // never drive is still open at teardown — which hangs the whole run,
+        // not just the test. The list itself is read through the real
+        // repository, so building and editing are genuinely exercised.
+        shoppingChangesProvider.overrideWith(
+          (Ref ref) => const Stream<void>.empty(),
+        ),
         recentLogsProvider.overrideWith((Ref ref) async => const <RecentLog>[]),
         weekEntriesProvider.overrideWith(
           (Ref ref) async => <DateTime, List<MealPlanEntry>>{},

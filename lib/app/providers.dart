@@ -36,6 +36,7 @@ import '../data/local/plan_store.dart';
 import '../data/local/preference_store.dart';
 import '../data/local/recipe_photo_store.dart';
 import '../data/local/recipe_store.dart';
+import '../data/local/shopping_store.dart';
 import '../data/remote/remote_gateway.dart';
 import '../data/remote/supabase_remote_gateway.dart';
 import '../data/repositories/collection_repository.dart';
@@ -44,6 +45,7 @@ import '../data/repositories/food_repository.dart';
 import '../data/repositories/ingredient_match_repository.dart';
 import '../data/repositories/plan_repository.dart';
 import '../data/repositories/recipe_repository.dart';
+import '../data/repositories/shopping_repository.dart';
 import '../data/sync/library_sync.dart';
 import '../data/sync/record_sync.dart';
 import '../data/sync/remote_rows.dart';
@@ -299,6 +301,75 @@ final FutureProvider<MacroTargets?> dayTargetsProvider =
       return ref
           .watch(planRepositoryProvider)
           .targetsFor(ref.watch(selectedDateProvider));
+    });
+
+// ── Shopping (spec §5.7) ─────────────────────────────────────────────────────
+
+final Provider<ShoppingRepository> shoppingRepositoryProvider =
+    Provider<ShoppingRepository>(
+      (Ref ref) => ShoppingRepository(
+        store: ShoppingStore(ref.watch(databaseProvider)),
+        householdId: ref.watch(currentHouseholdIdProvider),
+      ),
+    );
+
+/// The range the list currently covers.
+///
+/// Adjustable, and deliberately not a week: the shop happens on a Friday for a
+/// stretch covering the weekend and the week after (spec §5.7).
+class ShoppingRange extends Notifier<({DateTime from, DateTime to})> {
+  @override
+  ({DateTime from, DateTime to}) build() =>
+      ref.watch(shoppingRepositoryProvider).defaultRange();
+
+  void set({DateTime? from, DateTime? to}) {
+    final DateTime start = from ?? state.from;
+    final DateTime end = to ?? state.to;
+    // A range that ends before it starts is a mis-tap, not an instruction.
+    state = end.isBefore(start)
+        ? (from: start, to: start)
+        : (from: start, to: end);
+  }
+}
+
+final NotifierProvider<ShoppingRange, ({DateTime from, DateTime to})>
+shoppingRangeProvider =
+    NotifierProvider<ShoppingRange, ({DateTime from, DateTime to})>(
+      ShoppingRange.new,
+    );
+
+/// Whether spices are pulled from recipes. Off by default (spec §5.7).
+final NotifierProvider<ShoppingSeasonings, bool> shoppingSeasoningsProvider =
+    NotifierProvider<ShoppingSeasonings, bool>(ShoppingSeasonings.new);
+
+class ShoppingSeasonings extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void toggle() => state = !state;
+}
+
+final StreamProvider<void> shoppingChangesProvider = StreamProvider<void>(
+  (Ref ref) => ref.watch(shoppingRepositoryProvider).watchChanges(),
+);
+
+/// The list as it stands, or null when none has been built.
+final FutureProvider<ShoppingListSnapshot?> shoppingListProvider =
+    FutureProvider<ShoppingListSnapshot?>((Ref ref) {
+      ref.watch(shoppingChangesProvider);
+      return ref.watch(shoppingRepositoryProvider).current();
+    });
+
+/// The plan across the shopping range, which is what the list is built from.
+final FutureProvider<Map<DateTime, List<MealPlanEntry>>> shoppingPlanProvider =
+    FutureProvider<Map<DateTime, List<MealPlanEntry>>>((Ref ref) {
+      ref.watch(planChangesProvider);
+      final ({DateTime from, DateTime to}) range = ref.watch(
+        shoppingRangeProvider,
+      );
+      return ref
+          .watch(planRepositoryProvider)
+          .entriesBetween(range.from, range.to);
     });
 
 /// Things logged recently, for one-tap repeat (spec §5.6).

@@ -9094,6 +9094,1616 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
   }
 }
 
+class $ShoppingListsTable extends ShoppingLists
+    with TableInfo<$ShoppingListsTable, ShoppingListRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ShoppingListsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _householdIdMeta = const VerificationMeta(
+    'householdId',
+  );
+  @override
+  late final GeneratedColumn<String> householdId = GeneratedColumn<String>(
+    'household_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fromDateMeta = const VerificationMeta(
+    'fromDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> fromDate = GeneratedColumn<DateTime>(
+    'from_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _toDateMeta = const VerificationMeta('toDate');
+  @override
+  late final GeneratedColumn<DateTime> toDate = GeneratedColumn<DateTime>(
+    'to_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('draft'),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    householdId,
+    fromDate,
+    toDate,
+    status,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'shopping_lists';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ShoppingListRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('household_id')) {
+      context.handle(
+        _householdIdMeta,
+        householdId.isAcceptableOrUnknown(
+          data['household_id']!,
+          _householdIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_householdIdMeta);
+    }
+    if (data.containsKey('from_date')) {
+      context.handle(
+        _fromDateMeta,
+        fromDate.isAcceptableOrUnknown(data['from_date']!, _fromDateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_fromDateMeta);
+    }
+    if (data.containsKey('to_date')) {
+      context.handle(
+        _toDateMeta,
+        toDate.isAcceptableOrUnknown(data['to_date']!, _toDateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_toDateMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ShoppingListRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ShoppingListRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      householdId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}household_id'],
+      )!,
+      fromDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}from_date'],
+      )!,
+      toDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}to_date'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ShoppingListsTable createAlias(String alias) {
+    return $ShoppingListsTable(attachedDatabase, alias);
+  }
+}
+
+class ShoppingListRow extends DataClass implements Insertable<ShoppingListRow> {
+  final String id;
+  final String householdId;
+  final DateTime fromDate;
+  final DateTime toDate;
+  final String status;
+  final DateTime updatedAt;
+  const ShoppingListRow({
+    required this.id,
+    required this.householdId,
+    required this.fromDate,
+    required this.toDate,
+    required this.status,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['household_id'] = Variable<String>(householdId);
+    map['from_date'] = Variable<DateTime>(fromDate);
+    map['to_date'] = Variable<DateTime>(toDate);
+    map['status'] = Variable<String>(status);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  ShoppingListsCompanion toCompanion(bool nullToAbsent) {
+    return ShoppingListsCompanion(
+      id: Value(id),
+      householdId: Value(householdId),
+      fromDate: Value(fromDate),
+      toDate: Value(toDate),
+      status: Value(status),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory ShoppingListRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ShoppingListRow(
+      id: serializer.fromJson<String>(json['id']),
+      householdId: serializer.fromJson<String>(json['householdId']),
+      fromDate: serializer.fromJson<DateTime>(json['fromDate']),
+      toDate: serializer.fromJson<DateTime>(json['toDate']),
+      status: serializer.fromJson<String>(json['status']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'householdId': serializer.toJson<String>(householdId),
+      'fromDate': serializer.toJson<DateTime>(fromDate),
+      'toDate': serializer.toJson<DateTime>(toDate),
+      'status': serializer.toJson<String>(status),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  ShoppingListRow copyWith({
+    String? id,
+    String? householdId,
+    DateTime? fromDate,
+    DateTime? toDate,
+    String? status,
+    DateTime? updatedAt,
+  }) => ShoppingListRow(
+    id: id ?? this.id,
+    householdId: householdId ?? this.householdId,
+    fromDate: fromDate ?? this.fromDate,
+    toDate: toDate ?? this.toDate,
+    status: status ?? this.status,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  ShoppingListRow copyWithCompanion(ShoppingListsCompanion data) {
+    return ShoppingListRow(
+      id: data.id.present ? data.id.value : this.id,
+      householdId: data.householdId.present
+          ? data.householdId.value
+          : this.householdId,
+      fromDate: data.fromDate.present ? data.fromDate.value : this.fromDate,
+      toDate: data.toDate.present ? data.toDate.value : this.toDate,
+      status: data.status.present ? data.status.value : this.status,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ShoppingListRow(')
+          ..write('id: $id, ')
+          ..write('householdId: $householdId, ')
+          ..write('fromDate: $fromDate, ')
+          ..write('toDate: $toDate, ')
+          ..write('status: $status, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, householdId, fromDate, toDate, status, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ShoppingListRow &&
+          other.id == this.id &&
+          other.householdId == this.householdId &&
+          other.fromDate == this.fromDate &&
+          other.toDate == this.toDate &&
+          other.status == this.status &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ShoppingListsCompanion extends UpdateCompanion<ShoppingListRow> {
+  final Value<String> id;
+  final Value<String> householdId;
+  final Value<DateTime> fromDate;
+  final Value<DateTime> toDate;
+  final Value<String> status;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const ShoppingListsCompanion({
+    this.id = const Value.absent(),
+    this.householdId = const Value.absent(),
+    this.fromDate = const Value.absent(),
+    this.toDate = const Value.absent(),
+    this.status = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ShoppingListsCompanion.insert({
+    required String id,
+    required String householdId,
+    required DateTime fromDate,
+    required DateTime toDate,
+    this.status = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       householdId = Value(householdId),
+       fromDate = Value(fromDate),
+       toDate = Value(toDate),
+       updatedAt = Value(updatedAt);
+  static Insertable<ShoppingListRow> custom({
+    Expression<String>? id,
+    Expression<String>? householdId,
+    Expression<DateTime>? fromDate,
+    Expression<DateTime>? toDate,
+    Expression<String>? status,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (householdId != null) 'household_id': householdId,
+      if (fromDate != null) 'from_date': fromDate,
+      if (toDate != null) 'to_date': toDate,
+      if (status != null) 'status': status,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ShoppingListsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? householdId,
+    Value<DateTime>? fromDate,
+    Value<DateTime>? toDate,
+    Value<String>? status,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return ShoppingListsCompanion(
+      id: id ?? this.id,
+      householdId: householdId ?? this.householdId,
+      fromDate: fromDate ?? this.fromDate,
+      toDate: toDate ?? this.toDate,
+      status: status ?? this.status,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (householdId.present) {
+      map['household_id'] = Variable<String>(householdId.value);
+    }
+    if (fromDate.present) {
+      map['from_date'] = Variable<DateTime>(fromDate.value);
+    }
+    if (toDate.present) {
+      map['to_date'] = Variable<DateTime>(toDate.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ShoppingListsCompanion(')
+          ..write('id: $id, ')
+          ..write('householdId: $householdId, ')
+          ..write('fromDate: $fromDate, ')
+          ..write('toDate: $toDate, ')
+          ..write('status: $status, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ShoppingListItemsTable extends ShoppingListItems
+    with TableInfo<$ShoppingListItemsTable, ShoppingItemRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ShoppingListItemsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _listIdMeta = const VerificationMeta('listId');
+  @override
+  late final GeneratedColumn<String> listId = GeneratedColumn<String>(
+    'list_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _itemKeyMeta = const VerificationMeta(
+    'itemKey',
+  );
+  @override
+  late final GeneratedColumn<String> itemKey = GeneratedColumn<String>(
+    'item_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _foodIdMeta = const VerificationMeta('foodId');
+  @override
+  late final GeneratedColumn<String> foodId = GeneratedColumn<String>(
+    'food_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _plannedCanonicalMeta = const VerificationMeta(
+    'plannedCanonical',
+  );
+  @override
+  late final GeneratedColumn<double> plannedCanonical = GeneratedColumn<double>(
+    'planned_canonical',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _plannedKindMeta = const VerificationMeta(
+    'plannedKind',
+  );
+  @override
+  late final GeneratedColumn<String> plannedKind = GeneratedColumn<String>(
+    'planned_kind',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _plannedUnitMeta = const VerificationMeta(
+    'plannedUnit',
+  );
+  @override
+  late final GeneratedColumn<String> plannedUnit = GeneratedColumn<String>(
+    'planned_unit',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _wantedCanonicalMeta = const VerificationMeta(
+    'wantedCanonical',
+  );
+  @override
+  late final GeneratedColumn<double> wantedCanonical = GeneratedColumn<double>(
+    'wanted_canonical',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _wantedKindMeta = const VerificationMeta(
+    'wantedKind',
+  );
+  @override
+  late final GeneratedColumn<String> wantedKind = GeneratedColumn<String>(
+    'wanted_kind',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _wantedUnitMeta = const VerificationMeta(
+    'wantedUnit',
+  );
+  @override
+  late final GeneratedColumn<String> wantedUnit = GeneratedColumn<String>(
+    'wanted_unit',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _onHandCanonicalMeta = const VerificationMeta(
+    'onHandCanonical',
+  );
+  @override
+  late final GeneratedColumn<double> onHandCanonical = GeneratedColumn<double>(
+    'on_hand_canonical',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _onHandKindMeta = const VerificationMeta(
+    'onHandKind',
+  );
+  @override
+  late final GeneratedColumn<String> onHandKind = GeneratedColumn<String>(
+    'on_hand_kind',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _onHandUnitMeta = const VerificationMeta(
+    'onHandUnit',
+  );
+  @override
+  late final GeneratedColumn<String> onHandUnit = GeneratedColumn<String>(
+    'on_hand_unit',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _checkedMeta = const VerificationMeta(
+    'checked',
+  );
+  @override
+  late final GeneratedColumn<bool> checked = GeneratedColumn<bool>(
+    'checked',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("checked" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _isManualMeta = const VerificationMeta(
+    'isManual',
+  );
+  @override
+  late final GeneratedColumn<bool> isManual = GeneratedColumn<bool>(
+    'is_manual',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_manual" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _hasUnquantifiedMeta = const VerificationMeta(
+    'hasUnquantified',
+  );
+  @override
+  late final GeneratedColumn<bool> hasUnquantified = GeneratedColumn<bool>(
+    'has_unquantified',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("has_unquantified" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _storeTagMeta = const VerificationMeta(
+    'storeTag',
+  );
+  @override
+  late final GeneratedColumn<String> storeTag = GeneratedColumn<String>(
+    'store_tag',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _sourceRecipeIdsMeta = const VerificationMeta(
+    'sourceRecipeIds',
+  );
+  @override
+  late final GeneratedColumn<String> sourceRecipeIds = GeneratedColumn<String>(
+    'source_recipe_ids',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    listId,
+    itemKey,
+    foodId,
+    name,
+    plannedCanonical,
+    plannedKind,
+    plannedUnit,
+    wantedCanonical,
+    wantedKind,
+    wantedUnit,
+    onHandCanonical,
+    onHandKind,
+    onHandUnit,
+    checked,
+    isManual,
+    hasUnquantified,
+    storeTag,
+    sortOrder,
+    sourceRecipeIds,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'shopping_list_items';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ShoppingItemRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('list_id')) {
+      context.handle(
+        _listIdMeta,
+        listId.isAcceptableOrUnknown(data['list_id']!, _listIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_listIdMeta);
+    }
+    if (data.containsKey('item_key')) {
+      context.handle(
+        _itemKeyMeta,
+        itemKey.isAcceptableOrUnknown(data['item_key']!, _itemKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_itemKeyMeta);
+    }
+    if (data.containsKey('food_id')) {
+      context.handle(
+        _foodIdMeta,
+        foodId.isAcceptableOrUnknown(data['food_id']!, _foodIdMeta),
+      );
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('planned_canonical')) {
+      context.handle(
+        _plannedCanonicalMeta,
+        plannedCanonical.isAcceptableOrUnknown(
+          data['planned_canonical']!,
+          _plannedCanonicalMeta,
+        ),
+      );
+    }
+    if (data.containsKey('planned_kind')) {
+      context.handle(
+        _plannedKindMeta,
+        plannedKind.isAcceptableOrUnknown(
+          data['planned_kind']!,
+          _plannedKindMeta,
+        ),
+      );
+    }
+    if (data.containsKey('planned_unit')) {
+      context.handle(
+        _plannedUnitMeta,
+        plannedUnit.isAcceptableOrUnknown(
+          data['planned_unit']!,
+          _plannedUnitMeta,
+        ),
+      );
+    }
+    if (data.containsKey('wanted_canonical')) {
+      context.handle(
+        _wantedCanonicalMeta,
+        wantedCanonical.isAcceptableOrUnknown(
+          data['wanted_canonical']!,
+          _wantedCanonicalMeta,
+        ),
+      );
+    }
+    if (data.containsKey('wanted_kind')) {
+      context.handle(
+        _wantedKindMeta,
+        wantedKind.isAcceptableOrUnknown(data['wanted_kind']!, _wantedKindMeta),
+      );
+    }
+    if (data.containsKey('wanted_unit')) {
+      context.handle(
+        _wantedUnitMeta,
+        wantedUnit.isAcceptableOrUnknown(data['wanted_unit']!, _wantedUnitMeta),
+      );
+    }
+    if (data.containsKey('on_hand_canonical')) {
+      context.handle(
+        _onHandCanonicalMeta,
+        onHandCanonical.isAcceptableOrUnknown(
+          data['on_hand_canonical']!,
+          _onHandCanonicalMeta,
+        ),
+      );
+    }
+    if (data.containsKey('on_hand_kind')) {
+      context.handle(
+        _onHandKindMeta,
+        onHandKind.isAcceptableOrUnknown(
+          data['on_hand_kind']!,
+          _onHandKindMeta,
+        ),
+      );
+    }
+    if (data.containsKey('on_hand_unit')) {
+      context.handle(
+        _onHandUnitMeta,
+        onHandUnit.isAcceptableOrUnknown(
+          data['on_hand_unit']!,
+          _onHandUnitMeta,
+        ),
+      );
+    }
+    if (data.containsKey('checked')) {
+      context.handle(
+        _checkedMeta,
+        checked.isAcceptableOrUnknown(data['checked']!, _checkedMeta),
+      );
+    }
+    if (data.containsKey('is_manual')) {
+      context.handle(
+        _isManualMeta,
+        isManual.isAcceptableOrUnknown(data['is_manual']!, _isManualMeta),
+      );
+    }
+    if (data.containsKey('has_unquantified')) {
+      context.handle(
+        _hasUnquantifiedMeta,
+        hasUnquantified.isAcceptableOrUnknown(
+          data['has_unquantified']!,
+          _hasUnquantifiedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('store_tag')) {
+      context.handle(
+        _storeTagMeta,
+        storeTag.isAcceptableOrUnknown(data['store_tag']!, _storeTagMeta),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('source_recipe_ids')) {
+      context.handle(
+        _sourceRecipeIdsMeta,
+        sourceRecipeIds.isAcceptableOrUnknown(
+          data['source_recipe_ids']!,
+          _sourceRecipeIdsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ShoppingItemRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ShoppingItemRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      listId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}list_id'],
+      )!,
+      itemKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}item_key'],
+      )!,
+      foodId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}food_id'],
+      ),
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      plannedCanonical: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}planned_canonical'],
+      ),
+      plannedKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}planned_kind'],
+      ),
+      plannedUnit: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}planned_unit'],
+      ),
+      wantedCanonical: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}wanted_canonical'],
+      ),
+      wantedKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}wanted_kind'],
+      ),
+      wantedUnit: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}wanted_unit'],
+      ),
+      onHandCanonical: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}on_hand_canonical'],
+      ),
+      onHandKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}on_hand_kind'],
+      ),
+      onHandUnit: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}on_hand_unit'],
+      ),
+      checked: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}checked'],
+      )!,
+      isManual: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_manual'],
+      )!,
+      hasUnquantified: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}has_unquantified'],
+      )!,
+      storeTag: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_tag'],
+      ),
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      sourceRecipeIds: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_recipe_ids'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ShoppingListItemsTable createAlias(String alias) {
+    return $ShoppingListItemsTable(attachedDatabase, alias);
+  }
+}
+
+class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
+  final String id;
+  final String listId;
+
+  /// What duplicates are matched on, so a line survives a rebuild by being
+  /// recognised rather than by being in the same place.
+  final String itemKey;
+  final String? foodId;
+  final String name;
+  final double? plannedCanonical;
+  final String? plannedKind;
+  final String? plannedUnit;
+  final double? wantedCanonical;
+  final String? wantedKind;
+  final String? wantedUnit;
+  final double? onHandCanonical;
+  final String? onHandKind;
+  final String? onHandUnit;
+  final bool checked;
+  final bool isManual;
+  final bool hasUnquantified;
+  final String? storeTag;
+  final int sortOrder;
+
+  /// Comma-separated, like the other places this cache stores a small list —
+  /// it is only ever read back whole.
+  final String sourceRecipeIds;
+  final DateTime updatedAt;
+  const ShoppingItemRow({
+    required this.id,
+    required this.listId,
+    required this.itemKey,
+    this.foodId,
+    required this.name,
+    this.plannedCanonical,
+    this.plannedKind,
+    this.plannedUnit,
+    this.wantedCanonical,
+    this.wantedKind,
+    this.wantedUnit,
+    this.onHandCanonical,
+    this.onHandKind,
+    this.onHandUnit,
+    required this.checked,
+    required this.isManual,
+    required this.hasUnquantified,
+    this.storeTag,
+    required this.sortOrder,
+    required this.sourceRecipeIds,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['list_id'] = Variable<String>(listId);
+    map['item_key'] = Variable<String>(itemKey);
+    if (!nullToAbsent || foodId != null) {
+      map['food_id'] = Variable<String>(foodId);
+    }
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || plannedCanonical != null) {
+      map['planned_canonical'] = Variable<double>(plannedCanonical);
+    }
+    if (!nullToAbsent || plannedKind != null) {
+      map['planned_kind'] = Variable<String>(plannedKind);
+    }
+    if (!nullToAbsent || plannedUnit != null) {
+      map['planned_unit'] = Variable<String>(plannedUnit);
+    }
+    if (!nullToAbsent || wantedCanonical != null) {
+      map['wanted_canonical'] = Variable<double>(wantedCanonical);
+    }
+    if (!nullToAbsent || wantedKind != null) {
+      map['wanted_kind'] = Variable<String>(wantedKind);
+    }
+    if (!nullToAbsent || wantedUnit != null) {
+      map['wanted_unit'] = Variable<String>(wantedUnit);
+    }
+    if (!nullToAbsent || onHandCanonical != null) {
+      map['on_hand_canonical'] = Variable<double>(onHandCanonical);
+    }
+    if (!nullToAbsent || onHandKind != null) {
+      map['on_hand_kind'] = Variable<String>(onHandKind);
+    }
+    if (!nullToAbsent || onHandUnit != null) {
+      map['on_hand_unit'] = Variable<String>(onHandUnit);
+    }
+    map['checked'] = Variable<bool>(checked);
+    map['is_manual'] = Variable<bool>(isManual);
+    map['has_unquantified'] = Variable<bool>(hasUnquantified);
+    if (!nullToAbsent || storeTag != null) {
+      map['store_tag'] = Variable<String>(storeTag);
+    }
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['source_recipe_ids'] = Variable<String>(sourceRecipeIds);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  ShoppingListItemsCompanion toCompanion(bool nullToAbsent) {
+    return ShoppingListItemsCompanion(
+      id: Value(id),
+      listId: Value(listId),
+      itemKey: Value(itemKey),
+      foodId: foodId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(foodId),
+      name: Value(name),
+      plannedCanonical: plannedCanonical == null && nullToAbsent
+          ? const Value.absent()
+          : Value(plannedCanonical),
+      plannedKind: plannedKind == null && nullToAbsent
+          ? const Value.absent()
+          : Value(plannedKind),
+      plannedUnit: plannedUnit == null && nullToAbsent
+          ? const Value.absent()
+          : Value(plannedUnit),
+      wantedCanonical: wantedCanonical == null && nullToAbsent
+          ? const Value.absent()
+          : Value(wantedCanonical),
+      wantedKind: wantedKind == null && nullToAbsent
+          ? const Value.absent()
+          : Value(wantedKind),
+      wantedUnit: wantedUnit == null && nullToAbsent
+          ? const Value.absent()
+          : Value(wantedUnit),
+      onHandCanonical: onHandCanonical == null && nullToAbsent
+          ? const Value.absent()
+          : Value(onHandCanonical),
+      onHandKind: onHandKind == null && nullToAbsent
+          ? const Value.absent()
+          : Value(onHandKind),
+      onHandUnit: onHandUnit == null && nullToAbsent
+          ? const Value.absent()
+          : Value(onHandUnit),
+      checked: Value(checked),
+      isManual: Value(isManual),
+      hasUnquantified: Value(hasUnquantified),
+      storeTag: storeTag == null && nullToAbsent
+          ? const Value.absent()
+          : Value(storeTag),
+      sortOrder: Value(sortOrder),
+      sourceRecipeIds: Value(sourceRecipeIds),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory ShoppingItemRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ShoppingItemRow(
+      id: serializer.fromJson<String>(json['id']),
+      listId: serializer.fromJson<String>(json['listId']),
+      itemKey: serializer.fromJson<String>(json['itemKey']),
+      foodId: serializer.fromJson<String?>(json['foodId']),
+      name: serializer.fromJson<String>(json['name']),
+      plannedCanonical: serializer.fromJson<double?>(json['plannedCanonical']),
+      plannedKind: serializer.fromJson<String?>(json['plannedKind']),
+      plannedUnit: serializer.fromJson<String?>(json['plannedUnit']),
+      wantedCanonical: serializer.fromJson<double?>(json['wantedCanonical']),
+      wantedKind: serializer.fromJson<String?>(json['wantedKind']),
+      wantedUnit: serializer.fromJson<String?>(json['wantedUnit']),
+      onHandCanonical: serializer.fromJson<double?>(json['onHandCanonical']),
+      onHandKind: serializer.fromJson<String?>(json['onHandKind']),
+      onHandUnit: serializer.fromJson<String?>(json['onHandUnit']),
+      checked: serializer.fromJson<bool>(json['checked']),
+      isManual: serializer.fromJson<bool>(json['isManual']),
+      hasUnquantified: serializer.fromJson<bool>(json['hasUnquantified']),
+      storeTag: serializer.fromJson<String?>(json['storeTag']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      sourceRecipeIds: serializer.fromJson<String>(json['sourceRecipeIds']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'listId': serializer.toJson<String>(listId),
+      'itemKey': serializer.toJson<String>(itemKey),
+      'foodId': serializer.toJson<String?>(foodId),
+      'name': serializer.toJson<String>(name),
+      'plannedCanonical': serializer.toJson<double?>(plannedCanonical),
+      'plannedKind': serializer.toJson<String?>(plannedKind),
+      'plannedUnit': serializer.toJson<String?>(plannedUnit),
+      'wantedCanonical': serializer.toJson<double?>(wantedCanonical),
+      'wantedKind': serializer.toJson<String?>(wantedKind),
+      'wantedUnit': serializer.toJson<String?>(wantedUnit),
+      'onHandCanonical': serializer.toJson<double?>(onHandCanonical),
+      'onHandKind': serializer.toJson<String?>(onHandKind),
+      'onHandUnit': serializer.toJson<String?>(onHandUnit),
+      'checked': serializer.toJson<bool>(checked),
+      'isManual': serializer.toJson<bool>(isManual),
+      'hasUnquantified': serializer.toJson<bool>(hasUnquantified),
+      'storeTag': serializer.toJson<String?>(storeTag),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'sourceRecipeIds': serializer.toJson<String>(sourceRecipeIds),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  ShoppingItemRow copyWith({
+    String? id,
+    String? listId,
+    String? itemKey,
+    Value<String?> foodId = const Value.absent(),
+    String? name,
+    Value<double?> plannedCanonical = const Value.absent(),
+    Value<String?> plannedKind = const Value.absent(),
+    Value<String?> plannedUnit = const Value.absent(),
+    Value<double?> wantedCanonical = const Value.absent(),
+    Value<String?> wantedKind = const Value.absent(),
+    Value<String?> wantedUnit = const Value.absent(),
+    Value<double?> onHandCanonical = const Value.absent(),
+    Value<String?> onHandKind = const Value.absent(),
+    Value<String?> onHandUnit = const Value.absent(),
+    bool? checked,
+    bool? isManual,
+    bool? hasUnquantified,
+    Value<String?> storeTag = const Value.absent(),
+    int? sortOrder,
+    String? sourceRecipeIds,
+    DateTime? updatedAt,
+  }) => ShoppingItemRow(
+    id: id ?? this.id,
+    listId: listId ?? this.listId,
+    itemKey: itemKey ?? this.itemKey,
+    foodId: foodId.present ? foodId.value : this.foodId,
+    name: name ?? this.name,
+    plannedCanonical: plannedCanonical.present
+        ? plannedCanonical.value
+        : this.plannedCanonical,
+    plannedKind: plannedKind.present ? plannedKind.value : this.plannedKind,
+    plannedUnit: plannedUnit.present ? plannedUnit.value : this.plannedUnit,
+    wantedCanonical: wantedCanonical.present
+        ? wantedCanonical.value
+        : this.wantedCanonical,
+    wantedKind: wantedKind.present ? wantedKind.value : this.wantedKind,
+    wantedUnit: wantedUnit.present ? wantedUnit.value : this.wantedUnit,
+    onHandCanonical: onHandCanonical.present
+        ? onHandCanonical.value
+        : this.onHandCanonical,
+    onHandKind: onHandKind.present ? onHandKind.value : this.onHandKind,
+    onHandUnit: onHandUnit.present ? onHandUnit.value : this.onHandUnit,
+    checked: checked ?? this.checked,
+    isManual: isManual ?? this.isManual,
+    hasUnquantified: hasUnquantified ?? this.hasUnquantified,
+    storeTag: storeTag.present ? storeTag.value : this.storeTag,
+    sortOrder: sortOrder ?? this.sortOrder,
+    sourceRecipeIds: sourceRecipeIds ?? this.sourceRecipeIds,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  ShoppingItemRow copyWithCompanion(ShoppingListItemsCompanion data) {
+    return ShoppingItemRow(
+      id: data.id.present ? data.id.value : this.id,
+      listId: data.listId.present ? data.listId.value : this.listId,
+      itemKey: data.itemKey.present ? data.itemKey.value : this.itemKey,
+      foodId: data.foodId.present ? data.foodId.value : this.foodId,
+      name: data.name.present ? data.name.value : this.name,
+      plannedCanonical: data.plannedCanonical.present
+          ? data.plannedCanonical.value
+          : this.plannedCanonical,
+      plannedKind: data.plannedKind.present
+          ? data.plannedKind.value
+          : this.plannedKind,
+      plannedUnit: data.plannedUnit.present
+          ? data.plannedUnit.value
+          : this.plannedUnit,
+      wantedCanonical: data.wantedCanonical.present
+          ? data.wantedCanonical.value
+          : this.wantedCanonical,
+      wantedKind: data.wantedKind.present
+          ? data.wantedKind.value
+          : this.wantedKind,
+      wantedUnit: data.wantedUnit.present
+          ? data.wantedUnit.value
+          : this.wantedUnit,
+      onHandCanonical: data.onHandCanonical.present
+          ? data.onHandCanonical.value
+          : this.onHandCanonical,
+      onHandKind: data.onHandKind.present
+          ? data.onHandKind.value
+          : this.onHandKind,
+      onHandUnit: data.onHandUnit.present
+          ? data.onHandUnit.value
+          : this.onHandUnit,
+      checked: data.checked.present ? data.checked.value : this.checked,
+      isManual: data.isManual.present ? data.isManual.value : this.isManual,
+      hasUnquantified: data.hasUnquantified.present
+          ? data.hasUnquantified.value
+          : this.hasUnquantified,
+      storeTag: data.storeTag.present ? data.storeTag.value : this.storeTag,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      sourceRecipeIds: data.sourceRecipeIds.present
+          ? data.sourceRecipeIds.value
+          : this.sourceRecipeIds,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ShoppingItemRow(')
+          ..write('id: $id, ')
+          ..write('listId: $listId, ')
+          ..write('itemKey: $itemKey, ')
+          ..write('foodId: $foodId, ')
+          ..write('name: $name, ')
+          ..write('plannedCanonical: $plannedCanonical, ')
+          ..write('plannedKind: $plannedKind, ')
+          ..write('plannedUnit: $plannedUnit, ')
+          ..write('wantedCanonical: $wantedCanonical, ')
+          ..write('wantedKind: $wantedKind, ')
+          ..write('wantedUnit: $wantedUnit, ')
+          ..write('onHandCanonical: $onHandCanonical, ')
+          ..write('onHandKind: $onHandKind, ')
+          ..write('onHandUnit: $onHandUnit, ')
+          ..write('checked: $checked, ')
+          ..write('isManual: $isManual, ')
+          ..write('hasUnquantified: $hasUnquantified, ')
+          ..write('storeTag: $storeTag, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('sourceRecipeIds: $sourceRecipeIds, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    listId,
+    itemKey,
+    foodId,
+    name,
+    plannedCanonical,
+    plannedKind,
+    plannedUnit,
+    wantedCanonical,
+    wantedKind,
+    wantedUnit,
+    onHandCanonical,
+    onHandKind,
+    onHandUnit,
+    checked,
+    isManual,
+    hasUnquantified,
+    storeTag,
+    sortOrder,
+    sourceRecipeIds,
+    updatedAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ShoppingItemRow &&
+          other.id == this.id &&
+          other.listId == this.listId &&
+          other.itemKey == this.itemKey &&
+          other.foodId == this.foodId &&
+          other.name == this.name &&
+          other.plannedCanonical == this.plannedCanonical &&
+          other.plannedKind == this.plannedKind &&
+          other.plannedUnit == this.plannedUnit &&
+          other.wantedCanonical == this.wantedCanonical &&
+          other.wantedKind == this.wantedKind &&
+          other.wantedUnit == this.wantedUnit &&
+          other.onHandCanonical == this.onHandCanonical &&
+          other.onHandKind == this.onHandKind &&
+          other.onHandUnit == this.onHandUnit &&
+          other.checked == this.checked &&
+          other.isManual == this.isManual &&
+          other.hasUnquantified == this.hasUnquantified &&
+          other.storeTag == this.storeTag &&
+          other.sortOrder == this.sortOrder &&
+          other.sourceRecipeIds == this.sourceRecipeIds &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
+  final Value<String> id;
+  final Value<String> listId;
+  final Value<String> itemKey;
+  final Value<String?> foodId;
+  final Value<String> name;
+  final Value<double?> plannedCanonical;
+  final Value<String?> plannedKind;
+  final Value<String?> plannedUnit;
+  final Value<double?> wantedCanonical;
+  final Value<String?> wantedKind;
+  final Value<String?> wantedUnit;
+  final Value<double?> onHandCanonical;
+  final Value<String?> onHandKind;
+  final Value<String?> onHandUnit;
+  final Value<bool> checked;
+  final Value<bool> isManual;
+  final Value<bool> hasUnquantified;
+  final Value<String?> storeTag;
+  final Value<int> sortOrder;
+  final Value<String> sourceRecipeIds;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const ShoppingListItemsCompanion({
+    this.id = const Value.absent(),
+    this.listId = const Value.absent(),
+    this.itemKey = const Value.absent(),
+    this.foodId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.plannedCanonical = const Value.absent(),
+    this.plannedKind = const Value.absent(),
+    this.plannedUnit = const Value.absent(),
+    this.wantedCanonical = const Value.absent(),
+    this.wantedKind = const Value.absent(),
+    this.wantedUnit = const Value.absent(),
+    this.onHandCanonical = const Value.absent(),
+    this.onHandKind = const Value.absent(),
+    this.onHandUnit = const Value.absent(),
+    this.checked = const Value.absent(),
+    this.isManual = const Value.absent(),
+    this.hasUnquantified = const Value.absent(),
+    this.storeTag = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.sourceRecipeIds = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ShoppingListItemsCompanion.insert({
+    required String id,
+    required String listId,
+    required String itemKey,
+    this.foodId = const Value.absent(),
+    required String name,
+    this.plannedCanonical = const Value.absent(),
+    this.plannedKind = const Value.absent(),
+    this.plannedUnit = const Value.absent(),
+    this.wantedCanonical = const Value.absent(),
+    this.wantedKind = const Value.absent(),
+    this.wantedUnit = const Value.absent(),
+    this.onHandCanonical = const Value.absent(),
+    this.onHandKind = const Value.absent(),
+    this.onHandUnit = const Value.absent(),
+    this.checked = const Value.absent(),
+    this.isManual = const Value.absent(),
+    this.hasUnquantified = const Value.absent(),
+    this.storeTag = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.sourceRecipeIds = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       listId = Value(listId),
+       itemKey = Value(itemKey),
+       name = Value(name),
+       updatedAt = Value(updatedAt);
+  static Insertable<ShoppingItemRow> custom({
+    Expression<String>? id,
+    Expression<String>? listId,
+    Expression<String>? itemKey,
+    Expression<String>? foodId,
+    Expression<String>? name,
+    Expression<double>? plannedCanonical,
+    Expression<String>? plannedKind,
+    Expression<String>? plannedUnit,
+    Expression<double>? wantedCanonical,
+    Expression<String>? wantedKind,
+    Expression<String>? wantedUnit,
+    Expression<double>? onHandCanonical,
+    Expression<String>? onHandKind,
+    Expression<String>? onHandUnit,
+    Expression<bool>? checked,
+    Expression<bool>? isManual,
+    Expression<bool>? hasUnquantified,
+    Expression<String>? storeTag,
+    Expression<int>? sortOrder,
+    Expression<String>? sourceRecipeIds,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (listId != null) 'list_id': listId,
+      if (itemKey != null) 'item_key': itemKey,
+      if (foodId != null) 'food_id': foodId,
+      if (name != null) 'name': name,
+      if (plannedCanonical != null) 'planned_canonical': plannedCanonical,
+      if (plannedKind != null) 'planned_kind': plannedKind,
+      if (plannedUnit != null) 'planned_unit': plannedUnit,
+      if (wantedCanonical != null) 'wanted_canonical': wantedCanonical,
+      if (wantedKind != null) 'wanted_kind': wantedKind,
+      if (wantedUnit != null) 'wanted_unit': wantedUnit,
+      if (onHandCanonical != null) 'on_hand_canonical': onHandCanonical,
+      if (onHandKind != null) 'on_hand_kind': onHandKind,
+      if (onHandUnit != null) 'on_hand_unit': onHandUnit,
+      if (checked != null) 'checked': checked,
+      if (isManual != null) 'is_manual': isManual,
+      if (hasUnquantified != null) 'has_unquantified': hasUnquantified,
+      if (storeTag != null) 'store_tag': storeTag,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (sourceRecipeIds != null) 'source_recipe_ids': sourceRecipeIds,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ShoppingListItemsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? listId,
+    Value<String>? itemKey,
+    Value<String?>? foodId,
+    Value<String>? name,
+    Value<double?>? plannedCanonical,
+    Value<String?>? plannedKind,
+    Value<String?>? plannedUnit,
+    Value<double?>? wantedCanonical,
+    Value<String?>? wantedKind,
+    Value<String?>? wantedUnit,
+    Value<double?>? onHandCanonical,
+    Value<String?>? onHandKind,
+    Value<String?>? onHandUnit,
+    Value<bool>? checked,
+    Value<bool>? isManual,
+    Value<bool>? hasUnquantified,
+    Value<String?>? storeTag,
+    Value<int>? sortOrder,
+    Value<String>? sourceRecipeIds,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return ShoppingListItemsCompanion(
+      id: id ?? this.id,
+      listId: listId ?? this.listId,
+      itemKey: itemKey ?? this.itemKey,
+      foodId: foodId ?? this.foodId,
+      name: name ?? this.name,
+      plannedCanonical: plannedCanonical ?? this.plannedCanonical,
+      plannedKind: plannedKind ?? this.plannedKind,
+      plannedUnit: plannedUnit ?? this.plannedUnit,
+      wantedCanonical: wantedCanonical ?? this.wantedCanonical,
+      wantedKind: wantedKind ?? this.wantedKind,
+      wantedUnit: wantedUnit ?? this.wantedUnit,
+      onHandCanonical: onHandCanonical ?? this.onHandCanonical,
+      onHandKind: onHandKind ?? this.onHandKind,
+      onHandUnit: onHandUnit ?? this.onHandUnit,
+      checked: checked ?? this.checked,
+      isManual: isManual ?? this.isManual,
+      hasUnquantified: hasUnquantified ?? this.hasUnquantified,
+      storeTag: storeTag ?? this.storeTag,
+      sortOrder: sortOrder ?? this.sortOrder,
+      sourceRecipeIds: sourceRecipeIds ?? this.sourceRecipeIds,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (listId.present) {
+      map['list_id'] = Variable<String>(listId.value);
+    }
+    if (itemKey.present) {
+      map['item_key'] = Variable<String>(itemKey.value);
+    }
+    if (foodId.present) {
+      map['food_id'] = Variable<String>(foodId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (plannedCanonical.present) {
+      map['planned_canonical'] = Variable<double>(plannedCanonical.value);
+    }
+    if (plannedKind.present) {
+      map['planned_kind'] = Variable<String>(plannedKind.value);
+    }
+    if (plannedUnit.present) {
+      map['planned_unit'] = Variable<String>(plannedUnit.value);
+    }
+    if (wantedCanonical.present) {
+      map['wanted_canonical'] = Variable<double>(wantedCanonical.value);
+    }
+    if (wantedKind.present) {
+      map['wanted_kind'] = Variable<String>(wantedKind.value);
+    }
+    if (wantedUnit.present) {
+      map['wanted_unit'] = Variable<String>(wantedUnit.value);
+    }
+    if (onHandCanonical.present) {
+      map['on_hand_canonical'] = Variable<double>(onHandCanonical.value);
+    }
+    if (onHandKind.present) {
+      map['on_hand_kind'] = Variable<String>(onHandKind.value);
+    }
+    if (onHandUnit.present) {
+      map['on_hand_unit'] = Variable<String>(onHandUnit.value);
+    }
+    if (checked.present) {
+      map['checked'] = Variable<bool>(checked.value);
+    }
+    if (isManual.present) {
+      map['is_manual'] = Variable<bool>(isManual.value);
+    }
+    if (hasUnquantified.present) {
+      map['has_unquantified'] = Variable<bool>(hasUnquantified.value);
+    }
+    if (storeTag.present) {
+      map['store_tag'] = Variable<String>(storeTag.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (sourceRecipeIds.present) {
+      map['source_recipe_ids'] = Variable<String>(sourceRecipeIds.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ShoppingListItemsCompanion(')
+          ..write('id: $id, ')
+          ..write('listId: $listId, ')
+          ..write('itemKey: $itemKey, ')
+          ..write('foodId: $foodId, ')
+          ..write('name: $name, ')
+          ..write('plannedCanonical: $plannedCanonical, ')
+          ..write('plannedKind: $plannedKind, ')
+          ..write('plannedUnit: $plannedUnit, ')
+          ..write('wantedCanonical: $wantedCanonical, ')
+          ..write('wantedKind: $wantedKind, ')
+          ..write('wantedUnit: $wantedUnit, ')
+          ..write('onHandCanonical: $onHandCanonical, ')
+          ..write('onHandKind: $onHandKind, ')
+          ..write('onHandUnit: $onHandUnit, ')
+          ..write('checked: $checked, ')
+          ..write('isManual: $isManual, ')
+          ..write('hasUnquantified: $hasUnquantified, ')
+          ..write('storeTag: $storeTag, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('sourceRecipeIds: $sourceRecipeIds, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$HearthDatabase extends GeneratedDatabase {
   _$HearthDatabase(QueryExecutor e) : super(e);
   $HearthDatabaseManager get managers => $HearthDatabaseManager(this);
@@ -9124,6 +10734,9 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
   late final $CookSessionsTable cookSessions = $CookSessionsTable(this);
   late final $RecipePhotosTable recipePhotos = $RecipePhotosTable(this);
   late final $PendingWritesTable pendingWrites = $PendingWritesTable(this);
+  late final $ShoppingListsTable shoppingLists = $ShoppingListsTable(this);
+  late final $ShoppingListItemsTable shoppingListItems =
+      $ShoppingListItemsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -9148,6 +10761,8 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
     cookSessions,
     recipePhotos,
     pendingWrites,
+    shoppingLists,
+    shoppingListItems,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -16083,6 +17698,772 @@ typedef $$PendingWritesTableProcessedTableManager =
       PendingWriteRow,
       PrefetchHooks Function()
     >;
+typedef $$ShoppingListsTableCreateCompanionBuilder =
+    ShoppingListsCompanion Function({
+      required String id,
+      required String householdId,
+      required DateTime fromDate,
+      required DateTime toDate,
+      Value<String> status,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$ShoppingListsTableUpdateCompanionBuilder =
+    ShoppingListsCompanion Function({
+      Value<String> id,
+      Value<String> householdId,
+      Value<DateTime> fromDate,
+      Value<DateTime> toDate,
+      Value<String> status,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$ShoppingListsTableFilterComposer
+    extends Composer<_$HearthDatabase, $ShoppingListsTable> {
+  $$ShoppingListsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get householdId => $composableBuilder(
+    column: $table.householdId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get fromDate => $composableBuilder(
+    column: $table.fromDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get toDate => $composableBuilder(
+    column: $table.toDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ShoppingListsTableOrderingComposer
+    extends Composer<_$HearthDatabase, $ShoppingListsTable> {
+  $$ShoppingListsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get householdId => $composableBuilder(
+    column: $table.householdId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get fromDate => $composableBuilder(
+    column: $table.fromDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get toDate => $composableBuilder(
+    column: $table.toDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ShoppingListsTableAnnotationComposer
+    extends Composer<_$HearthDatabase, $ShoppingListsTable> {
+  $$ShoppingListsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get householdId => $composableBuilder(
+    column: $table.householdId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get fromDate =>
+      $composableBuilder(column: $table.fromDate, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get toDate =>
+      $composableBuilder(column: $table.toDate, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$ShoppingListsTableTableManager
+    extends
+        RootTableManager<
+          _$HearthDatabase,
+          $ShoppingListsTable,
+          ShoppingListRow,
+          $$ShoppingListsTableFilterComposer,
+          $$ShoppingListsTableOrderingComposer,
+          $$ShoppingListsTableAnnotationComposer,
+          $$ShoppingListsTableCreateCompanionBuilder,
+          $$ShoppingListsTableUpdateCompanionBuilder,
+          (
+            ShoppingListRow,
+            BaseReferences<
+              _$HearthDatabase,
+              $ShoppingListsTable,
+              ShoppingListRow
+            >,
+          ),
+          ShoppingListRow,
+          PrefetchHooks Function()
+        > {
+  $$ShoppingListsTableTableManager(
+    _$HearthDatabase db,
+    $ShoppingListsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ShoppingListsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ShoppingListsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ShoppingListsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> householdId = const Value.absent(),
+                Value<DateTime> fromDate = const Value.absent(),
+                Value<DateTime> toDate = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ShoppingListsCompanion(
+                id: id,
+                householdId: householdId,
+                fromDate: fromDate,
+                toDate: toDate,
+                status: status,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String householdId,
+                required DateTime fromDate,
+                required DateTime toDate,
+                Value<String> status = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => ShoppingListsCompanion.insert(
+                id: id,
+                householdId: householdId,
+                fromDate: fromDate,
+                toDate: toDate,
+                status: status,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ShoppingListsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$HearthDatabase,
+      $ShoppingListsTable,
+      ShoppingListRow,
+      $$ShoppingListsTableFilterComposer,
+      $$ShoppingListsTableOrderingComposer,
+      $$ShoppingListsTableAnnotationComposer,
+      $$ShoppingListsTableCreateCompanionBuilder,
+      $$ShoppingListsTableUpdateCompanionBuilder,
+      (
+        ShoppingListRow,
+        BaseReferences<_$HearthDatabase, $ShoppingListsTable, ShoppingListRow>,
+      ),
+      ShoppingListRow,
+      PrefetchHooks Function()
+    >;
+typedef $$ShoppingListItemsTableCreateCompanionBuilder =
+    ShoppingListItemsCompanion Function({
+      required String id,
+      required String listId,
+      required String itemKey,
+      Value<String?> foodId,
+      required String name,
+      Value<double?> plannedCanonical,
+      Value<String?> plannedKind,
+      Value<String?> plannedUnit,
+      Value<double?> wantedCanonical,
+      Value<String?> wantedKind,
+      Value<String?> wantedUnit,
+      Value<double?> onHandCanonical,
+      Value<String?> onHandKind,
+      Value<String?> onHandUnit,
+      Value<bool> checked,
+      Value<bool> isManual,
+      Value<bool> hasUnquantified,
+      Value<String?> storeTag,
+      Value<int> sortOrder,
+      Value<String> sourceRecipeIds,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$ShoppingListItemsTableUpdateCompanionBuilder =
+    ShoppingListItemsCompanion Function({
+      Value<String> id,
+      Value<String> listId,
+      Value<String> itemKey,
+      Value<String?> foodId,
+      Value<String> name,
+      Value<double?> plannedCanonical,
+      Value<String?> plannedKind,
+      Value<String?> plannedUnit,
+      Value<double?> wantedCanonical,
+      Value<String?> wantedKind,
+      Value<String?> wantedUnit,
+      Value<double?> onHandCanonical,
+      Value<String?> onHandKind,
+      Value<String?> onHandUnit,
+      Value<bool> checked,
+      Value<bool> isManual,
+      Value<bool> hasUnquantified,
+      Value<String?> storeTag,
+      Value<int> sortOrder,
+      Value<String> sourceRecipeIds,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$ShoppingListItemsTableFilterComposer
+    extends Composer<_$HearthDatabase, $ShoppingListItemsTable> {
+  $$ShoppingListItemsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get listId => $composableBuilder(
+    column: $table.listId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get itemKey => $composableBuilder(
+    column: $table.itemKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get foodId => $composableBuilder(
+    column: $table.foodId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get plannedCanonical => $composableBuilder(
+    column: $table.plannedCanonical,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get plannedKind => $composableBuilder(
+    column: $table.plannedKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get plannedUnit => $composableBuilder(
+    column: $table.plannedUnit,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get wantedCanonical => $composableBuilder(
+    column: $table.wantedCanonical,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get wantedKind => $composableBuilder(
+    column: $table.wantedKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get wantedUnit => $composableBuilder(
+    column: $table.wantedUnit,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get onHandCanonical => $composableBuilder(
+    column: $table.onHandCanonical,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get onHandKind => $composableBuilder(
+    column: $table.onHandKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get onHandUnit => $composableBuilder(
+    column: $table.onHandUnit,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get checked => $composableBuilder(
+    column: $table.checked,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isManual => $composableBuilder(
+    column: $table.isManual,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get hasUnquantified => $composableBuilder(
+    column: $table.hasUnquantified,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get storeTag => $composableBuilder(
+    column: $table.storeTag,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceRecipeIds => $composableBuilder(
+    column: $table.sourceRecipeIds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ShoppingListItemsTableOrderingComposer
+    extends Composer<_$HearthDatabase, $ShoppingListItemsTable> {
+  $$ShoppingListItemsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get listId => $composableBuilder(
+    column: $table.listId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get itemKey => $composableBuilder(
+    column: $table.itemKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get foodId => $composableBuilder(
+    column: $table.foodId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get plannedCanonical => $composableBuilder(
+    column: $table.plannedCanonical,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get plannedKind => $composableBuilder(
+    column: $table.plannedKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get plannedUnit => $composableBuilder(
+    column: $table.plannedUnit,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get wantedCanonical => $composableBuilder(
+    column: $table.wantedCanonical,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get wantedKind => $composableBuilder(
+    column: $table.wantedKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get wantedUnit => $composableBuilder(
+    column: $table.wantedUnit,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get onHandCanonical => $composableBuilder(
+    column: $table.onHandCanonical,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get onHandKind => $composableBuilder(
+    column: $table.onHandKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get onHandUnit => $composableBuilder(
+    column: $table.onHandUnit,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get checked => $composableBuilder(
+    column: $table.checked,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isManual => $composableBuilder(
+    column: $table.isManual,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get hasUnquantified => $composableBuilder(
+    column: $table.hasUnquantified,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get storeTag => $composableBuilder(
+    column: $table.storeTag,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceRecipeIds => $composableBuilder(
+    column: $table.sourceRecipeIds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ShoppingListItemsTableAnnotationComposer
+    extends Composer<_$HearthDatabase, $ShoppingListItemsTable> {
+  $$ShoppingListItemsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get listId =>
+      $composableBuilder(column: $table.listId, builder: (column) => column);
+
+  GeneratedColumn<String> get itemKey =>
+      $composableBuilder(column: $table.itemKey, builder: (column) => column);
+
+  GeneratedColumn<String> get foodId =>
+      $composableBuilder(column: $table.foodId, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<double> get plannedCanonical => $composableBuilder(
+    column: $table.plannedCanonical,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get plannedKind => $composableBuilder(
+    column: $table.plannedKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get plannedUnit => $composableBuilder(
+    column: $table.plannedUnit,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get wantedCanonical => $composableBuilder(
+    column: $table.wantedCanonical,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get wantedKind => $composableBuilder(
+    column: $table.wantedKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get wantedUnit => $composableBuilder(
+    column: $table.wantedUnit,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get onHandCanonical => $composableBuilder(
+    column: $table.onHandCanonical,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get onHandKind => $composableBuilder(
+    column: $table.onHandKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get onHandUnit => $composableBuilder(
+    column: $table.onHandUnit,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get checked =>
+      $composableBuilder(column: $table.checked, builder: (column) => column);
+
+  GeneratedColumn<bool> get isManual =>
+      $composableBuilder(column: $table.isManual, builder: (column) => column);
+
+  GeneratedColumn<bool> get hasUnquantified => $composableBuilder(
+    column: $table.hasUnquantified,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get storeTag =>
+      $composableBuilder(column: $table.storeTag, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceRecipeIds => $composableBuilder(
+    column: $table.sourceRecipeIds,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$ShoppingListItemsTableTableManager
+    extends
+        RootTableManager<
+          _$HearthDatabase,
+          $ShoppingListItemsTable,
+          ShoppingItemRow,
+          $$ShoppingListItemsTableFilterComposer,
+          $$ShoppingListItemsTableOrderingComposer,
+          $$ShoppingListItemsTableAnnotationComposer,
+          $$ShoppingListItemsTableCreateCompanionBuilder,
+          $$ShoppingListItemsTableUpdateCompanionBuilder,
+          (
+            ShoppingItemRow,
+            BaseReferences<
+              _$HearthDatabase,
+              $ShoppingListItemsTable,
+              ShoppingItemRow
+            >,
+          ),
+          ShoppingItemRow,
+          PrefetchHooks Function()
+        > {
+  $$ShoppingListItemsTableTableManager(
+    _$HearthDatabase db,
+    $ShoppingListItemsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ShoppingListItemsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ShoppingListItemsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ShoppingListItemsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> listId = const Value.absent(),
+                Value<String> itemKey = const Value.absent(),
+                Value<String?> foodId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<double?> plannedCanonical = const Value.absent(),
+                Value<String?> plannedKind = const Value.absent(),
+                Value<String?> plannedUnit = const Value.absent(),
+                Value<double?> wantedCanonical = const Value.absent(),
+                Value<String?> wantedKind = const Value.absent(),
+                Value<String?> wantedUnit = const Value.absent(),
+                Value<double?> onHandCanonical = const Value.absent(),
+                Value<String?> onHandKind = const Value.absent(),
+                Value<String?> onHandUnit = const Value.absent(),
+                Value<bool> checked = const Value.absent(),
+                Value<bool> isManual = const Value.absent(),
+                Value<bool> hasUnquantified = const Value.absent(),
+                Value<String?> storeTag = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<String> sourceRecipeIds = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ShoppingListItemsCompanion(
+                id: id,
+                listId: listId,
+                itemKey: itemKey,
+                foodId: foodId,
+                name: name,
+                plannedCanonical: plannedCanonical,
+                plannedKind: plannedKind,
+                plannedUnit: plannedUnit,
+                wantedCanonical: wantedCanonical,
+                wantedKind: wantedKind,
+                wantedUnit: wantedUnit,
+                onHandCanonical: onHandCanonical,
+                onHandKind: onHandKind,
+                onHandUnit: onHandUnit,
+                checked: checked,
+                isManual: isManual,
+                hasUnquantified: hasUnquantified,
+                storeTag: storeTag,
+                sortOrder: sortOrder,
+                sourceRecipeIds: sourceRecipeIds,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String listId,
+                required String itemKey,
+                Value<String?> foodId = const Value.absent(),
+                required String name,
+                Value<double?> plannedCanonical = const Value.absent(),
+                Value<String?> plannedKind = const Value.absent(),
+                Value<String?> plannedUnit = const Value.absent(),
+                Value<double?> wantedCanonical = const Value.absent(),
+                Value<String?> wantedKind = const Value.absent(),
+                Value<String?> wantedUnit = const Value.absent(),
+                Value<double?> onHandCanonical = const Value.absent(),
+                Value<String?> onHandKind = const Value.absent(),
+                Value<String?> onHandUnit = const Value.absent(),
+                Value<bool> checked = const Value.absent(),
+                Value<bool> isManual = const Value.absent(),
+                Value<bool> hasUnquantified = const Value.absent(),
+                Value<String?> storeTag = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<String> sourceRecipeIds = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => ShoppingListItemsCompanion.insert(
+                id: id,
+                listId: listId,
+                itemKey: itemKey,
+                foodId: foodId,
+                name: name,
+                plannedCanonical: plannedCanonical,
+                plannedKind: plannedKind,
+                plannedUnit: plannedUnit,
+                wantedCanonical: wantedCanonical,
+                wantedKind: wantedKind,
+                wantedUnit: wantedUnit,
+                onHandCanonical: onHandCanonical,
+                onHandKind: onHandKind,
+                onHandUnit: onHandUnit,
+                checked: checked,
+                isManual: isManual,
+                hasUnquantified: hasUnquantified,
+                storeTag: storeTag,
+                sortOrder: sortOrder,
+                sourceRecipeIds: sourceRecipeIds,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ShoppingListItemsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$HearthDatabase,
+      $ShoppingListItemsTable,
+      ShoppingItemRow,
+      $$ShoppingListItemsTableFilterComposer,
+      $$ShoppingListItemsTableOrderingComposer,
+      $$ShoppingListItemsTableAnnotationComposer,
+      $$ShoppingListItemsTableCreateCompanionBuilder,
+      $$ShoppingListItemsTableUpdateCompanionBuilder,
+      (
+        ShoppingItemRow,
+        BaseReferences<
+          _$HearthDatabase,
+          $ShoppingListItemsTable,
+          ShoppingItemRow
+        >,
+      ),
+      ShoppingItemRow,
+      PrefetchHooks Function()
+    >;
 
 class $HearthDatabaseManager {
   final _$HearthDatabase _db;
@@ -16125,4 +18506,8 @@ class $HearthDatabaseManager {
       $$RecipePhotosTableTableManager(_db, _db.recipePhotos);
   $$PendingWritesTableTableManager get pendingWrites =>
       $$PendingWritesTableTableManager(_db, _db.pendingWrites);
+  $$ShoppingListsTableTableManager get shoppingLists =>
+      $$ShoppingListsTableTableManager(_db, _db.shoppingLists);
+  $$ShoppingListItemsTableTableManager get shoppingListItems =>
+      $$ShoppingListItemsTableTableManager(_db, _db.shoppingListItems);
 }
