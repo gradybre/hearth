@@ -65,7 +65,7 @@ class SupabasePhotoStorage implements PhotoStorage {
   /// policy, a 413 from the size limit — is a real refusal that should stop
   /// after a few tries rather than hammer.
   static Object mapStorageError(StorageException error, String path) {
-    final String status = '${error.statusCode ?? ''}';
+    final String status = error.statusCode ?? '';
     if (status == '404') return PhotoObjectMissing(path);
 
     final String message = error.message.toLowerCase();

@@ -8,6 +8,7 @@ import '../../app/sync_controller.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../data/adapters/data_export.dart';
 import '../../data/auth/auth_gateway.dart';
 import '../../data/sync/sync_engine.dart';
 
@@ -205,6 +206,8 @@ class _HouseholdScreenState extends ConsumerState<HouseholdScreen> {
             ),
             const SizedBox(height: HearthSpacing.xl),
             const _SyncPanel(),
+            const SizedBox(height: HearthSpacing.xl),
+            const _YourData(),
             const SizedBox(height: HearthSpacing.xxl),
             TextButton.icon(
               onPressed: _signOut,
@@ -372,5 +375,88 @@ class _SyncPanel extends ConsumerWidget {
         ? 'Everything is up to date.'
         : 'Up to date — brought down $pulled '
               '${pulled == 1 ? 'change' : 'changes'}.';
+  }
+}
+
+/// Taking everything with you (spec §7.4).
+///
+/// Cheap insurance and on-brand for a personal tool: the point is that Hearth
+/// can be walked away from. It sits just above Sign out, which is where a
+/// person who is thinking about leaving will already be looking.
+class _YourData extends ConsumerStatefulWidget {
+  const _YourData();
+
+  @override
+  ConsumerState<_YourData> createState() => _YourDataState();
+}
+
+class _YourDataState extends ConsumerState<_YourData> {
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _export() async {
+    final HearthAccount? account = ref.read(accountProvider).value;
+    if (account == null) return;
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final ExportedFile file = await ref
+          .read(dataExportProvider)
+          .build(householdId: account.householdId, userId: account.userId);
+      await ref.read(fileShareProvider).share(file);
+    } on Object catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text('Your data', style: context.text.sectionHeader),
+        const SizedBox(height: HearthSpacing.xs),
+        Text(
+          'Everything Hearth holds — your recipes, foods, plans and every '
+          'meal you have logged — as one file you keep. Recipe photos are '
+          'not included.',
+          style: context.text.body.copyWith(color: colors.textSecondary),
+        ),
+        if (_error case final String error) ...<Widget>[
+          const SizedBox(height: HearthSpacing.sm),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Icon(Icons.error_outline, size: 18, color: colors.error),
+              const SizedBox(width: HearthSpacing.sm),
+              Expanded(
+                child: Text(
+                  error,
+                  style: context.text.metadata.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: HearthSpacing.md),
+        SizedBox(
+          height: HearthTouch.minTarget,
+          child: OutlinedButton.icon(
+            onPressed: _busy ? null : _export,
+            icon: const Icon(Icons.ios_share, size: 18),
+            label: Text(_busy ? 'Gathering it up…' : 'Export my data'),
+          ),
+        ),
+      ],
+    );
   }
 }

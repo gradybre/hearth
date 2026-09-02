@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../data/adapters/data_export.dart';
 import '../data/adapters/edge_function_label_reader.dart';
 import '../data/adapters/edge_function_recipe_ai.dart';
 import '../data/adapters/edge_function_shopping_assistant.dart';
@@ -19,6 +20,7 @@ import '../data/adapters/photo_picker.dart';
 import '../data/adapters/platform_kitchen_devices.dart';
 import '../data/adapters/platform_shared_content.dart';
 import '../data/adapters/recipe_ai.dart';
+import '../data/adapters/share_plus_file_share.dart';
 import '../data/adapters/shared_content.dart';
 import '../data/adapters/shopping_assistant.dart';
 import '../data/adapters/usda_nutrition_source.dart';
@@ -39,7 +41,9 @@ import '../data/local/preference_store.dart';
 import '../data/local/recipe_photo_store.dart';
 import '../data/local/recipe_store.dart';
 import '../data/local/shopping_store.dart';
+import '../data/remote/photo_storage.dart';
 import '../data/remote/remote_gateway.dart';
+import '../data/remote/supabase_photo_storage.dart';
 import '../data/remote/supabase_remote_gateway.dart';
 import '../data/repositories/collection_repository.dart';
 import '../data/repositories/food_profile_repository.dart';
@@ -49,8 +53,6 @@ import '../data/repositories/plan_repository.dart';
 import '../data/repositories/recipe_repository.dart';
 import '../data/repositories/shopping_repository.dart';
 import '../data/sync/library_sync.dart';
-import '../data/remote/photo_storage.dart';
-import '../data/remote/supabase_photo_storage.dart';
 import '../data/sync/photo_sync.dart';
 import '../data/sync/record_sync.dart';
 import '../data/sync/remote_rows.dart';
@@ -645,6 +647,22 @@ final Provider<CookSessionStore> cookSessionStoreProvider =
     Provider<CookSessionStore>(
       (Ref ref) => CookSessionStore(ref.watch(databaseProvider)),
     );
+
+// ── Taking your data with you (spec §7.4) ────────────────────────────────────
+
+final Provider<DataExport> dataExportProvider = Provider<DataExport>(
+  (Ref ref) => DataExport(
+    database: ref.watch(databaseProvider),
+    recipes: RecipeStore(ref.watch(databaseProvider)),
+    foods: FoodStore(ref.watch(databaseProvider)),
+  ),
+);
+
+/// Handing the file to the OS, behind an interface so a widget test can watch
+/// it happen without a share sheet (rule 7).
+final Provider<FileShare> fileShareProvider = Provider<FileShare>(
+  (Ref ref) => const SharePlusFileShare(),
+);
 
 // ── Recipe photos (spec §5.2) ────────────────────────────────────────────────
 
