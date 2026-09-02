@@ -479,6 +479,23 @@ class CookSessions extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{recipeId};
 }
 
+/// A good week, saved so it can be had again (spec §5.6).
+///
+/// User-scoped, like the plans it is made of: a partner's week is their own.
+/// Entries are JSON — placed by weekday rather than by date, so a template
+/// outlives the week it was saved from.
+@DataClassName('PlanTemplateRow')
+class PlanTemplates extends Table {
+  TextColumn get id => text()();
+  TextColumn get userId => text()();
+  TextColumn get name => text()();
+  TextColumn get entries => text().withDefault(const Constant<String>('[]'))();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
 /// A recipe's hero photo as it sits on *this* device (spec §5.2, §7.2).
 ///
 /// Its own table rather than a column on [Recipes]: that table is a sync

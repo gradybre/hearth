@@ -5,6 +5,7 @@ import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/recent_log.dart';
 import '../../domain/planning/week.dart';
+import '../../domain/planning/week_template.dart';
 import '../local/hearth_database.dart';
 import '../local/pending_write_store.dart';
 import '../local/plan_store.dart';
@@ -33,6 +34,7 @@ class PlanRepository {
   static const String entriesTable = 'meal_plan_entries';
   static const String daysTable = 'meal_plan_days';
   static const String targetsTable = 'macro_targets';
+  static const String templatesTable = 'plan_templates';
 
   final HearthDatabase _db;
   final PlanStore _store;
@@ -299,6 +301,123 @@ class PlanRepository {
       }
     }
     return copied;
+  }
+
+  // ── Week templates (spec §5.6) ────────────────────────────────────────────
+
+  Future<List<WeekTemplate>> templates() async {
+    final List<PlanTemplateRow> rows = await (_db.select(
+      _db.planTemplates,
+    )..where(($PlanTemplatesTable t) => t.userId.equals(_userId))).get();
+
+    return <WeekTemplate>[
+      for (final PlanTemplateRow row in rows)
+        WeekTemplate(
+          id: row.id,
+          name: row.name,
+          entries: WeekTemplate.decodeEntries(row.entries),
+          updatedAt: row.updatedAt,
+        ),
+    ]..sort((WeekTemplate a, WeekTemplate b) => a.name.compareTo(b.name));
+  }
+
+  /// Saves the week containing [anchor] under [name].
+  ///
+  /// Returns null when there is nothing planned that week — saving an empty
+  /// template is a thing you would only ever do by accident.
+  Future<WeekTemplate?> saveWeekAsTemplate({
+    required DateTime anchor,
+    required String name,
+  }) async {
+    final DateTime monday = startOfWeek(anchor);
+    final Map<DateTime, List<MealPlanEntry>> week = await entriesBetween(
+      monday,
+      monday.add(const Duration(days: 6)),
+    );
+
+    final List<TemplateEntry> entries = WeekTemplate.from(week);
+    if (entries.isEmpty) return null;
+
+    final DateTime now = _now();
+    final WeekTemplate template = WeekTemplate(
+      id: _newId(),
+      name: name.trim(),
+      entries: entries,
+      updatedAt: now,
+    );
+
+    await _db.transaction(() async {
+      await _db
+          .into(_db.planTemplates)
+          .insertOnConflictUpdate(
+            PlanTemplateRow(
+              id: template.id,
+              userId: _userId,
+              name: template.name,
+              entries: template.encodeEntries(),
+              updatedAt: now,
+            ),
+          );
+      await _queue.enqueue(
+        entityTable: templatesTable,
+        entityId: template.id,
+        operation: WriteOperation.upsert,
+        payload: <String, Object?>{
+          'id': template.id,
+          'user_id': _userId,
+          'name': template.name,
+          'entries': <Map<String, Object?>>[
+            for (final TemplateEntry entry in entries) entry.toJson(),
+          ],
+          'updated_at': now.toIso8601String(),
+        },
+        queuedAt: now,
+      );
+    });
+
+    return template;
+  }
+
+  /// Puts [template] onto the week containing [anchor], and says how many
+  /// meals it added.
+  ///
+  /// **Additive.** It never clears a day first: silently deleting a week
+  /// somebody had already planned is unrecoverable, and adding to a day is
+  /// something they can see and undo. Entries arrive PLANNED, never logged —
+  /// the same rule [copyDay] follows, and for the same reason (§4).
+  Future<int> applyTemplate({
+    required WeekTemplate template,
+    required DateTime anchor,
+  }) async {
+    int added = 0;
+    for (final ({DateTime date, TemplateEntry entry}) placed
+        in template.onWeekOf(anchor)) {
+      await add(
+        date: placed.date,
+        slot: placed.entry.slot,
+        refType: placed.entry.refType,
+        refId: placed.entry.refId,
+        servings: placed.entry.servings,
+      );
+      added++;
+    }
+    return added;
+  }
+
+  Future<void> deleteTemplate(String id) {
+    final DateTime now = _now();
+    return _db.transaction(() async {
+      await (_db.delete(
+        _db.planTemplates,
+      )..where(($PlanTemplatesTable t) => t.id.equals(id))).go();
+      await _queue.enqueue(
+        entityTable: templatesTable,
+        entityId: id,
+        operation: WriteOperation.delete,
+        payload: <String, Object?>{'id': id},
+        queuedAt: now,
+      );
+    });
   }
 
   /// Sets the macro targets for [date]'s week.

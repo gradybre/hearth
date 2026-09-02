@@ -52,6 +52,7 @@ class RecordSync {
           (table: 'macro_targets', apply: _rows.applyTargets),
           (table: 'collections', apply: _rows.applyCollection),
           (table: 'food_profiles', apply: _rows.applyFoodProfile),
+          (table: 'plan_templates', apply: _rows.applyPlanTemplate),
           // After foods: a match points at one, and a foreign key does not
           // care that the food arrived two milliseconds earlier.
           (table: 'ingredient_matches', apply: _rows.applyIngredientMatch),

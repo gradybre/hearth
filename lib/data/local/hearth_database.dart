@@ -34,6 +34,7 @@ part 'hearth_database.g.dart';
     Preferences,
     CookSessions,
     RecipePhotos,
+    PlanTemplates,
     PendingWrites,
     ShoppingLists,
     ShoppingListItems,
@@ -46,7 +47,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -125,6 +126,10 @@ class HearthDatabase extends _$HearthDatabase {
         // fileName becomes nullable: a device can know about a photo it has
         // not managed to download.
         await m.alterTable(TableMigration(recipePhotos));
+      }
+      // v15 is week templates (spec §5.6). Additive.
+      if (from < 15) {
+        await m.createTable(planTemplates);
       }
     },
     beforeOpen: (OpeningDetails details) async {

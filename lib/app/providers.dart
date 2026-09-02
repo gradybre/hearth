@@ -68,6 +68,7 @@ import '../domain/planning/day_progress.dart';
 import '../domain/planning/meal_plan.dart';
 import '../domain/planning/recent_log.dart';
 import '../domain/planning/week.dart';
+import '../domain/planning/week_template.dart';
 import '../domain/recipes/ingredient_matcher.dart';
 import '../domain/recipes/macro_calculator.dart';
 import '../domain/recipes/recipe_query.dart';
@@ -293,6 +294,18 @@ final StreamProvider<void> planChangesProvider = StreamProvider<void>(
 );
 
 /// The entries on the selected day.
+/// The weeks worth having again (spec §5.6).
+///
+/// A future that gets invalidated, not a live stream — the same shape as
+/// [dayEntriesProvider]. A sqlite subscription cannot be driven by the fake
+/// async a widget test runs on, so it stays open at teardown and hangs the
+/// whole run; and templates change only when somebody saves or forgets one,
+/// which is exactly when an invalidate is easy to write.
+final FutureProvider<List<WeekTemplate>> weekTemplatesProvider =
+    FutureProvider<List<WeekTemplate>>(
+      (Ref ref) => ref.watch(planRepositoryProvider).templates(),
+    );
+
 final FutureProvider<List<MealPlanEntry>> dayEntriesProvider =
     FutureProvider<List<MealPlanEntry>>((Ref ref) {
       ref.watch(planChangesProvider);

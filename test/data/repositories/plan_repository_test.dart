@@ -8,6 +8,7 @@ import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/recent_log.dart';
+import 'package:hearth/domain/planning/week_template.dart';
 
 void main() {
   late HearthDatabase db;
@@ -613,6 +614,166 @@ void main() {
       expect(
         day.entityId,
         PlanRepository.dayIdFor(userId: 'user-1', date: today),
+      );
+    });
+  });
+
+  group('week templates (spec §5.6)', () {
+    // A Wednesday, so a template saved from it has to land on a Wednesday.
+    final DateTime wednesday = DateTime(2026, 9, 2);
+
+    Future<void> planAWeek() async {
+      await repository.add(
+        date: wednesday,
+        slot: MealSlot.dinner,
+        refType: PlanRefType.recipe,
+        refId: 'recipe-1',
+        servings: 2,
+      );
+      await repository.add(
+        date: DateTime(2026, 8, 31),
+        slot: MealSlot.lunch,
+        refType: PlanRefType.recipe,
+        refId: 'recipe-2',
+        servings: 1,
+      );
+    }
+
+    test('saving a week keeps its shape, not its dates', () async {
+      await planAWeek();
+
+      final WeekTemplate? saved = await repository.saveWeekAsTemplate(
+        anchor: wednesday,
+        name: 'A good week',
+      );
+
+      expect(saved, isNotNull);
+      expect(saved!.entries, hasLength(2));
+      expect(saved.entries.map((TemplateEntry e) => e.weekday), <int>[
+        DateTime.monday,
+        DateTime.wednesday,
+      ]);
+    });
+
+    test(
+      'an empty week saves nothing rather than a template of nothing',
+      () async {
+        expect(
+          await repository.saveWeekAsTemplate(
+            anchor: wednesday,
+            name: 'Nothing at all',
+          ),
+          isNull,
+        );
+        expect(await repository.templates(), isEmpty);
+      },
+    );
+
+    test('applying it lands the meals on the matching weekdays', () async {
+      await planAWeek();
+      final WeekTemplate saved = (await repository.saveWeekAsTemplate(
+        anchor: wednesday,
+        name: 'A good week',
+      ))!;
+
+      // The week after.
+      final int added = await repository.applyTemplate(
+        template: saved,
+        anchor: DateTime(2026, 9, 9),
+      );
+
+      expect(added, 2);
+      final List<MealPlanEntry> onWednesday = await repository.entriesFor(
+        DateTime(2026, 9, 9),
+      );
+      expect(
+        onWednesday.map((MealPlanEntry e) => e.refId),
+        contains('recipe-1'),
+      );
+    });
+
+    test('and they arrive planned, never logged', () async {
+      // Applying a template says you intend to eat these things, not that you
+      // already have. Writing a snapshot would be inventing history (§4).
+      await repository.add(
+        date: wednesday,
+        slot: MealSlot.dinner,
+        refType: PlanRefType.recipe,
+        refId: 'recipe-1',
+        servings: 2,
+        loggedMacros: const Macros(
+          kcal: 500,
+          proteinG: 40,
+          carbG: 30,
+          fatG: 20,
+        ),
+      );
+      final WeekTemplate saved = (await repository.saveWeekAsTemplate(
+        anchor: wednesday,
+        name: 'Week I ate',
+      ))!;
+
+      await repository.applyTemplate(
+        template: saved,
+        anchor: DateTime(2026, 9, 9),
+      );
+
+      final MealPlanEntry landed = (await repository.entriesFor(
+        DateTime(2026, 9, 9),
+      )).single;
+      expect(landed.isLogged, isFalse);
+      expect(landed.isPlanned, isTrue);
+      expect(landed.macroSnapshot, isNull);
+    });
+
+    test('applying adds to a week rather than replacing it', () async {
+      // Silently deleting a week somebody had already planned is
+      // unrecoverable; adding to it is something they can see and undo.
+      await planAWeek();
+      final WeekTemplate saved = (await repository.saveWeekAsTemplate(
+        anchor: wednesday,
+        name: 'A good week',
+      ))!;
+
+      await repository.applyTemplate(template: saved, anchor: wednesday);
+
+      // The original Wednesday dinner is still there, plus the applied one.
+      expect(await repository.entriesFor(wednesday), hasLength(2));
+    });
+
+    test('saving queues it for the other device', () async {
+      await planAWeek();
+      await repository.saveWeekAsTemplate(
+        anchor: wednesday,
+        name: 'A good week',
+      );
+
+      final List<PendingWrite> writes = (await queue.pending())
+          .where((PendingWrite w) => w.entityTable == 'plan_templates')
+          .toList();
+      expect(writes, hasLength(1));
+      expect(writes.single.payload['name'], 'A good week');
+      // The server column is jsonb, so entries go as real JSON.
+      expect(writes.single.payload['entries'], isA<List<Object?>>());
+    });
+
+    test('forgetting one queues a delete', () async {
+      await planAWeek();
+      final WeekTemplate saved = (await repository.saveWeekAsTemplate(
+        anchor: wednesday,
+        name: 'A good week',
+      ))!;
+
+      await repository.deleteTemplate(saved.id);
+
+      expect(await repository.templates(), isEmpty);
+      expect(
+        (await queue.pending()).where(
+          (PendingWrite w) =>
+              w.entityTable == 'plan_templates' &&
+              w.operation == WriteOperation.delete,
+        ),
+        hasLength(1),
       );
     });
   });

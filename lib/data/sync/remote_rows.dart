@@ -122,6 +122,21 @@ class RemoteRows {
         ),
       );
 
+  /// A saved week arriving from another device (spec §5.6).
+  Future<void> applyPlanTemplate(Map<String, Object?> json) => _db
+      .into(_db.planTemplates)
+      .insertOnConflictUpdate(
+        PlanTemplateRow(
+          id: '${json['id']}',
+          userId: '${json['user_id']}',
+          name: '${json['name'] ?? ''}',
+          // The server column is jsonb, so this arrives decoded; the local
+          // column holds the text. Re-encoding beats storing "[object]".
+          entries: jsonEncode(json['entries'] ?? const <Object?>[]),
+          updatedAt: _time(json['updated_at']),
+        ),
+      );
+
   Future<void> applyShoppingList(Map<String, Object?> json) => _db
       .into(_db.shoppingLists)
       .insertOnConflictUpdate(

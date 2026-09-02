@@ -8747,6 +8747,356 @@ class RecipePhotosCompanion extends UpdateCompanion<RecipePhotoRow> {
   }
 }
 
+class $PlanTemplatesTable extends PlanTemplates
+    with TableInfo<$PlanTemplatesTable, PlanTemplateRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PlanTemplatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _entriesMeta = const VerificationMeta(
+    'entries',
+  );
+  @override
+  late final GeneratedColumn<String> entries = GeneratedColumn<String>(
+    'entries',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant<String>('[]'),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, userId, name, entries, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'plan_templates';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PlanTemplateRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('entries')) {
+      context.handle(
+        _entriesMeta,
+        entries.isAcceptableOrUnknown(data['entries']!, _entriesMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PlanTemplateRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PlanTemplateRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      entries: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entries'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PlanTemplatesTable createAlias(String alias) {
+    return $PlanTemplatesTable(attachedDatabase, alias);
+  }
+}
+
+class PlanTemplateRow extends DataClass implements Insertable<PlanTemplateRow> {
+  final String id;
+  final String userId;
+  final String name;
+  final String entries;
+  final DateTime updatedAt;
+  const PlanTemplateRow({
+    required this.id,
+    required this.userId,
+    required this.name,
+    required this.entries,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['user_id'] = Variable<String>(userId);
+    map['name'] = Variable<String>(name);
+    map['entries'] = Variable<String>(entries);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  PlanTemplatesCompanion toCompanion(bool nullToAbsent) {
+    return PlanTemplatesCompanion(
+      id: Value(id),
+      userId: Value(userId),
+      name: Value(name),
+      entries: Value(entries),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory PlanTemplateRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PlanTemplateRow(
+      id: serializer.fromJson<String>(json['id']),
+      userId: serializer.fromJson<String>(json['userId']),
+      name: serializer.fromJson<String>(json['name']),
+      entries: serializer.fromJson<String>(json['entries']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'userId': serializer.toJson<String>(userId),
+      'name': serializer.toJson<String>(name),
+      'entries': serializer.toJson<String>(entries),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  PlanTemplateRow copyWith({
+    String? id,
+    String? userId,
+    String? name,
+    String? entries,
+    DateTime? updatedAt,
+  }) => PlanTemplateRow(
+    id: id ?? this.id,
+    userId: userId ?? this.userId,
+    name: name ?? this.name,
+    entries: entries ?? this.entries,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  PlanTemplateRow copyWithCompanion(PlanTemplatesCompanion data) {
+    return PlanTemplateRow(
+      id: data.id.present ? data.id.value : this.id,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      name: data.name.present ? data.name.value : this.name,
+      entries: data.entries.present ? data.entries.value : this.entries,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlanTemplateRow(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('name: $name, ')
+          ..write('entries: $entries, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, userId, name, entries, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PlanTemplateRow &&
+          other.id == this.id &&
+          other.userId == this.userId &&
+          other.name == this.name &&
+          other.entries == this.entries &&
+          other.updatedAt == this.updatedAt);
+}
+
+class PlanTemplatesCompanion extends UpdateCompanion<PlanTemplateRow> {
+  final Value<String> id;
+  final Value<String> userId;
+  final Value<String> name;
+  final Value<String> entries;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const PlanTemplatesCompanion({
+    this.id = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.entries = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PlanTemplatesCompanion.insert({
+    required String id,
+    required String userId,
+    required String name,
+    this.entries = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       userId = Value(userId),
+       name = Value(name),
+       updatedAt = Value(updatedAt);
+  static Insertable<PlanTemplateRow> custom({
+    Expression<String>? id,
+    Expression<String>? userId,
+    Expression<String>? name,
+    Expression<String>? entries,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (userId != null) 'user_id': userId,
+      if (name != null) 'name': name,
+      if (entries != null) 'entries': entries,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PlanTemplatesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? userId,
+    Value<String>? name,
+    Value<String>? entries,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return PlanTemplatesCompanion(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      name: name ?? this.name,
+      entries: entries ?? this.entries,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (entries.present) {
+      map['entries'] = Variable<String>(entries.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlanTemplatesCompanion(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('name: $name, ')
+          ..write('entries: $entries, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $PendingWritesTable extends PendingWrites
     with TableInfo<$PendingWritesTable, PendingWriteRow> {
   @override
@@ -10905,6 +11255,7 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
   late final $PreferencesTable preferences = $PreferencesTable(this);
   late final $CookSessionsTable cookSessions = $CookSessionsTable(this);
   late final $RecipePhotosTable recipePhotos = $RecipePhotosTable(this);
+  late final $PlanTemplatesTable planTemplates = $PlanTemplatesTable(this);
   late final $PendingWritesTable pendingWrites = $PendingWritesTable(this);
   late final $ShoppingListsTable shoppingLists = $ShoppingListsTable(this);
   late final $ShoppingListItemsTable shoppingListItems =
@@ -10932,6 +11283,7 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
     preferences,
     cookSessions,
     recipePhotos,
+    planTemplates,
     pendingWrites,
     shoppingLists,
     shoppingListItems,
@@ -17672,6 +18024,212 @@ typedef $$RecipePhotosTableProcessedTableManager =
       RecipePhotoRow,
       PrefetchHooks Function({bool recipeId})
     >;
+typedef $$PlanTemplatesTableCreateCompanionBuilder =
+    PlanTemplatesCompanion Function({
+      required String id,
+      required String userId,
+      required String name,
+      Value<String> entries,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$PlanTemplatesTableUpdateCompanionBuilder =
+    PlanTemplatesCompanion Function({
+      Value<String> id,
+      Value<String> userId,
+      Value<String> name,
+      Value<String> entries,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$PlanTemplatesTableFilterComposer
+    extends Composer<_$HearthDatabase, $PlanTemplatesTable> {
+  $$PlanTemplatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get entries => $composableBuilder(
+    column: $table.entries,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PlanTemplatesTableOrderingComposer
+    extends Composer<_$HearthDatabase, $PlanTemplatesTable> {
+  $$PlanTemplatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entries => $composableBuilder(
+    column: $table.entries,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PlanTemplatesTableAnnotationComposer
+    extends Composer<_$HearthDatabase, $PlanTemplatesTable> {
+  $$PlanTemplatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get entries =>
+      $composableBuilder(column: $table.entries, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$PlanTemplatesTableTableManager
+    extends
+        RootTableManager<
+          _$HearthDatabase,
+          $PlanTemplatesTable,
+          PlanTemplateRow,
+          $$PlanTemplatesTableFilterComposer,
+          $$PlanTemplatesTableOrderingComposer,
+          $$PlanTemplatesTableAnnotationComposer,
+          $$PlanTemplatesTableCreateCompanionBuilder,
+          $$PlanTemplatesTableUpdateCompanionBuilder,
+          (
+            PlanTemplateRow,
+            BaseReferences<
+              _$HearthDatabase,
+              $PlanTemplatesTable,
+              PlanTemplateRow
+            >,
+          ),
+          PlanTemplateRow,
+          PrefetchHooks Function()
+        > {
+  $$PlanTemplatesTableTableManager(
+    _$HearthDatabase db,
+    $PlanTemplatesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PlanTemplatesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PlanTemplatesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PlanTemplatesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> userId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> entries = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PlanTemplatesCompanion(
+                id: id,
+                userId: userId,
+                name: name,
+                entries: entries,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String userId,
+                required String name,
+                Value<String> entries = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => PlanTemplatesCompanion.insert(
+                id: id,
+                userId: userId,
+                name: name,
+                entries: entries,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PlanTemplatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$HearthDatabase,
+      $PlanTemplatesTable,
+      PlanTemplateRow,
+      $$PlanTemplatesTableFilterComposer,
+      $$PlanTemplatesTableOrderingComposer,
+      $$PlanTemplatesTableAnnotationComposer,
+      $$PlanTemplatesTableCreateCompanionBuilder,
+      $$PlanTemplatesTableUpdateCompanionBuilder,
+      (
+        PlanTemplateRow,
+        BaseReferences<_$HearthDatabase, $PlanTemplatesTable, PlanTemplateRow>,
+      ),
+      PlanTemplateRow,
+      PrefetchHooks Function()
+    >;
 typedef $$PendingWritesTableCreateCompanionBuilder =
     PendingWritesCompanion Function({
       Value<int> sequence,
@@ -18737,6 +19295,8 @@ class $HearthDatabaseManager {
       $$CookSessionsTableTableManager(_db, _db.cookSessions);
   $$RecipePhotosTableTableManager get recipePhotos =>
       $$RecipePhotosTableTableManager(_db, _db.recipePhotos);
+  $$PlanTemplatesTableTableManager get planTemplates =>
+      $$PlanTemplatesTableTableManager(_db, _db.planTemplates);
   $$PendingWritesTableTableManager get pendingWrites =>
       $$PendingWritesTableTableManager(_db, _db.pendingWrites);
   $$ShoppingListsTableTableManager get shoppingLists =>

@@ -14,8 +14,10 @@ import '../../domain/planning/day_format.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/week.dart';
+import '../../domain/planning/week_template.dart';
 import 'entry_resolver.dart';
 import 'week_strip.dart';
+import 'week_template_sheet.dart';
 
 /// The weekly summary: per-day totals for the four tracked macros (spec §5.6).
 ///
@@ -249,8 +251,78 @@ class _WeekHeader extends ConsumerWidget {
         tooltip: 'Next week',
         icon: const Icon(Icons.chevron_right),
       ),
+      // The structural twin of the copy-day button in the day header: the
+      // same question — "put these meals on those days" — one level up.
+      IconButton(
+        onPressed: () => _save(context, ref),
+        tooltip: 'Save this week to use again',
+        icon: const Icon(Icons.bookmark_add_outlined),
+      ),
+      IconButton(
+        onPressed: () => _apply(context, ref),
+        tooltip: 'Use a saved week',
+        icon: const Icon(Icons.bookmarks_outlined),
+      ),
     ],
   );
+
+  Future<void> _save(BuildContext context, WidgetRef ref) async {
+    final String? name = await showSaveTemplateSheet(context);
+    if (name == null || name.trim().isEmpty || !context.mounted) return;
+
+    final WeekTemplate? saved = await ref
+        .read(planRepositoryProvider)
+        .saveWeekAsTemplate(anchor: ref.read(selectedDateProvider), name: name);
+    ref.invalidate(weekTemplatesProvider);
+    if (!context.mounted) return;
+
+    // Cleared first: these two actions sit next to each other, and a stale
+    // "Saved" message queued in front of a fresh "Added" one means waiting
+    // four seconds to find out what just happened.
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            saved == null
+                // Saving an empty week is something you would only do by
+                // accident, so it says so rather than making a template of
+                // nothing.
+                ? 'Nothing is planned this week yet.'
+                : 'Saved "${saved.name}" — ${saved.entries.length} '
+                      '${saved.entries.length == 1 ? 'meal' : 'meals'}.',
+          ),
+        ),
+      );
+  }
+
+  Future<void> _apply(BuildContext context, WidgetRef ref) async {
+    final WeekTemplate? template = await showApplyTemplateSheet(context);
+    if (template == null || !context.mounted) return;
+
+    final int added = await ref
+        .read(planRepositoryProvider)
+        .applyTemplate(
+          template: template,
+          anchor: ref.read(selectedDateProvider),
+        );
+    if (!context.mounted) return;
+
+    ref.invalidate(dayEntriesProvider);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          // Says how many it added rather than "done": applying is additive, so
+          // the count is how you tell it landed on a week that already had
+          // things on it.
+          content: Text(
+            'Added $added ${added == 1 ? 'meal' : 'meals'} '
+            'from "${template.name}".',
+          ),
+        ),
+      );
+  }
 }
 
 /// The week's average against target.
