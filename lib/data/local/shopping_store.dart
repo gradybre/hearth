@@ -78,14 +78,18 @@ class ShoppingStore {
   /// Written whole rather than diffed: a list is small, and a partial write
   /// that left the order half-applied would be worse than a rewrite that
   /// cannot.
-  Future<String> save({
+  ///
+  /// Returns the ids of items the rewrite removed, which is what the caller
+  /// needs to tell the server about — a rewrite that only ever upserts would
+  /// leave a deleted line standing on the partner's phone forever.
+  Future<List<String>> save({
     required String householdId,
     required String listId,
     required DateTime from,
     required DateTime to,
     required List<ShoppingLine> lines,
     required DateTime updatedAt,
-    required String Function() idFactory,
+    required String Function(String itemKey) idFor,
   }) => _db.transaction(() async {
     await _db
         .into(_db.shoppingLists)
@@ -100,17 +104,45 @@ class ShoppingStore {
           ),
         );
 
+    // What was here before, so the caller can be told what went away.
+    final List<String> had =
+        await (_db.selectOnly(_db.shoppingListItems)
+              ..addColumns(<Expression<Object>>[_db.shoppingListItems.id])
+              ..where(_db.shoppingListItems.listId.equals(listId)))
+            .map((TypedResult r) => r.read(_db.shoppingListItems.id)!)
+            .get();
+
     await (_db.delete(
       _db.shoppingListItems,
     )..where(($ShoppingListItemsTable i) => i.listId.equals(listId))).go();
 
+    final Set<String> kept = <String>{};
     for (final ShoppingLine line in lines) {
+      final String id = idFor(line.key);
+      kept.add(id);
       await _db
           .into(_db.shoppingListItems)
-          .insert(_toRow(line, listId, idFactory(), updatedAt));
+          .insert(_toRow(line, listId, id, updatedAt));
     }
-    return listId;
+    return <String>[
+      for (final String id in had)
+        if (!kept.contains(id)) id,
+    ];
   });
+
+  /// The stored rows of a list, as written.
+  ///
+  /// The repository needs the rows rather than the lines to queue a write:
+  /// the wire shape is the row's columns, and rebuilding it from a
+  /// [ShoppingLine] would be a second place for the two to drift apart.
+  Future<List<ShoppingItemRow>> rowsFor(String listId) =>
+      (_db.select(_db.shoppingListItems)
+            ..where(($ShoppingListItemsTable i) => i.listId.equals(listId))
+            ..orderBy(<OrderClauseGenerator<$ShoppingListItemsTable>>[
+              ($ShoppingListItemsTable i) =>
+                  OrderingTerm(expression: i.sortOrder),
+            ]))
+          .get();
 
   ShoppingItemRow _toRow(
     ShoppingLine line,

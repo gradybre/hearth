@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/data/local/pending_write_store.dart';
 import 'package:hearth/data/local/recipe_store.dart';
+import 'package:hearth/data/local/shopping_store.dart';
 import 'package:hearth/data/sync/remote_rows.dart';
 import 'package:hearth/domain/models/recipe.dart';
 
@@ -236,6 +237,74 @@ void main() {
       );
 
       expect(await db.select(db.recipeFavorites).get(), hasLength(1));
+    });
+  });
+
+  group("a partner's shopping list", () {
+    Map<String, Object?> aList() => <String, Object?>{
+      'id': 'list-1',
+      'household_id': 'household-1',
+      'from_date': '2026-09-02',
+      'to_date': '2026-09-08',
+      'status': 'draft',
+      'updated_at': '2026-09-02T09:00:00Z',
+    };
+
+    Map<String, Object?> anItem() => <String, Object?>{
+      'id': 'item-1',
+      'shopping_list_id': 'list-1',
+      'item_key': 'ground-beef',
+      'raw_name': 'ground beef',
+      'planned_canonical': 907.185,
+      'planned_kind': 'mass',
+      'planned_unit': 'lb',
+      'checked': true,
+      'is_manual': false,
+      'has_unquantified': false,
+      'sort_order': 0,
+      'source_recipe_ids': <String>['recipe-1', 'recipe-2'],
+      'updated_at': '2026-09-02T09:00:00Z',
+    };
+
+    test('arrives whole, tick and all', () async {
+      await rows.applyShoppingList(aList());
+      await rows.applyShoppingItem(anItem());
+
+      final ShoppingListSnapshot? saved = await ShoppingStore(db)
+          .current(householdId: 'household-1');
+      expect(saved, isNotNull);
+      expect(saved!.from, DateTime(2026, 9, 2));
+      expect(saved.lines.single.name, 'ground beef');
+      expect(saved.lines.single.checked, isTrue);
+    });
+
+    test(
+      'a uuid[] of sources becomes the joined string the store holds',
+      () async {
+        // Postgres sends an array; the local column is one joined string.
+        await rows.applyShoppingList(aList());
+        await rows.applyShoppingItem(anItem());
+
+        final List<ShoppingItemRow> stored = await ShoppingStore(db)
+            .rowsFor('list-1');
+        expect(stored.single.sourceRecipeIds, 'recipe-1,recipe-2');
+      },
+    );
+
+    test('a line whose list has not arrived is skipped, not fatal', () async {
+      // The foreign key would refuse it and take the rest of the table's pull
+      // down with it. The list is one step ahead in the same pass.
+      await rows.applyShoppingItem(anItem());
+
+      expect(await ShoppingStore(db).rowsFor('list-1'), isEmpty);
+    });
+
+    test('re-applying the same line changes nothing', () async {
+      await rows.applyShoppingList(aList());
+      await rows.applyShoppingItem(anItem());
+      await rows.applyShoppingItem(anItem());
+
+      expect(await ShoppingStore(db).rowsFor('list-1'), hasLength(1));
     });
   });
 }

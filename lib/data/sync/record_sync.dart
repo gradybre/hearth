@@ -55,6 +55,9 @@ class RecordSync {
           // After foods: a match points at one, and a foreign key does not
           // care that the food arrived two milliseconds earlier.
           (table: 'ingredient_matches', apply: _rows.applyIngredientMatch),
+          // The list before its lines, for the foreign key.
+          (table: 'shopping_lists', apply: _rows.applyShoppingList),
+          (table: 'shopping_list_items', apply: _rows.applyShoppingItem),
         ]) {
       final PullResult result = await _pullTable(spec.table, spec.apply);
       applied += result.applied;

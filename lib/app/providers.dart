@@ -310,7 +310,9 @@ final FutureProvider<MacroTargets?> dayTargetsProvider =
 final Provider<ShoppingRepository> shoppingRepositoryProvider =
     Provider<ShoppingRepository>(
       (Ref ref) => ShoppingRepository(
+        database: ref.watch(databaseProvider),
         store: ShoppingStore(ref.watch(databaseProvider)),
+        queue: PendingWriteStore(ref.watch(databaseProvider)),
         householdId: ref.watch(currentHouseholdIdProvider),
       ),
     );

@@ -8,7 +8,10 @@ import '../../domain/planning/week.dart';
 import '../../domain/shopping/shopping_line.dart';
 import '../../domain/shopping/shopping_list_builder.dart';
 import '../../domain/shopping/shopping_list_merge.dart';
+import '../local/hearth_database.dart';
+import '../local/pending_write_store.dart';
 import '../local/shopping_store.dart';
+import '../mappers/shopping_mapper.dart';
 
 /// The shopping list, built from the plan and then owned by the shopper
 /// (spec §5.7).
@@ -19,19 +22,41 @@ import '../local/shopping_store.dart';
 /// when to write.
 class ShoppingRepository {
   ShoppingRepository({
+    required HearthDatabase database,
     required ShoppingStore store,
+    required PendingWriteStore queue,
     required String householdId,
     DateTime Function()? now,
     String Function()? idFactory,
-  }) : _store = store,
+  }) : _db = database,
+       _store = store,
+       _queue = queue,
        _householdId = householdId,
        _now = now ?? DateTime.now,
        _idFactory = idFactory ?? (() => const Uuid().v4());
 
+  static const String listsTable = 'shopping_lists';
+  static const String itemsTable = 'shopping_list_items';
+
+  final HearthDatabase _db;
   final ShoppingStore _store;
+  final PendingWriteStore _queue;
   final String _householdId;
   final DateTime Function() _now;
   final String Function() _idFactory;
+
+  /// The id of a line, derived from the list and the line's own key.
+  ///
+  /// Derived rather than invented, and this is load-bearing for sync. Saving
+  /// rewrites every line, so a fresh uuid each time would mint a new server
+  /// row on every tick and leave the old one standing on the partner's phone.
+  /// The same line in the same list is the same row, on both devices, forever.
+  /// Same reasoning as [PlanRepository.dayIdFor].
+  static String itemIdFor({required String listId, required String itemKey}) =>
+      const Uuid().v5(
+        Namespace.url.value,
+        'hearth:shopping-item:$listId:$itemKey',
+      );
 
   /// How long a list covers when nobody has said otherwise.
   ///
@@ -117,15 +142,61 @@ class ShoppingRepository {
     required List<ShoppingLine> lines,
   }) async {
     final List<ShoppingLine> ordered = ShoppingListMerge.display(lines);
-    await _store.save(
-      householdId: _householdId,
-      listId: listId,
-      from: from,
-      to: to,
-      lines: ordered,
-      updatedAt: _now(),
-      idFactory: _idFactory,
-    );
+    final DateTime now = _now();
+
+    // One transaction, so a list that reaches the screen has already reached
+    // the queue — the rule every other repository follows.
+    await _db.transaction(() async {
+      final List<String> removed = await _store.save(
+        householdId: _householdId,
+        listId: listId,
+        from: from,
+        to: to,
+        lines: ordered,
+        updatedAt: now,
+        idFor: (String key) => itemIdFor(listId: listId, itemKey: key),
+      );
+
+      await _queue.enqueue(
+        entityTable: listsTable,
+        entityId: listId,
+        operation: WriteOperation.upsert,
+        payload: ShoppingMapper.listToJson(
+          ShoppingListRow(
+            id: listId,
+            householdId: _householdId,
+            fromDate: from,
+            toDate: to,
+            status: 'draft',
+            updatedAt: now,
+          ),
+        ),
+        queuedAt: now,
+      );
+
+      for (final ShoppingItemRow row in await _store.rowsFor(listId)) {
+        await _queue.enqueue(
+          entityTable: itemsTable,
+          entityId: row.id,
+          operation: WriteOperation.upsert,
+          payload: ShoppingMapper.itemToJson(row),
+          queuedAt: now,
+        );
+      }
+
+      // A line that went away is a real row removal, not a soft delete: an
+      // item carries no history worth keeping, unlike a recipe or a food.
+      for (final String id in removed) {
+        await _queue.enqueue(
+          entityTable: itemsTable,
+          entityId: id,
+          operation: WriteOperation.delete,
+          payload: <String, Object?>{'id': id},
+          queuedAt: now,
+        );
+      }
+    });
+
     return ordered;
   }
 }

@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 
 import '../../domain/text/text_normaliser.dart';
 import '../local/hearth_database.dart';
+import '../mappers/shopping_mapper.dart';
 import '../remote/supabase_remote_gateway.dart';
 
 /// Writes records that arrived from the server straight into the local cache.
@@ -120,6 +121,70 @@ class RemoteRows {
           updatedAt: _time(json['updated_at']),
         ),
       );
+
+  Future<void> applyShoppingList(Map<String, Object?> json) => _db
+      .into(_db.shoppingLists)
+      .insertOnConflictUpdate(
+        ShoppingListRow(
+          id: '${json['id']}',
+          householdId: '${json['household_id']}',
+          fromDate: _date(json['from_date']),
+          toDate: _date(json['to_date']),
+          status: '${json['status'] ?? 'draft'}',
+          updatedAt: _time(json['updated_at']),
+        ),
+      );
+
+  /// One line of a partner's list.
+  ///
+  /// Skipped when its list is not here yet, the same guard
+  /// [applyIngredientMatch] makes: the foreign key would refuse the row and
+  /// take the rest of the table's pull down with it, and the list is one
+  /// place ahead in the same pass.
+  Future<void> applyShoppingItem(Map<String, Object?> json) async {
+    final String listId = '${json['shopping_list_id']}';
+    final bool haveList =
+        await (_db.select(_db.shoppingLists)
+              ..where(($ShoppingListsTable l) => l.id.equals(listId)))
+            .getSingleOrNull() !=
+        null;
+    if (!haveList) return;
+
+    await _db
+        .into(_db.shoppingListItems)
+        .insertOnConflictUpdate(
+          ShoppingItemRow(
+            id: '${json['id']}',
+            listId: listId,
+            itemKey: '${json['item_key'] ?? ''}',
+            foodId: json['food_id'] == null ? null : '${json['food_id']}',
+            name: '${json['raw_name'] ?? ''}',
+            plannedCanonical: _double(json['planned_canonical']),
+            plannedKind: _text(json['planned_kind']),
+            plannedUnit: _text(json['planned_unit']),
+            wantedCanonical: _double(json['wanted_canonical']),
+            wantedKind: _text(json['wanted_kind']),
+            wantedUnit: _text(json['wanted_unit']),
+            onHandCanonical: _double(json['on_hand_canonical']),
+            onHandKind: _text(json['on_hand_kind']),
+            onHandUnit: _text(json['on_hand_unit']),
+            checked: json['checked'] == true,
+            isManual: json['is_manual'] == true,
+            hasUnquantified: json['has_unquantified'] == true,
+            storeTag: _text(json['store_tag']),
+            sortOrder: _int(json['sort_order']) ?? 0,
+            sourceRecipeIds: ShoppingMapper.sourceIdsFromJson(
+              json['source_recipe_ids'],
+            ),
+            updatedAt: _time(json['updated_at']),
+          ),
+        );
+  }
+
+  static String? _text(Object? value) {
+    final String text = '${value ?? ''}'.trim();
+    return text.isEmpty ? null : text;
+  }
 
   /// A remembered answer for an ingredient wording (spec §5.3).
   ///
