@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/auth/auth_gateway.dart';
 
+import '../data/sync/photo_sync.dart';
 import '../data/sync/sync_engine.dart';
 import 'providers.dart';
 
@@ -50,6 +51,13 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
     // never notices, because each run looks perfectly ordinary on its own.
     ref.listen(pendingWriteCountProvider, (_, _) => syncSoon());
 
+    // A photo added here is a local write too, and deserves the same nudge.
+    // Same shape and same warning as above — a Drift stream, never invalidated
+    // by hand. The attempt counter this listener reacts to is also what stops
+    // it looping: a photo that keeps failing drops out of the candidate query
+    // after five goes, so the retries terminate rather than trickle for ever.
+    ref.listen(pendingPhotoWorkProvider, (_, _) => syncSoon());
+
     return const SyncStatus.idle();
   }
 
@@ -86,6 +94,14 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
       // gap until the next run.
       final PullResult library = await ref.read(librarySyncProvider).pull();
       final PullResult records = await ref.read(recordSyncProvider).pull();
+
+      // Photos last. A missing picture blocks neither cooking nor logging, and
+      // the recipe row has to have reached the server before the storage
+      // policy will admit an object underneath it.
+      if (ref.read(photoSyncProvider) case final PhotoSync photos) {
+        await photos.push();
+        await photos.pull();
+      }
 
       state = SyncStatus.done(
         result,

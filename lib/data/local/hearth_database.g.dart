@@ -8330,9 +8330,43 @@ class $RecipePhotosTable extends RecipePhotos
   late final GeneratedColumn<String> fileName = GeneratedColumn<String>(
     'file_name',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.string,
-    requiredDuringInsert: true,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _remotePathMeta = const VerificationMeta(
+    'remotePath',
+  );
+  @override
+  late final GeneratedColumn<String> remotePath = GeneratedColumn<String>(
+    'remote_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _syncAttemptsMeta = const VerificationMeta(
+    'syncAttempts',
+  );
+  @override
+  late final GeneratedColumn<int> syncAttempts = GeneratedColumn<int>(
+    'sync_attempts',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant<int>(0),
+  );
+  static const VerificationMeta _syncErrorMeta = const VerificationMeta(
+    'syncError',
+  );
+  @override
+  late final GeneratedColumn<String> syncError = GeneratedColumn<String>(
+    'sync_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
   );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
@@ -8346,7 +8380,14 @@ class $RecipePhotosTable extends RecipePhotos
     requiredDuringInsert: true,
   );
   @override
-  List<GeneratedColumn> get $columns => [recipeId, fileName, updatedAt];
+  List<GeneratedColumn> get $columns => [
+    recipeId,
+    fileName,
+    remotePath,
+    syncAttempts,
+    syncError,
+    updatedAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -8372,8 +8413,27 @@ class $RecipePhotosTable extends RecipePhotos
         _fileNameMeta,
         fileName.isAcceptableOrUnknown(data['file_name']!, _fileNameMeta),
       );
-    } else if (isInserting) {
-      context.missing(_fileNameMeta);
+    }
+    if (data.containsKey('remote_path')) {
+      context.handle(
+        _remotePathMeta,
+        remotePath.isAcceptableOrUnknown(data['remote_path']!, _remotePathMeta),
+      );
+    }
+    if (data.containsKey('sync_attempts')) {
+      context.handle(
+        _syncAttemptsMeta,
+        syncAttempts.isAcceptableOrUnknown(
+          data['sync_attempts']!,
+          _syncAttemptsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sync_error')) {
+      context.handle(
+        _syncErrorMeta,
+        syncError.isAcceptableOrUnknown(data['sync_error']!, _syncErrorMeta),
+      );
     }
     if (data.containsKey('updated_at')) {
       context.handle(
@@ -8399,7 +8459,19 @@ class $RecipePhotosTable extends RecipePhotos
       fileName: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}file_name'],
+      ),
+      remotePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_path'],
+      ),
+      syncAttempts: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sync_attempts'],
       )!,
+      syncError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_error'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -8415,18 +8487,45 @@ class $RecipePhotosTable extends RecipePhotos
 
 class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
   final String recipeId;
-  final String fileName;
+
+  /// Null when this device knows about a photo it does not have.
+  final String? fileName;
+
+  /// The object path [fileName] is a copy of, or null when it was never
+  /// uploaded. Compared against the recipe's `photoUrl` to spot a stale copy —
+  /// a string compare, and reliable only because objects are immutable.
+  final String? remotePath;
+
+  /// Stops a permanently failing upload from retrying for ever.
+  ///
+  /// Load-bearing: writing this wakes the sync listener, which retries, which
+  /// writes it again. The loop terminates *only* because the candidate query
+  /// filters on this being under the limit.
+  final int syncAttempts;
+  final String? syncError;
   final DateTime updatedAt;
   const RecipePhotoRow({
     required this.recipeId,
-    required this.fileName,
+    this.fileName,
+    this.remotePath,
+    required this.syncAttempts,
+    this.syncError,
     required this.updatedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['recipe_id'] = Variable<String>(recipeId);
-    map['file_name'] = Variable<String>(fileName);
+    if (!nullToAbsent || fileName != null) {
+      map['file_name'] = Variable<String>(fileName);
+    }
+    if (!nullToAbsent || remotePath != null) {
+      map['remote_path'] = Variable<String>(remotePath);
+    }
+    map['sync_attempts'] = Variable<int>(syncAttempts);
+    if (!nullToAbsent || syncError != null) {
+      map['sync_error'] = Variable<String>(syncError);
+    }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -8434,7 +8533,16 @@ class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
   RecipePhotosCompanion toCompanion(bool nullToAbsent) {
     return RecipePhotosCompanion(
       recipeId: Value(recipeId),
-      fileName: Value(fileName),
+      fileName: fileName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fileName),
+      remotePath: remotePath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(remotePath),
+      syncAttempts: Value(syncAttempts),
+      syncError: syncError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncError),
       updatedAt: Value(updatedAt),
     );
   }
@@ -8446,7 +8554,10 @@ class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return RecipePhotoRow(
       recipeId: serializer.fromJson<String>(json['recipeId']),
-      fileName: serializer.fromJson<String>(json['fileName']),
+      fileName: serializer.fromJson<String?>(json['fileName']),
+      remotePath: serializer.fromJson<String?>(json['remotePath']),
+      syncAttempts: serializer.fromJson<int>(json['syncAttempts']),
+      syncError: serializer.fromJson<String?>(json['syncError']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -8455,24 +8566,40 @@ class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'recipeId': serializer.toJson<String>(recipeId),
-      'fileName': serializer.toJson<String>(fileName),
+      'fileName': serializer.toJson<String?>(fileName),
+      'remotePath': serializer.toJson<String?>(remotePath),
+      'syncAttempts': serializer.toJson<int>(syncAttempts),
+      'syncError': serializer.toJson<String?>(syncError),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
 
   RecipePhotoRow copyWith({
     String? recipeId,
-    String? fileName,
+    Value<String?> fileName = const Value.absent(),
+    Value<String?> remotePath = const Value.absent(),
+    int? syncAttempts,
+    Value<String?> syncError = const Value.absent(),
     DateTime? updatedAt,
   }) => RecipePhotoRow(
     recipeId: recipeId ?? this.recipeId,
-    fileName: fileName ?? this.fileName,
+    fileName: fileName.present ? fileName.value : this.fileName,
+    remotePath: remotePath.present ? remotePath.value : this.remotePath,
+    syncAttempts: syncAttempts ?? this.syncAttempts,
+    syncError: syncError.present ? syncError.value : this.syncError,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   RecipePhotoRow copyWithCompanion(RecipePhotosCompanion data) {
     return RecipePhotoRow(
       recipeId: data.recipeId.present ? data.recipeId.value : this.recipeId,
       fileName: data.fileName.present ? data.fileName.value : this.fileName,
+      remotePath: data.remotePath.present
+          ? data.remotePath.value
+          : this.remotePath,
+      syncAttempts: data.syncAttempts.present
+          ? data.syncAttempts.value
+          : this.syncAttempts,
+      syncError: data.syncError.present ? data.syncError.value : this.syncError,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -8482,50 +8609,77 @@ class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
     return (StringBuffer('RecipePhotoRow(')
           ..write('recipeId: $recipeId, ')
           ..write('fileName: $fileName, ')
+          ..write('remotePath: $remotePath, ')
+          ..write('syncAttempts: $syncAttempts, ')
+          ..write('syncError: $syncError, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(recipeId, fileName, updatedAt);
+  int get hashCode => Object.hash(
+    recipeId,
+    fileName,
+    remotePath,
+    syncAttempts,
+    syncError,
+    updatedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is RecipePhotoRow &&
           other.recipeId == this.recipeId &&
           other.fileName == this.fileName &&
+          other.remotePath == this.remotePath &&
+          other.syncAttempts == this.syncAttempts &&
+          other.syncError == this.syncError &&
           other.updatedAt == this.updatedAt);
 }
 
 class RecipePhotosCompanion extends UpdateCompanion<RecipePhotoRow> {
   final Value<String> recipeId;
-  final Value<String> fileName;
+  final Value<String?> fileName;
+  final Value<String?> remotePath;
+  final Value<int> syncAttempts;
+  final Value<String?> syncError;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const RecipePhotosCompanion({
     this.recipeId = const Value.absent(),
     this.fileName = const Value.absent(),
+    this.remotePath = const Value.absent(),
+    this.syncAttempts = const Value.absent(),
+    this.syncError = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   RecipePhotosCompanion.insert({
     required String recipeId,
-    required String fileName,
+    this.fileName = const Value.absent(),
+    this.remotePath = const Value.absent(),
+    this.syncAttempts = const Value.absent(),
+    this.syncError = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : recipeId = Value(recipeId),
-       fileName = Value(fileName),
        updatedAt = Value(updatedAt);
   static Insertable<RecipePhotoRow> custom({
     Expression<String>? recipeId,
     Expression<String>? fileName,
+    Expression<String>? remotePath,
+    Expression<int>? syncAttempts,
+    Expression<String>? syncError,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (recipeId != null) 'recipe_id': recipeId,
       if (fileName != null) 'file_name': fileName,
+      if (remotePath != null) 'remote_path': remotePath,
+      if (syncAttempts != null) 'sync_attempts': syncAttempts,
+      if (syncError != null) 'sync_error': syncError,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -8533,13 +8687,19 @@ class RecipePhotosCompanion extends UpdateCompanion<RecipePhotoRow> {
 
   RecipePhotosCompanion copyWith({
     Value<String>? recipeId,
-    Value<String>? fileName,
+    Value<String?>? fileName,
+    Value<String?>? remotePath,
+    Value<int>? syncAttempts,
+    Value<String?>? syncError,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
     return RecipePhotosCompanion(
       recipeId: recipeId ?? this.recipeId,
       fileName: fileName ?? this.fileName,
+      remotePath: remotePath ?? this.remotePath,
+      syncAttempts: syncAttempts ?? this.syncAttempts,
+      syncError: syncError ?? this.syncError,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -8553,6 +8713,15 @@ class RecipePhotosCompanion extends UpdateCompanion<RecipePhotoRow> {
     }
     if (fileName.present) {
       map['file_name'] = Variable<String>(fileName.value);
+    }
+    if (remotePath.present) {
+      map['remote_path'] = Variable<String>(remotePath.value);
+    }
+    if (syncAttempts.present) {
+      map['sync_attempts'] = Variable<int>(syncAttempts.value);
+    }
+    if (syncError.present) {
+      map['sync_error'] = Variable<String>(syncError.value);
     }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
@@ -8568,6 +8737,9 @@ class RecipePhotosCompanion extends UpdateCompanion<RecipePhotoRow> {
     return (StringBuffer('RecipePhotosCompanion(')
           ..write('recipeId: $recipeId, ')
           ..write('fileName: $fileName, ')
+          ..write('remotePath: $remotePath, ')
+          ..write('syncAttempts: $syncAttempts, ')
+          ..write('syncError: $syncError, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -17164,14 +17336,20 @@ typedef $$CookSessionsTableProcessedTableManager =
 typedef $$RecipePhotosTableCreateCompanionBuilder =
     RecipePhotosCompanion Function({
       required String recipeId,
-      required String fileName,
+      Value<String?> fileName,
+      Value<String?> remotePath,
+      Value<int> syncAttempts,
+      Value<String?> syncError,
       required DateTime updatedAt,
       Value<int> rowid,
     });
 typedef $$RecipePhotosTableUpdateCompanionBuilder =
     RecipePhotosCompanion Function({
       Value<String> recipeId,
-      Value<String> fileName,
+      Value<String?> fileName,
+      Value<String?> remotePath,
+      Value<int> syncAttempts,
+      Value<String?> syncError,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -17210,6 +17388,21 @@ class $$RecipePhotosTableFilterComposer
   });
   ColumnFilters<String> get fileName => $composableBuilder(
     column: $table.fileName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get remotePath => $composableBuilder(
+    column: $table.remotePath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get syncAttempts => $composableBuilder(
+    column: $table.syncAttempts,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncError => $composableBuilder(
+    column: $table.syncError,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -17256,6 +17449,21 @@ class $$RecipePhotosTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get remotePath => $composableBuilder(
+    column: $table.remotePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get syncAttempts => $composableBuilder(
+    column: $table.syncAttempts,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncError => $composableBuilder(
+    column: $table.syncError,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -17296,6 +17504,19 @@ class $$RecipePhotosTableAnnotationComposer
   });
   GeneratedColumn<String> get fileName =>
       $composableBuilder(column: $table.fileName, builder: (column) => column);
+
+  GeneratedColumn<String> get remotePath => $composableBuilder(
+    column: $table.remotePath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get syncAttempts => $composableBuilder(
+    column: $table.syncAttempts,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get syncError =>
+      $composableBuilder(column: $table.syncError, builder: (column) => column);
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
@@ -17353,24 +17574,36 @@ class $$RecipePhotosTableTableManager
           updateCompanionCallback:
               ({
                 Value<String> recipeId = const Value.absent(),
-                Value<String> fileName = const Value.absent(),
+                Value<String?> fileName = const Value.absent(),
+                Value<String?> remotePath = const Value.absent(),
+                Value<int> syncAttempts = const Value.absent(),
+                Value<String?> syncError = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RecipePhotosCompanion(
                 recipeId: recipeId,
                 fileName: fileName,
+                remotePath: remotePath,
+                syncAttempts: syncAttempts,
+                syncError: syncError,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
               ({
                 required String recipeId,
-                required String fileName,
+                Value<String?> fileName = const Value.absent(),
+                Value<String?> remotePath = const Value.absent(),
+                Value<int> syncAttempts = const Value.absent(),
+                Value<String?> syncError = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => RecipePhotosCompanion.insert(
                 recipeId: recipeId,
                 fileName: fileName,
+                remotePath: remotePath,
+                syncAttempts: syncAttempts,
+                syncError: syncError,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),

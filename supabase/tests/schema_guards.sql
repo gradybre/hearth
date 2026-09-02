@@ -192,3 +192,160 @@ begin
   raise notice 'frozen snapshot guard passed';
 end;
 $$;
+
+-- ── 7. Recipe photo storage (spec §5.2, §8.2) ───────────────────────────────
+-- Sections 1 and 2 scan `nspname = 'public'`, so nothing in `storage` is
+-- visible to them. Photo objects are a household's private pictures behind a
+-- publishable key, which makes these the guards worth having explicitly.
+do $$
+declare
+  v_public boolean;
+  v_limit bigint;
+  v_policies int;
+begin
+  select public, file_size_limit into v_public, v_limit
+    from storage.buckets where id = 'recipe-photos';
+
+  if v_public is null then
+    raise exception 'The recipe-photos bucket does not exist';
+  end if;
+  if v_public then
+    raise exception 'The recipe-photos bucket is public; it holds private photos';
+  end if;
+  -- Must match RecipePhotoStore.maxBytes, or a photo can save locally and
+  -- never upload, which looks like nothing at all to the user.
+  if v_limit is distinct from 4194304 then
+    raise exception 'recipe-photos size limit is %, expected 4194304', v_limit;
+  end if;
+
+  if not exists (
+    select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'storage' and c.relname = 'objects' and c.relrowsecurity
+  ) then
+    raise exception 'RLS is not enabled on storage.objects';
+  end if;
+
+  select count(*) into v_policies from pg_policies
+   where schemaname = 'storage' and tablename = 'objects'
+     and policyname like 'recipe_photos%';
+  if v_policies <> 2 then
+    raise exception
+      'Expected exactly 2 recipe_photos policies (select, insert), found %',
+      v_policies;
+  end if;
+
+  -- A client chooses the object path, so the recipe id is a string it made
+  -- up. This cast must deny rather than raise: a raise inside a policy is a
+  -- 500 where a denial was meant.
+  if public.uuid_or_null('nonsense') is not null
+     or public.uuid_or_null('') is not null then
+    raise exception 'uuid_or_null accepted a value that is not a uuid';
+  end if;
+
+  raise notice 'recipe photo storage guards passed';
+end;
+$$;
+
+-- ── 8. The storage policies, executed rather than merely written ────────────
+-- Guard 7 proves the policies exist. This proves they do the right thing,
+-- which is the part that is easy to get subtly wrong and impossible to see
+-- from Dart: photo objects are a household's private pictures sitting behind
+-- a publishable key.
+do $$
+declare
+  v_alice uuid;
+  v_bob uuid;
+  v_carol uuid;
+  v_household uuid;
+  v_recipe uuid;
+  v_seen int;
+begin
+  select id into v_alice from auth.users where email = 'alice@example.test';
+  select id into v_carol from auth.users where email = 'carol@example.test';
+  select id into v_bob   from auth.users where email = 'bob@example.test';
+  if v_alice is null or v_carol is null then
+    raise exception 'Guard 8 needs the users guard 3 creates';
+  end if;
+
+  select household_id into v_household from public.profiles where id = v_alice;
+
+  insert into public.recipes (household_id, title, servings, created_by)
+  values (v_household, 'Alice''s photographed pie', 4, v_alice)
+  returning id into v_recipe;
+
+  -- Alice can put a photo under her own recipe.
+  set local role authenticated;
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_alice, 'role', 'authenticated')::text, true);
+
+  insert into storage.objects (bucket_id, name, owner_id)
+  values ('recipe-photos', v_recipe || '/first.jpg', v_alice::text);
+
+  select count(*) into v_seen from storage.objects
+   where bucket_id = 'recipe-photos' and name = v_recipe || '/first.jpg';
+  if v_seen <> 1 then
+    raise exception 'Owner cannot read back their own photo (saw % rows)', v_seen;
+  end if;
+
+  -- Bob, in the same household, can read it. This is the whole point of the
+  -- feature: a partner's copy of the recipe should have the picture.
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_bob, 'role', 'authenticated')::text, true);
+  select count(*) into v_seen from storage.objects
+   where bucket_id = 'recipe-photos' and name = v_recipe || '/first.jpg';
+  if v_seen <> 1 then
+    raise exception 'A household member cannot see the shared photo';
+  end if;
+
+  -- Carol, in another household, sees nothing and can write nothing.
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_carol, 'role', 'authenticated')::text, true);
+
+  select count(*) into v_seen from storage.objects
+   where bucket_id = 'recipe-photos' and name = v_recipe || '/first.jpg';
+  if v_seen <> 0 then
+    raise exception
+      'Cross-household leak: another household read % photo rows', v_seen;
+  end if;
+
+  begin
+    insert into storage.objects (bucket_id, name, owner_id)
+    values ('recipe-photos', v_recipe || '/intrusion.jpg', v_carol::text);
+    raise exception
+      'Cross-household leak: a photo was written under another household''s recipe';
+  exception
+    when insufficient_privilege then null;
+  end;
+
+  -- A path naming no recipe at all is refused, and refused *as a denial*
+  -- rather than as an error: `'loose'::uuid` would raise, and a raise inside
+  -- a policy is a 500 where a "no" was meant.
+  begin
+    insert into storage.objects (bucket_id, name, owner_id)
+    values ('recipe-photos', 'loose-file.jpg', v_carol::text);
+    raise exception 'A path with no recipe folder was accepted';
+  exception
+    when insufficient_privilege then null;
+  end;
+
+  begin
+    insert into storage.objects (bucket_id, name, owner_id)
+    values ('recipe-photos', 'not-a-uuid/x.jpg', v_carol::text);
+    raise exception 'A non-uuid recipe folder was accepted';
+  exception
+    when insufficient_privilege then null;
+  end;
+
+  -- And one under a recipe that does not exist.
+  begin
+    insert into storage.objects (bucket_id, name, owner_id)
+    values ('recipe-photos', gen_random_uuid() || '/x.jpg', v_carol::text);
+    raise exception 'A photo was accepted under a recipe that does not exist';
+  exception
+    when insufficient_privilege then null;
+  end;
+
+  reset role;
+  raise notice 'storage policy isolation guards passed';
+end;
+$$;

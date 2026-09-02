@@ -479,7 +479,7 @@ class CookSessions extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{recipeId};
 }
 
-/// A recipe's hero photo as it sits on *this* device (spec §5.2).
+/// A recipe's hero photo as it sits on *this* device (spec §5.2, §7.2).
 ///
 /// Its own table rather than a column on [Recipes]: that table is a sync
 /// cache, and a record arriving from the server would overwrite the row —
@@ -488,11 +488,40 @@ class CookSessions extends Table {
 /// Only the file name is stored, never an absolute path. iOS moves an app's
 /// container between installs, so an absolute path is a promise the device
 /// stops keeping.
+///
+/// This table is never *pushed* — but it is no longer purely local either. It
+/// is this device's index into a shared object store, and the pair
+/// ([fileName], [remotePath]) encodes four states:
+///
+///   - file, no remote     → taken here, not uploaded yet. Also every row that
+///                           existed before photo sync, which is what makes
+///                           the backfill need no code of its own.
+///   - file, remote == the recipe's photo_url → cached and current.
+///   - file, remote != it  → stale; the partner replaced it. Re-download.
+///   - no file, remote set → known about, not held. A failed download, or a
+///                           reinstall that took the container with it.
 @DataClassName('RecipePhotoRow')
 class RecipePhotos extends Table {
   TextColumn get recipeId =>
       text().references(Recipes, #id, onDelete: KeyAction.cascade)();
-  TextColumn get fileName => text()();
+
+  /// Null when this device knows about a photo it does not have.
+  TextColumn get fileName => text().nullable()();
+
+  /// The object path [fileName] is a copy of, or null when it was never
+  /// uploaded. Compared against the recipe's `photoUrl` to spot a stale copy —
+  /// a string compare, and reliable only because objects are immutable.
+  TextColumn get remotePath => text().nullable()();
+
+  /// Stops a permanently failing upload from retrying for ever.
+  ///
+  /// Load-bearing: writing this wakes the sync listener, which retries, which
+  /// writes it again. The loop terminates *only* because the candidate query
+  /// filters on this being under the limit.
+  IntColumn get syncAttempts => integer().withDefault(const Constant<int>(0))();
+
+  TextColumn get syncError => text().nullable()();
+
   DateTimeColumn get updatedAt => dateTime()();
 
   @override

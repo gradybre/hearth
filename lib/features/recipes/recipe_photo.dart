@@ -8,6 +8,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../data/adapters/photo_picker.dart';
+import '../../data/local/hearth_database.dart';
 import '../../data/local/recipe_photo_store.dart';
 
 /// A recipe's hero photo, wherever it is shown (spec §5.2).
@@ -158,7 +159,58 @@ class _RecipePhotoFieldState extends ConsumerState<RecipePhotoField> {
               ),
           ],
         ),
+        if (hasPhoto) _SharingLine(recipeId: recipeId),
       ],
+    );
+  }
+}
+
+/// Whether the household has this photo yet (spec §5.2, §6.3).
+///
+/// Said in words rather than shown as a colour or a spinner: a photo that is
+/// only ever going to live on this phone is something you would want to know
+/// about, and silence would read as success.
+class _SharingLine extends ConsumerWidget {
+  const _SharingLine({required this.recipeId});
+
+  final String recipeId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final RecipePhotoRow? row = ref
+        .watch(recipePhotoRowProvider(recipeId))
+        .value;
+    if (row == null) return const SizedBox.shrink();
+
+    final bool stuck = row.syncAttempts >= RecipePhotoStore.maxAttempts;
+    final bool shared = row.remotePath != null;
+    // Nothing to say while it is simply on its way: the next sync will carry
+    // it, and a "pending" line on every photo is noise.
+    if (shared || !stuck) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: HearthSpacing.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(
+            Icons.cloud_off_outlined,
+            size: 16,
+            color: context.colors.textMuted,
+          ),
+          const SizedBox(width: HearthSpacing.sm),
+          Expanded(
+            child: Text(
+              row.syncError ??
+                  'This photo could not be shared, so it is only on this '
+                      'device.',
+              style: context.text.metadata.copyWith(
+                color: context.colors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

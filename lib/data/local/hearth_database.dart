@@ -46,7 +46,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -113,6 +113,18 @@ class HearthDatabase extends _$HearthDatabase {
       if (from < 13) {
         await m.createTable(shoppingLists);
         await m.createTable(shoppingListItems);
+      }
+      // v14 is photo sync (spec §5.2, §7.2). Existing rows get a null
+      // remotePath, which is exactly the "needs uploading" predicate — so
+      // every photo already on this device backfills through the ordinary
+      // upload loop with no migration that reads a file or touches a network.
+      if (from < 14) {
+        await m.addColumn(recipePhotos, recipePhotos.remotePath);
+        await m.addColumn(recipePhotos, recipePhotos.syncAttempts);
+        await m.addColumn(recipePhotos, recipePhotos.syncError);
+        // fileName becomes nullable: a device can know about a photo it has
+        // not managed to download.
+        await m.alterTable(TableMigration(recipePhotos));
       }
     },
     beforeOpen: (OpeningDetails details) async {

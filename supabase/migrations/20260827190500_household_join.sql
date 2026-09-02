@@ -107,3 +107,8 @@ grant execute on function public.join_household(text) to authenticated;
 -- foods with a full id remapping — too much to get right as a side note, and
 -- shipping a half-correct version of a data-duplicating operation is worse
 -- than not having it. It needs its own change.
+--
+-- Since 20260903120000_recipe_photos.sql that copy also has to cover storage:
+-- a duplicated recipe gets a new id, and its photo lives at a path keyed by
+-- the old one, so unlinking must copy the objects too or one household walks
+-- away with recipes whose pictures it can no longer read.

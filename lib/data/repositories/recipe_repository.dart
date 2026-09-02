@@ -65,6 +65,33 @@ class RecipeRepository {
     });
   }
 
+  /// Points a recipe at its photo in the household's bucket (spec §5.2).
+  ///
+  /// A separate method rather than part of [save] because the photo's object
+  /// path is decided by the sync pass, not by anything the editor knows, and
+  /// routing it through the editor would mean the screen holding a value it
+  /// has no opinion about.
+  ///
+  /// Null clears it — the photo was removed.
+  Future<void> setPhotoUrl(String id, String? path) {
+    final DateTime now = _now();
+    return _db.transaction(() async {
+      final Recipe? recipe = await _store.byId(id);
+      if (recipe == null) return;
+      final Recipe owned = _withHousehold(
+        recipe.copyWith(photoUrl: path, clearPhotoUrl: path == null),
+      );
+      await _store.upsert(owned, updatedAt: now);
+      await _queue.enqueue(
+        entityTable: entityTable,
+        entityId: id,
+        operation: WriteOperation.upsert,
+        payload: RecipeMapper.toJson(owned, updatedAt: now),
+        queuedAt: now,
+      );
+    });
+  }
+
   /// Hides a recipe and queues the change.
   ///
   /// This is a soft delete pushed as an ordinary update, never a row removal:

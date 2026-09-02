@@ -263,6 +263,11 @@ class Recipe {
     double? servings,
     List<RecipeSection>? sections,
     String? title,
+    String? photoUrl,
+
+    /// Removing a photo is a real value, which a nullable argument cannot say
+    /// on its own — the same shape [ShoppingLine.copyWith] uses.
+    bool clearPhotoUrl = false,
   }) => Recipe(
     id: id,
     title: title ?? this.title,
@@ -274,7 +279,7 @@ class Recipe {
     cuisine: cuisine,
     tags: tags,
     source: source,
-    photoUrl: photoUrl,
+    photoUrl: clearPhotoUrl ? null : (photoUrl ?? this.photoUrl),
     notes: notes,
     createdBy: createdBy,
     isDeleted: isDeleted,

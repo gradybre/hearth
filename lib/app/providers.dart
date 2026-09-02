@@ -49,6 +49,9 @@ import '../data/repositories/plan_repository.dart';
 import '../data/repositories/recipe_repository.dart';
 import '../data/repositories/shopping_repository.dart';
 import '../data/sync/library_sync.dart';
+import '../data/remote/photo_storage.dart';
+import '../data/remote/supabase_photo_storage.dart';
+import '../data/sync/photo_sync.dart';
 import '../data/sync/record_sync.dart';
 import '../data/sync/remote_rows.dart';
 import '../data/sync/sync_engine.dart';
@@ -663,6 +666,45 @@ final StreamProvider<Map<String, String>> recipePhotoNamesProvider =
     StreamProvider<Map<String, String>>(
       (Ref ref) => ref.watch(recipePhotoStoreProvider).watchAll(),
     );
+
+/// Photos in the household's bucket (spec §5.2, rule 7).
+///
+/// Null when there is no backend, matching every other remote provider — and
+/// the honest state of a build with none configured.
+final Provider<PhotoStorage?> photoStorageProvider = Provider<PhotoStorage?>(
+  (Ref ref) => ref.watch(supabaseReadyProvider)
+      ? SupabasePhotoStorage(Supabase.instance.client)
+      : null,
+);
+
+/// The photo half of a sync pass. Null for the same reason as above.
+final Provider<PhotoSync?> photoSyncProvider = Provider<PhotoSync?>((Ref ref) {
+  final PhotoStorage? storage = ref.watch(photoStorageProvider);
+  if (storage == null) return null;
+  return PhotoSync(
+    database: ref.watch(databaseProvider),
+    photos: ref.watch(recipePhotoStoreProvider),
+    recipes: ref.watch(recipeRepositoryProvider),
+    storage: storage,
+  );
+});
+
+/// How much photo work is waiting, so adding one nudges a sync.
+///
+/// A Drift stream, like [pendingWriteCountProvider], and under the same
+/// standing warning: nothing may invalidate it by hand.
+final StreamProvider<int> pendingPhotoWorkProvider = StreamProvider<int>(
+  (Ref ref) => ref.watch(recipePhotoStoreProvider).watchPendingWork(),
+);
+
+/// What a photo's sharing state is, for the one recipe on screen.
+///
+/// Watched rather than read: an upload finishing should update the line
+/// without the user touching anything.
+final recipePhotoRowProvider = StreamProvider.family<RecipePhotoRow?, String>(
+  (Ref ref, String recipeId) =>
+      ref.watch(recipePhotoStoreProvider).watchRow(recipeId),
+);
 
 /// The directory photos are resolved against.
 final FutureProvider<Directory> recipePhotoDirectoryProvider =

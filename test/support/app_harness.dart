@@ -135,6 +135,9 @@ Future<HearthDatabase> pumpHearthApp(
         // And the list's chat. Null hides the panel, which is what a build
         // with no backend honestly does.
         shoppingAssistantProvider.overrideWithValue(shoppingAssistant),
+        // Photos go to a household bucket over the network; a widget test has
+        // neither. Null is also what a build with no backend honestly has.
+        photoStorageProvider.overrideWithValue(null),
         // Another sqlite-backed stream, and the same reasoning as the rest:
         // fake async cannot drive real I/O, so a live subscription would
         // never emit and would still be open at teardown.
