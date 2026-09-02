@@ -46,14 +46,10 @@ class _ReadLabelSheet extends ConsumerStatefulWidget {
 }
 
 class _ReadLabelSheetState extends ConsumerState<_ReadLabelSheet> {
-  @override
-  void initState() {
-    super.initState();
-    // Whatever the last one left behind is not this one's answer.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ref.read(labelScanProvider.notifier).reset();
-    });
-  }
+  // Nothing to reset here: labelScanProvider is auto-disposed, so a sheet
+  // opens on a controller that has never read anything. Resetting from
+  // initState was a frame too late — the first build had already seen the
+  // previous reading and scheduled a pop with it.
 
   @override
   Widget build(BuildContext context) {

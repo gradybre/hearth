@@ -292,4 +292,29 @@ void main() {
     expect(find.text('oz'), findsOneWidget);
     expect(find.text('cup'), findsOneWidget);
   });
+
+  testWidgets('reopening the sheet asks for a photo, not the last answer', (
+    WidgetTester tester,
+  ) async {
+    // Brendan's report. The sheet reset the controller in a post-frame
+    // callback — one frame too late. Its first build had already seen the
+    // previous LabelScanDone and scheduled a pop carrying that reading, so
+    // the second open handed back the last label instead of asking for a
+    // photo. Backing out and coming in again "fixed" it, because by then the
+    // reset had landed.
+    await openEditor(tester, reader: FakeLabelReader());
+
+    await tester.tap(find.text('Read label'));
+    await pumpFrames(tester);
+    await takePhoto(tester);
+    expect(find.text('New food'), findsOneWidget);
+
+    await tester.tap(find.text('Read label'));
+    await pumpFrames(tester, frames: 10);
+
+    // Still on the sheet, asking — not popped straight back with the old
+    // reading.
+    expect(find.text('Take a photo'), findsOneWidget);
+    expect(find.text('Choose a photo'), findsOneWidget);
+  });
 }

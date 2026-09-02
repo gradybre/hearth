@@ -43,4 +43,30 @@ void main() {
       expect(wordCoverage('ground beef', ''), 0);
     });
   });
+
+  group('a plural is the same word (Brendan\'s report)', () {
+    // A recipe line says "apples" and the food is called "Honeycrisp Apple".
+    // Matching on substrings, "honeycrisp apple" does not contain "apples",
+    // so the food picker filtered out the very food the line was already
+    // matched to and said "None of your foods match".
+    test('a plural query finds a singular name', () {
+      expect(wordCoverage('apples', 'Honeycrisp Apple'), 1.0);
+      expect(wordCoverage('eggs', 'Large Egg'), 1.0);
+      expect(wordCoverage('tomatoes', 'Tinned Tomato'), 1.0);
+    });
+
+    test('and a singular query still finds a plural name', () {
+      expect(wordCoverage('apple', 'Honeycrisp Apples'), 1.0);
+      expect(wordCoverage('berry', 'Mixed Berries'), 1.0);
+    });
+
+    test('without making unrelated words match', () {
+      // Stemming that is too eager is worse than none: it would quietly
+      // attach the wrong food, which is the one failure a review screen
+      // cannot catch because it looks right.
+      expect(wordCoverage('grass', 'Gras'), 0.0);
+      expect(wordCoverage('bass', 'Bas'), 0.0);
+      expect(wordCoverage('beans', 'Beef'), 0.0);
+    });
+  });
 }

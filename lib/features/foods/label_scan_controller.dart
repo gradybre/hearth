@@ -143,7 +143,16 @@ class LabelScanController extends Notifier<LabelScanState> {
   };
 }
 
+/// Auto-disposed, which is what makes reopening the sheet safe.
+///
+/// It used to be kept, and the sheet reset it in a post-frame callback — one
+/// frame too late. The first build already saw the previous
+/// [LabelScanDone] and scheduled its own callback to pop with that reading,
+/// so opening the sheet a second time handed back the last label instead of
+/// asking for a photo. Two callbacks racing where no state should have
+/// survived at all.
 final NotifierProvider<LabelScanController, LabelScanState> labelScanProvider =
     NotifierProvider<LabelScanController, LabelScanState>(
       LabelScanController.new,
+      isAutoDispose: true,
     );

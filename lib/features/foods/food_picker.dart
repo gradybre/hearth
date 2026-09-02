@@ -117,7 +117,7 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
   /// Beef"), and a `contains` check in either direction missed that entirely.
   List<Food> _rank(List<Food> foods) {
     final String query = _search.text;
-    if (normaliseKey(query).isEmpty) return _withCurrentFirst(foods);
+    if (normaliseKey(query).isEmpty) return _withCurrentFirst(foods, foods);
 
     final List<(Food, double)> scored = <(Food, double)>[
       for (final Food food in foods)
@@ -130,18 +130,29 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
 
     return _withCurrentFirst(<Food>[
       for (final (Food, double) entry in matched) entry.$1,
-    ]);
+    ], foods);
   }
 
   /// Whatever is already matched — an actual pick, or a strong suggestion
   /// like a previously-used or remembered food — leads the list, so it is
   /// never left to compete with an arbitrary sort order for the top spot.
-  List<Food> _withCurrentFirst(List<Food> foods) {
+  ///
+  /// And is *in* the list at all. It used only to reorder, so a search that
+  /// did not happen to find the matched food dropped it: a line reading
+  /// "apples" matched to "Honeycrisp Apple" opened on "None of your foods
+  /// match" while the header offered to Unmatch it. Which is exactly the case
+  /// remembered matches exist for — the wording and the food's name differing
+  /// is the whole point of remembering.
+  List<Food> _withCurrentFirst(List<Food> foods, List<Food> all) {
     final String? currentId = widget.currentFoodId;
     if (currentId == null) return foods;
 
     final int index = foods.indexWhere((Food f) => f.id == currentId);
-    if (index <= 0) return foods;
+    if (index < 0) {
+      final int inLibrary = all.indexWhere((Food f) => f.id == currentId);
+      return inLibrary < 0 ? foods : <Food>[all[inLibrary], ...foods];
+    }
+    if (index == 0) return foods;
 
     return <Food>[
       foods[index],
@@ -213,16 +224,23 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
                         // Salt has nothing to match and never will. Offered
                         // here because here is where the line is nagging, and
                         // it is remembered, so the next recipe starts quiet.
+                        // An offer, and it has to look like one. Styled as an
+                        // accent text button it was the same grass icon in the
+                        // same colour as the badge a *marked* line wears, so
+                        // opening the sheet on an apple read as Hearth
+                        // claiming the apple was a seasoning.
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: TextButton.icon(
+                          child: OutlinedButton.icon(
                             onPressed: () =>
                                 Navigator.of(context)
                                     .pop(noMatchNeededSentinel),
-                            icon: const Icon(Icons.grass_outlined, size: 18),
-                            label: const Text(
-                              "Nothing to match — it's a seasoning",
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: colors.textSecondary,
+                              side: BorderSide(color: colors.outline),
                             ),
+                            icon: const Icon(Icons.grass_outlined, size: 18),
+                            label: const Text('Mark as a seasoning instead'),
                           ),
                         ),
                         const SizedBox(height: HearthSpacing.sm),

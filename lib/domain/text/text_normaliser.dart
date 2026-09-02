@@ -37,7 +37,50 @@ double wordCoverage(String query, String haystack) {
   ];
   if (words.isEmpty) return 0;
 
-  final String normalisedHaystack = normaliseKey(haystack);
-  final int hits = words.where(normalisedHaystack.contains).length;
+  final List<String> haystackWords = <String>[
+    for (final String word in normaliseKey(haystack).split(' '))
+      if (word.isNotEmpty) word,
+  ];
+
+  final int hits = words
+      .where(
+        (String word) =>
+            haystackWords.any((String other) => _sameWord(word, other)),
+      )
+      .length;
   return hits / words.length;
 }
+
+/// Whether two words are the same word, give or take a plural.
+///
+/// Substring matching used to do this job and could not: a recipe line saying
+/// "apples" against a food called "Honeycrisp Apple" shares no substring in
+/// either direction, so the food picker filtered out the very food that line
+/// was already matched to and reported "None of your foods match".
+///
+/// Deliberately only plurals, and only when there is a real word left over.
+/// Stemming that is too eager is worse than none — it attaches the wrong food,
+/// which is the one failure a review screen cannot catch, because it looks
+/// right. "Grass" is not "gras" and "beans" is not "beef".
+/// [wanted] is a word from the query; [found] is one from the name.
+///
+/// Containment is one-directional, as it was before this gained stems: a
+/// query word may be part of a longer name word — "oat" finds "Oatly" — but a
+/// name word being part of the query must not count, or "grass" would find
+/// "gras".
+bool _sameWord(String wanted, String found) =>
+    wanted == found ||
+    found.contains(wanted) ||
+    _stems(wanted).intersection(_stems(found)).isNotEmpty;
+
+Set<String> _stems(String word) => <String>{
+  word,
+  if (word.length > 4 && word.endsWith('ies'))
+    '${word.substring(0, word.length - 3)}y',
+  if (word.length > 4 && word.endsWith('es'))
+    word.substring(0, word.length - 2),
+  // Four letters and an s: "eggs" has to reach "egg". Words ending "ss" are
+  // excluded, so "bass" is not read as a plural of "bas".
+  if (word.length > 3 && word.endsWith('s') && !word.endsWith('ss'))
+    word.substring(0, word.length - 1),
+};
