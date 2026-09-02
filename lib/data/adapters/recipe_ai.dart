@@ -76,6 +76,7 @@ class AiRecipe {
     this.uncertain = const <AiUncertainty>[],
     this.estimates = const <AiEstimate>[],
     this.reply,
+    this.usage,
   });
 
   final String title;
@@ -95,6 +96,13 @@ class AiRecipe {
 
   /// What to say back in the chat. Null when extracting (spec §5.4).
   final String? reply;
+
+  /// Where the month's AI budget stands after this call (spec §3, §8.1).
+  ///
+  /// Null when the function did not say — an older deployment, or a counter
+  /// that could not be read. Absent is not zero, and the screens treat it as
+  /// "no news" rather than as "nothing spent".
+  final AiUsage? usage;
 }
 
 /// One turn of the generation conversation (spec §5.4).
@@ -104,6 +112,34 @@ class AiTurn {
 
   final bool fromUser;
   final String text;
+}
+
+/// The month's AI spend against its ceiling (spec §3, §8.1).
+///
+/// Returned with every answer rather than fetched separately: the number is
+/// only interesting next to a thing that just spent some of it, and a second
+/// round trip to learn it would itself be a cost.
+@immutable
+class AiUsage {
+  const AiUsage({
+    required this.spentUsd,
+    required this.ceilingUsd,
+    required this.fraction,
+    required this.warn,
+  });
+
+  final double spentUsd;
+  final double ceilingUsd;
+
+  /// 0..1 and beyond. Past 1 the function refuses, so the app only ever sees
+  /// this above 1 on the refusal itself.
+  final double fraction;
+
+  /// Whether the app should say something. Decided server-side so the
+  /// threshold lives in one place rather than in every screen that shows it.
+  final bool warn;
+
+  int get percent => (fraction * 100).round();
 }
 
 /// An image on its way to extraction.
@@ -148,18 +184,26 @@ abstract interface class RecipeAiSource {
   /// MacrosFirst migration path, where a recipe spans two or three screens.
   /// [text] is a recipe somebody pasted or shared as words — the usual shape
   /// of an Instagram DM, where the whole thing arrives as a message.
+  /// [notes] are the user's own instructions about the source — which end of
+  /// a range to take, that the stated yield is wrong, that half the
+  /// screenshot is an advert. They override what the source appears to say.
   Future<AiRecipe> extract({
     List<AiImage> images = const <AiImage>[],
     String? url,
     String? text,
+    String? notes,
   });
 
   /// Writes or revises a recipe from a conversation (spec §5.4).
   ///
   /// [profile] is the user's food profile, passed as standing context so
   /// allergies and dislikes do not have to be restated every turn.
+  /// [recipe] is an existing recipe to revise, as text. Given, the
+  /// conversation is about changing that rather than writing something new —
+  /// which is what the editor's chat is for.
   Future<AiRecipe> generate({
     required List<AiTurn> turns,
     Map<String, Object?> profile = const <String, Object?>{},
+    String? recipe,
   });
 }

@@ -24,6 +24,7 @@ class EdgeFunctionRecipeAi implements RecipeAiSource {
     List<AiImage> images = const <AiImage>[],
     String? url,
     String? text,
+    String? notes,
   }) {
     final String trimmed = (url ?? '').trim();
     final String words = (text ?? '').trim();
@@ -43,6 +44,7 @@ class EdgeFunctionRecipeAi implements RecipeAiSource {
         ],
       if (trimmed.isNotEmpty) 'url': trimmed,
       if (words.isNotEmpty) 'text': words,
+      if ((notes ?? '').trim().isNotEmpty) 'notes': notes!.trim(),
     });
   }
 
@@ -50,6 +52,7 @@ class EdgeFunctionRecipeAi implements RecipeAiSource {
   Future<AiRecipe> generate({
     required List<AiTurn> turns,
     Map<String, Object?> profile = const <String, Object?>{},
+    String? recipe,
   }) {
     if (turns.isEmpty) {
       throw const RecipeAiException(
@@ -68,6 +71,7 @@ class EdgeFunctionRecipeAi implements RecipeAiSource {
           },
       ],
       if (profile.isNotEmpty) 'profile': profile,
+      if ((recipe ?? '').trim().isNotEmpty) 'recipe': recipe!.trim(),
     });
   }
 
@@ -114,6 +118,18 @@ class EdgeFunctionRecipeAi implements RecipeAiSource {
       throw const RecipeAiException('No recipe could be read from that.');
     }
     return _toRecipe(recipe, envelope);
+  }
+
+  static AiUsage? _usage(Object? raw) {
+    if (raw is! Map) return null;
+    final double? ceiling = _number(raw['ceiling_usd']);
+    if (ceiling == null) return null;
+    return AiUsage(
+      spentUsd: _number(raw['spent_usd']) ?? 0,
+      ceilingUsd: ceiling,
+      fraction: _number(raw['fraction']) ?? 0,
+      warn: raw['warn'] == true,
+    );
   }
 
   static AiRecipe _toRecipe(
@@ -165,6 +181,7 @@ class EdgeFunctionRecipeAi implements RecipeAiSource {
               ),
       ],
       reply: _textOrNull(envelope['reply']),
+      usage: _usage(envelope['usage']),
     );
   }
 

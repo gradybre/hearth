@@ -104,4 +104,65 @@ void main() {
       ),
     );
   }, skip: skip);
+
+  test(
+    'a note overrides what the source appears to say',
+    () async {
+      // The upload page's notes field. The reader cannot know from the page
+      // which end of a range was meant, or that the printed yield is wrong.
+      final AiRecipe recipe = await ai.extract(
+        text:
+            'Garlic butter pasta. Serves 2-4. '
+            '200-300g spaghetti, 2 cloves garlic, 50g butter. '
+            'Boil pasta. Melt butter with garlic. Toss.',
+        notes: 'Take the higher number in any range, and this serves 6.',
+      );
+
+      expect(recipe.servings, 6);
+      expect(
+        recipe.sections.map((AiSection s) => s.ingredientsText).join(),
+        contains('300'),
+      );
+    },
+    skip: skip,
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
+  test(
+    'a revision changes what was asked and says what it changed',
+    () async {
+      // The editor's chat. The whole recipe comes back, not a diff, and the
+      // reply is the only thing that saves the user diffing two recipes by eye.
+      final AiRecipe revised = await ai.generate(
+        turns: <AiTurn>[
+          const AiTurn(fromUser: true, text: 'Swap steps 1 and 2.'),
+        ],
+        recipe:
+            'Garlic butter pasta\nServes 4\n\n## Main\nIngredients:\n'
+            '300g spaghetti\n50g butter\nDirections:\n'
+            'Boil the pasta.\nMelt the butter.',
+      );
+
+      expect(revised.sections, isNotEmpty);
+      expect(revised.reply, isNotNull);
+      expect(revised.reply, isNotEmpty);
+    },
+    skip: skip,
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
+  test(
+    'every answer says where the month budget stands',
+    () async {
+      // §3, §8.1: the ceiling is enforced server-side, and the app is told so it
+      // can warn before it is refused.
+      final AiRecipe recipe = await ai.extract(text: 'Toast. 1 slice bread.');
+
+      expect(recipe.usage, isNotNull);
+      expect(recipe.usage!.ceilingUsd, greaterThan(0));
+      expect(recipe.usage!.fraction, greaterThanOrEqualTo(0));
+    },
+    skip: skip,
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 }

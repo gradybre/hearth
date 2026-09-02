@@ -32,6 +32,7 @@ class RecipeImportScreen extends ConsumerStatefulWidget {
 class _RecipeImportScreenState extends ConsumerState<RecipeImportScreen> {
   final TextEditingController _url = TextEditingController();
   final TextEditingController _text = TextEditingController();
+  final TextEditingController _notes = TextEditingController();
 
   /// Whether the review screen is already open for this extraction.
   ///
@@ -60,6 +61,7 @@ class _RecipeImportScreenState extends ConsumerState<RecipeImportScreen> {
   void dispose() {
     _url.dispose();
     _text.dispose();
+    _notes.dispose();
     super.dispose();
   }
 
@@ -91,6 +93,7 @@ class _RecipeImportScreenState extends ConsumerState<RecipeImportScreen> {
       controller.reset();
       _url.clear();
       _text.clear();
+      _notes.clear();
       if (mounted) Navigator.of(context).maybePop();
     } finally {
       _reviewing = false;
@@ -239,6 +242,36 @@ class _RecipeImportScreenState extends ConsumerState<RecipeImportScreen> {
               style: context.text.body,
               decoration: InputDecoration(
                 hintText: '2 lb ground beef…',
+                filled: true,
+                fillColor: colors.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(HearthRadius.md),
+                  borderSide: BorderSide(color: colors.outline),
+                ),
+              ),
+            ),
+            const SizedBox(height: HearthSpacing.xl),
+            Text('Anything I should know?', style: context.text.sectionHeader),
+            const SizedBox(height: HearthSpacing.sm),
+            Text(
+              'Instructions for the reading itself, which win over what the '
+              'source says. Fixing it afterwards is a conversation in the '
+              'editor.',
+              style: context.text.metadata.copyWith(color: colors.textMuted),
+            ),
+            const SizedBox(height: HearthSpacing.sm),
+            TextField(
+              controller: _notes,
+              enabled: !busy,
+              maxLines: 3,
+              minLines: 2,
+              keyboardType: TextInputType.multiline,
+              onChanged: controller.setNotes,
+              style: context.text.body,
+              decoration: InputDecoration(
+                hintText:
+                    'Take the higher number in any range. This serves 6, '
+                    'not 4.',
                 filled: true,
                 fillColor: colors.surface,
                 border: OutlineInputBorder(

@@ -29,12 +29,14 @@ class FakeAi implements RecipeAiSource {
     List<AiImage> images = const <AiImage>[],
     String? url,
     String? text,
+    String? notes,
   }) async => throw UnimplementedError();
 
   @override
   Future<AiRecipe> generate({
     required List<AiTurn> turns,
     Map<String, Object?> profile = const <String, Object?>{},
+    String? recipe,
   }) async {
     lastTurns = turns;
     lastProfile = profile;

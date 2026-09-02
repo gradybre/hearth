@@ -18,22 +18,34 @@ class FakeAi implements RecipeAiSource {
   FakeAi({this.answer, this.error});
 
   final AiRecipe? answer;
+
+  /// What `generate` answers with, when it is asked at all. Separate from
+  /// [answer] so a test can import one recipe and be handed a different one
+  /// back when it asks for a change.
+  AiRecipe? answer2;
+
+  /// The recipe handed over for revision, so a test can prove it was the one
+  /// on screen rather than the one first imported.
+  String? lastRecipe;
   final RecipeAiException? error;
   int extractCalls = 0;
   List<AiImage> lastImages = const <AiImage>[];
   String? lastUrl;
   String? lastText;
+  String? lastNotes;
 
   @override
   Future<AiRecipe> extract({
     List<AiImage> images = const <AiImage>[],
     String? url,
     String? text,
+    String? notes,
   }) async {
     extractCalls++;
     lastImages = images;
     lastUrl = url;
     lastText = text;
+    lastNotes = notes;
     if (error != null) throw error!;
     return answer!;
   }
@@ -42,7 +54,12 @@ class FakeAi implements RecipeAiSource {
   Future<AiRecipe> generate({
     required List<AiTurn> turns,
     Map<String, Object?> profile = const <String, Object?>{},
-  }) async => answer!;
+    String? recipe,
+  }) async {
+    lastRecipe = recipe;
+    if (error != null) throw error!;
+    return answer2 ?? answer!;
+  }
 }
 
 class FakePicker implements PhotoPicker {
@@ -97,6 +114,39 @@ AiRecipe shortRibs({List<AiUncertainty> uncertain = const <AiUncertainty>[]}) =>
       ],
     );
 
+/// Scrolls the read button into view, then taps it.
+///
+/// The screen is a ListView and the button sits under the photo, link, text
+/// and notes fields, so on a phone-sized test surface it is not built until it
+/// is scrolled to. A bare tap finds nothing and reads as the button being
+/// missing rather than merely below the fold.
+Future<void> tapRead(WidgetTester tester) async {
+  final Finder button = find.text('Read the recipe');
+  // scrollUntilVisible rather than ensureVisible: a ListView does not build
+  // what is below the fold at all, so there is no element to make visible —
+  // the list has to be scrolled until one exists.
+  // An explicit scrollable: the text fields carry their own, so the default
+  // finder matches several and cannot choose.
+  await tester.scrollUntilVisible(
+    button,
+    200,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await pumpFrames(tester);
+  await tester.tap(button);
+  await pumpFrames(tester);
+
+  // Only while still on the import screen. What the tap produces — a
+  // spinner, a failure and its retry — renders *below* the button, and a
+  // ListView does not build what is off screen. But a successful read pushes
+  // the editor during those frames, and scrolling then would be scrolling the
+  // editor past its own title.
+  if (button.evaluate().isNotEmpty) {
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -600));
+    await pumpFrames(tester);
+  }
+}
+
 Future<void> openImport(
   WidgetTester tester, {
   RecipeAiSource? ai,
@@ -133,7 +183,7 @@ void main() {
 
     await tester.tap(find.text('Choose pictures'));
     await pumpFrames(tester);
-    await tester.tap(find.text('Read the recipe'));
+    await tapRead(tester);
     await pumpFrames(tester, frames: 20);
 
     expect(ai.extractCalls, 1);
@@ -146,6 +196,12 @@ void main() {
     await openImport(tester, ai: FakeAi(answer: shortRibs()));
 
     final Finder button = find.widgetWithText(FilledButton, 'Read the recipe');
+    await tester.scrollUntilVisible(
+      button,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await pumpFrames(tester);
     expect(tester.widget<FilledButton>(button).onPressed, isNull);
   });
 
@@ -160,7 +216,7 @@ void main() {
 
     await tester.tap(find.text('Choose pictures'));
     await pumpFrames(tester);
-    await tester.tap(find.text('Read the recipe'));
+    await tapRead(tester);
     await pumpFrames(tester, frames: 20);
 
     // The editor is the review screen (CLAUDE.md rule 4) — filled in, and
@@ -189,7 +245,7 @@ void main() {
 
     await tester.tap(find.text('Choose pictures'));
     await pumpFrames(tester);
-    await tester.tap(find.text('Read the recipe'));
+    await tapRead(tester);
     await pumpFrames(tester, frames: 20);
 
     expect(find.text('Check and save'), findsOneWidget);
@@ -226,7 +282,7 @@ void main() {
 
     await tester.tap(find.text('Choose pictures'));
     await pumpFrames(tester);
-    await tester.tap(find.text('Read the recipe'));
+    await tapRead(tester);
     await pumpFrames(tester, frames: 20);
 
     // "Check the recipe" makes you re-read all of it; this sends you to one
@@ -245,7 +301,7 @@ void main() {
 
     await tester.tap(find.text('Choose pictures'));
     await pumpFrames(tester);
-    await tester.tap(find.text('Read the recipe'));
+    await tapRead(tester);
     await pumpFrames(tester, frames: 20);
 
     expect(find.text('The reader was busy.'), findsOneWidget);
@@ -274,7 +330,7 @@ void main() {
 
     await tester.tap(find.text('Choose pictures'));
     await pumpFrames(tester);
-    await tester.tap(find.text('Read the recipe'));
+    await tapRead(tester);
     await pumpFrames(tester, frames: 20);
 
     expect(find.text('That is not a url.'), findsOneWidget);
@@ -288,7 +344,7 @@ void main() {
 
     await tester.tap(find.text('Choose pictures'));
     await pumpFrames(tester);
-    await tester.tap(find.text('Read the recipe'));
+    await tapRead(tester);
     await pumpFrames(tester, frames: 20);
 
     expect(find.textContaining('none configured'), findsOneWidget);

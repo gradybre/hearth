@@ -324,6 +324,69 @@ class RecipeDraft {
     },
   );
 
+  /// The recipe as words, for handing to the model to revise (spec §5.4).
+  ///
+  /// The draft *as it currently stands*, hand edits and all — not as it was
+  /// imported. Asking for "swap steps 2 and 3" against a stale copy would
+  /// hand back a recipe with your own corrections quietly undone.
+  ///
+  /// Plain text rather than JSON on purpose: sections are already stored as
+  /// the text the user typed, the model writes them back the same way, and a
+  /// schema in between would be two more places for a recipe to lose a line.
+  String toPrompt() {
+    final StringBuffer out = StringBuffer()
+      ..writeln(title.trim().isEmpty ? 'Untitled' : title.trim())
+      ..writeln('Serves $servings');
+    if (prepMinutes != null) out.writeln('Prep: $prepMinutes minutes');
+    if (cookMinutes != null) out.writeln('Cook: $cookMinutes minutes');
+    if ((cuisine ?? '').trim().isNotEmpty) out.writeln('Cuisine: $cuisine');
+    if (tags.isNotEmpty) out.writeln('Tags: ${tags.join(', ')}');
+    if ((notes ?? '').trim().isNotEmpty) out.writeln('Notes: $notes');
+
+    for (final DraftSection section in sections) {
+      out
+        ..writeln()
+        ..writeln('## ${section.storedName}')
+        ..writeln('Ingredients:')
+        ..writeln(section.ingredientsText.trim())
+        ..writeln('Directions:')
+        ..writeln(section.directionsText.trim());
+    }
+    return out.toString().trim();
+  }
+
+  /// This draft's content replaced by [incoming], keeping what is not the
+  /// model's to decide.
+  ///
+  /// Three things must survive a revision, and each is a way this could
+  /// quietly do damage:
+  ///
+  ///  * **[existingId]** — without it, editing a saved recipe and asking for
+  ///    one change would save a second copy of it instead.
+  ///  * **[matches] and [noMatch]** — keyed by normalised ingredient name, so
+  ///    every line whose name did not change keeps the food attached to it. A
+  ///    revision that dropped them would cost a re-match of the whole recipe
+  ///    for the sake of reordering two steps.
+  ///  * **[notes]** — the model is not asked about them and must not be able
+  ///    to remove them by not mentioning them.
+  ///
+  /// A line the model genuinely renamed does lose its match, which is correct:
+  /// the match was to the old wording, and the food it named may no longer be
+  /// what the line says.
+  RecipeDraft revisedWith(RecipeDraft incoming) => RecipeDraft(
+    title: incoming.title,
+    servings: incoming.servings,
+    sections: incoming.sections,
+    prepMinutes: incoming.prepMinutes,
+    cookMinutes: incoming.cookMinutes,
+    cuisine: incoming.cuisine,
+    tags: incoming.tags,
+    notes: notes,
+    existingId: existingId,
+    matches: matches,
+    noMatch: noMatch,
+  );
+
   RecipeDraft copyWith({
     String? title,
     double? servings,

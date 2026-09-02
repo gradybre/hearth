@@ -24,9 +24,11 @@ import '../foods/read_label_sheet.dart';
 import 'macro_stats_row.dart';
 import 'match_review_controller.dart';
 import 'match_review_screen.dart';
+import 'recipe_chat_controller.dart' show ChatMessage;
 import 'recipe_draft.dart';
 import 'recipe_import_controller.dart';
 import 'recipe_photo.dart';
+import 'recipe_revise_controller.dart';
 
 /// The ways out of a line whose food cannot answer in its unit.
 enum _FixChoice { addServing, readLabel, pickAnother, scan, unmatch, noMatch }
@@ -806,6 +808,18 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
               onChanged: _rebuild,
               textCapitalization: TextCapitalization.sentences,
             ),
+            // Last, deliberately. It is for correcting what the reader got
+            // wrong, which is something you notice after reading down the
+            // recipe — and putting it above the fields would push the save
+            // button around every time the conversation grew.
+            if (ref.watch(recipeAiProvider) != null) ...<Widget>[
+              const SizedBox(height: HearthSpacing.xl),
+              _ReviseCard(
+                current: () => _draft,
+                onApply: (RecipeDraft revised) =>
+                    setState(() => _fill(revised)),
+              ),
+            ],
             const SizedBox(height: HearthSpacing.xxl),
           ],
         ),
@@ -814,6 +828,200 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   }
 
   void _rebuild(String _) => setState(() {});
+}
+
+/// Asking for a change instead of typing it (spec §5.4).
+///
+/// The answer lands straight in the fields above. That is safe because
+/// nothing here is saved — the editor *is* the review screen (CLAUDE.md
+/// rule 4) — and it is undoable, which is what makes applying it directly
+/// better than a second review screen in front of the first.
+class _ReviseCard extends ConsumerStatefulWidget {
+  const _ReviseCard({required this.current, required this.onApply});
+
+  /// Read at the moment of asking, not captured: the user goes on typing
+  /// between questions, and the answer has to be about what is on screen.
+  final RecipeDraft Function() current;
+
+  final ValueChanged<RecipeDraft> onApply;
+
+  @override
+  ConsumerState<_ReviseCard> createState() => _ReviseCardState();
+}
+
+class _ReviseCardState extends ConsumerState<_ReviseCard> {
+  final TextEditingController _said = TextEditingController();
+
+  @override
+  void dispose() {
+    _said.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final String text = _said.text.trim();
+    if (text.isEmpty) return;
+    _said.clear();
+
+    final RecipeDraft? revised = await ref
+        .read(recipeReviseProvider.notifier)
+        .send(text, widget.current());
+    if (revised != null) widget.onApply(revised);
+  }
+
+  Future<void> _retry() async {
+    final RecipeDraft? revised = await ref
+        .read(recipeReviseProvider.notifier)
+        .retry(widget.current());
+    if (revised != null) widget.onApply(revised);
+  }
+
+  void _undo() {
+    final RecipeDraft? before = ref.read(recipeReviseProvider.notifier).undo();
+    if (before != null) widget.onApply(before);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final ReviseState state = ref.watch(recipeReviseProvider);
+    final RecipeReviseController controller = ref.read(
+      recipeReviseProvider.notifier,
+    );
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surfaceSunken,
+        borderRadius: BorderRadius.circular(HearthRadius.lg),
+        border: Border.all(color: colors.outline),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(HearthSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text('Ask for a change', style: context.text.sectionHeader),
+            const SizedBox(height: HearthSpacing.xs),
+            Text(
+              'Swap steps 2 and 3. Use the higher end of the beef range. '
+              'This should serve 6.',
+              style: context.text.metadata.copyWith(color: colors.textMuted),
+            ),
+            for (final ChatMessage message in state.messages) ...<Widget>[
+              const SizedBox(height: HearthSpacing.md),
+              _ReviseLine(message: message),
+            ],
+            if (state case final ReviseFailed failed) ...<Widget>[
+              const SizedBox(height: HearthSpacing.md),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Icon(Icons.error_outline, size: 18, color: colors.error),
+                  const SizedBox(width: HearthSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      failed.message,
+                      style: context.text.metadata.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  if (failed.canRetry)
+                    TextButton(
+                      onPressed: _retry,
+                      child: const Text('Try again'),
+                    ),
+                ],
+              ),
+            ],
+            // The month's AI budget, said once it is worth saying. A quiet
+            // line rather than a dialog: a warning that interrupts every
+            // question is one nobody reads by the third time (§3, §8.1).
+            if (controller.warning case final AiUsage usage) ...<Widget>[
+              const SizedBox(height: HearthSpacing.sm),
+              Text(
+                'AI budget: ${usage.percent}% of this month used.',
+                style: context.text.metadata.copyWith(color: colors.textMuted),
+              ),
+            ],
+            const SizedBox(height: HearthSpacing.md),
+            TextField(
+              controller: _said,
+              enabled: !state.isBusy,
+              minLines: 1,
+              maxLines: 4,
+              keyboardType: TextInputType.multiline,
+              textCapitalization: TextCapitalization.sentences,
+              style: context.text.body,
+              decoration: InputDecoration(
+                hintText: 'What should change?',
+                filled: true,
+                fillColor: colors.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(HearthRadius.md),
+                  borderSide: BorderSide(color: colors.outline),
+                ),
+              ),
+            ),
+            const SizedBox(height: HearthSpacing.md),
+            Row(
+              children: <Widget>[
+                if (controller.canUndo) ...<Widget>[
+                  TextButton.icon(
+                    onPressed: state.isBusy ? null : _undo,
+                    icon: const Icon(Icons.undo, size: 18),
+                    label: const Text('Undo'),
+                  ),
+                  const SizedBox(width: HearthSpacing.sm),
+                ],
+                Expanded(
+                  child: SizedBox(
+                    height: HearthTouch.minTarget,
+                    child: FilledButton(
+                      onPressed: state.isBusy ? null : _send,
+                      child: Text(state.isBusy ? 'Thinking…' : 'Ask'),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReviseLine extends StatelessWidget {
+  const _ReviseLine({required this.message});
+
+  final ChatMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Icon(
+          message.fromUser ? Icons.person_outline : Icons.auto_awesome,
+          size: 16,
+          color: colors.textMuted,
+        ),
+        const SizedBox(width: HearthSpacing.sm),
+        Expanded(
+          child: Text(
+            message.text,
+            style: context.text.body.copyWith(
+              color: message.fromUser
+                  ? colors.textSecondary
+                  : colors.textPrimary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _Field extends StatelessWidget {

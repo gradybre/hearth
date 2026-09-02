@@ -39,6 +39,25 @@ const MAX_TOTAL_BYTES = 18 * 1024 * 1024;
 const MAX_MESSAGES = 40;
 const MAX_URL_BYTES = 2 * 1024 * 1024;
 
+/// USD per million tokens for MODEL. Change both together with MODEL.
+///
+/// Approximate on purpose: the ceiling is a guardrail, not an invoice, and
+/// Anthropic's own billing limit is the number that actually binds. Being a
+/// little pessimistic here is the safe direction to be wrong in.
+const INPUT_USD_PER_MTOK = 3;
+const OUTPUT_USD_PER_MTOK = 15;
+
+/// Above this share of the ceiling, answers carry a warning; at or above 1,
+/// they are refused (spec §3, §8.1).
+const WARN_AT = 0.75;
+
+/// The default when AI_MONTHLY_CEILING_USD is unset.
+///
+/// A number rather than "unlimited", deliberately. §8 names a dev-time retry
+/// loop as the real risk, and a loop that runs into an unset variable is a
+/// loop with no ceiling at all — which is the failure this exists to stop.
+const DEFAULT_CEILING_USD = 25;
+
 /// The one shape both modes return, and the only thing the app parses.
 ///
 /// Sections carry ingredients and directions as *text*, not as parsed rows:
@@ -210,6 +229,35 @@ does. A rough number that is honest about being rough beats a silent zero.`;
 /// back as "1 item", which is the same portion described by a word nobody
 /// uses. Every one of these names something you can hold; "serving" and
 /// "portion" are still absent, because they name only themselves.
+/// The units a label reading may use.
+///
+/// One list, referenced by the tool schema *and* by the shaper, because they
+/// disagreed once and the disagreement was invisible: the model answered
+/// "scoop" and the shaper silently threw it away.
+const LABEL_UNITS = [
+  'g',
+  'ml',
+  'oz',
+  'lb',
+  'cup',
+  'tbsp',
+  'tsp',
+  'item',
+  'slice',
+  'piece',
+  'scoop',
+  'bar',
+  'patty',
+  'square',
+  'stick',
+  'tortilla',
+  'package',
+  'packet',
+  'container',
+  'bottle',
+  'can',
+] as const;
+
 const LABEL_TOOL = {
   name: 'nutrition_label',
   description: "Return what the food's label states.",
@@ -240,29 +288,7 @@ const LABEL_TOOL = {
             amount: { type: 'number', description: 'How much. 0.25 for 1/4.' },
             unit: {
               type: 'string',
-              enum: [
-                'g',
-                'ml',
-                'oz',
-                'lb',
-                'cup',
-                'tbsp',
-                'tsp',
-                'item',
-                'slice',
-                'piece',
-                'scoop',
-                'bar',
-                'patty',
-                'square',
-                'stick',
-                'tortilla',
-                'package',
-                'packet',
-                'container',
-                'bottle',
-                'can',
-              ],
+              enum: LABEL_UNITS,
             },
             kcal: { type: 'number' },
             protein_g: { type: 'number' },
@@ -335,6 +361,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
     images?: string[];
     url?: string;
     text?: string;
+    notes?: string;
+    recipe?: string;
     messages?: { role?: string; text?: string }[];
     profile?: Record<string, unknown>;
   };
@@ -350,26 +378,49 @@ Deno.serve(async (request: Request): Promise<Response> => {
   }
 
   try {
-    if (mode === 'label') {
-      const input = await ask(
-        LABEL_PROMPT,
-        labelContent(body.images ?? []),
-        key,
-        LABEL_TOOL,
-      );
-      return json(shapeLabel(input));
+    // Before the call, not after: refusing to spend is the whole point, and a
+    // check that runs afterwards has already spent it (spec §3, §8.1).
+    const budget = await checkBudget();
+    if (budget.exhausted) {
+      return json({
+        // Not toFixed(2) on the ceiling: a small one rounds to "$0.00",
+        // which reads as a bug rather than as a limit.
+        error: `This month's AI budget is used up ($${
+          budget.spent.toFixed(2)
+        } of $${budget.ceiling}). Raise AI_MONTHLY_CEILING_USD to carry on.`,
+        usage: budget.report,
+      }, 429);
     }
 
-    const content = mode === 'extract'
+    const content = mode === 'label'
+      ? labelContent(body.images ?? [])
+      : mode === 'extract'
       ? await extractContent(
         body.images ?? [],
         (body.url ?? '').trim(),
         (body.text ?? '').trim(),
+        (body.notes ?? '').trim(),
       )
-      : generateContent(body.messages ?? [], body.profile ?? {});
+      : generateContent(
+        body.messages ?? [],
+        body.profile ?? {},
+        (body.recipe ?? '').trim(),
+      );
 
-    const system = mode === 'extract' ? EXTRACT_PROMPT : GENERATE_PROMPT;
-    return json(shape(await ask(system, content, key, RECIPE_TOOL)));
+    const system = mode === 'label'
+      ? LABEL_PROMPT
+      : mode === 'extract'
+      ? EXTRACT_PROMPT
+      : GENERATE_PROMPT;
+    const tool = mode === 'label' ? LABEL_TOOL : RECIPE_TOOL;
+
+    const answer = await ask(system, content, key, tool);
+    const usage = await recordUsage(answer.usage);
+
+    const shaped = mode === 'label'
+      ? shapeLabel(answer.input)
+      : shape(answer.input);
+    return json({ ...shaped, usage });
   } catch (error) {
     // `${error}` on an Error stringifies as "Error: bad request: …", so the
     // prefix check never matched: every malformed request came back 502 with
@@ -389,6 +440,7 @@ async function extractContent(
   images: string[],
   url: string,
   text: string,
+  notes: string,
 ): Promise<unknown[]> {
   if (images.length === 0 && !url && !text) {
     throw new Error('bad request: give images, a url, or some text');
@@ -405,6 +457,18 @@ async function extractContent(
   // no fetching and no photograph of themselves.
   if (text) {
     content.push({ type: 'text', text: text.slice(0, MAX_URL_BYTES) });
+  }
+
+  // What the reader could not know from the page alone: which end of a range
+  // to take, that the yield on the page is wrong, that half the screenshot is
+  // an advert. Kept separate from the recipe content above and labelled as
+  // instructions, so the model does not read them as part of the recipe.
+  if (notes) {
+    content.push({
+      type: 'text',
+      text: `Instructions from the user about this source, which override ` +
+        `what the source appears to say:\n${notes.slice(0, 4000)}`,
+    });
   }
 
   content.push({
@@ -477,6 +541,7 @@ function imageBlocks(images: string[]): unknown[] {
 function generateContent(
   messages: { role?: string; text?: string }[],
   profile: Record<string, unknown>,
+  recipe: string,
 ): unknown[] {
   const turns = messages
     .filter((m) => (m.text ?? '').trim().length > 0)
@@ -486,11 +551,25 @@ function generateContent(
     throw new Error('bad request: nothing to generate from');
   }
 
+
   const content: unknown[] = [];
   if (Object.keys(profile).length > 0) {
     content.push({
       type: 'text',
       text: `The user's food profile:\n${JSON.stringify(profile, null, 2)}`,
+    });
+  }
+
+  // Revising something that already exists rather than writing from nothing.
+  // Its own block rather than smuggled into a user turn, so the prompt has
+  // something to point at — and so what arrives is the recipe as it stands on
+  // screen, hand edits included, not as it was first imported.
+  if (recipe) {
+    content.push({
+      type: 'text',
+      text: 'The recipe as it currently stands, which the user is asking you ' +
+        `to revise. Return the whole thing back, changed only where they ` +
+        `asked:\n\n${recipe.slice(0, 20000)}`,
     });
   }
 
@@ -550,12 +629,17 @@ async function fetchPage(url: string): Promise<string> {
 /// Forcing it matters: a model asked for JSON in prose will occasionally wrap
 /// it in an apology, and that becomes a parse error in Dart. Forced tool use
 /// makes a malformed answer the API's problem, not the app's.
+interface Answer {
+  input: Record<string, unknown>;
+  usage: { input_tokens?: number; output_tokens?: number } | null;
+}
+
 async function ask(
   system: string,
   content: unknown[],
   key: string,
   tool: { name: string },
-): Promise<Record<string, unknown>> {
+): Promise<Answer> {
   const response = await fetch(ANTHROPIC, {
     method: 'POST',
     headers: {
@@ -587,7 +671,97 @@ async function ask(
     throw new Error('Claude returned nothing readable');
   }
 
-  return block.input;
+  // The token counts were always in this payload and were always thrown away.
+  // They are what the ceiling is counted in.
+  return { input: block.input, usage: payload?.usage ?? null };
+}
+
+/// What the month has cost, and whether that is already too much.
+///
+/// A failure to read the counter is treated as "carry on": the ceiling is a
+/// guardrail, and a database hiccup that silently disabled recipe import
+/// would be a worse outcome than a call that should not have been made.
+/// Anthropic's own billing limit is still underneath this.
+async function checkBudget(): Promise<
+  { exhausted: boolean; spent: number; ceiling: number; report: unknown }
+> {
+  const ceiling = Number(
+    Deno.env.get('AI_MONTHLY_CEILING_USD') ?? DEFAULT_CEILING_USD,
+  );
+  const spent = await callRpc('ai_usage_this_month', {}) ?? 0;
+  const fraction = ceiling > 0 ? Number(spent) / ceiling : 0;
+
+  return {
+    exhausted: fraction >= 1,
+    spent: Number(spent),
+    ceiling,
+    report: {
+      spent_usd: Number(Number(spent).toFixed(4)),
+      ceiling_usd: ceiling,
+      fraction: Number(fraction.toFixed(4)),
+      // The app shows a quiet line at 75% rather than a dialog: a warning
+      // that interrupts every import is one nobody reads by the third time.
+      warn: fraction >= WARN_AT,
+    },
+  };
+}
+
+/// Adds what a call cost and returns the month's totals for the app to show.
+async function recordUsage(
+  usage: { input_tokens?: number; output_tokens?: number } | null,
+): Promise<unknown> {
+  const input = usage?.input_tokens ?? 0;
+  const output = usage?.output_tokens ?? 0;
+  const cost = (input / 1e6) * INPUT_USD_PER_MTOK +
+    (output / 1e6) * OUTPUT_USD_PER_MTOK;
+
+  const row = await callRpc('record_ai_usage', {
+    p_input_tokens: input,
+    p_output_tokens: output,
+    p_cost_usd: Number(cost.toFixed(6)),
+  });
+
+  const ceiling = Number(
+    Deno.env.get('AI_MONTHLY_CEILING_USD') ?? DEFAULT_CEILING_USD,
+  );
+  const spent = Number(row?.cost_usd ?? 0);
+  const fraction = ceiling > 0 ? spent / ceiling : 0;
+
+  return {
+    spent_usd: Number(spent.toFixed(4)),
+    ceiling_usd: ceiling,
+    fraction: Number(fraction.toFixed(4)),
+    warn: fraction >= WARN_AT,
+  };
+}
+
+/// Calls a Postgres function with the secret key.
+///
+/// The secret key, not the caller's JWT: `ai_usage` has no write policy on
+/// purpose, because a client that could edit it could raise its own ceiling.
+// deno-lint-ignore no-explicit-any
+async function callRpc(name: string, args: unknown): Promise<any> {
+  const url = Deno.env.get('SUPABASE_URL');
+  const secret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !secret) return null;
+
+  try {
+    const response = await fetch(`${url}/rest/v1/rpc/${name}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        apikey: secret,
+        authorization: `Bearer ${secret}`,
+      },
+      body: JSON.stringify(args),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    // See checkBudget: counting is best-effort, refusing is not.
+    return null;
+  }
 }
 
 /// Narrows what the model returned to the shape the app is promised.
@@ -641,7 +815,11 @@ function shape(input: Record<string, unknown>): Record<string, unknown> {
 /// a wrong number into a day, which is the one failure mode a review screen
 /// cannot catch, because it looks correct.
 function shapeLabel(input: Record<string, unknown>): Record<string, unknown> {
-  const units = ['g', 'ml', 'oz', 'lb', 'cup', 'tbsp', 'tsp', 'item'];
+  // Must stay in step with LABEL_TOOL's own enum. It did not: the packet units
+  // were added to what the model may answer and not to what this accepts, so
+  // every scoop and every bar was dropped here — by the very filter whose
+  // comment above explains that dropping is safer than defaulting.
+  const units: readonly string[] = LABEL_UNITS;
   const servings = Array.isArray(input.servings) ? input.servings : [];
 
   return {

@@ -41,6 +41,7 @@ sealed class RecipeImportState {
     this.images = const <PickedPhoto>[],
     this.url = '',
     this.text = '',
+    this.notes = '',
   });
 
   final List<PickedPhoto> images;
@@ -49,6 +50,12 @@ sealed class RecipeImportState {
   /// A recipe shared as words rather than as a page — the usual shape of an
   /// Instagram DM, where the whole thing arrives as a message.
   final String text;
+
+  /// What the reader could not work out from the source alone (spec §5.3):
+  /// which end of a range to take, that the stated yield is wrong, that half
+  /// the screenshot is an advert. Instructions, not content — they override
+  /// what the source appears to say.
+  final String notes;
 
   /// Why a shared link cannot be read, when that is known before trying.
   ///
@@ -66,11 +73,17 @@ sealed class RecipeImportState {
 
 /// Waiting on the user — nothing chosen yet, or something chosen and not sent.
 class RecipeImportIdle extends RecipeImportState {
-  const RecipeImportIdle({super.images, super.url, super.text});
+  const RecipeImportIdle({super.images, super.url, super.text, super.notes});
 }
 
 class RecipeImportReading extends RecipeImportState {
-  const RecipeImportReading(this.what, {super.images, super.url, super.text});
+  const RecipeImportReading(
+    this.what, {
+    super.images,
+    super.url,
+    super.text,
+    super.notes,
+  });
 
   /// What is being read, for something honest to put on screen.
   final String what;
@@ -93,6 +106,10 @@ class RecipeImportFailed extends RecipeImportState {
     super.images,
     super.url,
     super.text,
+    // Carried through a failure like everything else: §5.3's fail-soft is
+    // "nothing the user entered is lost", and a note is something they
+    // entered.
+    super.notes,
   });
 
   final String message;
@@ -112,6 +129,7 @@ class RecipeImportController extends Notifier<RecipeImportState> {
   final List<PickedPhoto> _images = <PickedPhoto>[];
   String _url = '';
   String _text = '';
+  String _notes = '';
   int _run = 0;
 
   /// Beyond this an image is not a screenshot, and the function will refuse it
@@ -165,6 +183,11 @@ class RecipeImportController extends Notifier<RecipeImportState> {
 
   void setText(String value) {
     _text = value;
+    state = _idle();
+  }
+
+  void setNotes(String value) {
+    _notes = value;
     state = _idle();
   }
 
@@ -230,6 +253,7 @@ class RecipeImportController extends Notifier<RecipeImportState> {
       images: images,
       url: _url,
       text: _text,
+      notes: _notes,
     );
 
     try {
@@ -240,6 +264,7 @@ class RecipeImportController extends Notifier<RecipeImportState> {
         ],
         url: _url.trim().isEmpty ? null : _url.trim(),
         text: _text.trim().isEmpty ? null : _text.trim(),
+        notes: _notes.trim().isEmpty ? null : _notes.trim(),
       );
 
       if (_run != run) return;
@@ -276,12 +301,13 @@ class RecipeImportController extends Notifier<RecipeImportState> {
     _images.clear();
     _url = '';
     _text = '';
+    _notes = '';
     state = _idle();
   }
 
   /// A fresh instance every time, carrying the current queue.
   RecipeImportIdle _idle() =>
-      RecipeImportIdle(images: images, url: _url, text: _text);
+      RecipeImportIdle(images: images, url: _url, text: _text, notes: _notes);
 
   RecipeImportFailed _failed(String message, {required bool canRetry}) =>
       RecipeImportFailed(
@@ -290,6 +316,7 @@ class RecipeImportController extends Notifier<RecipeImportState> {
         images: images,
         url: _url,
         text: _text,
+        notes: _notes,
       );
 
   /// What the user has queued up.

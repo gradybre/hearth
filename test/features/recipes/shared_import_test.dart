@@ -120,8 +120,16 @@ void main() {
   ) async {
     await openShared(tester, SharedContent(images: <Uint8List>[aPng()]));
 
-    expect(find.text('Read the recipe'), findsOneWidget);
     expect(find.byType(Image), findsWidgets);
+    // The queued picture pushes the button below the fold, and a ListView
+    // does not build what is off screen — so it has to be scrolled to before
+    // it can be said to exist.
+    await tester.scrollUntilVisible(
+      find.text('Read the recipe'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Read the recipe'), findsOneWidget);
   });
 
   testWidgets('a share while nothing was shared changes nothing', (
