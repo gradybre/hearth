@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/adapters/edge_function_label_reader.dart';
 import '../data/adapters/edge_function_recipe_ai.dart';
+import '../data/adapters/edge_function_shopping_assistant.dart';
 import '../data/adapters/image_picker_photos.dart';
 import '../data/adapters/kitchen_devices.dart';
 import '../data/adapters/label_reader.dart';
@@ -19,6 +20,7 @@ import '../data/adapters/platform_kitchen_devices.dart';
 import '../data/adapters/platform_shared_content.dart';
 import '../data/adapters/recipe_ai.dart';
 import '../data/adapters/shared_content.dart';
+import '../data/adapters/shopping_assistant.dart';
 import '../data/adapters/usda_nutrition_source.dart';
 import '../data/auth/account_cache.dart';
 import '../data/auth/auth_gateway.dart';
@@ -348,6 +350,18 @@ class ShoppingSeasonings extends Notifier<bool> {
 
   void toggle() => state = !state;
 }
+
+/// Editing the list by asking (spec §5.7).
+///
+/// Nullable for the same reason as the other AI surfaces: the key lives in an
+/// Edge Function, so an unconfigured build has no way to, and the panel hides
+/// itself rather than failing on send.
+final Provider<ShoppingAssistant?> shoppingAssistantProvider =
+    Provider<ShoppingAssistant?>(
+      (Ref ref) => ref.watch(supabaseReadyProvider)
+          ? EdgeFunctionShoppingAssistant(Supabase.instance.client)
+          : null,
+    );
 
 final StreamProvider<void> shoppingChangesProvider = StreamProvider<void>(
   (Ref ref) => ref.watch(shoppingRepositoryProvider).watchChanges(),

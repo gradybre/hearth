@@ -12,6 +12,7 @@ import 'package:hearth/data/adapters/photo_picker.dart';
 import 'package:hearth/data/adapters/platform_shared_content.dart';
 import 'package:hearth/data/adapters/recipe_ai.dart';
 import 'package:hearth/data/adapters/shared_content.dart';
+import 'package:hearth/data/adapters/shopping_assistant.dart';
 import 'package:hearth/data/auth/local_auth_gateway.dart';
 import 'package:hearth/data/local/collection_store.dart';
 import 'package:hearth/data/local/food_store.dart';
@@ -61,6 +62,7 @@ Future<HearthDatabase> pumpHearthApp(
   List<NutritionSource> nutritionSources = const <NutritionSource>[],
   RecipeAiSource? recipeAi,
   LabelReader? labelReader,
+  ShoppingAssistant? shoppingAssistant,
   PhotoPicker? photoPicker,
   SharedContentSource? sharedContent,
   FoodProfile? foodProfile,
@@ -130,6 +132,9 @@ Future<HearthDatabase> pumpHearthApp(
         // backend, and it is what the buttons check before offering
         // themselves.
         labelReaderProvider.overrideWithValue(labelReader),
+        // And the list's chat. Null hides the panel, which is what a build
+        // with no backend honestly does.
+        shoppingAssistantProvider.overrideWithValue(shoppingAssistant),
         // Another sqlite-backed stream, and the same reasoning as the rest:
         // fake async cannot drive real I/O, so a live subscription would
         // never emit and would still be open at teardown.

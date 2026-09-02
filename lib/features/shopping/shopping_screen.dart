@@ -17,6 +17,7 @@ import '../../domain/shopping/shopping_line.dart';
 import '../../domain/shopping/shopping_list_builder.dart';
 import '../../domain/units/quantity.dart';
 import 'shopping_amount_sheet.dart';
+import 'shopping_chat_controller.dart';
 import 'shopping_export_sheet.dart';
 
 /// The shopping list (spec §5.7).
@@ -157,6 +158,14 @@ class _Body extends ConsumerWidget {
             ),
             const SizedBox(height: HearthSpacing.lg),
           ],
+        // Last, so a growing conversation never pushes the list about.
+        if (ref.watch(shoppingAssistantProvider) != null) ...<Widget>[
+          _ChatCard(
+            lines: lines,
+            onApply: (List<ShoppingLine> next) => _save(ref, next),
+          ),
+          const SizedBox(height: HearthSpacing.lg),
+        ],
         if (lines.isNotEmpty) ...<Widget>[
           SizedBox(
             width: double.infinity,
@@ -594,4 +603,176 @@ class _AddItemDialogState extends State<_AddItemDialog> {
       ),
     ],
   );
+}
+
+/// Changing the list by asking (spec §5.7).
+///
+/// The answer lands straight on the list, with an undo. Safe for the reason
+/// the whole screen is: nothing leaves the app until an export is tapped, so
+/// the list is its own review surface (rule 4).
+class _ChatCard extends ConsumerStatefulWidget {
+  const _ChatCard({required this.lines, required this.onApply});
+
+  final List<ShoppingLine> lines;
+  final ValueChanged<List<ShoppingLine>> onApply;
+
+  @override
+  ConsumerState<_ChatCard> createState() => _ChatCardState();
+}
+
+class _ChatCardState extends ConsumerState<_ChatCard> {
+  final TextEditingController _said = TextEditingController();
+
+  @override
+  void dispose() {
+    _said.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final String text = _said.text.trim();
+    if (text.isEmpty) return;
+    _said.clear();
+
+    final List<ShoppingLine>? next = await ref
+        .read(shoppingChatProvider.notifier)
+        .send(text, widget.lines);
+    if (next != null) widget.onApply(next);
+  }
+
+  Future<void> _retry() async {
+    final List<ShoppingLine>? next = await ref
+        .read(shoppingChatProvider.notifier)
+        .retry(widget.lines);
+    if (next != null) widget.onApply(next);
+  }
+
+  void _undo() {
+    final List<ShoppingLine>? before = ref
+        .read(shoppingChatProvider.notifier)
+        .undo();
+    if (before != null) widget.onApply(before);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final ShoppingChatState state = ref.watch(shoppingChatProvider);
+    final ShoppingChatController controller = ref.read(
+      shoppingChatProvider.notifier,
+    );
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surfaceSunken,
+        borderRadius: BorderRadius.circular(HearthRadius.lg),
+        border: Border.all(color: colors.outline),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(HearthSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text('Ask for a change', style: context.text.sectionHeader),
+            const SizedBox(height: HearthSpacing.xs),
+            Text(
+              'Add coffee and paper towels. I have a pound of the beef '
+              'already. Take the kale off.',
+              style: context.text.metadata.copyWith(color: colors.textMuted),
+            ),
+            for (final ShoppingMessage message in state.messages) ...<Widget>[
+              const SizedBox(height: HearthSpacing.md),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Icon(
+                    message.fromUser
+                        ? Icons.person_outline
+                        : Icons.auto_awesome,
+                    size: 16,
+                    color: colors.textMuted,
+                  ),
+                  const SizedBox(width: HearthSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      message.text,
+                      style: context.text.body.copyWith(
+                        color: message.fromUser
+                            ? colors.textSecondary
+                            : colors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (state case final ShoppingChatFailed failed) ...<Widget>[
+              const SizedBox(height: HearthSpacing.md),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Icon(Icons.error_outline, size: 18, color: colors.error),
+                  const SizedBox(width: HearthSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      failed.message,
+                      style: context.text.metadata.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  if (failed.canRetry)
+                    TextButton(
+                      onPressed: _retry,
+                      child: const Text('Try again'),
+                    ),
+                ],
+              ),
+            ],
+            const SizedBox(height: HearthSpacing.md),
+            TextField(
+              controller: _said,
+              enabled: !state.isBusy,
+              minLines: 1,
+              maxLines: 4,
+              keyboardType: TextInputType.multiline,
+              textCapitalization: TextCapitalization.sentences,
+              style: context.text.body,
+              decoration: InputDecoration(
+                hintText: 'What should change?',
+                filled: true,
+                fillColor: colors.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(HearthRadius.md),
+                  borderSide: BorderSide(color: colors.outline),
+                ),
+              ),
+            ),
+            const SizedBox(height: HearthSpacing.md),
+            Row(
+              children: <Widget>[
+                if (controller.canUndo) ...<Widget>[
+                  TextButton.icon(
+                    onPressed: state.isBusy ? null : _undo,
+                    icon: const Icon(Icons.undo, size: 18),
+                    label: const Text('Undo'),
+                  ),
+                  const SizedBox(width: HearthSpacing.sm),
+                ],
+                Expanded(
+                  child: SizedBox(
+                    height: HearthTouch.minTarget,
+                    child: FilledButton(
+                      onPressed: state.isBusy ? null : _send,
+                      child: Text(state.isBusy ? 'Thinking…' : 'Ask'),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

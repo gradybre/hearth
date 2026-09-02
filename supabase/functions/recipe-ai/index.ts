@@ -315,6 +315,79 @@ const LABEL_TOOL = {
   },
 } as const;
 
+/// Editing a shopping list by asking (spec §5.7).
+///
+/// Operations rather than a rewritten list, deliberately. A model handed the
+/// whole list back would be free to drop a line by forgetting it, and a
+/// shopping list that quietly loses an item is worse than one that refuses an
+/// instruction: a refusal is discovered in the app, a loss in the shop.
+const SHOPPING_TOOL = {
+  name: 'edit_shopping_list',
+  description: 'Return the changes to make to the shopping list.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      operations: {
+        type: 'array',
+        description: 'The changes, in the order they should be applied.',
+        items: {
+          type: 'object',
+          properties: {
+            op: {
+              type: 'string',
+              enum: [
+                'add',
+                'remove',
+                'set_amount',
+                'set_on_hand',
+                'check',
+                'uncheck',
+              ],
+            },
+            name: {
+              type: 'string',
+              description:
+                'Which item. Use the wording from the list when the item is ' +
+                'already on it, so it can be found again.',
+            },
+            amount: { type: 'number' },
+            unit: { type: 'string', enum: LABEL_UNITS },
+            store_tag: { type: 'string' },
+          },
+          required: ['op', 'name'],
+        },
+      },
+      reply: {
+        type: 'string',
+        description:
+          'One sentence saying what you changed. This is the only thing the ' +
+          'user reads, and it is what saves them checking the list line by ' +
+          'line afterwards.',
+      },
+    },
+    required: ['operations', 'reply'],
+  },
+} as const;
+
+const SHOPPING_PROMPT = `You edit a household's shopping list on request.
+
+Return operations, never a rewritten list. Change only what was asked for:
+everything else on that list is somebody's decision — a quantity they rounded
+up to a whole packet, an item they ticked because it is already in the
+cupboard — and none of it is yours to tidy.
+
+"I already have some" is set_on_hand, not check. Checking says there is
+nothing left to buy; on-hand says how much of it is already in. Getting that
+wrong sends somebody home without the other half.
+
+Use the list's own wording for an item that is already on it. Add only what
+was actually asked for — no helpful extras, no staples the list "should"
+have.
+
+Always fill in reply, in one sentence, saying what you changed. It is the only
+thing the user reads, and without it they have to check the list line by line
+to find out what happened.`;
+
 const LABEL_PROMPT = `You read Nutrition Facts panels off packaging.
 
 Transcribe the printed numbers. Never compute: do not scale a per-100 g column
@@ -363,6 +436,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     text?: string;
     notes?: string;
     recipe?: string;
+    list?: string;
     messages?: { role?: string; text?: string }[];
     profile?: Record<string, unknown>;
   };
@@ -373,8 +447,14 @@ Deno.serve(async (request: Request): Promise<Response> => {
   }
 
   const mode = (body.mode ?? '').trim();
-  if (mode !== 'extract' && mode !== 'generate' && mode !== 'label') {
-    return json({ error: 'mode must be extract, generate or label' }, 400);
+  if (
+    mode !== 'extract' && mode !== 'generate' && mode !== 'label' &&
+    mode !== 'shopping'
+  ) {
+    return json(
+      { error: 'mode must be extract, generate, label or shopping' },
+      400,
+    );
   }
 
   try {
@@ -392,7 +472,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
       }, 429);
     }
 
-    const content = mode === 'label'
+    const content = mode === 'shopping'
+      ? shoppingContent(body.messages ?? [], (body.list ?? '').trim())
+      : mode === 'label'
       ? labelContent(body.images ?? [])
       : mode === 'extract'
       ? await extractContent(
@@ -407,17 +489,25 @@ Deno.serve(async (request: Request): Promise<Response> => {
         (body.recipe ?? '').trim(),
       );
 
-    const system = mode === 'label'
+    const system = mode === 'shopping'
+      ? SHOPPING_PROMPT
+      : mode === 'label'
       ? LABEL_PROMPT
       : mode === 'extract'
       ? EXTRACT_PROMPT
       : GENERATE_PROMPT;
-    const tool = mode === 'label' ? LABEL_TOOL : RECIPE_TOOL;
+    const tool = mode === 'shopping'
+      ? SHOPPING_TOOL
+      : mode === 'label'
+      ? LABEL_TOOL
+      : RECIPE_TOOL;
 
     const answer = await ask(system, content, key, tool);
     const usage = await recordUsage(answer.usage);
 
-    const shaped = mode === 'label'
+    const shaped = mode === 'shopping'
+      ? shapeShopping(answer.input)
+      : mode === 'label'
       ? shapeLabel(answer.input)
       : shape(answer.input);
     return json({ ...shaped, usage });
@@ -585,6 +675,60 @@ function generateContent(
   });
 
   return content;
+}
+
+/// The list as it stands, plus what was asked of it.
+function shoppingContent(
+  messages: { role?: string; text?: string }[],
+  list: string,
+): unknown[] {
+  const turns = messages
+    .filter((m) => (m.text ?? '').trim().length > 0)
+    .slice(-MAX_MESSAGES);
+
+  if (turns.length === 0) {
+    throw new Error('bad request: nothing to do');
+  }
+
+  return [
+    {
+      type: 'text',
+      text: list
+        ? `The shopping list as it stands:\n\n${list.slice(0, 20000)}`
+        : 'The shopping list is currently empty.',
+    },
+    {
+      type: 'text',
+      text: turns
+        .map((m) => `${m.role === 'assistant' ? 'You' : 'User'}: ${m.text}`)
+        .join('\n\n'),
+    },
+  ];
+}
+
+/// Narrows the operations to the ones the app knows how to perform.
+///
+/// An operation with no name cannot be applied to anything, and one with an
+/// unknown verb would be silently ignored further down — dropping both here
+/// means the reply is the only thing that can be wrong, and the reply is read
+/// by a person.
+function shapeShopping(input: Record<string, unknown>): Record<string, unknown> {
+  const ops = ['add', 'remove', 'set_amount', 'set_on_hand', 'check', 'uncheck'];
+  const units: readonly string[] = LABEL_UNITS;
+  const raw = Array.isArray(input.operations) ? input.operations : [];
+
+  return {
+    operations: (raw as Record<string, unknown>[])
+      .filter((o) => ops.includes(text(o?.op)) && text(o?.name).length > 0)
+      .map((o) => ({
+        op: text(o.op),
+        name: text(o.name),
+        amount: number(o.amount),
+        unit: units.includes(text(o.unit)) ? text(o.unit) : null,
+        store_tag: text(o.store_tag) || null,
+      })),
+    reply: text(input.reply) || null,
+  };
 }
 
 /// Fetches a recipe page as text.
