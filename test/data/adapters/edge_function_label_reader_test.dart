@@ -169,4 +169,55 @@ void main() {
       );
     });
   });
+
+  group('a packet unit and its weight', () {
+    /// Exactly what the deployed function returned for a real protein tub
+    /// reading "Serving Size 1 Rounded Scoop (31g)".
+    ///
+    /// Kept verbatim because the bug this guards against was a disagreement
+    /// between the two ends: the server offered the model "scoop" and then
+    /// filtered it out again on the way back, so the app never saw one. The
+    /// live test crosses that seam; this one is the cheap half that runs
+    /// without a key.
+    Map<Object?, Object?> tub() => <Object?, Object?>{
+      'name': null,
+      'brand': null,
+      'servings': <Object?>[
+        <String, Object?>{
+          'amount': 1,
+          'unit': 'scoop',
+          'kcal': 120,
+          'protein_g': 24,
+          'carb_g': 3,
+          'fat_g': 1,
+        },
+        <String, Object?>{
+          'amount': 31,
+          'unit': 'g',
+          'kcal': 120,
+          'protein_g': 24,
+          'carb_g': 3,
+          'fat_g': 1,
+        },
+      ],
+      'uncertain': <Object?>[],
+    };
+
+    test('both rows arrive, with the packet word intact', () {
+      final LabelReading reading = EdgeFunctionLabelReader.readingFrom(tub());
+
+      expect(reading.servings, hasLength(2));
+      expect(reading.servings.first.unitId, 'scoop');
+      expect(reading.servings.first.amount, 1);
+      expect(reading.servings.last.unitId, 'g');
+      expect(reading.servings.last.amount, 31);
+    });
+
+    test('with the same macros, which is what makes the pair worth having', () {
+      final LabelReading reading = EdgeFunctionLabelReader.readingFrom(tub());
+
+      expect(reading.servings.first.kcal, reading.servings.last.kcal);
+      expect(reading.servings.first.proteinG, 24);
+    });
+  });
 }
