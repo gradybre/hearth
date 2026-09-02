@@ -47,10 +47,15 @@ class StepAmounts extends StatelessWidget {
     if (used.isEmpty) return const SizedBox.shrink();
 
     final HearthColors colors = context.colors;
+    // `format`, not `formatAsAuthored`. The latter exists for surfaces showing
+    // somebody their own typing back — an editor's parse preview — and its own
+    // doc says reading surfaces honour the reader's units instead. This is the
+    // reading surface: a step saying "16 oz" beside a list saying "1 lb" makes
+    // a cook stop and work out whether those are the same number.
     final String line = used
         .map(
           (RecipeIngredient i) =>
-              '${QuantityFormat.formatAsAuthored(i.quantity!)} ${i.name}',
+              '${QuantityFormat.format(i.quantity!)} ${i.name}',
         )
         .join('  ·  ');
 

@@ -27,13 +27,29 @@ import 'timer_bar.dart';
 /// In read mode the screen shows ingredients and directions and little else —
 /// the reader is ruthlessly focused, because this is what you look at with
 /// flour on your hands.
-class RecipeDetailScreen extends ConsumerWidget {
+class RecipeDetailScreen extends ConsumerStatefulWidget {
   const RecipeDetailScreen({required this.recipeId, super.key});
 
   final String recipeId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RecipeDetailScreen> createState() => _RecipeDetailScreenState();
+}
+
+class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
+  /// Held here rather than in the body, because the Cook button is not in the
+  /// body.
+  ///
+  /// It used to live in `_RecipeBodyState`, one level below the Scaffold's
+  /// floatingActionButton — so scaling a recipe to 2x and tapping Cook handed
+  /// cook-along the recipe as written. Brendan doubled a turkey bowl, saw
+  /// 2 lb on the page, and was told to brown 1 lb. Scaling is a way of
+  /// reading a recipe (§5.2), and cooking is reading it.
+  double? _target;
+
+  @override
+  Widget build(BuildContext context) {
+    final String recipeId = widget.recipeId;
     final HearthColors colors = context.colors;
     final AsyncValue<Recipe?> recipe = ref.watch(recipeByIdProvider(recipeId));
     final Map<String, Food> foods = <String, Food>{
@@ -68,7 +84,12 @@ class RecipeDetailScreen extends ConsumerWidget {
             Center(child: Text('Could not open that recipe.\n$error')),
         data: (Recipe? loaded) => loaded == null
             ? const Center(child: Text('That recipe no longer exists.'))
-            : _RecipeBody(recipe: loaded, foods: foods),
+            : _RecipeBody(
+                recipe: loaded,
+                foods: foods,
+                target: _target,
+                onScaled: (double? value) => setState(() => _target = value),
+              ),
       ),
       // The recipe screen is pushed above the shell, so it does not get the
       // shell's timer bar. Without this, opening a recipe mid-cook is the one
@@ -84,8 +105,11 @@ class RecipeDetailScreen extends ConsumerWidget {
                   // The recipe is handed over by value: cook-along runs off a
                   // snapshot, so a partner's mid-cook edit cannot move the
                   // step under your hands (spec §5.2).
+                  //
+                  // And scaled, because what is on screen is what the cook
+                  // means to make.
                   builder: (BuildContext context) =>
-                      CookAlongScreen(recipe: recipe.value!),
+                      CookAlongScreen(recipe: _scaled(recipe.value!)),
                 ),
               ),
               backgroundColor: colors.accent,
@@ -95,21 +119,40 @@ class RecipeDetailScreen extends ConsumerWidget {
             ),
     );
   }
+
+  /// The recipe as the reader has it, scaled or not.
+  ///
+  /// A recipe with no yield cannot be scaled to one, and `RecipeScaler` says
+  /// so by throwing — so the guard here is the same one the body applies
+  /// before offering the control at all.
+  Recipe _scaled(Recipe recipe) {
+    final double? target = _target;
+    if (target == null || recipe.servings <= 0) return recipe;
+    return RecipeScaler.toServings(recipe, target).recipe;
+  }
 }
 
 class _RecipeBody extends StatefulWidget {
-  const _RecipeBody({required this.recipe, required this.foods});
+  const _RecipeBody({
+    required this.recipe,
+    required this.foods,
+    required this.target,
+    required this.onScaled,
+  });
 
   final Recipe recipe;
   final Map<String, Food> foods;
+
+  /// The yield the reader has scaled to, owned by the screen so the Cook
+  /// button can see it too.
+  final double? target;
+  final ValueChanged<double?> onScaled;
 
   @override
   State<_RecipeBody> createState() => _RecipeBodyState();
 }
 
 class _RecipeBodyState extends State<_RecipeBody> {
-  double? _target;
-
   /// Whether the ingredients are shown summed rather than by section.
   ///
   /// The same kind of state as [_target], and for the same reason: scaling and
@@ -117,7 +160,7 @@ class _RecipeBodyState extends State<_RecipeBody> {
   /// nothing is written, and reopening shows it as written (spec §5.2).
   bool _combined = false;
 
-  double get _targetServings => _target ?? widget.recipe.servings;
+  double get _targetServings => widget.target ?? widget.recipe.servings;
 
   @override
   Widget build(BuildContext context) {
@@ -186,7 +229,7 @@ class _RecipeBodyState extends State<_RecipeBody> {
             ScaleControl(
               originalServings: original.servings,
               targetServings: _targetServings,
-              onChanged: (double value) => setState(() => _target = value),
+              onChanged: widget.onScaled,
             ),
           ],
           const SizedBox(height: HearthSpacing.xl),
