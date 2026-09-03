@@ -6,9 +6,24 @@
 library;
 
 /// Lowercases, strips punctuation, and collapses whitespace.
+///
+/// Hyphens and slashes become **spaces**, not nothing, and not themselves.
+/// Recipes spell the same ingredient both ways — "sun-dried tomatoes" and
+/// "sun dried tomatoes", "extra-virgin" and "extra virgin" — and while the
+/// hyphen survived, those were different keys everywhere this function is
+/// used: the shopping list showed two lines for one ingredient, a duplicate
+/// food was never flagged, a remembered match was asked again, and word
+/// coverage scored 0.5 in one direction and 1.0 in the other depending on
+/// which side happened to carry the hyphen.
+///
+/// A slash for the same reason, and it broke this file's own worked example:
+/// "96/4 Ground Beef" used to normalise to "964 ground beef", fusing the
+/// digits into a number that means nothing.
 String normaliseKey(String raw) => raw
     .toLowerCase()
-    .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
+    // Separators first, so "sun-dried" becomes two words rather than one.
+    .replaceAll(RegExp(r'[-/]'), ' ')
+    .replaceAll(RegExp(r'[^a-z0-9\s]'), '')
     .replaceAll(RegExp(r'\s+'), ' ')
     .trim();
 

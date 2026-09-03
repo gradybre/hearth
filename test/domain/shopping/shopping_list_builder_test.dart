@@ -221,4 +221,25 @@ void main() {
       );
     });
   });
+
+  group('two spellings of one ingredient are one line', () {
+    // Recipes say "sun-dried tomatoes" and "sun dried tomatoes"
+    // interchangeably. While the hyphen survived normalisation these were
+    // different keys, so the list showed two lines for one thing and you
+    // bought it twice — the exact opposite of what aggregation is for.
+    test('an unmatched ingredient keys the same either way', () {
+      expect(
+        ShoppingListBuilder.keyFor(name: 'Sun-dried tomatoes'),
+        ShoppingListBuilder.keyFor(name: 'sun dried tomatoes'),
+      );
+    });
+
+    test('and a matched one still keys by its food', () {
+      // Unchanged: a matched line never depended on the wording at all.
+      expect(
+        ShoppingListBuilder.keyFor(foodId: 'food-1', name: 'Sun-dried'),
+        'food-1',
+      );
+    });
+  });
 }

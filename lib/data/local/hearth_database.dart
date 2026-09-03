@@ -1,6 +1,8 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:meta/meta.dart';
 
+import '../../domain/text/text_normaliser.dart';
 import 'tables.dart';
 
 part 'hearth_database.g.dart';
@@ -47,7 +49,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -131,6 +133,13 @@ class HearthDatabase extends _$HearthDatabase {
       if (from < 15) {
         await m.createTable(planTemplates);
       }
+      // v16 re-keys remembered ingredient matches: a hyphen is a separator
+      // now, so "sun-dried tomatoes" and "sun dried tomatoes" are one key
+      // rather than two. Data only — no columns move.
+      if (from < 16) {
+        await _renormaliseIngredientMatches();
+        await _renormaliseShoppingKeys();
+      }
     },
     beforeOpen: (OpeningDetails details) async {
       // Drift leaves foreign keys off by default; without this the cascade
@@ -138,6 +147,74 @@ class HearthDatabase extends _$HearthDatabase {
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );
+
+  /// Brings stored ingredient keys into line with [normaliseKey].
+  ///
+  /// Public so it can be tested: this runs exactly once on a real device with
+  /// real data, and a migration that merges the wrong row or trips the unique
+  /// key has no second chance.
+  @visibleForTesting
+  Future<void> renormaliseForV16() async {
+    await _renormaliseIngredientMatches();
+    await _renormaliseShoppingKeys();
+  }
+
+  ///
+  /// Done in Dart rather than SQL because sqlite has no regexp_replace, and
+  /// because reusing the very function the app matches with is the only way
+  /// to be sure the two agree — a hand-written SQL counterpart that drifted
+  /// would put this device permanently out of step with the server.
+  Future<void> _renormaliseIngredientMatches() async {
+    final List<IngredientMatchRow> rows = await select(ingredientMatches).get();
+
+    // Newest answer per key wins, ties broken by id so the result does not
+    // depend on row order — the same rule the server migration uses.
+    final Map<String, IngredientMatchRow> keep = <String, IngredientMatchRow>{};
+    for (final IngredientMatchRow row in rows) {
+      final String key = normaliseKey(row.ingredientString);
+      if (key.isEmpty) continue;
+
+      final String slot = '${row.householdId}\u0000$key';
+      final IngredientMatchRow? held = keep[slot];
+      if (held == null ||
+          row.updatedAt.isAfter(held.updatedAt) ||
+          (row.updatedAt == held.updatedAt && row.id.compareTo(held.id) > 0)) {
+        keep[slot] = row;
+      }
+    }
+
+    await transaction(() async {
+      await delete(ingredientMatches).go();
+      for (final MapEntry<String, IngredientMatchRow> entry in keep.entries) {
+        final IngredientMatchRow row = entry.value;
+        await into(ingredientMatches).insert(
+          row.copyWith(ingredientString: entry.key.split('\u0000').last),
+        );
+      }
+    });
+  }
+
+  /// Keeps an in-flight shopping list mergeable across the key change.
+  ///
+  /// Lines are merged by [item_key], which for an ingredient with no matched
+  /// food is the normalised wording. Left alone, the first rebuild after this
+  /// change would see a hyphenated line as brand new and drop its tick, its
+  /// on-hand amount and any hand-edited quantity — which is exactly what
+  /// merging rather than replacing exists to prevent. A matched line is keyed
+  /// by food id and is untouched.
+  Future<void> _renormaliseShoppingKeys() async {
+    final List<ShoppingItemRow> rows = await select(shoppingListItems).get();
+    await transaction(() async {
+      for (final ShoppingItemRow row in rows) {
+        if (row.foodId != null) continue;
+        final String key = normaliseKey(row.itemKey);
+        if (key.isEmpty || key == row.itemKey) continue;
+        await (update(shoppingListItems)
+              ..where(($ShoppingListItemsTable i) => i.id.equals(row.id)))
+            .write(ShoppingListItemsCompanion(itemKey: Value<String>(key)));
+      }
+    });
+  }
 
   static QueryExecutor _open() => driftDatabase(name: 'hearth');
 }

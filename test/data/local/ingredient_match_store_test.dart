@@ -5,6 +5,7 @@ import 'package:hearth/data/local/food_store.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/data/local/ingredient_match_store.dart';
 import 'package:hearth/domain/foods/no_match_rule.dart';
+import 'package:hearth/domain/text/text_normaliser.dart';
 
 import '../../support/fixtures.dart';
 
@@ -116,6 +117,60 @@ void main() {
   test('an empty string is never remembered', () async {
     await remember('   ', 'food-oil');
     expect(await matches.allFor(household), isEmpty);
+  });
+
+  group('re-keying when a hyphen became a separator (schema v16)', () {
+    // The upgrade step itself runs on open and cannot be driven from here.
+    // These pin what makes its merge safe: the store's own idea of when two
+    // wordings are the same, which is the rule the migration reproduces.
+    test('both spellings now resolve to the one remembered answer', () async {
+      await matches.remember(
+        householdId: household,
+        ingredientString: 'Sun-dried tomatoes',
+        foodId: 'food-oil',
+        updatedAt: now,
+      );
+
+      // Asked the other way round, which used to be a different key entirely.
+      expect(
+        await matches.rememberedFoodId(
+          householdId: household,
+          ingredientString: 'sun dried tomatoes',
+        ),
+        'food-oil',
+      );
+    });
+
+    test('and answering twice leaves one row, not two', () async {
+      // Exactly what the migration must reproduce for rows already stored:
+      // the two spellings collide, and the later answer is the one kept.
+      await matches.remember(
+        householdId: household,
+        ingredientString: 'Sun-dried tomatoes',
+        foodId: 'food-oil',
+        updatedAt: now,
+      );
+      await matches.remember(
+        householdId: household,
+        ingredientString: 'sun dried tomatoes',
+        foodId: 'food-butter',
+        updatedAt: now.add(const Duration(days: 1)),
+      );
+
+      expect(await db.select(db.ingredientMatches).get(), hasLength(1));
+      expect(
+        await matches.rememberedFoodId(
+          householdId: household,
+          ingredientString: 'SUN DRIED TOMATOES',
+        ),
+        'food-butter',
+      );
+    });
+
+    test('a slash is a separator too', () {
+      // "96/4 Ground Beef" used to fuse into "964 ground beef".
+      expect(normaliseKey('96/4 Ground Beef'), '96 4 ground beef');
+    });
   });
 }
 

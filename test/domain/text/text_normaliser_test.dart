@@ -5,7 +5,10 @@ void main() {
   group('normaliseKey', () {
     test('lowercases, strips punctuation, and collapses whitespace', () {
       expect(normaliseKey('  EVOO.  '), 'evoo');
-      expect(normaliseKey('96/4 Ground Beef'), '964 ground beef');
+      // This used to assert '964 ground beef', which pinned a bug rather than
+      // a behaviour: the slash was being deleted, fusing two numbers into one
+      // that means nothing. It is a separator now — see the group below.
+      expect(normaliseKey('96/4 Ground Beef'), '96 4 ground beef');
     });
   });
 
@@ -67,6 +70,61 @@ void main() {
       expect(wordCoverage('grass', 'Gras'), 0.0);
       expect(wordCoverage('bass', 'Bas'), 0.0);
       expect(wordCoverage('beans', 'Beef'), 0.0);
+    });
+  });
+
+  group('a hyphen is a separator, not a character', () {
+    // Hyphenated ingredients are ordinary — sun-dried, extra-virgin, low-fat,
+    // all-purpose, bone-in — and recipes spell them both ways. Keeping the
+    // hyphen made the two spellings different keys, which split a shopping
+    // line in two, hid a duplicate food, and forgot a remembered match.
+    test('the two spellings of the same thing agree', () {
+      for (final (String, String) pair in <(String, String)>[
+        ('Sun-dried tomatoes', 'sun dried tomatoes'),
+        ('Extra-virgin olive oil', 'extra virgin olive oil'),
+        ('Low-fat Greek yoghurt', 'low fat greek yoghurt'),
+        ('All-purpose flour', 'all purpose flour'),
+        ('Half-and-half', 'half and half'),
+      ]) {
+        expect(
+          normaliseKey(pair.$1),
+          normaliseKey(pair.$2),
+          reason: '${pair.$1} vs ${pair.$2}',
+        );
+      }
+    });
+
+    test('and a slash is too', () {
+      // "96/4 Ground Beef" is this file's own worked example, and it used to
+      // normalise to "964 ground beef" — the digits fused.
+      expect(normaliseKey('96/4 Ground Beef'), '96 4 ground beef');
+      expect(
+        normaliseKey('96/4 Ground Beef'),
+        normaliseKey('96 4 ground beef'),
+      );
+    });
+
+    test('a run of separators still collapses to one space', () {
+      expect(normaliseKey('beef  --  ground'), 'beef ground');
+      expect(normaliseKey('half - and - half'), 'half and half');
+    });
+
+    test('and one at either end leaves no stray space', () {
+      expect(normaliseKey('-beef-'), 'beef');
+      expect(normaliseKey('/beef/'), 'beef');
+    });
+  });
+
+  group('matching stops depending on which side has the hyphen', () {
+    test('coverage is the same in both directions', () {
+      // It used to be 0.5 one way and 1.0 the other, because _sameWord asks
+      // whether the found word *contains* the wanted one — so "sun-dried"
+      // swallowed "sun" and "dried", while "sun-dried" matched neither.
+      expect(
+        wordCoverage('sun-dried tomatoes', 'Sun Dried Tomatoes'),
+        wordCoverage('sun dried tomatoes', 'Sun-Dried Tomatoes'),
+      );
+      expect(wordCoverage('sun-dried tomatoes', 'Sun Dried Tomatoes'), 1.0);
     });
   });
 }
