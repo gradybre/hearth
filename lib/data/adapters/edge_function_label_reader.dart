@@ -128,6 +128,9 @@ class EdgeFunctionLabelReader implements LabelReader {
       proteinG: _number(json['protein_g']) ?? 0,
       carbG: _number(json['carb_g']) ?? 0,
       fatG: _number(json['fat_g']) ?? 0,
+      fiberG: _number(json['fiber_g']),
+      sodiumMg: _number(json['sodium_mg']),
+      cholesterolMg: _number(json['cholesterol_mg']),
     );
   }
 

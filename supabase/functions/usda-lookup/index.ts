@@ -18,6 +18,13 @@ const PROTEIN = '203';
 const CARB = '205';
 const FAT = '204';
 
+/// The three minor nutrients (spec §5.6). USDA reports sodium and cholesterol
+/// in milligrams and fibre in grams, which is exactly how Hearth stores them,
+/// so nothing is converted here.
+const FIBER = '291';
+const SODIUM = '307';
+const CHOLESTEROL = '601';
+
 /// Energy, in the order FDC prefers to state it.
 ///
 /// 208 is the classic reported value and covers the branded catalogue. The
@@ -34,6 +41,11 @@ interface Macros {
   protein_g: number;
   carb_g: number;
   fat_g: number;
+  /// Null when USDA did not report it. Deliberately not defaulted to 0 — a
+  /// food nobody measured for fibre is not a food with no fibre (spec §5.6).
+  fiber_g: number | null;
+  sodium_mg: number | null;
+  cholesterol_mg: number | null;
 }
 
 interface Match {
@@ -189,6 +201,11 @@ function macrosOf(food: any): Macros | null {
     protein_g: by(PROTEIN) ?? 0,
     carb_g: by(CARB) ?? 0,
     fat_g: by(FAT) ?? 0,
+    // `by` already answers null for a nutrient USDA did not report, and that
+    // null is carried the whole way rather than flattened here.
+    fiber_g: by(FIBER),
+    sodium_mg: by(SODIUM),
+    cholesterol_mg: by(CHOLESTEROL),
   };
 }
 

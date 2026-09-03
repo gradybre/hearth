@@ -294,6 +294,22 @@ const LABEL_TOOL = {
             protein_g: { type: 'number' },
             carb_g: { type: 'number' },
             fat_g: { type: 'number' },
+            // A US panel is required by law to print all three, so they are
+            // almost always there to be read (spec §5.6). Omit rather than
+            // guess: absent means "the label did not say", and a zero here
+            // would be Hearth asserting a fact the label never stated.
+            fiber_g: {
+              type: 'number',
+              description: 'Dietary fibre in grams. Omit if not printed.',
+            },
+            sodium_mg: {
+              type: 'number',
+              description: 'Sodium in milligrams. Omit if not printed.',
+            },
+            cholesterol_mg: {
+              type: 'number',
+              description: 'Cholesterol in milligrams. Omit if not printed.',
+            },
           },
           required: ['amount', 'unit', 'kcal'],
         },
@@ -981,6 +997,11 @@ function shapeLabel(input: Record<string, unknown>): Record<string, unknown> {
         protein_g: number(s.protein_g) ?? 0,
         carb_g: number(s.carb_g) ?? 0,
         fat_g: number(s.fat_g) ?? 0,
+        // `number` already answers null for a field the model omitted, and
+        // that null is the answer — not a zero (spec §5.6).
+        fiber_g: number(s.fiber_g),
+        sodium_mg: number(s.sodium_mg),
+        cholesterol_mg: number(s.cholesterol_mg),
       })),
     uncertain: Array.isArray(input.uncertain)
       ? (input.uncertain as Uncertain[])

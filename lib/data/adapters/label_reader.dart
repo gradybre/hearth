@@ -12,6 +12,9 @@ class LabelServing {
     this.proteinG = 0,
     this.carbG = 0,
     this.fatG = 0,
+    this.fiberG,
+    this.sodiumMg,
+    this.cholesterolMg,
   });
 
   final double amount;
@@ -24,6 +27,14 @@ class LabelServing {
   final double proteinG;
   final double carbG;
   final double fatG;
+
+  /// The three minor nutrients, null where the panel did not print them
+  /// (spec §5.6). A US label is required by law to carry all three, so these
+  /// are usually there — but a cropped photo is a real thing, and a zero
+  /// would be Hearth asserting a fact no label stated.
+  final double? fiberG;
+  final double? sodiumMg;
+  final double? cholesterolMg;
 }
 
 /// What a photographed label says.

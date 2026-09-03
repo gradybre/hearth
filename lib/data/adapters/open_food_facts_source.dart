@@ -209,6 +209,15 @@ class OpenFoodFactsSource implements NutritionSource {
       proteinG: _number(nutriments['proteins_100g']) ?? 0,
       carbG: _number(nutriments['carbohydrates_100g']) ?? 0,
       fatG: _number(nutriments['fat_100g']) ?? 0,
+      // Already in the payload this call was fetching — `nutriments` is
+      // requested whole, so the three cost nothing extra (spec §5.6).
+      fiberG: _number(nutriments['fiber_100g']),
+      // **Open Food Facts normalises these to grams**, and Hearth stores
+      // milligrams. Getting this wrong is a factor of a thousand and nothing
+      // would fail: a sodium of 0.6 would read as under a milligram rather
+      // than most of a day's salt.
+      sodiumMg: _milligrams(_number(nutriments['sodium_100g'])),
+      cholesterolMg: _milligrams(_number(nutriments['cholesterol_100g'])),
     );
 
     final String? brand = _firstBrand(product['brands']);
@@ -386,4 +395,12 @@ class OpenFoodFactsSource implements NutritionSource {
     final String s => double.tryParse(s.replaceAll(',', '.')),
     _ => null,
   };
+
+  /// Grams to milligrams, keeping "not stated" as not stated.
+  ///
+  /// Open Food Facts normalises `sodium_100g` and `cholesterol_100g` to
+  /// **grams**; Hearth stores milligrams (spec §5.6). Written as its own
+  /// function so the conversion has one home and one test.
+  static double? _milligrams(double? grams) =>
+      grams == null ? null : grams * 1000;
 }

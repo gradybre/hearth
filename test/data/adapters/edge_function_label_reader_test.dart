@@ -220,4 +220,50 @@ void main() {
       expect(reading.servings.first.proteinG, 24);
     });
   });
+
+  group('the three minor nutrients (spec §5.6)', () {
+    test('are read off the panel when the model returns them', () {
+      final LabelReading reading = EdgeFunctionLabelReader.readingFrom(
+        panel(
+          servings: <Object?>[
+            <String, Object?>{
+              'amount': 1,
+              'unit': 'oz',
+              'kcal': 110,
+              'protein_g': 7,
+              'fiber_g': 0,
+              'sodium_mg': 180,
+              'cholesterol_mg': 30,
+            },
+          ],
+        ),
+      );
+
+      expect(reading.servings.single.sodiumMg, 180);
+      expect(reading.servings.single.cholesterolMg, 30);
+      // Cheddar has no fibre and the panel prints a 0. That is a reading, not
+      // a gap, and it has to arrive as one.
+      expect(reading.servings.single.fiberG, 0);
+    });
+
+    test('a cropped panel leaves them unknown rather than zero', () {
+      final LabelReading reading = EdgeFunctionLabelReader.readingFrom(
+        panel(
+          servings: <Object?>[
+            <String, Object?>{
+              'amount': 1,
+              'unit': 'oz',
+              'kcal': 110,
+              'protein_g': 7,
+            },
+          ],
+        ),
+      );
+
+      expect(reading.servings.single.fiberG, isNull);
+      expect(reading.servings.single.sodiumMg, isNull);
+      expect(reading.servings.single.cholesterolMg, isNull);
+      expect(reading.servings.single.kcal, 110);
+    });
+  });
 }

@@ -88,6 +88,12 @@ class UsdaNutritionSource implements NutritionSource {
       proteinG: _number(per100['protein_g']) ?? 0,
       carbG: _number(per100['carb_g']) ?? 0,
       fatG: _number(per100['fat_g']) ?? 0,
+      // No fallback. USDA reports fibre in grams and sodium and cholesterol
+      // in milligrams — Hearth's own units — so a value passes through and an
+      // absence stays an absence (spec §5.6).
+      fiberG: _number(per100['fiber_g']),
+      sodiumMg: _number(per100['sodium_mg']),
+      cholesterolMg: _number(per100['cholesterol_mg']),
     );
 
     final String id = '${json['fdc_id'] ?? ''}'.trim();

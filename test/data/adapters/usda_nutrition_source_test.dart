@@ -1,6 +1,7 @@
 import 'package:hearth/data/adapters/nutrition_source.dart';
 import 'package:hearth/data/adapters/usda_nutrition_source.dart';
 import 'package:hearth/domain/models/food.dart';
+import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/units/unit.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -29,6 +30,9 @@ Map<String, Object?> aHit({
   String? servingLabel,
   double servingGrams = 28,
   String? dataType,
+  Object? fiber,
+  Object? sodium,
+  Object? cholesterol,
 }) => <String, Object?>{
   'matches': <Object?>[
     <String, Object?>{
@@ -40,6 +44,9 @@ Map<String, Object?> aHit({
         'protein_g': 25,
         'carb_g': 1.3,
         'fat_g': 33,
+        'fiber_g': ?fiber,
+        'sodium_mg': ?sodium,
+        'cholesterol_mg': ?cholesterol,
       },
       'serving_grams': servingGrams,
       'serving_label': ?servingLabel,
@@ -123,5 +130,34 @@ void main() {
         .search('cheddar');
 
     expect(matches.single.food.defaultServing!.label, '28 g');
+  });
+
+  group('the three minor nutrients (spec §5.6)', () {
+    test('arrive in Hearth\'s own units, unconverted', () async {
+      // USDA reports fibre in grams and the other two in milligrams, which is
+      // exactly how Hearth stores them — unlike Open Food Facts, which sends
+      // grams for all three. Nothing is scaled here, and this says so.
+      final UsdaNutritionSource usda = sourceReturning(
+        aHit(fiber: 0, sodium: 653, cholesterol: 105),
+      );
+      final List<NutritionMatch> matches = await usda.search('cheddar');
+      final Macros per100g = matches.single.food.servingOptions.last.macros;
+
+      expect(per100g.sodiumMg, 653);
+      expect(per100g.cholesterolMg, 105);
+      // Cheddar genuinely has no fibre, and USDA says so with a zero.
+      expect(per100g.fiberG, 0);
+    });
+
+    test('a hit that reports none of them leaves all three unknown', () async {
+      final UsdaNutritionSource usda = sourceReturning(aHit());
+      final List<NutritionMatch> matches = await usda.search('cheddar');
+      final Macros per100g = matches.single.food.servingOptions.last.macros;
+
+      expect(per100g.fiberG, isNull);
+      expect(per100g.sodiumMg, isNull);
+      expect(per100g.cholesterolMg, isNull);
+      expect(per100g.kcal, 400);
+    });
   });
 }

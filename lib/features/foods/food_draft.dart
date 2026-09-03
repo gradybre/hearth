@@ -20,6 +20,9 @@ class ServingDraft {
     this.protein = '',
     this.carbs = '',
     this.fat = '',
+    this.fiber = '',
+    this.sodium = '',
+    this.cholesterol = '',
     this.id,
   });
 
@@ -29,6 +32,16 @@ class ServingDraft {
   final String protein;
   final String carbs;
   final String fat;
+
+  /// The three minor nutrients (spec §5.6). **Empty means unknown**, which is
+  /// what an empty field already means to anyone looking at it — and it is
+  /// how someone says "I do not know" as distinct from typing a 0 to say the
+  /// food genuinely has none. The four above have no such distinction: they
+  /// default to zero, because a food with no calories entered is being
+  /// described as having none.
+  final String fiber;
+  final String sodium;
+  final String cholesterol;
 
   /// Set when editing an existing serving, so a save updates it in place.
   final String? id;
@@ -90,6 +103,11 @@ class ServingDraft {
     proteinG: double.tryParse(protein.trim()) ?? 0,
     carbG: double.tryParse(carbs.trim()) ?? 0,
     fatG: double.tryParse(fat.trim()) ?? 0,
+    // No `?? 0`: an empty field is a question nobody answered, and
+    // `double.tryParse` already says so.
+    fiberG: double.tryParse(fiber.trim()),
+    sodiumMg: double.tryParse(sodium.trim()),
+    cholesterolMg: double.tryParse(cholesterol.trim()),
   );
 
   /// How the portion reads in a picker: "100 g", "1 item".
@@ -109,6 +127,9 @@ class ServingDraft {
     String? protein,
     String? carbs,
     String? fat,
+    String? fiber,
+    String? sodium,
+    String? cholesterol,
   }) => ServingDraft(
     amount: amount ?? this.amount,
     unitId: unitId ?? this.unitId,
@@ -116,6 +137,9 @@ class ServingDraft {
     protein: protein ?? this.protein,
     carbs: carbs ?? this.carbs,
     fat: fat ?? this.fat,
+    fiber: fiber ?? this.fiber,
+    sodium: sodium ?? this.sodium,
+    cholesterol: cholesterol ?? this.cholesterol,
     id: id,
   );
 }
@@ -179,6 +203,11 @@ class FoodDraft {
           protein: _macroText(option.macros.proteinG),
           carbs: _macroText(option.macros.carbG),
           fat: _macroText(option.macros.fatG),
+          // Empty for an unknown, so editing a food Hearth was never told
+          // about does not silently record a zero on the way back out.
+          fiber: _minorText(option.macros.fiberG),
+          sodium: _minorText(option.macros.sodiumMg),
+          cholesterol: _minorText(option.macros.cholesterolMg),
         ),
     ],
   );
@@ -210,6 +239,9 @@ class FoodDraft {
             protein: _rounded(serving.protein),
             carbs: _rounded(serving.carbs),
             fat: _rounded(serving.fat),
+            fiber: _rounded(serving.fiber),
+            sodium: _rounded(serving.sodium, decimals: 0),
+            cholesterol: _rounded(serving.cholesterol, decimals: 0),
           ),
       ],
     );
@@ -281,6 +313,15 @@ class FoodDraft {
         protein: _rounded('${read.proteinG}'),
         carbs: _rounded('${read.carbG}'),
         fat: _rounded('${read.fatG}'),
+        // Empty where the panel said nothing, which is the same sentence the
+        // field itself makes when it is left blank (spec §5.6).
+        fiber: read.fiberG == null ? '' : _rounded('${read.fiberG}'),
+        sodium: read.sodiumMg == null
+            ? ''
+            : _rounded('${read.sodiumMg}', decimals: 0),
+        cholesterol: read.cholesterolMg == null
+            ? ''
+            : _rounded('${read.cholesterolMg}', decimals: 0),
       );
       final bool alreadyHere = <ServingDraft>[
         ...kept,
@@ -399,6 +440,17 @@ class FoodDraft {
   /// never entered. Empty also lets the hint do its job.
   static String _macroText(double value) =>
       value == 0 ? '' : writeAmount(value);
+
+  /// A minor nutrient as a field's text: empty for unknown, **"0" for a
+  /// stated zero** (spec §5.6).
+  ///
+  /// Deliberately not [_macroText]. That one blanks a zero, which is right for
+  /// the four — an empty calorie field parses back to the zero it came from,
+  /// and nothing is lost. Here a blank field means "nobody said", so blanking
+  /// a stated zero would turn a fact into a gap on every edit. Water really
+  /// does have no sodium.
+  static String _minorText(double? value) =>
+      value == null ? '' : writeAmount(value);
 }
 
 /// A typed pack size — "1 lb", "7.2 oz" — as a quantity, or null.

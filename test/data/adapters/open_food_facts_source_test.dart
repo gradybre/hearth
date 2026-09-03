@@ -18,6 +18,9 @@ Map<String, Object?> product({
   Object? carbs = 12.9,
   Object? fat = 0.2,
   String? servingSize,
+  Object? fiber,
+  Object? sodium,
+  Object? cholesterol,
 }) => <String, Object?>{
   'code': code,
   'product_name': name,
@@ -28,6 +31,9 @@ Map<String, Object?> product({
     'proteins_100g': protein,
     'carbohydrates_100g': carbs,
     'fat_100g': fat,
+    'fiber_100g': ?fiber,
+    'sodium_100g': ?sodium,
+    'cholesterol_100g': ?cholesterol,
   },
 };
 
@@ -599,6 +605,54 @@ void hydrationTests() {
       final Food food = (await off.search('oikos')).single.food;
       expect(food.servingOptions.last.isReference, isTrue);
       expect(food.servingOptions.first.isReference, isFalse);
+    });
+  });
+
+  group('the three minor nutrients (spec §5.6)', () {
+    Future<Food> lookedUp(Map<String, Object?> p) async {
+      final OpenFoodFactsSource off = sourceReturning(<String, Object?>{
+        'status': 1,
+        'product': p,
+      });
+      final NutritionMatch match = (await off.byBarcode('5000157024671'))!;
+      return match.food;
+    }
+
+    test('come through when the product states them', () async {
+      final Food food = await lookedUp(
+        product(fiber: 3.7, sodium: 0.24, cholesterol: 0.002),
+      );
+      final ServingOption per100g = food.servingOptions.last;
+      expect(per100g.macros.fiberG, closeTo(3.7, 1e-9));
+    });
+
+    test('and sodium is converted out of grams into milligrams', () async {
+      // The failure this exists to catch is silent and a thousandfold: Open
+      // Food Facts normalises sodium to grams, so 0.24 is 240 mg — most of a
+      // tin of beans' salt — and storing it as 0.24 mg would read as none.
+      final Food food = await lookedUp(
+        product(sodium: 0.24, cholesterol: 0.002),
+      );
+      final ServingOption per100g = food.servingOptions.last;
+      expect(per100g.macros.sodiumMg, closeTo(240, 1e-9));
+      expect(per100g.macros.cholesterolMg, closeTo(2, 1e-9));
+    });
+
+    test('a product that says nothing leaves them unknown, not zero', () async {
+      final Food food = await lookedUp(product());
+      final ServingOption per100g = food.servingOptions.last;
+      expect(per100g.macros.fiberG, isNull);
+      expect(per100g.macros.sodiumMg, isNull);
+      expect(per100g.macros.cholesterolMg, isNull);
+      // And the four are still the four.
+      expect(per100g.macros.proteinG, closeTo(4.7, 1e-9));
+    });
+
+    test('a stated zero stays a zero', () async {
+      final Food food = await lookedUp(product(fiber: 0, sodium: 0));
+      final ServingOption per100g = food.servingOptions.last;
+      expect(per100g.macros.fiberG, 0);
+      expect(per100g.macros.sodiumMg, 0);
     });
   });
 }
