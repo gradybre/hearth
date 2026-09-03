@@ -119,6 +119,31 @@ class RecipeMacros {
           if (i.status == status) i.ingredient,
       ];
 
+  /// How many of the ingredients that actually counted knew nothing about
+  /// [nutrient] (spec §5.6).
+  ///
+  /// Only the resolved ones are asked. An ingredient excluded as optional, or
+  /// marked as a seasoning, is not a gap in the fibre total any more than it
+  /// is a gap in the calories — it was never going to contribute.
+  int unknownCountFor(MinorNutrient nutrient) => ingredients
+      .where((IngredientMacros i) => i.isResolved && !i.macros.knows(nutrient))
+      .length;
+
+  /// One phrase saying a [nutrient] total is only part of the story, or null
+  /// when every counted ingredient knew it.
+  ///
+  /// A partial total looks exactly like a whole one on screen, which is how
+  /// "12 g fibre" from half a recipe becomes a number somebody trusts. §4's
+  /// rule is that incomplete data flags rather than blocks; this is the flag.
+  String? partialNoteFor(MinorNutrient nutrient) {
+    if (total.minor(nutrient) == null) return null;
+    final int unknown = unknownCountFor(nutrient);
+    if (unknown == 0) return null;
+    return unknown == 1
+        ? '1 ingredient did not say'
+        : '$unknown ingredients did not say';
+  }
+
   /// One sentence naming what is actually missing, or null when nothing is.
   ///
   /// Every gap used to be reported as "not matched to a food", whatever its

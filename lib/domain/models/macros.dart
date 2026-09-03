@@ -22,6 +22,9 @@ class Macros {
     this.proteinG = 0,
     this.carbG = 0,
     this.fatG = 0,
+    this.fiberG,
+    this.sodiumMg,
+    this.cholesterolMg,
   });
 
   final double kcal;
@@ -29,15 +32,62 @@ class Macros {
   final double carbG;
   final double fatG;
 
+  /// Grams of dietary fibre, or null when the source did not say.
+  final double? fiberG;
+
+  /// **Milligrams** of sodium, or null. Open Food Facts reports sodium in
+  /// grams per 100 g and a nutrition label prints milligrams; the adapters
+  /// convert, and nothing here will fail loudly if one of them forgets — hence
+  /// the unit in the name.
+  final double? sodiumMg;
+
+  /// **Milligrams** of cholesterol, or null.
+  final double? cholesterolMg;
+
   static const Macros zero = Macros();
 
+  /// Whether the four tracked macros are all zero.
+  ///
+  /// Deliberately says nothing about the minor three: a food is not made
+  /// non-zero by knowing its sodium, and `isZero` is what decides whether a
+  /// food has usable nutrition at all.
   bool get isZero => kcal == 0 && proteinG == 0 && carbG == 0 && fatG == 0;
+
+  /// This macros' value for [nutrient], in that nutrient's own unit.
+  double? minor(MinorNutrient nutrient) => switch (nutrient) {
+    MinorNutrient.fiber => fiberG,
+    MinorNutrient.sodium => sodiumMg,
+    MinorNutrient.cholesterol => cholesterolMg,
+  };
+
+  /// Whether anything is known about [nutrient] here.
+  bool knows(MinorNutrient nutrient) => minor(nutrient) != null;
+
+  /// Adds two values where **either** side knows one.
+  ///
+  /// Null only when neither did. The alternative — one unmatched ingredient
+  /// poisoning a whole recipe's fibre to null — would leave these blank
+  /// essentially always, which is the same as not having them. §4's standing
+  /// rule is that incomplete data flags rather than blocks, and a partial
+  /// total that says it is partial is the useful shape of that here.
+  static double? _add(double? a, double? b) {
+    if (a == null && b == null) return null;
+    return (a ?? 0) + (b ?? 0);
+  }
+
+  static double? _subtract(double? a, double? b) {
+    if (a == null && b == null) return null;
+    return (a ?? 0) - (b ?? 0);
+  }
 
   Macros operator +(Macros other) => Macros(
     kcal: kcal + other.kcal,
     proteinG: proteinG + other.proteinG,
     carbG: carbG + other.carbG,
     fatG: fatG + other.fatG,
+    fiberG: _add(fiberG, other.fiberG),
+    sodiumMg: _add(sodiumMg, other.sodiumMg),
+    cholesterolMg: _add(cholesterolMg, other.cholesterolMg),
   );
 
   Macros operator -(Macros other) => Macros(
@@ -45,15 +95,24 @@ class Macros {
     proteinG: proteinG - other.proteinG,
     carbG: carbG - other.carbG,
     fatG: fatG - other.fatG,
+    fiberG: _subtract(fiberG, other.fiberG),
+    sodiumMg: _subtract(sodiumMg, other.sodiumMg),
+    cholesterolMg: _subtract(cholesterolMg, other.cholesterolMg),
   );
 
   Macros scaledBy(num factor) {
     final double f = factor.toDouble();
+    // Half of "we do not know" is still "we do not know" — and so is zero
+    // times it. Scaling a portion to nothing must not invent a number.
+    double? scale(double? value) => value == null ? null : value * f;
     return Macros(
       kcal: kcal * f,
       proteinG: proteinG * f,
       carbG: carbG * f,
       fatG: fatG * f,
+      fiberG: scale(fiberG),
+      sodiumMg: scale(sodiumMg),
+      cholesterolMg: scale(cholesterolMg),
     );
   }
 
@@ -67,10 +126,14 @@ class Macros {
       other.kcal == kcal &&
       other.proteinG == proteinG &&
       other.carbG == carbG &&
-      other.fatG == fatG;
+      other.fatG == fatG &&
+      other.fiberG == fiberG &&
+      other.sodiumMg == sodiumMg &&
+      other.cholesterolMg == cholesterolMg;
 
   @override
-  int get hashCode => Object.hash(kcal, proteinG, carbG, fatG);
+  int get hashCode =>
+      Object.hash(kcal, proteinG, carbG, fatG, fiberG, sodiumMg, cholesterolMg);
 
   @override
   String toString() => 'Macros(${kcal}kcal P$proteinG C$carbG F$fatG)';
@@ -80,3 +143,23 @@ class Macros {
 ///
 /// Calories are the primary focus, the other three secondary (spec §5.6).
 enum MacroKind { calories, protein, carbs, fat }
+
+/// The three optional nutrients carried alongside the four macros (spec §5.6).
+///
+/// Deliberately **not** members of [MacroKind]. That enum drives progress
+/// against `macro_target`, and these have no targets: they are shown where
+/// known and absent where not, never a bar to fill.
+enum MinorNutrient {
+  fiber('Fibre', 'g'),
+  sodium('Sodium', 'mg'),
+  cholesterol('Cholesterol', 'mg');
+
+  const MinorNutrient(this.label, this.unit);
+
+  /// What the nutrient is called on screen.
+  final String label;
+
+  /// The unit it is stored and displayed in — grams for fibre, milligrams for
+  /// the other two. Shown always, because "200 sodium" means nothing.
+  final String unit;
+}

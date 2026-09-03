@@ -87,6 +87,99 @@ void main() {
       expect(result.isDataGap, isFalse);
     });
 
+    test('a partial fibre total says how much of it was guessed at', () {
+      // Two ingredients count; one of their foods knows its fibre. The total
+      // is real as far as it goes, and saying so is the difference between a
+      // useful number and one somebody trusts too far (spec §5.6).
+      final Food known = aFood(
+        'oats',
+        id: 'f-oats',
+        servingOptions: <ServingOption>[
+          aServing(
+            amount: 100,
+            unit: Units.gram,
+            macros: const Macros(kcal: 380, fiberG: 10),
+          ),
+        ],
+      );
+      final Food silent = aFood(
+        'milk',
+        id: 'f-milk',
+        servingOptions: <ServingOption>[
+          aServing(
+            amount: 100,
+            unit: Units.millilitre,
+            macros: const Macros(kcal: 50),
+          ),
+        ],
+      );
+
+      final RecipeMacros macros = MacroCalculator.forRecipe(
+        aRecipe(
+          title: 'Porridge',
+          servings: 1,
+          ingredients: <RecipeIngredient>[
+            anIngredient(
+              'oats',
+              amount: 100,
+              unit: Units.gram,
+              foodId: 'f-oats',
+            ),
+            anIngredient(
+              'milk',
+              amount: 100,
+              unit: Units.millilitre,
+              foodId: 'f-milk',
+            ),
+          ],
+        ),
+        foods: <String, Food>{'f-oats': known, 'f-milk': silent},
+      );
+
+      expect(macros.total.fiberG, closeTo(10, 1e-9));
+      expect(macros.unknownCountFor(MinorNutrient.fiber), 1);
+      expect(
+        macros.partialNoteFor(MinorNutrient.fiber),
+        '1 ingredient did not say',
+      );
+      // Nobody said anything about sodium, so there is no total to caveat.
+      expect(macros.total.sodiumMg, isNull);
+      expect(macros.partialNoteFor(MinorNutrient.sodium), isNull);
+    });
+
+    test('a total every counted ingredient knew carries no caveat', () {
+      final Food oats = aFood(
+        'oats',
+        id: 'f-oats',
+        servingOptions: <ServingOption>[
+          aServing(
+            amount: 100,
+            unit: Units.gram,
+            macros: const Macros(kcal: 380, fiberG: 10),
+          ),
+        ],
+      );
+      final RecipeMacros macros = MacroCalculator.forRecipe(
+        aRecipe(
+          title: 'Oats',
+          servings: 1,
+          ingredients: <RecipeIngredient>[
+            anIngredient(
+              'oats',
+              amount: 100,
+              unit: Units.gram,
+              foodId: 'f-oats',
+            ),
+            // Excluded on the recipe's own say-so, so not a gap in anything.
+            anIngredient('salt', optional: true),
+          ],
+        ),
+        foods: <String, Food>{'f-oats': oats},
+      );
+
+      expect(macros.partialNoteFor(MinorNutrient.fiber), isNull);
+    });
+
     test('optional wins over the seasoning mark, and that is deliberate', () {
       // Both flags are set, and `optionalExcluded` is the answer. Do not
       // reorder these two checks to make a "mark as a seasoning" button do
