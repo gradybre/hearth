@@ -176,8 +176,10 @@ void main() {
   testWidgets('the export says what it can do before you press it', (
     WidgetTester tester,
   ) async {
-    // Walmart has no public way for an app to fill a basket, and a button
-    // named after a shop that opens a search page instead should say so first.
+    // A button named after a shop that opens a search page rather than
+    // filling a basket should say so before it is pressed. (It says Hearth
+    // lacks the product codes — not that Walmart lacks a cart URL, which was
+    // wrong: walmart.io/docs/atc/v1/add-to-cart is open to anyone.)
     await openShopping(tester, entries: <MealPlanEntry>[tonight()]);
     await build(tester);
 
@@ -185,7 +187,7 @@ void main() {
     await pumpFrames(tester, frames: 10);
 
     expect(find.text('Copy the list'), findsOneWidget);
-    expect(find.textContaining('no public way'), findsOneWidget);
+    expect(find.textContaining('does not know'), findsOneWidget);
     expect(find.textContaining('1 item still to buy'), findsOneWidget);
   });
 

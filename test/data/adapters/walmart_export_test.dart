@@ -133,7 +133,7 @@ Anywhere
 
     test('and the adapter says what it can actually do', () {
       // The sheet describes the hand-off from this rather than promising a
-      // cart Walmart offers no public way to fill.
+      // cart Hearth has no product codes to fill.
       expect(const WalmartExport().kind, ShoppingExportKind.deepLink);
       expect(const WalmartExport().displayName, 'Walmart');
     });

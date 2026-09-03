@@ -86,9 +86,10 @@ class _ExportSheet extends StatelessWidget {
                 // "Walmart" that opens a search page instead of filling a
                 // basket should say so before it is pressed.
                 Text(
-                  '${adapter.displayName} has no public way for an app to fill '
-                  'a basket, so this opens a search for the first item. '
-                  'Copying the list is usually quicker.',
+                  'Hearth does not know ${adapter.displayName}\'s product '
+                  'codes yet, so this opens a search for the first item '
+                  'rather than filling a basket. Copying the list is usually '
+                  'quicker.',
                   style: context.text.metadata.copyWith(
                     color: colors.textSecondary,
                   ),

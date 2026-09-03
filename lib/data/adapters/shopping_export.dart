@@ -40,10 +40,10 @@ enum ShoppingExportKind { deepLink, clipboard, cart }
 
 /// A store hand-off, behind an interface (CLAUDE.md rule 7).
 ///
-/// Walmart has no public consumer cart API, so v1 is deep links plus copy
-/// (spec §5.7). Keeping this an interface is what lets a real partner cart
-/// API — or Instacart, which does offer one — slot in later without touching
-/// the UI.
+/// v1 is deep links plus copy (spec §5.7) — not because a cart hand-off is
+/// impossible, but because every one of them is keyed by a product id Hearth
+/// does not hold yet. Keeping this an interface is what lets a real cart
+/// hand-off slot in later without touching the UI.
 ///
 /// **Nothing here may send anything anywhere on its own.** The list is fully
 /// editable first and the export is a deliberate, reviewed hand-off, never a

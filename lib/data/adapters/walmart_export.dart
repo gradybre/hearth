@@ -5,11 +5,15 @@ import 'shopping_export.dart';
 
 /// Handing the list to Walmart (spec §5.7).
 ///
-/// Walmart has no public consumer cart API — the transactional services are
-/// partner-gated and not open to solo developers — so this is what an honest
-/// v1 can actually do: a search link per item, and the list as text to paste
-/// wherever you like. The interface it implements is what lets a real cart
-/// API, or Instacart's, replace it later without the screen changing.
+/// Walmart *does* have an open add-to-cart URL — `/sc/cart/addToCart?items=`,
+/// documented at walmart.io/docs/atc/v1/add-to-cart, and explicitly available
+/// whether or not you are onboarded to Impact Radius. What it will not do is
+/// take a name: it wants Walmart item ids, and resolving "ground beef" to one
+/// needs the catalog API, which *is* partner-gated.
+///
+/// So v1 is a search link per item and the list as text, until a food can
+/// carry an item id of its own. The interface is what lets that, or
+/// Instacart's cart API, replace this without the screen changing.
 ///
 /// **Nothing here sends anything.** It builds links and text and hands them
 /// back; opening or copying is a separate, deliberate tap (rule 4).
