@@ -419,6 +419,11 @@ class FoodDraft {
     List<ServingDraft>? servings,
     bool? isDefault,
     bool? isZeroCalorie,
+
+    /// Only the restaurant switch sets this. Everything else keeps the
+    /// provenance the food arrived with — a food saved from Open Food Facts
+    /// stays Open Food Facts however much of it is edited (spec §5.5).
+    FoodSource? source,
   }) => FoodDraft(
     name: name ?? this.name,
     brand: brand ?? this.brand,
@@ -428,7 +433,7 @@ class FoodDraft {
     barcode: barcode ?? this.barcode,
     servings: servings ?? this.servings,
     existingId: existingId,
-    source: source,
+    source: source ?? this.source,
     isDefault: isDefault ?? this.isDefault,
     isZeroCalorie: isZeroCalorie ?? this.isZeroCalorie,
   );

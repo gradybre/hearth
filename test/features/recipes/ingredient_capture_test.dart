@@ -348,8 +348,17 @@ void main() {
       // That food's own editor, with the grams it had and the units the label
       // states — and nothing saved until it is (CLAUDE.md rule 4).
       expect(find.text('Edit food'), findsOneWidget);
-      expect(find.text('g'), findsOneWidget);
-      expect(find.text('cup'), findsOneWidget);
+      // Scrolled to rather than assumed on screen: these are two serving rows
+      // in a lazy ListView, so whether both are built at once depends on how
+      // tall the form above them happens to be, not on the servings.
+      for (final String unit in <String>['g', 'cup']) {
+        await tester.scrollUntilVisible(
+          find.text(unit),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(find.text(unit), findsOneWidget);
+      }
     });
 
     testWidgets('adding a serving goes to that food, not the picker', (

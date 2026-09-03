@@ -288,9 +288,19 @@ void main() {
     await pumpFrames(tester);
     await takePhoto(tester);
 
-    expect(find.text('g'), findsOneWidget);
-    expect(find.text('oz'), findsOneWidget);
-    expect(find.text('cup'), findsOneWidget);
+    // Scrolled to, not assumed on screen. The editor is a lazy ListView and
+    // these are three separate serving rows near its foot, so whether all
+    // three are built at once depends on how tall everything above them
+    // happens to be — which has broken this test twice for reasons that had
+    // nothing to do with servings being kept.
+    for (final String unit in <String>['g', 'oz', 'cup']) {
+      await tester.scrollUntilVisible(
+        find.text(unit),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text(unit), findsOneWidget);
+    }
   });
 
   testWidgets('reopening the sheet asks for a photo, not the last answer', (

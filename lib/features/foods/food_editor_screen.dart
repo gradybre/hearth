@@ -57,6 +57,20 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
   bool _saving = false;
   bool _showErrors = false;
 
+  /// What the food's provenance was before the restaurant switch touched it,
+  /// so turning it back off restores the truth rather than saying "manual".
+  late final FoodSource _wasSource = _draft.source == FoodSource.restaurant
+      ? FoodSource.manual
+      : _draft.source;
+
+  bool get _isRestaurant => _draft.source == FoodSource.restaurant;
+
+  /// A restaurant food with no restaurant on it cannot be grouped into a menu
+  /// and would never appear in the builder — so it is asked for rather than
+  /// silently accepted.
+  String? get _restaurantError =>
+      _isRestaurant && _draft.brand.trim().isEmpty ? 'Which restaurant?' : null;
+
   /// Units offered for a serving size, in groups.
   ///
   /// Grouped rather than listed flat because the third group is the reason it
@@ -123,7 +137,7 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
   }
 
   Future<void> _save() async {
-    if (!_draft.isValid) {
+    if (!_draft.isValid || _restaurantError != null) {
       setState(() => _showErrors = true);
       return;
     }
@@ -281,25 +295,59 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
               children: <Widget>[
                 Expanded(
                   child: _TextField(
-                    label: 'Brand',
+                    // The restaurant *is* the brand — a food from Chipotle is
+                    // branded Chipotle, and that one string is what groups a
+                    // menu together. Only the label changes, so nothing has to
+                    // be re-typed when the switch below is flipped.
+                    label: _isRestaurant ? 'Restaurant' : 'Brand',
                     value: _draft.brand,
+                    hint: _isRestaurant ? 'Chipotle' : null,
+                    errorText: _showErrors ? _restaurantError : null,
                     textCapitalization: TextCapitalization.words,
                     onChanged: (String v) =>
                         setState(() => _draft = _draft.copyWith(brand: v)),
                   ),
                 ),
-                const SizedBox(width: HearthSpacing.md),
-                Expanded(
-                  child: _TextField(
-                    label: 'Store',
-                    value: _draft.storeTag,
-                    hint: 'Costco',
-                    textCapitalization: TextCapitalization.words,
-                    onChanged: (String v) =>
-                        setState(() => _draft = _draft.copyWith(storeTag: v)),
+                if (!_isRestaurant) ...<Widget>[
+                  const SizedBox(width: HearthSpacing.md),
+                  Expanded(
+                    child: _TextField(
+                      // Nothing to tag with a shop. You do not buy a burrito
+                      // bowl's chicken at Costco.
+                      label: 'Store',
+                      value: _draft.storeTag,
+                      hint: 'Costco',
+                      textCapitalization: TextCapitalization.words,
+                      onChanged: (String v) =>
+                          setState(() => _draft = _draft.copyWith(storeTag: v)),
+                    ),
                   ),
-                ),
+                ],
               ],
+            ),
+            const SizedBox(height: HearthSpacing.sm),
+            // The same control the other two food-level answers use, rather
+            // than a hand-rolled row: SwitchListTile merges its own semantics,
+            // so a screen reader says "From a restaurant, switch, off" as one
+            // thing (§6.3).
+            SwitchListTile.adaptive(
+              value: _isRestaurant,
+              onChanged: (bool on) => setState(() {
+                _draft = _draft.copyWith(
+                  source: on ? FoodSource.restaurant : _wasSource,
+                  // A shop tag means nothing on a menu item, and leaving one
+                  // behind would group a burrito bowl under Costco.
+                  storeTag: on ? '' : null,
+                );
+              }),
+              title: Text('From a restaurant', style: context.text.body),
+              subtitle: Text(
+                'Never matched into a recipe you cook — your chicken breast '
+                'and their chicken are not the same food. Shows up when you '
+                'build a meal you ate out.',
+                style: context.text.metadata.copyWith(color: colors.textMuted),
+              ),
+              contentPadding: EdgeInsets.zero,
             ),
             const SizedBox(height: HearthSpacing.lg),
             // Only when there is something to confirm. A food with real
