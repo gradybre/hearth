@@ -7,6 +7,7 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../data/adapters/shopping_export.dart';
 import '../../data/adapters/walmart_export.dart';
+import '../../domain/models/food.dart';
 import '../../domain/shopping/shopping_line.dart';
 
 /// Handing the finished list to a shop (spec §5.7).
@@ -18,26 +19,36 @@ Future<void> showShoppingExportSheet(
   BuildContext context,
   List<ShoppingLine> lines, {
   ShoppingExportAdapter adapter = const WalmartExport(),
+  Map<String, Food> foods = const <String, Food>{},
 }) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
   backgroundColor: Colors.transparent,
   builder: (BuildContext context) =>
-      _ExportSheet(lines: lines, adapter: adapter),
+      _ExportSheet(lines: lines, adapter: adapter, foods: foods),
 );
 
 class _ExportSheet extends StatelessWidget {
-  const _ExportSheet({required this.lines, required this.adapter});
+  const _ExportSheet({
+    required this.lines,
+    required this.adapter,
+    required this.foods,
+  });
 
   final List<ShoppingLine> lines;
   final ShoppingExportAdapter adapter;
+  final Map<String, Food> foods;
 
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     // What is left to buy. A ticked line and one you already have enough of
     // are the same thing to somebody in a shop: nothing to pick up.
-    final List<ShoppingExportItem> items = exportableLines(lines);
+    final List<ShoppingExportItem> items = exportableLines(lines, foods: foods);
+    final Uri? cart = WalmartExport.cartLinkFor(items);
+    final int unnamed = items
+        .where((ShoppingExportItem i) => i.productId == null)
+        .length;
 
     return SafeArea(
       child: DecoratedBox(
@@ -77,6 +88,33 @@ class _ExportSheet extends StatelessWidget {
                 ),
                 if (items.isNotEmpty) ...<Widget>[
                   const SizedBox(height: HearthSpacing.lg),
+                  if (cart != null) ...<Widget>[
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _open(context, cart),
+                        icon: const Icon(Icons.add_shopping_cart_outlined),
+                        label: Text('Fill a ${adapter.displayName} basket'),
+                      ),
+                    ),
+                    const SizedBox(height: HearthSpacing.sm),
+                    // Said before it is pressed, because the failure is
+                    // expensive: Walmart drops you on its homepage if any one
+                    // item will not add, so a basket is never guaranteed to be
+                    // the whole list and the copy is what makes the rest
+                    // survivable.
+                    Text(
+                      unnamed == 0
+                          ? 'Everything left has a saved product.'
+                          : '$unnamed of these have no saved product, so they '
+                                'are left out of the basket. Copy the list to '
+                                'catch them.',
+                      style: context.text.metadata.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: HearthSpacing.lg),
+                  ],
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
@@ -138,9 +176,14 @@ class _ExportSheet extends StatelessWidget {
   ) async {
     final ShoppingExportResult result = await adapter.export(items);
     if (result.deepLinks.isEmpty || !context.mounted) return;
+    await _open(context, result.deepLinks.first);
+  }
 
+  /// Hands one link to the OS. Nothing here sends anything on its own — this
+  /// is the deliberate tap (rule 4).
+  Future<void> _open(BuildContext context, Uri link) async {
     final bool opened = await launchUrl(
-      result.deepLinks.first,
+      link,
       mode: LaunchMode.externalApplication,
     );
     if (!context.mounted) return;

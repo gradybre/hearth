@@ -1,5 +1,6 @@
 import 'package:hearth/data/adapters/shopping_export.dart';
 import 'package:hearth/data/adapters/walmart_export.dart';
+import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/shopping/shopping_line.dart';
 import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
@@ -136,6 +137,123 @@ Anywhere
       // cart Hearth has no product codes to fill.
       expect(const WalmartExport().kind, ShoppingExportKind.deepLink);
       expect(const WalmartExport().displayName, 'Walmart');
+    });
+  });
+
+  group('the basket', () {
+    Food product(String id, {Quantity? pack}) => Food(
+      id: 'food-$id',
+      householdId: 'household-1',
+      name: 'Ground beef',
+      source: FoodSource.manual,
+      servingOptions: const <ServingOption>[],
+      walmartItemId: id,
+      packSize: pack,
+    );
+
+    ShoppingLine lineFor(String foodId, Quantity planned) => ShoppingLine(
+      key: foodId,
+      name: 'ground beef',
+      planned: <Quantity>[planned],
+      foodId: foodId,
+    );
+
+    test('several items ride in one link', () async {
+      final List<ShoppingExportItem> items = exportableLines(
+        <ShoppingLine>[
+          lineFor('food-a', Quantity.of(1, Units.pound)),
+          lineFor('food-b', Quantity.of(1, Units.pound)),
+        ],
+        foods: <String, Food>{
+          'food-a': product('111111111'),
+          'food-b': product('222222222'),
+        },
+      );
+
+      final Uri link = WalmartExport.cartLinkFor(items)!;
+      expect(link.host, 'www.walmart.com');
+      expect(link.path, '/sc/cart/addToCart');
+      expect(link.queryParameters['items'], '111111111,222222222');
+    });
+
+    test('a quantity rides with the id, and one is left implied', () async {
+      // A bare id already means one, so the suffix would be noise on most
+      // lines — and the documented format allows either.
+      final List<ShoppingExportItem> items = exportableLines(
+        <ShoppingLine>[
+          lineFor('food-a', Quantity.of(3, Units.pound)),
+          lineFor('food-b', Quantity.of(1, Units.pound)),
+        ],
+        foods: <String, Food>{
+          'food-a': product('111111111', pack: Quantity.of(1, Units.pound)),
+          'food-b': product('222222222', pack: Quantity.of(1, Units.pound)),
+        },
+      );
+
+      expect(
+        WalmartExport.cartLinkFor(items)!.queryParameters['items'],
+        '111111111_3,222222222',
+      );
+    });
+
+    test('a line with no saved product is left out of the basket', () async {
+      // Walmart drops the shopper on its homepage if any item fails to add,
+      // so a name Hearth invented would cost the whole trip.
+      final List<ShoppingExportItem> items = exportableLines(
+        <ShoppingLine>[
+          lineFor('food-a', Quantity.of(1, Units.pound)),
+          lineFor('food-b', Quantity.of(1, Units.pound)),
+        ],
+        foods: <String, Food>{'food-a': product('111111111')},
+      );
+
+      expect(
+        WalmartExport.cartLinkFor(items)!.queryParameters['items'],
+        '111111111',
+      );
+    });
+
+    test(
+      'but it is still in the copied text, which is the safety net',
+      () async {
+        final List<ShoppingExportItem> items = exportableLines(<ShoppingLine>[
+          lineFor('food-b', Quantity.of(1, Units.pound)),
+        ]);
+
+        expect(WalmartExport.asText(items), contains('ground beef'));
+      },
+    );
+
+    test('no saved products at all means no basket to offer', () async {
+      final List<ShoppingExportItem> items = exportableLines(<ShoppingLine>[
+        lineFor('food-a', Quantity.of(1, Units.pound)),
+      ]);
+
+      expect(WalmartExport.cartLinkFor(items), isNull);
+    });
+
+    test('and the kind says which hand-off is actually available', () async {
+      // A screen reads this to decide whether to offer the basket at all.
+      final ShoppingExportResult without = await const WalmartExport().export(
+        exportableLines(<ShoppingLine>[
+          lineFor('food-a', Quantity.of(1, Units.pound)),
+        ]),
+      );
+      expect(without.kind, ShoppingExportKind.deepLink);
+      expect(without.cartLink, isNull);
+
+      final ShoppingExportResult with_ = await const WalmartExport().export(
+        exportableLines(
+          <ShoppingLine>[lineFor('food-a', Quantity.of(1, Units.pound))],
+          foods: <String, Food>{'food-a': product('111111111')},
+        ),
+      );
+      expect(with_.kind, ShoppingExportKind.cart);
+      expect(with_.cartLink, isNotNull);
+      // The copy and the search links survive either way — the basket is an
+      // addition, never a replacement.
+      expect(with_.clipboardText, isNotNull);
+      expect(with_.deepLinks, isNotEmpty);
     });
   });
 }

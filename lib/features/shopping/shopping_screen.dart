@@ -170,7 +170,17 @@ class _Body extends ConsumerWidget {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: () => showShoppingExportSheet(context, lines),
+              onPressed: () => showShoppingExportSheet(
+                context,
+                lines,
+                // Passed in, so the sheet and the adapter stay free of
+                // Riverpod and of anything that could reach a network.
+                foods: <String, Food>{
+                  for (final Food f
+                      in ref.read(foodLibraryProvider).value ?? const <Food>[])
+                    f.id: f,
+                },
+              ),
               icon: const Icon(Icons.ios_share),
               label: const Text('Take it shopping'),
             ),

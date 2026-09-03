@@ -301,62 +301,6 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
                 ),
               ],
             ),
-
-            const SizedBox(height: HearthSpacing.lg),
-            // Optional, and skippable for most foods. Filling it in is what
-            // turns "Take it shopping" from a search into a basket (§5.7).
-            Text('Buying it at Walmart', style: context.text.label),
-            const SizedBox(height: HearthSpacing.xs),
-            Text(
-              'Paste a product link and Hearth remembers which product this '
-              'is. Add the pack size and it works out how many to order.',
-              style: context.text.metadata.copyWith(
-                color: context.colors.textMuted,
-              ),
-            ),
-            const SizedBox(height: HearthSpacing.sm),
-            _TextField(
-              label: 'Walmart link or item number',
-              value: _draft.walmartItemId,
-              hint: 'walmart.com/ip/…/10450479',
-              onChanged: (String v) =>
-                  setState(() => _draft = _draft.copyWith(walmartItemId: v)),
-            ),
-            if (_draft.walmartItemId.trim().isNotEmpty &&
-                !WalmartProduct.looksValid(_draft.walmartItemId)) ...<Widget>[
-              const SizedBox(height: HearthSpacing.xs),
-              // Said here rather than discovered at the shop: an id that does
-              // not parse is stored as nothing, and a basket that silently
-              // omits this food is the first anyone would know about it.
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Icon(
-                    Icons.info_outline,
-                    size: 16,
-                    color: context.colors.textMuted,
-                  ),
-                  const SizedBox(width: HearthSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      'No item number in that. Paste the whole product link, '
-                      'or just the number from the end of it.',
-                      style: context.text.metadata.copyWith(
-                        color: context.colors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: HearthSpacing.md),
-            _TextField(
-              label: 'Sold in',
-              value: _draft.packSize,
-              hint: '1 lb',
-              onChanged: (String v) =>
-                  setState(() => _draft = _draft.copyWith(packSize: v)),
-            ),
             const SizedBox(height: HearthSpacing.lg),
             // Only when there is something to confirm. A food with real
             // numbers on it has no zeros to vouch for, and offering the
@@ -464,6 +408,62 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
                   }),
                 ),
               ),
+
+            const SizedBox(height: HearthSpacing.lg),
+            // Optional, and skippable for most foods. Filling it in is what
+            // turns "Take it shopping" from a search into a basket (§5.7).
+            Text('Buying it at Walmart', style: context.text.label),
+            const SizedBox(height: HearthSpacing.xs),
+            Text(
+              'Paste a product link and Hearth remembers which product this '
+              'is. Add the pack size and it works out how many to order.',
+              style: context.text.metadata.copyWith(
+                color: context.colors.textMuted,
+              ),
+            ),
+            const SizedBox(height: HearthSpacing.sm),
+            _TextField(
+              label: 'Walmart link or item number',
+              value: _draft.walmartItemId,
+              hint: 'walmart.com/ip/…/10450479',
+              onChanged: (String v) =>
+                  setState(() => _draft = _draft.copyWith(walmartItemId: v)),
+            ),
+            if (_draft.walmartItemId.trim().isNotEmpty &&
+                !WalmartProduct.looksValid(_draft.walmartItemId)) ...<Widget>[
+              const SizedBox(height: HearthSpacing.xs),
+              // Said here rather than discovered at the shop: an id that does
+              // not parse is stored as nothing, and a basket that silently
+              // omits this food is the first anyone would know about it.
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: context.colors.textMuted,
+                  ),
+                  const SizedBox(width: HearthSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      'No item number in that. Paste the whole product link, '
+                      'or just the number from the end of it.',
+                      style: context.text.metadata.copyWith(
+                        color: context.colors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: HearthSpacing.md),
+            _TextField(
+              label: 'Sold in',
+              value: _draft.packSize,
+              hint: '1 lb',
+              onChanged: (String v) =>
+                  setState(() => _draft = _draft.copyWith(packSize: v)),
+            ),
             const SizedBox(height: HearthSpacing.xxl),
           ],
         ),

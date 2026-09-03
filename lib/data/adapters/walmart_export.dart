@@ -1,4 +1,6 @@
 import '../../domain/format/quantity_format.dart';
+import '../../domain/models/food.dart';
+import '../../domain/shopping/cart_quantity.dart';
 import '../../domain/shopping/shopping_line.dart';
 import '../../domain/units/quantity.dart';
 import 'shopping_export.dart';
@@ -28,21 +30,52 @@ class WalmartExport implements ShoppingExportAdapter {
   @override
   ShoppingExportKind get kind => ShoppingExportKind.deepLink;
 
+  /// The open add-to-cart URL: comma-separated `itemId_qty`, a bare id
+  /// meaning one. Documented at walmart.io/docs/atc/v1/add-to-cart, and
+  /// explicitly available whether or not you are onboarded to Impact Radius —
+  /// no key, no approval.
+  static const String _cart = 'https://www.walmart.com/sc/cart/addToCart';
+
+  /// A basket of everything Hearth can name, or null when it can name none.
+  ///
+  /// Only items with a product id go in. Walmart's documentation says that if
+  /// *any* item fails to add, the shopper gets an error modal and is dropped
+  /// on the homepage — so a link carrying a name it invented would cost the
+  /// whole trip, not just that line.
+  static Uri? cartLinkFor(List<ShoppingExportItem> items) {
+    final List<String> named = <String>[
+      for (final ShoppingExportItem item in items)
+        if (item.productId case final String id)
+          // A bare id already means one, so the suffix is noise on most lines.
+          item.quantity <= 1 ? id : '${id}_${item.quantity}',
+    ];
+    if (named.isEmpty) return null;
+    return Uri.parse(_cart)
+        .replace(queryParameters: <String, String>{'items': named.join(',')});
+  }
+
   @override
-  Future<ShoppingExportResult> export(List<ShoppingExportItem> items) async =>
-      ShoppingExportResult(
-        kind: kind,
-        deepLinks: <Uri>[
-          for (final ShoppingExportItem item in items)
-            Uri.parse(_search).replace(
-              // The name only. A quantity in a search box finds nothing —
-              // "2 lb ground beef" is not a product, and the amount is for
-              // the person reading the list, not for the shop's index.
-              queryParameters: <String, String>{'q': item.name},
-            ),
-        ],
-        clipboardText: asText(items),
-      );
+  Future<ShoppingExportResult> export(List<ShoppingExportItem> items) async {
+    final Uri? cart = cartLinkFor(items);
+    return ShoppingExportResult(
+      // `cart` only when something can actually go in one — the kind is what
+      // a screen reads to decide whether to offer the basket at all.
+      kind: cart == null
+          ? ShoppingExportKind.deepLink
+          : ShoppingExportKind.cart,
+      cartLink: cart,
+      deepLinks: <Uri>[
+        for (final ShoppingExportItem item in items)
+          Uri.parse(_search).replace(
+            // The name only. A quantity in a search box finds nothing —
+            // "2 lb ground beef" is not a product, and the amount is for
+            // the person reading the list, not for the shop's index.
+            queryParameters: <String, String>{'q': item.name},
+          ),
+      ],
+      clipboardText: asText(items),
+    );
+  }
 
   /// The list as something you can paste anywhere.
   ///
@@ -86,16 +119,26 @@ class WalmartExport implements ShoppingExportAdapter {
 /// What is left to buy, in the amount to buy — not what the recipes wanted.
 /// A ticked line and a line you already have enough of are the same thing to
 /// somebody standing in a shop: nothing to pick up.
-List<ShoppingExportItem> exportableLines(List<ShoppingLine> lines) =>
-    <ShoppingExportItem>[
-      for (final ShoppingLine line in lines)
-        if (!line.isChecked)
-          ShoppingExportItem(
-            name: line.name,
-            quantityLabel: _label(line),
-            storeTag: line.storeTag,
-          ),
-    ];
+/// [foods] is passed in rather than looked up, so this and the adapter stay
+/// pure — nothing in here may reach a database or a network.
+List<ShoppingExportItem> exportableLines(
+  List<ShoppingLine> lines, {
+  Map<String, Food> foods = const <String, Food>{},
+}) => <ShoppingExportItem>[
+  for (final ShoppingLine line in lines)
+    if (!line.isChecked)
+      if (_food(line, foods) case final Food? food)
+        ShoppingExportItem(
+          name: line.name,
+          quantityLabel: _label(line),
+          storeTag: line.storeTag,
+          productId: food?.walmartItemId,
+          quantity: CartQuantity.forLine(line: line, pack: food?.packSize),
+        ),
+];
+
+Food? _food(ShoppingLine line, Map<String, Food> foods) =>
+    line.foodId == null ? null : foods[line.foodId];
 
 String? _label(ShoppingLine line) {
   final Quantity? buy = line.toBuy;

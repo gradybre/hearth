@@ -76,6 +76,14 @@ void main() {
     await openNewFood(tester);
 
     await fill(tester, name: 'Ground beef', link: 'ground beef');
+    // The section sits at the foot of the editor — below the servings, which
+    // are what the screen is actually for — so the warning has to be scrolled
+    // to before a ListView has built it.
+    await tester.scrollUntilVisible(
+      find.textContaining('No item number in that'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
 
     expect(find.textContaining('No item number in that'), findsOneWidget);
   });

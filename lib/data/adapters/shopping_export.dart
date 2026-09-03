@@ -7,6 +7,8 @@ class ShoppingExportItem {
     required this.name,
     this.quantityLabel,
     this.storeTag,
+    this.productId,
+    this.quantity = 1,
   });
 
   final String name;
@@ -16,6 +18,14 @@ class ShoppingExportItem {
   final String? quantityLabel;
 
   final String? storeTag;
+
+  /// The shop's own code for this product, when the household has told Hearth
+  /// one. Null for most items, and for everything added by hand — a cart
+  /// hand-off can only carry the ones it can name.
+  final String? productId;
+
+  /// How many of that product to ask for. Meaningless without [productId].
+  final int quantity;
 }
 
 /// What an export produced, for the UI to act on.
@@ -25,6 +35,7 @@ class ShoppingExportResult {
     required this.kind,
     this.deepLinks = const <Uri>[],
     this.clipboardText,
+    this.cartLink,
   });
 
   final ShoppingExportKind kind;
@@ -34,6 +45,11 @@ class ShoppingExportResult {
 
   /// The list as text, for the one-tap copy path.
   final String? clipboardText;
+
+  /// One link that fills a basket, when the shop offers such a thing and
+  /// enough items could be named. Kept apart from [deepLinks] so nothing can
+  /// confuse "fill a basket" with "search for one thing".
+  final Uri? cartLink;
 }
 
 enum ShoppingExportKind { deepLink, clipboard, cart }

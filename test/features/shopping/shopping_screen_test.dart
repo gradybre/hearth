@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/app_harness.dart';
@@ -204,5 +206,85 @@ void main() {
 
     expect(find.text('Everything on the list is ticked off.'), findsOneWidget);
     expect(find.text('Copy the list'), findsNothing);
+  });
+
+  group('filling a basket (spec §5.7)', () {
+    Food beefAt(String? itemId, {Quantity? pack}) => Food(
+      id: 'f-beef',
+      householdId: 'household-1',
+      name: 'Ground beef',
+      source: FoodSource.manual,
+      servingOptions: const <ServingOption>[],
+      walmartItemId: itemId,
+      packSize: pack,
+    );
+
+    /// The chilli's beef, matched to a food so the line carries a foodId.
+    Recipe chilliWith(String foodId) => aRecipe(
+      id: 'r-chilli',
+      title: 'Chilli',
+      servings: 4,
+      sections: <RecipeSection>[
+        aSection(
+          id: 's1',
+          ingredients: <RecipeIngredient>[
+            anIngredient(
+              'ground beef',
+              amount: 1,
+              unit: Units.pound,
+              sectionId: 's1',
+              foodId: foodId,
+            ),
+          ],
+        ),
+      ],
+    );
+
+    Future<void> openExport(WidgetTester tester, List<Food> foods) async {
+      await pumpHearthApp(
+        tester,
+        recipes: <Recipe>[chilliWith('f-beef')],
+        foods: foods,
+        entries: <MealPlanEntry>[tonight()],
+      );
+      await tester.tap(find.text('Shopping').last);
+      await pumpFrames(tester);
+      await build(tester);
+      await tester.tap(find.text('Take it shopping'));
+      await pumpFrames(tester, frames: 10);
+    }
+
+    testWidgets('the basket is offered once a product is saved', (
+      WidgetTester tester,
+    ) async {
+      await openExport(tester, <Food>[beefAt('10450479')]);
+
+      expect(find.textContaining('Fill a Walmart basket'), findsOneWidget);
+      expect(
+        find.textContaining('Everything left has a saved product'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and not offered when nothing has one', (
+      WidgetTester tester,
+    ) async {
+      // Most foods will never carry a product code, and a button that can
+      // only fail is worse than no button.
+      await openExport(tester, <Food>[beefAt(null)]);
+
+      expect(find.textContaining('Fill a Walmart basket'), findsNothing);
+      expect(find.text('Copy the list'), findsOneWidget);
+    });
+
+    testWidgets('copying stays available either way', (
+      WidgetTester tester,
+    ) async {
+      // Walmart drops you on its homepage if any item will not add, so the
+      // copy is what makes a failed basket survivable.
+      await openExport(tester, <Food>[beefAt('10450479')]);
+
+      expect(find.text('Copy the list'), findsOneWidget);
+    });
   });
 }
