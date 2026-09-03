@@ -15,6 +15,7 @@ import '../../domain/models/recipe.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/week.dart';
+import '../recipes/macro_stats_row.dart';
 import 'day_picker_sheet.dart';
 import 'entry_resolver.dart';
 import 'log_sheet.dart';
@@ -272,6 +273,13 @@ class _RemainingCard extends ConsumerWidget {
           ),
           const SizedBox(height: HearthSpacing.md),
           MacroRings(progress: progress),
+          // Below the rings and without one of its own: these have no target
+          // to fill, and a ring would say they did (spec §5.6). Absent on any
+          // day whose foods have never been asked, which is most of them.
+          if (eaten.knowsAnyMinor) ...<Widget>[
+            const SizedBox(height: HearthSpacing.md),
+            MinorNutrientsLine(macros: eaten),
+          ],
         ],
       ),
     );

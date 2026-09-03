@@ -472,7 +472,7 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
   }
 }
 
-class _ServingRow extends StatelessWidget {
+class _ServingRow extends StatefulWidget {
   const _ServingRow({
     required this.serving,
     required this.units,
@@ -488,8 +488,37 @@ class _ServingRow extends StatelessWidget {
   final VoidCallback onRemove;
 
   @override
+  State<_ServingRow> createState() => _ServingRowState();
+}
+
+class _ServingRowState extends State<_ServingRow> {
+  /// Whether the three minor nutrients are showing (spec §5.6).
+  ///
+  /// Open whenever any of them has a value, so a food that knows its sodium
+  /// never hides the fact behind a tap — and closed otherwise, costing no
+  /// height at all, because the toggle lives in a row that already exists.
+  late bool _minorOpen = _hasMinor;
+
+  bool get _hasMinor =>
+      widget.serving.fiber.trim().isNotEmpty ||
+      widget.serving.sodium.trim().isNotEmpty ||
+      widget.serving.cholesterol.trim().isNotEmpty;
+
+  @override
+  void didUpdateWidget(_ServingRow old) {
+    super.didUpdateWidget(old);
+    // A label read into this serving fills them in from underneath.
+    if (_hasMinor && !_minorOpen) _minorOpen = true;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
+    final ServingDraft serving = widget.serving;
+    final Map<String, List<Unit>> units = widget.units;
+    final bool canRemove = widget.canRemove;
+    final ValueChanged<ServingDraft> onChanged = widget.onChanged;
+    final VoidCallback onRemove = widget.onRemove;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -574,6 +603,16 @@ class _ServingRow extends StatelessWidget {
                     ],
                   ),
                 ),
+                IconButton(
+                  onPressed: () => setState(() => _minorOpen = !_minorOpen),
+                  tooltip: _minorOpen
+                      ? 'Hide fibre, sodium and cholesterol'
+                      : 'Add fibre, sodium and cholesterol',
+                  icon: Icon(
+                    _minorOpen ? Icons.expand_less : Icons.expand_more,
+                    color: _hasMinor ? colors.accent : colors.textMuted,
+                  ),
+                ),
                 if (canRemove)
                   IconButton(
                     onPressed: onRemove,
@@ -626,6 +665,48 @@ class _ServingRow extends StatelessWidget {
                 ),
               ],
             ),
+            if (_minorOpen) ...<Widget>[
+              const SizedBox(height: HearthSpacing.md),
+              // Their own rows rather than beside the four: seven fields
+              // across overflows at 3x text, which is how the export sheet
+              // broke.
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: _TextField(
+                      label: 'Fibre (g)',
+                      value: serving.fiber,
+                      keyboardType: _decimal,
+                      onChanged: (String v) =>
+                          onChanged(serving.copyWith(fiber: v)),
+                    ),
+                  ),
+                  const SizedBox(width: HearthSpacing.sm),
+                  Expanded(
+                    child: _TextField(
+                      label: 'Sodium (mg)',
+                      value: serving.sodium,
+                      keyboardType: _decimal,
+                      onChanged: (String v) =>
+                          onChanged(serving.copyWith(sodium: v)),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: HearthSpacing.sm),
+              _TextField(
+                label: 'Cholesterol (mg)',
+                value: serving.cholesterol,
+                keyboardType: _decimal,
+                onChanged: (String v) =>
+                    onChanged(serving.copyWith(cholesterol: v)),
+              ),
+              const SizedBox(height: HearthSpacing.xs),
+              Text(
+                'Leave blank if you do not know. A 0 says it has none.',
+                style: context.text.metadata.copyWith(color: colors.textMuted),
+              ),
+            ],
           ],
         ),
       ),

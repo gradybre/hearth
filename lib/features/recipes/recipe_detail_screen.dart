@@ -211,6 +211,15 @@ class _RecipeBodyState extends State<_RecipeBody> {
             Text('Nutrition per serving', style: text.sectionHeader),
             const SizedBox(height: HearthSpacing.sm),
             MacroStatsRow(macros: macros.perServing),
+            // Quiet, below the four, and absent entirely when nothing here
+            // knows them — which is most recipes (spec §5.6).
+            if (macros.perServing.knowsAnyMinor) ...<Widget>[
+              const SizedBox(height: HearthSpacing.sm),
+              MinorNutrientsLine(
+                macros: macros.perServing,
+                partialFor: macros.partialNoteFor,
+              ),
+            ],
             // Missing data flags, never blocks (spec §5.3): shown alongside
             // the numbers rather than hiding them, so what is known is never
             // held back for want of what isn't — and naming the actual gap,

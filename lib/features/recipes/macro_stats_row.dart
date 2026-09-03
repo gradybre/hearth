@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/hearth_colors.dart';
+import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
 import '../../domain/models/macros.dart';
@@ -85,5 +86,71 @@ class MacroStatsLine extends StatelessWidget {
       line,
       style: context.text.metadata.copyWith(color: colors.textMuted),
     );
+  }
+}
+
+/// The three minor nutrients as one quiet line, or nothing at all.
+///
+/// Nothing at all is the common case and the right one: a food nobody has
+/// told Hearth about has no fibre to report, and an empty "Fibre —" would be
+/// a row of dashes on most recipes (spec §5.6).
+///
+/// [partialFor] names, per nutrient, how much of the total was actually seen.
+/// A partial total looks exactly like a whole one, which is how "12 g fibre"
+/// off half a recipe becomes a number somebody trusts.
+class MinorNutrientsLine extends StatelessWidget {
+  const MinorNutrientsLine({required this.macros, this.partialFor, super.key});
+
+  final Macros macros;
+
+  /// Null where the caller has no notion of partial totals — a single food's
+  /// serving is either known or not.
+  final String? Function(MinorNutrient)? partialFor;
+
+  @override
+  Widget build(BuildContext context) {
+    final List<MinorNutrient> known = <MinorNutrient>[
+      for (final MinorNutrient n in MinorNutrient.values)
+        if (macros.knows(n)) n,
+    ];
+    if (known.isEmpty) return const SizedBox.shrink();
+
+    final HearthColors colors = context.colors;
+    final List<String> caveats = <String>[
+      for (final MinorNutrient n in known)
+        if (partialFor?.call(n) case final String note) '${n.label}: $note',
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          <String>[
+            for (final MinorNutrient n in known)
+              '${n.label} ${_number(macros.minor(n)!)} ${n.unit}',
+          ].join('  ·  '),
+          style: context.text.metadata.copyWith(color: colors.textSecondary),
+        ),
+        if (caveats.isNotEmpty) ...<Widget>[
+          const SizedBox(height: HearthSpacing.xxs),
+          Text(
+            caveats.join('  ·  '),
+            style: context.text.metadata.copyWith(color: colors.textMuted),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Whole numbers, except where rounding would erase the value entirely.
+  ///
+  /// The four macros round flat, which is fine at their magnitudes. Half a
+  /// gram of fibre rounding to "0 g" would report the opposite of the truth,
+  /// so anything under ten keeps a decimal.
+  static String _number(double value) {
+    if (value >= 10 || value == value.roundToDouble()) {
+      return value.round().toString();
+    }
+    return value.toStringAsFixed(1);
   }
 }

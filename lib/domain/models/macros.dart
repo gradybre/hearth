@@ -63,6 +63,9 @@ class Macros {
   /// Whether anything is known about [nutrient] here.
   bool knows(MinorNutrient nutrient) => minor(nutrient) != null;
 
+  /// Whether there is any minor nutrient worth showing at all.
+  bool get knowsAnyMinor => MinorNutrient.values.any(knows);
+
   /// Adds two values where **either** side knows one.
   ///
   /// Null only when neither did. The alternative — one unmatched ingredient
