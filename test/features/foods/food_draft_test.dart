@@ -1,6 +1,7 @@
 import 'package:hearth/data/adapters/label_reader.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
+import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 import 'package:hearth/features/foods/food_draft.dart';
 import 'package:test/test.dart';
@@ -585,6 +586,61 @@ void packetServingTests() {
 
       expect(food.servingOptions.single.amount.preferredUnit, Units.scoop);
       expect(food.servingOptions.single.label, '1 scoop');
+    });
+  });
+
+  group('the Walmart product a food is bought as (spec §5.7)', () {
+    FoodDraft draft({String link = '', String pack = ''}) => FoodDraft.blank()
+        .copyWith(name: 'Ground beef', walmartItemId: link, packSize: pack);
+
+    test('a pasted product link is stored as the item number', () {
+      // Stored as the id, never as the link: a URL that stops parsing later
+      // is a URL nothing can use, and the failure would surface in a basket.
+      final Food food = draft(
+        link: 'https://www.walmart.com/ip/Ground-Beef-80-20/10450479?from=/search',
+      ).toFood();
+
+      expect(food.walmartItemId, '10450479');
+    });
+
+    test('and so is a bare item number', () {
+      expect(draft(link: '10450479').toFood().walmartItemId, '10450479');
+    });
+
+    test('something with no item number in it is stored as nothing', () {
+      // Better absent than wrong — the editor says so beside the field.
+      expect(draft(link: 'ground beef').toFood().walmartItemId, isNull);
+      expect(draft().toFood().walmartItemId, isNull);
+    });
+
+    test('a pack size becomes a quantity', () {
+      expect(
+        draft(pack: '1 lb').toFood().packSize,
+        Quantity.of(1, Units.pound),
+      );
+      expect(
+        draft(pack: '7.2 oz').toFood().packSize,
+        Quantity.of(7.2, Units.ounce),
+      );
+    });
+
+    test('half a pack size is no pack size', () {
+      // A number with no unit, or a unit Hearth does not know, would order
+      // the wrong amount silently rather than fail.
+      for (final String raw in <String>['lb', 'a bag', '0 lb', '']) {
+        expect(draft(pack: raw).toFood().packSize, isNull, reason: raw);
+      }
+    });
+
+    test('an existing food fills the fields back in', () {
+      final Food saved = draft(link: '10450479', pack: '1 lb').toFood();
+
+      final FoodDraft reopened = FoodDraft.fromFood(saved);
+
+      expect(reopened.walmartItemId, '10450479');
+      expect(reopened.packSize, '1 lb');
+      // And survives an untouched round trip.
+      expect(reopened.toFood().packSize, Quantity.of(1, Units.pound));
     });
   });
 }
