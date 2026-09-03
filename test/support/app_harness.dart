@@ -29,6 +29,7 @@ import 'package:hearth/domain/planning/recent_log.dart';
 import 'package:hearth/domain/planning/week.dart';
 import 'package:hearth/main.dart';
 
+import 'fake_auth.dart';
 import 'fake_kitchen.dart';
 
 /// Pumps the real app for a widget test.
@@ -49,6 +50,16 @@ import 'fake_kitchen.dart';
 Future<HearthDatabase> pumpHearthApp(
   WidgetTester tester, {
   Size size = const Size(390, 844),
+
+  /// Dynamic type, driven the way the OS drives it (spec §6.3).
+  ///
+  /// Set on the platform dispatcher rather than wrapped in a MediaQuery,
+  /// because HearthApp builds its own MaterialApp — which would rebuild the
+  /// MediaQuery and throw an outer one away.
+  double textScale = 1.0,
+
+  /// The app is ThemeMode.system, so this is the switch the OS actually flips.
+  Brightness brightness = Brightness.light,
   List<Recipe> recipes = const <Recipe>[],
   Stream<List<Recipe>>? recipeStream,
   List<Food> foods = const <Food>[],
@@ -70,6 +81,10 @@ Future<HearthDatabase> pumpHearthApp(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
+
+  tester.platformDispatcher.textScaleFactorTestValue = textScale;
+  tester.platformDispatcher.platformBrightnessTestValue = brightness;
+  addTearDown(tester.platformDispatcher.clearAllTestValues);
 
   final HearthDatabase db = HearthDatabase.forTesting(NativeDatabase.memory());
   addTearDown(db.close);
@@ -138,6 +153,22 @@ Future<HearthDatabase> pumpHearthApp(
         // Photos go to a household bucket over the network; a widget test has
         // neither. Null is also what a build with no backend honestly has.
         photoStorageProvider.overrideWithValue(null),
+        // Cook-along keeps the screen awake and schedules timer alerts, both
+        // of which are platform channels a widget test has none of — the
+        // wakelock throws a PlatformException the moment the screen opens.
+        // The household screen carries the sync panel, and the real controller
+        // registers a lifecycle observer and a 600ms debounce timer. Either
+        // one left running means teardown never completes — the test does not
+        // fail, it hangs, which is far worse to diagnose.
+        syncControllerProvider.overrideWith(FakeSyncController.new),
+        // And the queue count it displays, which is a live Drift stream —
+        // fake async cannot drive real sqlite, so the subscription is still
+        // open at teardown and the run hangs rather than fails.
+        pendingWriteCountProvider.overrideWith(
+          (Ref ref) => Stream<int>.value(0),
+        ),
+        screenKeeperProvider.overrideWithValue(FakeScreenKeeper()),
+        timerAlertsProvider.overrideWithValue(FakeTimerAlerts()),
         // Another sqlite-backed stream, and the same reasoning as the rest:
         // fake async cannot drive real I/O, so a live subscription would
         // never emit and would still be open at teardown.

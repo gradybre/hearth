@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
+import '../a11y/accessibility.dart';
 import '../theme/hearth_colors.dart';
 import '../theme/hearth_spacing.dart';
 import '../theme/hearth_theme.dart';
@@ -122,7 +123,11 @@ class _SwipeToDeleteState extends State<SwipeToDelete> {
             ),
             AnimatedSlide(
               offset: _open ? const Offset(-_revealed, 0) : Offset.zero,
-              duration: const Duration(milliseconds: 180),
+              // Through A11y.motion, not a bare Duration: this is the only
+              // animation in the app, and motion respects the OS setting
+              // (§6.3). The row still moves aside — it just arrives there
+              // rather than sliding.
+              duration: A11y.motion(context, const Duration(milliseconds: 180)),
               curve: Curves.easeOut,
               child: widget.child,
             ),

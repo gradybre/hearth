@@ -7,6 +7,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
+import '../../app/widgets/centred_message.dart';
 import '../../app/widgets/swipe_to_delete.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
@@ -173,54 +174,44 @@ class _NoMatches extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 380),
-        child: Padding(
-          padding: EdgeInsets.all(gutter),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                'No recipes match',
-                style: context.text.sectionHeader,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: HearthSpacing.sm),
-              Text(
-                filter.text.trim().isEmpty
-                    ? 'Nothing in the library fits these filters.'
-                    : 'Nothing matches "${filter.text.trim()}".',
-                style: context.text.body.copyWith(color: colors.textSecondary),
-                textAlign: TextAlign.center,
-              ),
-              // A calorie or protein chip excludes any recipe whose
-              // ingredients aren't all matched to foods — filtering on a
-              // number that is missing half the dish would be worse than
-              // showing nothing. Said out loud, because an empty screen
-              // otherwise reads as a bug.
-              if (filter.maxKcalPerServing != null ||
-                  filter.minProteinPerServing != null) ...<Widget>[
-                const SizedBox(height: HearthSpacing.sm),
-                Text(
-                  'Recipes whose ingredients are not all matched to foods have '
-                  'no nutrition to filter on, so they are left out of the '
-                  'calorie and protein filters.',
-                  style: context.text.metadata.copyWith(
-                    color: colors.textMuted,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-              const SizedBox(height: HearthSpacing.md),
-              FilledButton(
-                onPressed: onClear,
-                child: const Text('Clear search and filters'),
-              ),
-            ],
-          ),
+    return CentredMessage(
+      gutter: gutter,
+      children: <Widget>[
+        Text(
+          'No recipes match',
+          style: context.text.sectionHeader,
+          textAlign: TextAlign.center,
         ),
-      ),
+        const SizedBox(height: HearthSpacing.sm),
+        Text(
+          filter.text.trim().isEmpty
+              ? 'Nothing in the library fits these filters.'
+              : 'Nothing matches "${filter.text.trim()}".',
+          style: context.text.body.copyWith(color: colors.textSecondary),
+          textAlign: TextAlign.center,
+        ),
+        // A calorie or protein chip excludes any recipe whose
+        // ingredients aren't all matched to foods — filtering on a
+        // number that is missing half the dish would be worse than
+        // showing nothing. Said out loud, because an empty screen
+        // otherwise reads as a bug.
+        if (filter.maxKcalPerServing != null ||
+            filter.minProteinPerServing != null) ...<Widget>[
+          const SizedBox(height: HearthSpacing.sm),
+          Text(
+            'Recipes whose ingredients are not all matched to foods have '
+            'no nutrition to filter on, so they are left out of the '
+            'calorie and protein filters.',
+            style: context.text.metadata.copyWith(color: colors.textMuted),
+            textAlign: TextAlign.center,
+          ),
+        ],
+        const SizedBox(height: HearthSpacing.md),
+        FilledButton(
+          onPressed: onClear,
+          child: const Text('Clear search and filters'),
+        ),
+      ],
     );
   }
 }
@@ -439,30 +430,22 @@ class _EmptyLibrary extends StatelessWidget {
     final HearthColors colors = context.colors;
     final HearthTextStyles text = context.text;
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 380),
-        child: Padding(
-          padding: EdgeInsets.all(gutter),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                'Your library is empty',
-                style: text.sectionHeader,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: HearthSpacing.sm),
-              Text(
-                'Add a recipe by hand to get started. Importing from a photo '
-                'or a link comes later.',
-                style: text.body.copyWith(color: colors.textSecondary),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
+    return CentredMessage(
+      gutter: gutter,
+      children: <Widget>[
+        Text(
+          'Your library is empty',
+          style: text.sectionHeader,
+          textAlign: TextAlign.center,
         ),
-      ),
+        const SizedBox(height: HearthSpacing.sm),
+        Text(
+          'Add a recipe by hand to get started. Importing from a photo '
+          'or a link comes later.',
+          style: text.body.copyWith(color: colors.textSecondary),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 }
@@ -476,28 +459,23 @@ class _LibraryError extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.all(gutter),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(Icons.error_outline, color: colors.error),
-            const SizedBox(height: HearthSpacing.sm),
-            Text(
-              'The recipe library could not be read.',
-              style: context.text.body,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: HearthSpacing.xs),
-            Text(
-              '$error',
-              style: context.text.metadata.copyWith(color: colors.textMuted),
-              textAlign: TextAlign.center,
-            ),
-          ],
+    return CentredMessage(
+      gutter: gutter,
+      children: <Widget>[
+        Icon(Icons.error_outline, color: colors.error),
+        const SizedBox(height: HearthSpacing.sm),
+        Text(
+          'The recipe library could not be read.',
+          style: context.text.body,
+          textAlign: TextAlign.center,
         ),
-      ),
+        const SizedBox(height: HearthSpacing.xs),
+        Text(
+          '$error',
+          style: context.text.metadata.copyWith(color: colors.textMuted),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 }

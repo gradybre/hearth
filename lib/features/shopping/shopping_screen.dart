@@ -298,41 +298,63 @@ class _RangeCard extends ConsumerWidget {
             InkWell(
               onTap: () => _pick(context, ref),
               borderRadius: BorderRadius.circular(HearthRadius.sm),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: HearthSpacing.xs),
-                child: Row(
-                  children: <Widget>[
-                    Text(
-                      '${shortDate(range.from)} – ${shortDate(range.to)}',
-                      style: context.text.recipeTitle,
-                    ),
-                    const SizedBox(width: HearthSpacing.sm),
-                    Icon(
-                      Icons.edit_calendar_outlined,
-                      size: 18,
-                      color: colors.textMuted,
-                    ),
-                  ],
+              // A minimum, not a fixed height: at default text this row came
+              // out 43pt tall, a pixel under the 44pt floor, which is exactly
+              // the kind of miss no one spots by eye. It still grows with the
+              // text (§6.3).
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minHeight: HearthTouch.minTarget,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: HearthSpacing.xs,
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      // Flexible, so a big date range at accessibility text
+                      // sizes wraps instead of running off the right. The range
+                      // is set in a title face, which at 3x is very large
+                      // indeed, and the icon beside it does not shrink.
+                      Flexible(
+                        child: Text(
+                          '${shortDate(range.from)} – ${shortDate(range.to)}',
+                          style: context.text.recipeTitle,
+                        ),
+                      ),
+                      const SizedBox(width: HearthSpacing.sm),
+                      Icon(
+                        Icons.edit_calendar_outlined,
+                        size: 18,
+                        color: colors.textMuted,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
             const SizedBox(height: HearthSpacing.md),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    'Include seasonings',
-                    style: context.text.metadata.copyWith(
-                      color: colors.textSecondary,
+            // Merged, so a screen reader says "Include seasonings, switch,
+            // off" instead of just "switch, off". The words are a sibling of
+            // the control, which is invisible to anyone reading by ear.
+            MergeSemantics(
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      'Include seasonings',
+                      style: context.text.metadata.copyWith(
+                        color: colors.textSecondary,
+                      ),
                     ),
                   ),
-                ),
-                Switch(
-                  value: seasonings,
-                  onChanged: (_) =>
-                      ref.read(shoppingSeasoningsProvider.notifier).toggle(),
-                ),
-              ],
+                  Switch(
+                    value: seasonings,
+                    onChanged: (_) =>
+                        ref.read(shoppingSeasoningsProvider.notifier).toggle(),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: HearthSpacing.sm),
             SizedBox(

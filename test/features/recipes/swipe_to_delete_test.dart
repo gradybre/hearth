@@ -121,4 +121,36 @@ void main() {
       reason: 'delete must be offered as a semantics action',
     );
   });
+
+  testWidgets('the slide is instant when the OS asks for reduced motion', (
+    WidgetTester tester,
+  ) async {
+    // §6.3: motion respects the OS setting. This was the one animation in the
+    // app and the only one that did not — a hardcoded 180ms that played
+    // regardless, for someone whose vestibular system it can genuinely upset.
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        FakeAccessibilityFeatures.allOn;
+    addTearDown(tester.platformDispatcher.clearAllTestValues);
+
+    await openLibrary(tester, <Recipe>[aRecipe(title: 'Braised short ribs')]);
+    final AnimatedSlide slide = tester.widget<AnimatedSlide>(
+      find.byType(AnimatedSlide).first,
+    );
+
+    expect(slide.duration, Duration.zero);
+  });
+
+  testWidgets('and animates normally when it does not', (
+    WidgetTester tester,
+  ) async {
+    await openLibrary(tester, <Recipe>[aRecipe(title: 'Braised short ribs')]);
+    final AnimatedSlide slide = tester.widget<AnimatedSlide>(
+      find.byType(AnimatedSlide).first,
+    );
+
+    expect(slide.duration, greaterThan(Duration.zero));
+  });
 }

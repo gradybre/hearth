@@ -7,6 +7,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
+import '../../app/widgets/centred_message.dart';
 import '../../app/widgets/swipe_to_delete.dart';
 import '../../app/widgets/undo_snackbar.dart';
 import '../../data/adapters/label_reader.dart';
@@ -459,29 +460,21 @@ class _EmptyFoods extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 380),
-        child: Padding(
-          padding: EdgeInsets.all(gutter),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                'No foods yet',
-                style: context.text.sectionHeader,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: HearthSpacing.sm),
-              Text(
-                'Scan a packet, or add the things you eat often by hand.',
-                style: context.text.body.copyWith(color: colors.textSecondary),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
+    return CentredMessage(
+      gutter: gutter,
+      children: <Widget>[
+        Text(
+          'No foods yet',
+          style: context.text.sectionHeader,
+          textAlign: TextAlign.center,
         ),
-      ),
+        const SizedBox(height: HearthSpacing.sm),
+        Text(
+          'Scan a packet, or add the things you eat often by hand.',
+          style: context.text.body.copyWith(color: colors.textSecondary),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 }
@@ -494,28 +487,23 @@ class _NoMatches extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.all(gutter),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            // "Nothing matches" while five results sit underneath reads as a
-            // broken screen. This message is only ever about the household's
-            // own foods, so it says so.
-            Text(
-              'None of your foods match "$query"',
-              style: context.text.body,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: HearthSpacing.sm),
-            TextButton(
-              onPressed: () => context.push('/food/new'),
-              child: const Text('Add it as a new food'),
-            ),
-          ],
+    return CentredMessage(
+      gutter: gutter,
+      children: <Widget>[
+        // "Nothing matches" while five results sit underneath reads as a
+        // broken screen. This message is only ever about the household's
+        // own foods, so it says so.
+        Text(
+          'None of your foods match "$query"',
+          style: context.text.body,
+          textAlign: TextAlign.center,
         ),
-      ),
+        const SizedBox(height: HearthSpacing.sm),
+        TextButton(
+          onPressed: () => context.push('/food/new'),
+          child: const Text('Add it as a new food'),
+        ),
+      ],
     );
   }
 }

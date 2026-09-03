@@ -5,6 +5,7 @@ import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../app/widgets/centred_message.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/recipes/default_sweep.dart';
@@ -237,32 +238,25 @@ class _NothingToDo extends StatelessWidget {
   final bool hasDefaults;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: EdgeInsets.all(gutter * 2),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Text(
-            hasDefaults ? 'Nothing left to match.' : 'No defaults marked yet.',
-            style: context.text.sectionHeader,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: HearthSpacing.sm),
-          Text(
-            hasDefaults
-                ? 'Every ingredient your defaults answer already has a food '
-                      'attached.'
-                : 'Open a food you buy often and turn on "Use this by '
-                      'default". Recipes calling for it will match it on '
-                      'their own.',
-            style: context.text.body.copyWith(
-              color: context.colors.textSecondary,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+  Widget build(BuildContext context) => CentredMessage(
+    gutter: gutter * 2,
+    children: <Widget>[
+      Text(
+        hasDefaults ? 'Nothing left to match.' : 'No defaults marked yet.',
+        style: context.text.sectionHeader,
+        textAlign: TextAlign.center,
       ),
-    ),
+      const SizedBox(height: HearthSpacing.sm),
+      Text(
+        hasDefaults
+            ? 'Every ingredient your defaults answer already has a food '
+                  'attached.'
+            : 'Open a food you buy often and turn on "Use this by '
+                  'default". Recipes calling for it will match it on '
+                  'their own.',
+        style: context.text.body.copyWith(color: context.colors.textSecondary),
+        textAlign: TextAlign.center,
+      ),
+    ],
   );
 }
