@@ -155,6 +155,10 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
         ingredientName: ingredient.name,
         library: _foods.values.toList(growable: false),
         remembered: remembered,
+        // A recipe is matched against the kitchen it came out of: a bowl
+        // resolves against the restaurant's menu and nothing else, a chilli
+        // against the household's foods and nothing else (spec §5.2).
+        kind: _kind,
       );
       if (suggestion == null || !suggestion.isTrusted) continue;
 
@@ -257,6 +261,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
         : IngredientMatcher.suggest(
             ingredientName: ingredient.name,
             library: _foods.values.toList(growable: false),
+            kind: _kind,
             // Not `remembered` here: a remembered match is already applied
             // by `_autoApplyTrustedMatches` before the row can even be tapped, so
             // `current` would already be set — passing it again would just
@@ -272,6 +277,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
         : IngredientMatcher.defaultsFor(
             ingredient.name,
             _foods.values.toList(growable: false),
+            kind: _kind,
           );
 
     final String? chosen = await showFoodPicker(
@@ -846,6 +852,19 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
                         _prep.clear();
                         _cook.clear();
                       }
+                      // Anything *Hearth* matched was matched against the
+                      // wrong kitchen and is dropped, so the auto-apply can
+                      // answer again with the other library. Hand-picked
+                      // matches are left exactly where they are — a person
+                      // choosing a food is not a guess to revisit.
+                      final Map<String, String> next = <String, String>{
+                        ..._matches,
+                      };
+                      for (final String key in _autoApplied) {
+                        next.remove(key);
+                      }
+                      _autoApplied.clear();
+                      _matches = next;
                     }),
                   ),
                 ],

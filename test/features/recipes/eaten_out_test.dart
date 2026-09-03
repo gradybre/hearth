@@ -139,6 +139,107 @@ void main() {
     expect(rows.single.kind, 'eaten_out');
   });
 
+  /// Chipotle's menu, as the seed writes it: global, branded, restaurant.
+  Food component(String name, double ounces, Macros macros) => aFood(
+    name,
+    id: 'f-${name.toLowerCase()}',
+    brand: 'Chipotle',
+    source: FoodSource.restaurant,
+    servingOptions: <ServingOption>[
+      aServing(amount: ounces, unit: Units.ounce, macros: macros),
+    ],
+  );
+
+  List<Food> chipotleMenu() => <Food>[
+    component('Chicken', 4, const Macros(kcal: 180, proteinG: 32, fatG: 7)),
+    component(
+      'Cilantro-Lime White Rice',
+      4,
+      const Macros(kcal: 210, proteinG: 4, carbG: 40, fatG: 4),
+    ),
+    component(
+      'Black Beans',
+      4,
+      const Macros(kcal: 130, proteinG: 8, carbG: 22, fatG: 1.5),
+    ),
+  ];
+
+  Future<void> typeIngredients(WidgetTester tester, String lines) async {
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (Widget w) =>
+            w is TextField &&
+            (w.decoration?.hintText ?? '').startsWith('2 tbsp olive oil'),
+      ),
+      lines,
+    );
+    await pumpFrames(tester, frames: 12);
+  }
+
+  Future<void> markEatenOut(WidgetTester tester) async {
+    // `scrollUntilVisible`, not `ensureVisible`: the editor is a lazy
+    // ListView and the switch sits below the ingredient rows, so with a few
+    // lines typed it has not been built yet and there is no element to scroll
+    // to.
+    final Finder toggle = find.byType(Switch);
+    await tester.scrollUntilVisible(
+      toggle,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await pumpFrames(tester);
+    await tester.tap(toggle);
+    await pumpFrames(tester, frames: 12);
+  }
+
+  testWidgets('a bowl builds itself once you say you ate out', (
+    WidgetTester tester,
+  ) async {
+    // The whole of building one: paste the lines, flip the switch. No tap per
+    // component to confirm a decision already made by saying it was eaten
+    // out.
+    await pumpHearthApp(tester, foods: chipotleMenu());
+    await tester.tap(find.text('Recipes').last);
+    await pumpFrames(tester);
+    await tester.tap(find.text('New recipe'));
+    await pumpFrames(tester);
+
+    await typeIngredients(
+      tester,
+      '4 oz chicken\n4 oz white rice\n4 oz black beans',
+    );
+    // Nothing yet: this is still a recipe somebody might be cooking.
+    expect(find.text('tap to match a food'), findsNWidgets(3));
+
+    await markEatenOut(tester);
+
+    expect(find.text('tap to match a food'), findsNothing);
+    expect(find.text('Chicken'), findsWidgets);
+    expect(find.text('Cilantro-Lime White Rice'), findsWidgets);
+    expect(find.text('Black Beans'), findsWidgets);
+  });
+
+  testWidgets('and flipping it back asks the question again', (
+    WidgetTester tester,
+  ) async {
+    // What Hearth matched, Hearth matched against a library that is now the
+    // wrong one. Leaving a burrito's chicken attached to a recipe somebody
+    // has just said they cook would be a wrong macro nobody chose.
+    await pumpHearthApp(tester, foods: chipotleMenu());
+    await tester.tap(find.text('Recipes').last);
+    await pumpFrames(tester);
+    await tester.tap(find.text('New recipe'));
+    await pumpFrames(tester);
+
+    await typeIngredients(tester, '4 oz chicken');
+    await markEatenOut(tester);
+    expect(find.text('tap to match a food'), findsNothing);
+
+    await markEatenOut(tester);
+
+    expect(find.text('tap to match a food'), findsOneWidget);
+  });
+
   testWidgets('its components are picked from the library by hand', (
     WidgetTester tester,
   ) async {

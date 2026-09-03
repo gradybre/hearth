@@ -1,4 +1,5 @@
 import 'package:hearth/domain/models/food.dart';
+import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/recipes/ingredient_matcher.dart';
 import 'package:test/test.dart';
 
@@ -414,25 +415,161 @@ void defaultFoodTests() {
       expect(IngredientMatcher.defaultsFor('chicken', <Food>[marked]), isEmpty);
     });
 
-    test('but a remembered match still wins, because a person chose it', () {
-      // Excluding these from *automatic* matching is the rule. Somebody who
-      // deliberately attached Chipotle's guacamole to a line has said what
-      // they meant, and Hearth does not second-guess a decision it was told.
+    test('a remembered match wins in the kitchen it came from', () {
+      // Somebody who deliberately attached Chipotle's guacamole to a line has
+      // said what they meant — but only about a meal from Chipotle. This test
+      // used to assert the first half without the second, which was the hole:
+      // remembered matches are trusted and keyed on the bare ingredient
+      // string, so "guacamole → Chipotle's" would have been applied to a
+      // recipe somebody was cooking.
       final Food guac = aFood(
         'Guacamole',
         id: 'f-chipotle-guac',
         brand: 'Chipotle',
         source: FoodSource.restaurant,
       );
+      const Map<String, String> remembered = <String, String>{
+        'guacamole': 'f-chipotle-guac',
+      };
 
-      final MatchSuggestion? suggestion = IngredientMatcher.suggest(
+      final MatchSuggestion? eatenOut = IngredientMatcher.suggest(
         ingredientName: 'guacamole',
         library: <Food>[guac],
-        remembered: <String, String>{'guacamole': 'f-chipotle-guac'},
+        remembered: remembered,
+        kind: RecipeKind.eatenOut,
+      );
+      expect(eatenOut?.foodId, 'f-chipotle-guac');
+      expect(eatenOut?.origin, MatchOrigin.remembered);
+
+      final MatchSuggestion? cooking = IngredientMatcher.suggest(
+        ingredientName: 'guacamole',
+        library: <Food>[guac],
+        remembered: remembered,
+      );
+      expect(cooking, isNull);
+    });
+  });
+
+  group('a meal you ordered matches against the menu (spec §5.2)', () {
+    Food chipotleChicken() => aFood(
+      'Chicken',
+      id: 'f-chipotle-chicken',
+      brand: 'Chipotle',
+      source: FoodSource.restaurant,
+    );
+    Food ownChicken() => aFood('Chicken breast', id: 'f-own-chicken');
+
+    test('a component resolves without being asked', () {
+      // The whole point of A: typing the six lines of a burrito bowl should
+      // be the whole of building one. A tap per line to say "yes, that
+      // Chipotle chicken" is a tax paid on a decision already made by saying
+      // the meal was eaten out.
+      final MatchSuggestion? suggestion = IngredientMatcher.suggest(
+        ingredientName: 'chicken',
+        library: <Food>[chipotleChicken(), ownChicken()],
+        kind: RecipeKind.eatenOut,
       );
 
-      expect(suggestion?.foodId, 'f-chipotle-guac');
-      expect(suggestion?.origin, MatchOrigin.remembered);
+      expect(suggestion?.foodId, 'f-chipotle-chicken');
+      // Trusted, so the editor applies it rather than offering it. A plain
+      // best guess would still need the tap this exists to remove.
+      expect(suggestion?.isTrusted, isTrue);
+      expect(suggestion?.origin, MatchOrigin.restaurantMenu);
+    });
+
+    test('and the household\'s own foods stay out of it', () {
+      // Symmetrical to the cooking rule. Your raw chicken breast is not what
+      // was in the bowl, and offering it would be the same error in reverse.
+      final MatchSuggestion? suggestion = IngredientMatcher.suggest(
+        ingredientName: 'chicken breast',
+        library: <Food>[ownChicken()],
+        kind: RecipeKind.eatenOut,
+      );
+
+      expect(suggestion, isNull);
+    });
+
+    test('a partial name still finds the one thing it can mean', () {
+      // Chipotle calls it "Cilantro-Lime White Rice"; nobody types that.
+      final Food rice = aFood(
+        'Cilantro-Lime White Rice',
+        id: 'f-white-rice',
+        brand: 'Chipotle',
+        source: FoodSource.restaurant,
+      );
+      final Food brown = aFood(
+        'Cilantro-Lime Brown Rice',
+        id: 'f-brown-rice',
+        brand: 'Chipotle',
+        source: FoodSource.restaurant,
+      );
+
+      expect(
+        IngredientMatcher.suggest(
+          ingredientName: 'white rice',
+          library: <Food>[rice, brown],
+          kind: RecipeKind.eatenOut,
+        )?.foodId,
+        'f-white-rice',
+      );
+      // But a line that has genuinely not said which is still offered rather
+      // than guessed at — the rule that will protect this the day a second
+      // chain is seeded and there are two Chickens.
+      expect(
+        IngredientMatcher.suggest(
+          ingredientName: 'rice',
+          library: <Food>[rice, brown],
+          kind: RecipeKind.eatenOut,
+        ),
+        isNull,
+      );
+    });
+
+    test('two chains answering one line is offered, never applied', () {
+      final Food cava = aFood(
+        'Chicken',
+        id: 'f-cava-chicken',
+        brand: 'Cava',
+        source: FoodSource.restaurant,
+      );
+
+      expect(
+        IngredientMatcher.suggest(
+          ingredientName: 'chicken',
+          library: <Food>[chipotleChicken(), cava],
+          kind: RecipeKind.eatenOut,
+        ),
+        isNull,
+      );
+    });
+
+    test('a remembered restaurant match never leaks into a cooking recipe', () {
+      // The hole this closes: picking Chipotle's chicken by hand in a bowl
+      // writes an `ingredient_match` row keyed on "chicken", and remembered
+      // matches are trusted — so the next chilli would silently count a
+      // burrito's chicken. Excluding restaurant foods from the candidate pool
+      // meant nothing while this path went around it.
+      final MatchSuggestion? suggestion = IngredientMatcher.suggest(
+        ingredientName: 'chicken',
+        library: <Food>[chipotleChicken(), ownChicken()],
+        remembered: <String, String>{'chicken': 'f-chipotle-chicken'},
+      );
+
+      expect(suggestion?.foodId, isNot('f-chipotle-chicken'));
+    });
+
+    test('and a remembered household match does not leak the other way', () {
+      final MatchSuggestion? suggestion = IngredientMatcher.suggest(
+        ingredientName: 'beans',
+        library: <Food>[
+          ownChicken(),
+          aFood('Black beans', id: 'f-own-beans'),
+        ],
+        remembered: <String, String>{'beans': 'f-own-beans'},
+        kind: RecipeKind.eatenOut,
+      );
+
+      expect(suggestion, isNull);
     });
   });
 }

@@ -2,6 +2,7 @@ import 'package:meta/meta.dart';
 
 import '../foods/food_concept.dart';
 import '../models/food.dart';
+import '../models/recipe.dart';
 import '../text/text_normaliser.dart';
 
 /// Where a suggested food came from, so the UI can say why (spec §5.3).
@@ -22,6 +23,17 @@ enum MatchOrigin {
   /// recipe or a recent one.
   previouslyUsed,
 
+  /// A component of a meal you said you ate out, matched against that
+  /// restaurant's own published menu (spec §5.2).
+  ///
+  /// Trusted, unlike the plain library guess below, and the difference is the
+  /// candidate set. A guess across the whole household library is one of many
+  /// plausible foods; this is a name match against one chain's small, curated
+  /// menu, in a recipe whose kind already said that is where the food came
+  /// from. The unambiguity rule still applies — two chains answering one line
+  /// is offered, not applied.
+  restaurantMenu,
+
   /// A plain name match against the library. The weakest signal, and the one
   /// worth showing as a guess rather than applying silently.
   bestGuess,
@@ -38,7 +50,9 @@ class MatchSuggestion {
   /// Defaults and remembered corrections are applied without asking; anything
   /// weaker is a suggestion the user confirms.
   bool get isTrusted =>
-      origin == MatchOrigin.defaultFood || origin == MatchOrigin.remembered;
+      origin == MatchOrigin.defaultFood ||
+      origin == MatchOrigin.remembered ||
+      origin == MatchOrigin.restaurantMenu;
 
   @override
   bool operator ==(Object other) =>
@@ -77,22 +91,22 @@ abstract final class IngredientMatcher {
     required List<Food> library,
     Map<String, String> remembered = const <String, String>{},
     Map<String, String> previouslyUsed = const <String, String>{},
+    RecipeKind kind = RecipeKind.cooked,
   }) {
     final String key = normaliseKey(ingredientName);
     if (key.isEmpty) return null;
 
-    // Everything the *household* could be cooking with. A restaurant's own
-    // menu is in the same library and is not one of them — see [matchable].
-    final List<Food> candidates = matchable(library);
+    final List<Food> candidates = matchable(library, kind: kind);
 
-    // `known` is still the whole live library on purpose: it only checks that
-    // a remembered or previously-used id still exists, and a person who
-    // deliberately attached Chipotle's guacamole to a line has said what they
-    // meant. The exclusion is of automatic matching, not of choice.
-    final Set<String> known = library
-        .where((Food f) => !f.isDeleted)
-        .map((Food f) => f.id)
-        .toSet();
+    // Deliberately the candidates rather than the whole live library.
+    //
+    // `known` gates the remembered and previously-used paths, and both are
+    // *trusted* — applied without asking. Picking Chipotle's chicken by hand
+    // in a bowl writes an `ingredient_match` row keyed on "chicken", so
+    // letting that row through here would auto-apply a burrito's chicken to
+    // the next chilli. Excluding restaurant foods from the guess would have
+    // meant nothing while this path went around it.
+    final Set<String> known = candidates.map((Food f) => f.id).toSet();
 
     // Only when the household has said exactly one thing. Several defaults
     // answering the same line is not a tie to break — a recipe asking for
@@ -123,7 +137,13 @@ abstract final class IngredientMatcher {
       );
     }
 
-    return _bestGuess(key, candidates);
+    return _bestGuess(
+      key,
+      candidates,
+      origin: kind == RecipeKind.eatenOut
+          ? MatchOrigin.restaurantMenu
+          : MatchOrigin.bestGuess,
+    );
   }
 
   /// Every default food whose name says what [ingredientName] asks for,
@@ -133,12 +153,16 @@ abstract final class IngredientMatcher {
   /// match. More than one is the ambiguity worth showing: those are the
   /// options to offer, and they are already the household's own foods, so the
   /// menu is short and every item on it is one they chose.
-  static List<Food> defaultsFor(String ingredientName, List<Food> library) {
+  static List<Food> defaultsFor(
+    String ingredientName,
+    List<Food> library, {
+    RecipeKind kind = RecipeKind.cooked,
+  }) {
     final FoodConcept line = FoodConcept.of(ingredientName);
     if (line.isEmpty) return const <Food>[];
 
     final List<(Food, int)> matched = <(Food, int)>[
-      for (final Food food in matchable(library))
+      for (final Food food in matchable(library, kind: kind))
         if (food.isDefault && !food.isDeleted)
           if (FoodConcept.of('${food.name} ${food.brand ?? ''}')
               case final FoodConcept c when c.covers(line))
@@ -149,28 +173,49 @@ abstract final class IngredientMatcher {
   }
 
   /// An exact normalised name match, or a single unambiguous partial one.
-  /// The foods an ingredient line may be matched to **automatically**.
+  /// The foods an ingredient line may be matched to **automatically**, for a
+  /// recipe of this [kind] (spec §5.2).
   ///
-  /// Everything live, less anything read off a restaurant's menu (spec §5.2).
-  /// Chipotle's sheet contributes a Chicken, a Cheese, a Sour Cream and a
-  /// Romaine Lettuce to the household library, and none of them is a thing
-  /// you cook with. Renaming them "Chipotle Chicken" would not help:
-  /// [FoodConcept.canAnswer] is asymmetric on purpose, so a line reading
-  /// "chicken" is still answered by a food whose name merely adds a brand.
+  /// The two sets are disjoint, and that is the whole idea: **a recipe is
+  /// matched against the kitchen it came out of.**
   ///
-  /// The damage is worse than a wrong suggestion. A best guess is only
-  /// offered when it is unambiguous, so a second Chicken makes lines that
-  /// used to resolve cleanly stop resolving at all — a silent loss of
-  /// matching quality across every recipe already in the library.
+  ///  * A recipe you **cook** never sees a restaurant's menu. Chipotle's
+  ///    sheet contributes a Chicken, a Cheese, a Sour Cream and a Romaine
+  ///    Lettuce to the household library, and none of them is a thing you
+  ///    cook with. Renaming them "Chipotle Chicken" would not help:
+  ///    [FoodConcept.canAnswer] is asymmetric on purpose, so a line reading
+  ///    "chicken" is still answered by a food whose name merely adds a brand.
   ///
-  /// Choosing one by hand is untouched, and so is a remembered match. This
-  /// excludes them from being picked *for* you, not from being picked.
-  static List<Food> matchable(List<Food> library) => <Food>[
-    for (final Food food in library)
-      if (!food.isDeleted && food.source != FoodSource.restaurant) food,
-  ];
+  ///    The damage is worse than a wrong suggestion. A guess is only offered
+  ///    when it is unambiguous, so a second Chicken makes lines that used to
+  ///    resolve cleanly stop resolving at all — a silent loss of matching
+  ///    quality across every recipe already saved.
+  ///
+  ///  * A meal you **ate out** sees nothing else. Your raw chicken breast was
+  ///    not what was in the bowl, and offering it is the same error in
+  ///    reverse. Excluding it also keeps the answer unambiguous, which is
+  ///    what lets a menu match be applied rather than merely offered.
+  ///
+  /// Choosing one by hand is untouched in both directions — the picker is
+  /// unfiltered. This decides what is picked *for* you.
+  static List<Food> matchable(
+    List<Food> library, {
+    RecipeKind kind = RecipeKind.cooked,
+  }) {
+    final bool wantRestaurant = kind == RecipeKind.eatenOut;
+    return <Food>[
+      for (final Food food in library)
+        if (!food.isDeleted &&
+            (food.source == FoodSource.restaurant) == wantRestaurant)
+          food,
+    ];
+  }
 
-  static MatchSuggestion? _bestGuess(String key, List<Food> library) {
+  static MatchSuggestion? _bestGuess(
+    String key,
+    List<Food> library, {
+    MatchOrigin origin = MatchOrigin.bestGuess,
+  }) {
     final List<Food> live = library
         .where((Food f) => !f.isDeleted)
         .toList(growable: false);
@@ -179,10 +224,7 @@ abstract final class IngredientMatcher {
         .where((Food f) => normaliseKey(f.name) == key)
         .toList(growable: false);
     if (exact.length == 1) {
-      return MatchSuggestion(
-        foodId: exact.single.id,
-        origin: MatchOrigin.bestGuess,
-      );
+      return MatchSuggestion(foodId: exact.single.id, origin: origin);
     }
     // Two foods with the same name is exactly the case the duplicate warning
     // exists for; picking one here would be arbitrary.
@@ -196,10 +238,7 @@ abstract final class IngredientMatcher {
         )
         .toList(growable: false);
     if (partial.length == 1) {
-      return MatchSuggestion(
-        foodId: partial.single.id,
-        origin: MatchOrigin.bestGuess,
-      );
+      return MatchSuggestion(foodId: partial.single.id, origin: origin);
     }
 
     return null;
