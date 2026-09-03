@@ -275,6 +275,11 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       ingredientName: ingredient.name,
       currentFoodId: current ?? suggestion?.foodId,
       defaults: defaults.length > 1 ? defaults : const <Food>[],
+      // The same guard the row's own grass icon has carried all along
+      // (`_offersNoMatch`): a line the recipe already excluded cannot show a
+      // seasoning badge, so it is not offered one. The Seasonings screen is
+      // where that list is managed.
+      offerSeasoning: !ingredient.isOptional,
     );
     await _applyMatch(ingredient, chosen);
   }

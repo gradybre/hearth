@@ -23,6 +23,7 @@ Future<String?> showFoodPicker(
   required String ingredientName,
   String? currentFoodId,
   List<Food> defaults = const <Food>[],
+  bool offerSeasoning = true,
 }) => showModalBottomSheet<String>(
   context: context,
   isScrollControlled: true,
@@ -31,6 +32,7 @@ Future<String?> showFoodPicker(
     ingredientName: ingredientName,
     currentFoodId: currentFoodId,
     defaults: defaults,
+    offerSeasoning: offerSeasoning,
   ),
 );
 
@@ -45,10 +47,20 @@ class _FoodPickerSheet extends ConsumerStatefulWidget {
     required this.ingredientName,
     this.currentFoodId,
     this.defaults = const <Food>[],
+    this.offerSeasoning = true,
   });
 
   final String ingredientName;
   final String? currentFoodId;
+
+  /// Whether marking this line as a seasoning could actually change anything.
+  ///
+  /// False for a line the recipe's own words already excluded — "salt to
+  /// taste". `MacroCalculator` resolves `isOptional` before it looks at the
+  /// seasoning mark, so such a line reads "not counted" however many times
+  /// the button is pressed. It still wrote a remembered row, which made the
+  /// control worse than absent: it did something invisible and looked broken.
+  final bool offerSeasoning;
 
   /// The household's defaults that answer this line, when more than one does.
   ///
@@ -229,21 +241,23 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
                         // same colour as the badge a *marked* line wears, so
                         // opening the sheet on an apple read as Hearth
                         // claiming the apple was a seasoning.
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: OutlinedButton.icon(
-                            onPressed: () =>
-                                Navigator.of(context)
-                                    .pop(noMatchNeededSentinel),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: colors.textSecondary,
-                              side: BorderSide(color: colors.outline),
+                        if (widget.offerSeasoning) ...<Widget>[
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: OutlinedButton.icon(
+                              onPressed: () =>
+                                  Navigator.of(context)
+                                      .pop(noMatchNeededSentinel),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: colors.textSecondary,
+                                side: BorderSide(color: colors.outline),
+                              ),
+                              icon: const Icon(Icons.grass_outlined, size: 18),
+                              label: const Text('Mark as a seasoning instead'),
                             ),
-                            icon: const Icon(Icons.grass_outlined, size: 18),
-                            label: const Text('Mark as a seasoning instead'),
                           ),
-                        ),
-                        const SizedBox(height: HearthSpacing.sm),
+                          const SizedBox(height: HearthSpacing.sm),
+                        ],
                         Row(
                           children: <Widget>[
                             Expanded(

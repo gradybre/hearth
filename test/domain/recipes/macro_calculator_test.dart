@@ -87,6 +87,19 @@ void main() {
       expect(result.isDataGap, isFalse);
     });
 
+    test('optional wins over the seasoning mark, and that is deliberate', () {
+      // Both flags are set, and `optionalExcluded` is the answer. Do not
+      // reorder these two checks to make a "mark as a seasoning" button do
+      // something on a "to taste" line: the parser read the recipe's own
+      // words, and "to taste" is what the recipe said. The button is hidden
+      // there instead — see `showFoodPicker`'s `offerSeasoning`.
+      final IngredientMacros result = MacroCalculator.forIngredient(
+        anIngredient('salt', optional: true, needsNoMatch: true),
+      );
+      expect(result.status, IngredientMacroStatus.optionalExcluded);
+      expect(result.isDataGap, isFalse);
+    });
+
     test('an unmatched ingredient is a gap, not a zero-calorie ingredient', () {
       final IngredientMacros result = MacroCalculator.forIngredient(
         anIngredient('fennel fronds', amount: 1, unit: Units.cup),

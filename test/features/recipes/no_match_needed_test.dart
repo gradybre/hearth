@@ -146,6 +146,39 @@ void main() {
       expect(rows.single.needsNoMatch, isFalse);
       expect(rows.single.foodId, isNull);
     });
+
+    testWidgets('from the picker, on a line that can take the mark', (
+      WidgetTester tester,
+    ) async {
+      await openEditorWith(tester, '1 tbsp fish sauce');
+      await tester.tap(find.text('tap to match a food'));
+      await pumpFrames(tester, frames: 12);
+
+      await tester.tap(find.text('Mark as a seasoning instead'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(find.text('seasoning — no match needed'), findsOneWidget);
+    });
+
+    testWidgets('but not offered where it could not possibly land', (
+      WidgetTester tester,
+    ) async {
+      // "Salt to taste" is excluded already, on the recipe's own say-so, and
+      // `MacroCalculator` resolves that before it looks at the seasoning mark
+      // — so the status can never become "seasoning" however hard the button
+      // is pressed. Offering it anyway was a control that wrote a remembered
+      // row, changed nothing on screen, and read exactly like a bug.
+      await openEditorWith(tester, 'salt to taste');
+      expect(find.text('not counted'), findsOneWidget);
+
+      await tester.tap(find.text('not counted'));
+      await pumpFrames(tester, frames: 12);
+
+      // The picker still opens: attaching a food to a "to taste" line is a
+      // reasonable thing to want. It is only the seasoning offer that goes.
+      expect(find.text('Search your foods'), findsOneWidget);
+      expect(find.text('Mark as a seasoning instead'), findsNothing);
+    });
   });
 
   group('the list of them', () {
