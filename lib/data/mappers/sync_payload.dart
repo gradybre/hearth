@@ -123,6 +123,13 @@ abstract final class SyncPayload {
             proteinG: _double(o['protein_g']) ?? 0,
             carbG: _double(o['carb_g']) ?? 0,
             fatG: _double(o['fat_g']) ?? 0,
+            // The four fall back to zero because they are always known and a
+            // missing one is a broken payload. These three do not: a payload
+            // silent about fibre is a food nobody has told us about, and this
+            // is the last place that could be lost (spec §5.6).
+            fiberG: _double(o['fiber_g']),
+            sodiumMg: _double(o['sodium_mg']),
+            cholesterolMg: _double(o['cholesterol_mg']),
           ),
         ),
     ],

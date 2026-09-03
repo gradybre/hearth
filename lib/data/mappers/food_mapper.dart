@@ -65,6 +65,11 @@ abstract final class FoodMapper {
             proteinG: row.proteinG,
             carbG: row.carbG,
             fatG: row.fatG,
+            // No `?? 0`. A serving that has never been told its fibre says so
+            // by staying null all the way back out (spec §5.6).
+            fiberG: row.fiberG,
+            sodiumMg: row.sodiumMg,
+            cholesterolMg: row.cholesterolMg,
           ),
         ),
     ],
@@ -109,6 +114,11 @@ abstract final class FoodMapper {
             proteinG: Value<double>(food.servingOptions[i].macros.proteinG),
             carbG: Value<double>(food.servingOptions[i].macros.carbG),
             fatG: Value<double>(food.servingOptions[i].macros.fatG),
+            fiberG: Value<double?>(food.servingOptions[i].macros.fiberG),
+            sodiumMg: Value<double?>(food.servingOptions[i].macros.sodiumMg),
+            cholesterolMg: Value<double?>(
+              food.servingOptions[i].macros.cholesterolMg,
+            ),
             sortOrder: Value<int>(i),
           ),
       ];
@@ -151,6 +161,9 @@ abstract final class FoodMapper {
           'protein_g': food.servingOptions[i].macros.proteinG,
           'carb_g': food.servingOptions[i].macros.carbG,
           'fat_g': food.servingOptions[i].macros.fatG,
+          'fiber_g': food.servingOptions[i].macros.fiberG,
+          'sodium_mg': food.servingOptions[i].macros.sodiumMg,
+          'cholesterol_mg': food.servingOptions[i].macros.cholesterolMg,
           'sort_order': i,
         },
     ],

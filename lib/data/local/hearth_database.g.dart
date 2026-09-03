@@ -4356,6 +4356,37 @@ class $FoodServingOptionsTable extends FoodServingOptions
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _fiberGMeta = const VerificationMeta('fiberG');
+  @override
+  late final GeneratedColumn<double> fiberG = GeneratedColumn<double>(
+    'fiber_g',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sodiumMgMeta = const VerificationMeta(
+    'sodiumMg',
+  );
+  @override
+  late final GeneratedColumn<double> sodiumMg = GeneratedColumn<double>(
+    'sodium_mg',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _cholesterolMgMeta = const VerificationMeta(
+    'cholesterolMg',
+  );
+  @override
+  late final GeneratedColumn<double> cholesterolMg = GeneratedColumn<double>(
+    'cholesterol_mg',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _sortOrderMeta = const VerificationMeta(
     'sortOrder',
   );
@@ -4380,6 +4411,9 @@ class $FoodServingOptionsTable extends FoodServingOptions
     proteinG,
     carbG,
     fatG,
+    fiberG,
+    sodiumMg,
+    cholesterolMg,
     sortOrder,
   ];
   @override
@@ -4464,6 +4498,27 @@ class $FoodServingOptionsTable extends FoodServingOptions
         fatG.isAcceptableOrUnknown(data['fat_g']!, _fatGMeta),
       );
     }
+    if (data.containsKey('fiber_g')) {
+      context.handle(
+        _fiberGMeta,
+        fiberG.isAcceptableOrUnknown(data['fiber_g']!, _fiberGMeta),
+      );
+    }
+    if (data.containsKey('sodium_mg')) {
+      context.handle(
+        _sodiumMgMeta,
+        sodiumMg.isAcceptableOrUnknown(data['sodium_mg']!, _sodiumMgMeta),
+      );
+    }
+    if (data.containsKey('cholesterol_mg')) {
+      context.handle(
+        _cholesterolMgMeta,
+        cholesterolMg.isAcceptableOrUnknown(
+          data['cholesterol_mg']!,
+          _cholesterolMgMeta,
+        ),
+      );
+    }
     if (data.containsKey('sort_order')) {
       context.handle(
         _sortOrderMeta,
@@ -4519,6 +4574,18 @@ class $FoodServingOptionsTable extends FoodServingOptions
         DriftSqlType.double,
         data['${effectivePrefix}fat_g'],
       )!,
+      fiberG: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}fiber_g'],
+      ),
+      sodiumMg: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}sodium_mg'],
+      ),
+      cholesterolMg: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}cholesterol_mg'],
+      ),
       sortOrder: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
@@ -4544,6 +4611,13 @@ class FoodServingOptionRow extends DataClass
   final double proteinG;
   final double carbG;
   final double fatG;
+
+  /// The three minor nutrients (spec §5.6). Nullable and **no default**: null
+  /// is unknown, and a `withDefault(0)` here would quietly turn every food
+  /// that has never heard of fibre into one that claims to have none.
+  final double? fiberG;
+  final double? sodiumMg;
+  final double? cholesterolMg;
   final int sortOrder;
   const FoodServingOptionRow({
     required this.id,
@@ -4556,6 +4630,9 @@ class FoodServingOptionRow extends DataClass
     required this.proteinG,
     required this.carbG,
     required this.fatG,
+    this.fiberG,
+    this.sodiumMg,
+    this.cholesterolMg,
     required this.sortOrder,
   });
   @override
@@ -4573,6 +4650,15 @@ class FoodServingOptionRow extends DataClass
     map['protein_g'] = Variable<double>(proteinG);
     map['carb_g'] = Variable<double>(carbG);
     map['fat_g'] = Variable<double>(fatG);
+    if (!nullToAbsent || fiberG != null) {
+      map['fiber_g'] = Variable<double>(fiberG);
+    }
+    if (!nullToAbsent || sodiumMg != null) {
+      map['sodium_mg'] = Variable<double>(sodiumMg);
+    }
+    if (!nullToAbsent || cholesterolMg != null) {
+      map['cholesterol_mg'] = Variable<double>(cholesterolMg);
+    }
     map['sort_order'] = Variable<int>(sortOrder);
     return map;
   }
@@ -4591,6 +4677,15 @@ class FoodServingOptionRow extends DataClass
       proteinG: Value(proteinG),
       carbG: Value(carbG),
       fatG: Value(fatG),
+      fiberG: fiberG == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fiberG),
+      sodiumMg: sodiumMg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sodiumMg),
+      cholesterolMg: cholesterolMg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cholesterolMg),
       sortOrder: Value(sortOrder),
     );
   }
@@ -4611,6 +4706,9 @@ class FoodServingOptionRow extends DataClass
       proteinG: serializer.fromJson<double>(json['proteinG']),
       carbG: serializer.fromJson<double>(json['carbG']),
       fatG: serializer.fromJson<double>(json['fatG']),
+      fiberG: serializer.fromJson<double?>(json['fiberG']),
+      sodiumMg: serializer.fromJson<double?>(json['sodiumMg']),
+      cholesterolMg: serializer.fromJson<double?>(json['cholesterolMg']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
     );
   }
@@ -4628,6 +4726,9 @@ class FoodServingOptionRow extends DataClass
       'proteinG': serializer.toJson<double>(proteinG),
       'carbG': serializer.toJson<double>(carbG),
       'fatG': serializer.toJson<double>(fatG),
+      'fiberG': serializer.toJson<double?>(fiberG),
+      'sodiumMg': serializer.toJson<double?>(sodiumMg),
+      'cholesterolMg': serializer.toJson<double?>(cholesterolMg),
       'sortOrder': serializer.toJson<int>(sortOrder),
     };
   }
@@ -4643,6 +4744,9 @@ class FoodServingOptionRow extends DataClass
     double? proteinG,
     double? carbG,
     double? fatG,
+    Value<double?> fiberG = const Value.absent(),
+    Value<double?> sodiumMg = const Value.absent(),
+    Value<double?> cholesterolMg = const Value.absent(),
     int? sortOrder,
   }) => FoodServingOptionRow(
     id: id ?? this.id,
@@ -4655,6 +4759,11 @@ class FoodServingOptionRow extends DataClass
     proteinG: proteinG ?? this.proteinG,
     carbG: carbG ?? this.carbG,
     fatG: fatG ?? this.fatG,
+    fiberG: fiberG.present ? fiberG.value : this.fiberG,
+    sodiumMg: sodiumMg.present ? sodiumMg.value : this.sodiumMg,
+    cholesterolMg: cholesterolMg.present
+        ? cholesterolMg.value
+        : this.cholesterolMg,
     sortOrder: sortOrder ?? this.sortOrder,
   );
   FoodServingOptionRow copyWithCompanion(FoodServingOptionsCompanion data) {
@@ -4675,6 +4784,11 @@ class FoodServingOptionRow extends DataClass
       proteinG: data.proteinG.present ? data.proteinG.value : this.proteinG,
       carbG: data.carbG.present ? data.carbG.value : this.carbG,
       fatG: data.fatG.present ? data.fatG.value : this.fatG,
+      fiberG: data.fiberG.present ? data.fiberG.value : this.fiberG,
+      sodiumMg: data.sodiumMg.present ? data.sodiumMg.value : this.sodiumMg,
+      cholesterolMg: data.cholesterolMg.present
+          ? data.cholesterolMg.value
+          : this.cholesterolMg,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
     );
   }
@@ -4692,6 +4806,9 @@ class FoodServingOptionRow extends DataClass
           ..write('proteinG: $proteinG, ')
           ..write('carbG: $carbG, ')
           ..write('fatG: $fatG, ')
+          ..write('fiberG: $fiberG, ')
+          ..write('sodiumMg: $sodiumMg, ')
+          ..write('cholesterolMg: $cholesterolMg, ')
           ..write('sortOrder: $sortOrder')
           ..write(')'))
         .toString();
@@ -4709,6 +4826,9 @@ class FoodServingOptionRow extends DataClass
     proteinG,
     carbG,
     fatG,
+    fiberG,
+    sodiumMg,
+    cholesterolMg,
     sortOrder,
   );
   @override
@@ -4725,6 +4845,9 @@ class FoodServingOptionRow extends DataClass
           other.proteinG == this.proteinG &&
           other.carbG == this.carbG &&
           other.fatG == this.fatG &&
+          other.fiberG == this.fiberG &&
+          other.sodiumMg == this.sodiumMg &&
+          other.cholesterolMg == this.cholesterolMg &&
           other.sortOrder == this.sortOrder);
 }
 
@@ -4740,6 +4863,9 @@ class FoodServingOptionsCompanion
   final Value<double> proteinG;
   final Value<double> carbG;
   final Value<double> fatG;
+  final Value<double?> fiberG;
+  final Value<double?> sodiumMg;
+  final Value<double?> cholesterolMg;
   final Value<int> sortOrder;
   final Value<int> rowid;
   const FoodServingOptionsCompanion({
@@ -4753,6 +4879,9 @@ class FoodServingOptionsCompanion
     this.proteinG = const Value.absent(),
     this.carbG = const Value.absent(),
     this.fatG = const Value.absent(),
+    this.fiberG = const Value.absent(),
+    this.sodiumMg = const Value.absent(),
+    this.cholesterolMg = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -4767,6 +4896,9 @@ class FoodServingOptionsCompanion
     this.proteinG = const Value.absent(),
     this.carbG = const Value.absent(),
     this.fatG = const Value.absent(),
+    this.fiberG = const Value.absent(),
+    this.sodiumMg = const Value.absent(),
+    this.cholesterolMg = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -4785,6 +4917,9 @@ class FoodServingOptionsCompanion
     Expression<double>? proteinG,
     Expression<double>? carbG,
     Expression<double>? fatG,
+    Expression<double>? fiberG,
+    Expression<double>? sodiumMg,
+    Expression<double>? cholesterolMg,
     Expression<int>? sortOrder,
     Expression<int>? rowid,
   }) {
@@ -4799,6 +4934,9 @@ class FoodServingOptionsCompanion
       if (proteinG != null) 'protein_g': proteinG,
       if (carbG != null) 'carb_g': carbG,
       if (fatG != null) 'fat_g': fatG,
+      if (fiberG != null) 'fiber_g': fiberG,
+      if (sodiumMg != null) 'sodium_mg': sodiumMg,
+      if (cholesterolMg != null) 'cholesterol_mg': cholesterolMg,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (rowid != null) 'rowid': rowid,
     });
@@ -4815,6 +4953,9 @@ class FoodServingOptionsCompanion
     Value<double>? proteinG,
     Value<double>? carbG,
     Value<double>? fatG,
+    Value<double?>? fiberG,
+    Value<double?>? sodiumMg,
+    Value<double?>? cholesterolMg,
     Value<int>? sortOrder,
     Value<int>? rowid,
   }) {
@@ -4829,6 +4970,9 @@ class FoodServingOptionsCompanion
       proteinG: proteinG ?? this.proteinG,
       carbG: carbG ?? this.carbG,
       fatG: fatG ?? this.fatG,
+      fiberG: fiberG ?? this.fiberG,
+      sodiumMg: sodiumMg ?? this.sodiumMg,
+      cholesterolMg: cholesterolMg ?? this.cholesterolMg,
       sortOrder: sortOrder ?? this.sortOrder,
       rowid: rowid ?? this.rowid,
     );
@@ -4867,6 +5011,15 @@ class FoodServingOptionsCompanion
     if (fatG.present) {
       map['fat_g'] = Variable<double>(fatG.value);
     }
+    if (fiberG.present) {
+      map['fiber_g'] = Variable<double>(fiberG.value);
+    }
+    if (sodiumMg.present) {
+      map['sodium_mg'] = Variable<double>(sodiumMg.value);
+    }
+    if (cholesterolMg.present) {
+      map['cholesterol_mg'] = Variable<double>(cholesterolMg.value);
+    }
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
@@ -4889,6 +5042,9 @@ class FoodServingOptionsCompanion
           ..write('proteinG: $proteinG, ')
           ..write('carbG: $carbG, ')
           ..write('fatG: $fatG, ')
+          ..write('fiberG: $fiberG, ')
+          ..write('sodiumMg: $sodiumMg, ')
+          ..write('cholesterolMg: $cholesterolMg, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -15437,6 +15593,9 @@ typedef $$FoodServingOptionsTableCreateCompanionBuilder =
       Value<double> proteinG,
       Value<double> carbG,
       Value<double> fatG,
+      Value<double?> fiberG,
+      Value<double?> sodiumMg,
+      Value<double?> cholesterolMg,
       Value<int> sortOrder,
       Value<int> rowid,
     });
@@ -15452,6 +15611,9 @@ typedef $$FoodServingOptionsTableUpdateCompanionBuilder =
       Value<double> proteinG,
       Value<double> carbG,
       Value<double> fatG,
+      Value<double?> fiberG,
+      Value<double?> sodiumMg,
+      Value<double?> cholesterolMg,
       Value<int> sortOrder,
       Value<int> rowid,
     });
@@ -15541,6 +15703,21 @@ class $$FoodServingOptionsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<double> get fiberG => $composableBuilder(
+    column: $table.fiberG,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get sodiumMg => $composableBuilder(
+    column: $table.sodiumMg,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get cholesterolMg => $composableBuilder(
+    column: $table.cholesterolMg,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
     builder: (column) => ColumnFilters(column),
@@ -15624,6 +15801,21 @@ class $$FoodServingOptionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get fiberG => $composableBuilder(
+    column: $table.fiberG,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get sodiumMg => $composableBuilder(
+    column: $table.sodiumMg,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get cholesterolMg => $composableBuilder(
+    column: $table.cholesterolMg,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
     builder: (column) => ColumnOrderings(column),
@@ -15695,6 +15887,17 @@ class $$FoodServingOptionsTableAnnotationComposer
   GeneratedColumn<double> get fatG =>
       $composableBuilder(column: $table.fatG, builder: (column) => column);
 
+  GeneratedColumn<double> get fiberG =>
+      $composableBuilder(column: $table.fiberG, builder: (column) => column);
+
+  GeneratedColumn<double> get sodiumMg =>
+      $composableBuilder(column: $table.sodiumMg, builder: (column) => column);
+
+  GeneratedColumn<double> get cholesterolMg => $composableBuilder(
+    column: $table.cholesterolMg,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
 
@@ -15765,6 +15968,9 @@ class $$FoodServingOptionsTableTableManager
                 Value<double> proteinG = const Value.absent(),
                 Value<double> carbG = const Value.absent(),
                 Value<double> fatG = const Value.absent(),
+                Value<double?> fiberG = const Value.absent(),
+                Value<double?> sodiumMg = const Value.absent(),
+                Value<double?> cholesterolMg = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FoodServingOptionsCompanion(
@@ -15778,6 +15984,9 @@ class $$FoodServingOptionsTableTableManager
                 proteinG: proteinG,
                 carbG: carbG,
                 fatG: fatG,
+                fiberG: fiberG,
+                sodiumMg: sodiumMg,
+                cholesterolMg: cholesterolMg,
                 sortOrder: sortOrder,
                 rowid: rowid,
               ),
@@ -15793,6 +16002,9 @@ class $$FoodServingOptionsTableTableManager
                 Value<double> proteinG = const Value.absent(),
                 Value<double> carbG = const Value.absent(),
                 Value<double> fatG = const Value.absent(),
+                Value<double?> fiberG = const Value.absent(),
+                Value<double?> sodiumMg = const Value.absent(),
+                Value<double?> cholesterolMg = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FoodServingOptionsCompanion.insert(
@@ -15806,6 +16018,9 @@ class $$FoodServingOptionsTableTableManager
                 proteinG: proteinG,
                 carbG: carbG,
                 fatG: fatG,
+                fiberG: fiberG,
+                sodiumMg: sodiumMg,
+                cholesterolMg: cholesterolMg,
                 sortOrder: sortOrder,
                 rowid: rowid,
               ),

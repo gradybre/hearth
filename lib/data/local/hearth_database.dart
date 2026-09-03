@@ -49,7 +49,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -171,6 +171,26 @@ class HearthDatabase extends _$HearthDatabase {
         await _addColumnIfMissing(m, foods, foods.packCanonical);
         await _addColumnIfMissing(m, foods, foods.packKind);
         await _addColumnIfMissing(m, foods, foods.packUnit);
+      }
+      // v19 carries fibre, sodium and cholesterol on a serving (spec §5.6).
+      // Additive, and nullable — an existing serving has never been asked
+      // about them, which is exactly what null says.
+      if (from < 19) {
+        await _addColumnIfMissing(
+          m,
+          foodServingOptions,
+          foodServingOptions.fiberG,
+        );
+        await _addColumnIfMissing(
+          m,
+          foodServingOptions,
+          foodServingOptions.sodiumMg,
+        );
+        await _addColumnIfMissing(
+          m,
+          foodServingOptions,
+          foodServingOptions.cholesterolMg,
+        );
       }
     },
     beforeOpen: (OpeningDetails details) async {

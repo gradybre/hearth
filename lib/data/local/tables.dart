@@ -154,6 +154,13 @@ class FoodServingOptions extends Table {
   RealColumn get proteinG => real().withDefault(const Constant(0))();
   RealColumn get carbG => real().withDefault(const Constant(0))();
   RealColumn get fatG => real().withDefault(const Constant(0))();
+
+  /// The three minor nutrients (spec §5.6). Nullable and **no default**: null
+  /// is unknown, and a `withDefault(0)` here would quietly turn every food
+  /// that has never heard of fibre into one that claims to have none.
+  RealColumn get fiberG => real().nullable()();
+  RealColumn get sodiumMg => real().nullable()();
+  RealColumn get cholesterolMg => real().nullable()();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
 
   @override

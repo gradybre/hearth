@@ -51,6 +51,12 @@ void main() {
     return version;
   }
 
+  /// Read from the database rather than written down here. Every schema bump
+  /// used to break these three, which taught the next person to edit the
+  /// number rather than to ask why a migration test was failing.
+  final int current = HearthDatabase.forTesting(NativeDatabase.memory())
+      .schemaVersion;
+
   test(
     'a database whose columns ran ahead of its version still opens',
     () async {
@@ -59,7 +65,7 @@ void main() {
       // there before a later step failed.
       final File file = await databaseAt(13, modernPhotos: true);
 
-      expect(await openAndRead(file), 18);
+      expect(await openAndRead(file), current);
     },
   );
 
@@ -68,13 +74,13 @@ void main() {
     // reason to skip a column that genuinely is missing.
     final File file = await databaseAt(13, modernPhotos: false);
 
-    expect(await openAndRead(file), 18);
+    expect(await openAndRead(file), current);
   });
 
   test('opening twice is not a second migration', () async {
     final File file = await databaseAt(13, modernPhotos: true);
     await openAndRead(file);
 
-    expect(await openAndRead(file), 18);
+    expect(await openAndRead(file), current);
   });
 }

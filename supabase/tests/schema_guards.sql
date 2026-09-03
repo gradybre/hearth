@@ -349,3 +349,74 @@ begin
   raise notice 'storage policy isolation guards passed';
 end;
 $$;
+
+-- ── Unknown is not zero (spec §5.6) ─────────────────────────────────────────
+--
+-- The whole of the minor-nutrient feature rests on one distinction, and there
+-- are exactly two places in SQL where it could be lost: a `default 0` on the
+-- column, and a `coalesce` in `upsert_food`. Both are checked here rather than
+-- trusted, because neither would fail loudly — they would simply put a wrong
+-- number on every food that has never been asked.
+do $$
+declare
+  v_food_id uuid := gen_random_uuid();
+  v_silent  uuid := gen_random_uuid();
+  v_stated  uuid := gen_random_uuid();
+  v_value   numeric;
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'food_serving_options'
+      and column_name in ('fiber_g', 'sodium_mg', 'cholesterol_mg')
+      and (is_nullable = 'NO' or column_default is not null)
+  ) then
+    raise exception 'A minor nutrient column is not-null or defaulted';
+  end if;
+
+  perform public.upsert_food(jsonb_build_object(
+    'id', v_food_id, 'name', 'Guard oats', 'source', 'manual',
+    'serving_options', jsonb_build_array(
+      jsonb_build_object('id', v_stated, 'label', '100 g',
+        'amount_canonical', 100, 'amount_kind', 'mass', 'amount_unit', 'g',
+        'kcal', 380, 'fiber_g', 10, 'cholesterol_mg', 0, 'sort_order', 0),
+      jsonb_build_object('id', v_silent, 'label', '1 cup',
+        'amount_canonical', 80, 'amount_kind', 'mass', 'amount_unit', 'g',
+        'kcal', 300, 'sort_order', 1)
+    )
+  ));
+
+  select fiber_g into v_value
+  from public.food_serving_options where id = v_stated;
+  if v_value is distinct from 10 then
+    raise exception 'upsert_food lost a stated fibre: %', v_value;
+  end if;
+
+  -- A stated zero is a fact — water really has no sodium — and must survive.
+  select cholesterol_mg into v_value
+  from public.food_serving_options where id = v_stated;
+  if v_value is distinct from 0 then
+    raise exception 'upsert_food turned a stated zero into %', v_value;
+  end if;
+
+  select fiber_g into v_value
+  from public.food_serving_options where id = v_silent;
+  if v_value is not null then
+    raise exception 'upsert_food invented a fibre of % for a silent serving',
+      v_value;
+  end if;
+
+  -- And the pull half agrees with the push half.
+  if not exists (
+    select 1 from public.changed_foods(null) c
+    where (c ->> 'id')::uuid = v_food_id
+      and (c -> 'serving_options' -> 0 ->> 'fiber_g')::numeric = 10
+      and (c -> 'serving_options' -> 1 -> 'fiber_g') = 'null'::jsonb
+  ) then
+    raise exception 'changed_foods did not carry the nutrients faithfully';
+  end if;
+
+  delete from public.foods where id = v_food_id;
+  raise notice 'minor nutrient guards passed';
+end;
+$$;

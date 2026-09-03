@@ -313,4 +313,108 @@ void main() {
       expect(back.packSize, isNull);
     });
   });
+
+  group('the three minor nutrients (spec §5.6)', () {
+    Food withNutrients() => Food(
+      id: 'food-oats',
+      householdId: household,
+      name: 'Oats',
+      source: FoodSource.manual,
+      servingOptions: <ServingOption>[
+        aServing(
+          id: 'serving-oats',
+          amount: 100,
+          unit: Units.gram,
+          macros: const Macros(
+            kcal: 380,
+            proteinG: 13,
+            carbG: 67,
+            fatG: 7,
+            fiberG: 10,
+            sodiumMg: 2,
+            cholesterolMg: 0,
+          ),
+        ),
+      ],
+    );
+
+    test('survive a save and a read back, zero included', () async {
+      await store.upsert(withNutrients(), updatedAt: DateTime.utc(2026));
+
+      final Macros back = (await store.byId('food-oats'))!
+          .servingOptions
+          .single
+          .macros;
+      expect(back.fiberG, 10);
+      expect(back.sodiumMg, 2);
+      // A stated zero is a fact, and must not come back as "unknown".
+      expect(back.cholesterolMg, 0);
+    });
+
+    test('and through the wire in both directions', () async {
+      final Map<String, Object?> json = FoodMapper.toJson(
+        withNutrients(),
+        updatedAt: DateTime.utc(2026),
+      );
+      final List<Object?> servings = json['serving_options']! as List<Object?>;
+      final Map<String, Object?> serving =
+          servings.single! as Map<String, Object?>;
+      expect(serving['fiber_g'], 10);
+      expect(serving['sodium_mg'], 2);
+      expect(serving['cholesterol_mg'], 0);
+
+      final Macros back = SyncPayload.food(json).servingOptions.single.macros;
+      expect(back.fiberG, 10);
+      expect(back.cholesterolMg, 0);
+    });
+
+    test(
+      'a payload from before these existed decodes as unknown, not zero',
+      () {
+        // The guard that matters most. Every food already in the hosted
+        // database was written by a client that had never heard of fibre, and
+        // reading those back as "0 g fibre" would put a wrong number on every
+        // one of them (spec §5.6, and §4's frozen history by extension).
+        final Map<String, Object?> json = FoodMapper.toJson(
+          withNutrients(),
+          updatedAt: DateTime.utc(2026),
+        );
+        final Map<String, Object?> serving =
+            (json['serving_options']! as List<Object?>).single!
+                as Map<String, Object?>;
+        serving
+          ..remove('fiber_g')
+          ..remove('sodium_mg')
+          ..remove('cholesterol_mg');
+
+        final Macros back = SyncPayload.food(json).servingOptions.single.macros;
+        expect(back.kcal, 380);
+        expect(back.fiberG, isNull);
+        expect(back.sodiumMg, isNull);
+        expect(back.cholesterolMg, isNull);
+      },
+    );
+
+    test('a food nobody asked about keeps all three null', () async {
+      await store.upsert(
+        aFood(
+          'Plainer',
+          servingOptions: <ServingOption>[
+            aServing(
+              amount: 100,
+              unit: Units.gram,
+              macros: const Macros(kcal: 100),
+            ),
+          ],
+        ).withHousehold(household),
+        updatedAt: DateTime.utc(2026),
+      );
+
+      final Food back = (await store.all(householdId: household))
+          .firstWhere((Food f) => f.name == 'Plainer');
+      expect(back.servingOptions.single.macros.fiberG, isNull);
+      expect(back.servingOptions.single.macros.sodiumMg, isNull);
+      expect(back.servingOptions.single.macros.cholesterolMg, isNull);
+    });
+  });
 }
