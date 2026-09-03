@@ -64,6 +64,10 @@ task seems to require breaking one.
 - **Build order is §10.** Don't pull work forward from a later phase without asking.
 - **Deferred is deferred.** §12 lists what is explicitly out of scope for v1 — don't
   helpfully add micronutrients, sub-recipes, voice control, weight tracking, etc.
+  Two things have been lifted from it deliberately, and are in scope: pantry
+  quantity subtraction (phase 4), and **fibre, sodium and cholesterol** as optional
+  nullable nutrients (§5.6). Lifting one is Brendan's call and amends the spec in
+  the same change — never a quiet addition.
 - **Open decisions are Brendan's** (§12). Surface them, don't quietly decide them.
 - Flag spec gaps and contradictions instead of inventing an answer.
 - Prefer small, reviewable changes over large sweeping ones.

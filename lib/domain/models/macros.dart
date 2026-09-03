@@ -1,9 +1,17 @@
 import 'package:meta/meta.dart';
 
-/// The four tracked macros (spec §5.6): calories, protein, carbohydrate, fat.
+/// The four tracked macros (spec §5.6): calories, protein, carbohydrate, fat,
+/// plus three optional minor nutrients.
 ///
-/// Micronutrients, sugar, fibre, and sodium are explicitly out of scope for v1
-/// (spec §12) — do not add fields here without that decision changing.
+/// The four are always known and default to zero. Fibre, sodium and
+/// cholesterol are **nullable, and null means unknown** — a food with no fibre
+/// data is not a food with no fibre. Everything below that treats them
+/// differently from the four follows from that one distinction, and a careless
+/// `?? 0` anywhere in a mapper turns a missing number into a wrong one.
+///
+/// Micronutrients beyond these, and sugar, remain out of scope (spec §12) — do
+/// not add fields here without that decision changing. The three that are here
+/// were lifted from §12 deliberately and the spec was amended to say so.
 ///
 /// Values are full precision. Rounding is a display concern and happens in the
 /// format layer, never here (spec §4).

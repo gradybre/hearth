@@ -199,6 +199,10 @@ Core entities (Postgres tables, RLS-scoped):
 - Add individual foods or recipes (recipe added as N servings) to any slot on any day.
 - **Week starts Monday.**
 - **Weekly summary view:** per-day totals for the four tracked macros — **calories, protein, carbohydrates, fat** — across the week. Tap a day to see slot-level detail.
+- **Minor nutrients (fibre, sodium, cholesterol).** *Lifted from §12 at Brendan's request, v0.9.* Three optional nutrients carried alongside the four macros, and unlike them **nullable — null means unknown, never zero**. Every source Hearth already reads gives all three (Open Food Facts and USDA return them in the payload the adapter is already fetching; a US nutrition label is legally required to print them), so they cost no extra call.
+  - **Never a target.** No progress bars, no `macro_target` columns, and deliberately not members of `MacroKind` — that enum exists to drive target progress. Calories stay the primary focus and the four macros stay secondary; these sit below both.
+  - **Partial totals are reported as partial.** A recipe where five of eight ingredients know their fibre reports the fibre it can see and says how many it could not — §4's "incomplete data flags, never blocks", not a new rule. The alternative, null unless every ingredient knows, would render them blank essentially always.
+  - **Unknown never renders as zero.** A food with no fibre data showing "0 g" is a wrong number where no number was the honest answer.
 - **Macro targets:** fixed daily targets set per week (can change week to week), set **manually** (goal presets that calculate from body stats are a later option). Progress bars fill against targets.
 - **At-a-glance tracking:** a **remaining-for-the-day** view ("142 g protein left") with over/under **color coding**, not just totals. **Calories are the primary focus**, with the three macros secondary.
 - **Portions are fully independent per person.** You and your partner each log your own amounts against your own targets; no shared portion math.
@@ -456,7 +460,7 @@ These share the household model and slot into the pillar navigation without a da
 - Whether to add **water/weight/exercise** tracking later (currently out of scope — food only).
 - Auth: add social login later, or keep email/password.
 - **Partial-serving log UX** — portion stepper approach to be refined against a live draft (Brendan to guide).
-- **Explicitly deferred (out of scope for v1):** micronutrients beyond the 4 macros; sugar / fiber / sodium tracking; water / weight / exercise logging; recipe ratings & reviews; purchase-size mapping for shopping; voice control in cook-along; "cook from what I have" generation; whole-week AI plan generation; goal presets from body stats; leftovers/batch draw-down tracking; sub-recipes (a recipe used as an ingredient in another); recipe step/gallery photos; starter/seed recipes.
+- **Explicitly deferred (out of scope for v1):** micronutrients beyond the 4 macros and the three minor nutrients below; sugar tracking; water / weight / exercise logging; recipe ratings & reviews; purchase-size mapping for shopping; voice control in cook-along; "cook from what I have" generation; whole-week AI plan generation; goal presets from body stats; leftovers/batch draw-down tracking; sub-recipes (a recipe used as an ingredient in another); recipe step/gallery photos; starter/seed recipes.
 
 ---
 
