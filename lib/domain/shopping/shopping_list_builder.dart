@@ -71,7 +71,14 @@ abstract final class ShoppingListBuilder {
     final Map<String, double> servings = <String, double>{};
     for (final MealPlanEntry entry in entries) {
       if (entry.refType != PlanRefType.recipe) continue;
-      if (!recipes.containsKey(entry.refId)) continue;
+      final Recipe? recipe = recipes[entry.refId];
+      if (recipe == null) continue;
+      // Nobody shops for a burrito bowl. A restaurant meal is a recipe so
+      // that it can be planned, logged and repeated like anything else — but
+      // its ingredients live in somebody else's kitchen, and putting "4 oz
+      // chicken" on the list because Chipotle is planned for Thursday would
+      // send you to the shop for a meal you are not cooking (spec §5.2, §5.7).
+      if (recipe.isEatenOut) continue;
       servings[entry.refId] = (servings[entry.refId] ?? 0) + entry.servings;
     }
     if (servings.isEmpty) return const <ShoppingLine>[];

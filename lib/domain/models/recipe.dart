@@ -5,6 +5,25 @@ import '../units/quantity.dart';
 /// How a recipe entered the library, kept for provenance (spec §4, §5.4).
 enum RecipeSource { manual, imported, aiGenerated }
 
+/// Whether a recipe is something you cook or something you order (spec §5.2).
+///
+/// A restaurant meal is structurally a recipe — components with quantities
+/// that sum to macros — so it is one, rather than a parallel entity with its
+/// own screens, sync and export. What it is *not* is something you shop for or
+/// cook, and that difference is a column rather than a tag because
+/// [ShoppingListBuilder] uses it to decide what goes on a list. A rule that
+/// decides what you are sent to the shop for should not hang off a string
+/// somebody could rename.
+enum RecipeKind {
+  /// The ordinary case: ingredients you buy and steps you follow.
+  cooked,
+
+  /// Ordered and eaten out. Never reaches the shopping list, has no
+  /// cook-along and no scaling — you cannot make the burrito bowl bigger by
+  /// wanting to.
+  eatenOut,
+}
+
 /// One ingredient line, parsed into structured fields.
 ///
 /// The structure is what makes scaling and shopping aggregation possible —
@@ -178,6 +197,7 @@ class Recipe {
     this.cookTime,
     this.cuisine,
     this.tags = const <String>[],
+    this.kind = RecipeKind.cooked,
     this.source = RecipeSource.manual,
     this.photoUrl,
     this.notes,
@@ -202,6 +222,14 @@ class Recipe {
   final Duration? cookTime;
   final String? cuisine;
   final List<String> tags;
+
+  /// Cooked, or eaten out (spec §5.2). Defaults to cooked, which is what
+  /// every recipe written before this existed is.
+  final RecipeKind kind;
+
+  /// Convenience for the many places that only care about the one case.
+  bool get isEatenOut => kind == RecipeKind.eatenOut;
+
   final RecipeSource source;
   final String? photoUrl;
   final String? notes;
@@ -278,6 +306,7 @@ class Recipe {
     cookTime: cookTime,
     cuisine: cuisine,
     tags: tags,
+    kind: kind,
     source: source,
     photoUrl: clearPhotoUrl ? null : (photoUrl ?? this.photoUrl),
     notes: notes,

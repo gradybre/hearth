@@ -242,4 +242,93 @@ void main() {
       );
     });
   });
+
+  group('a meal you order rather than cook (spec §5.2, §5.7)', () {
+    test('never reaches the list, however firmly it is planned', () {
+      // The bug this exists to stop: a Chipotle bowl planned for Thursday
+      // sending you to the shop for 4 oz of chicken and 2 oz of sour cream.
+      final Recipe bowl = aRecipe(
+        id: 'r-bowl',
+        title: 'Burrito bowl',
+        servings: 1,
+        kind: RecipeKind.eatenOut,
+        ingredients: <RecipeIngredient>[
+          anIngredient('chicken', amount: 4, unit: Units.ounce),
+          anIngredient('white rice', amount: 4, unit: Units.ounce),
+        ],
+      );
+
+      final List<ShoppingLine> lines = ShoppingListBuilder.forRange(
+        from: DateTime.utc(2026, 9, 7),
+        to: DateTime.utc(2026, 9, 13),
+        entriesByDay: <DateTime, List<MealPlanEntry>>{
+          DateTime.utc(2026, 9, 10): <MealPlanEntry>[
+            const MealPlanEntry(
+              id: 'e-bowl',
+              dayId: 'd1',
+              slot: MealSlot.lunch,
+              refType: PlanRefType.recipe,
+              refId: 'r-bowl',
+              servings: 1,
+            ),
+          ],
+        },
+        recipes: <String, Recipe>{'r-bowl': bowl},
+        foods: const <String, Food>{},
+      );
+
+      expect(lines, isEmpty);
+    });
+
+    test('and does not take the week\'s cooking down with it', () {
+      // The exclusion has to be per recipe, not per day: eating out on
+      // Thursday says nothing about Wednesday's chilli.
+      final Recipe bowl = aRecipe(
+        id: 'r-bowl',
+        title: 'Burrito bowl',
+        servings: 1,
+        kind: RecipeKind.eatenOut,
+        ingredients: <RecipeIngredient>[
+          anIngredient('chicken', amount: 4, unit: Units.ounce),
+        ],
+      );
+      final Recipe chilli = aRecipe(
+        id: 'r-chilli',
+        title: 'Chilli',
+        servings: 4,
+        ingredients: <RecipeIngredient>[
+          anIngredient('ground beef', amount: 1, unit: Units.pound),
+        ],
+      );
+
+      final List<ShoppingLine> lines = ShoppingListBuilder.forRange(
+        from: DateTime.utc(2026, 9, 7),
+        to: DateTime.utc(2026, 9, 13),
+        entriesByDay: <DateTime, List<MealPlanEntry>>{
+          DateTime.utc(2026, 9, 10): <MealPlanEntry>[
+            const MealPlanEntry(
+              id: 'e-bowl',
+              dayId: 'd1',
+              slot: MealSlot.lunch,
+              refType: PlanRefType.recipe,
+              refId: 'r-bowl',
+              servings: 1,
+            ),
+            const MealPlanEntry(
+              id: 'e-chilli',
+              dayId: 'd1',
+              slot: MealSlot.dinner,
+              refType: PlanRefType.recipe,
+              refId: 'r-chilli',
+              servings: 4,
+            ),
+          ],
+        },
+        recipes: <String, Recipe>{'r-bowl': bowl, 'r-chilli': chilli},
+        foods: const <String, Food>{},
+      );
+
+      expect(lines.map((ShoppingLine l) => l.name), <String>['ground beef']);
+    });
+  });
 }
