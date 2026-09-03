@@ -115,6 +115,13 @@ class Foods extends Table {
   TextColumn get name => text()();
   TextColumn get brand => text().nullable()();
   TextColumn get storeTag => text().nullable()();
+
+  /// The Walmart item id for the product bought, and how much is in one of
+  /// them — what lets the shopping export fill a basket (spec §5.7).
+  TextColumn get walmartItemId => text().nullable()();
+  RealColumn get packCanonical => real().nullable()();
+  TextColumn get packKind => text().nullable()();
+  TextColumn get packUnit => text().nullable()();
   TextColumn get barcode => text().nullable()();
   RealColumn get gramsPerMillilitre => real().nullable()();
   TextColumn get source => text().withDefault(const Constant('manual'))();

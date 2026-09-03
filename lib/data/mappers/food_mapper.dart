@@ -35,6 +35,8 @@ abstract final class FoodMapper {
     name: food.name,
     brand: food.brand,
     storeTag: food.storeTag,
+    walmartItemId: food.walmartItemId,
+    packSize: _packFrom(food),
     barcode: food.barcode,
     gramsPerMillilitre: food.gramsPerMillilitre,
     source: sourceFromSql(food.source),
@@ -75,6 +77,10 @@ abstract final class FoodMapper {
         name: food.name,
         brand: Value<String?>(food.brand),
         storeTag: Value<String?>(food.storeTag),
+        walmartItemId: Value<String?>(food.walmartItemId),
+        packCanonical: Value<double?>(food.packSize?.canonicalAmount),
+        packKind: Value<String?>(food.packSize?.kind.name),
+        packUnit: Value<String?>(food.packSize?.preferredUnit?.id),
         barcode: Value<String?>(food.barcode),
         gramsPerMillilitre: Value<double?>(food.gramsPerMillilitre),
         source: Value<String>(sourceToSql(food.source)),
@@ -118,6 +124,10 @@ abstract final class FoodMapper {
     'name': food.name,
     'brand': food.brand,
     'store_tag': food.storeTag,
+    'walmart_item_id': food.walmartItemId,
+    'pack_canonical': food.packSize?.canonicalAmount,
+    'pack_kind': food.packSize?.kind.name,
+    'pack_unit': food.packSize?.preferredUnit?.id,
     'barcode': food.barcode,
     'grams_per_millilitre': food.gramsPerMillilitre,
     'source': sourceToSql(food.source),
@@ -145,4 +155,28 @@ abstract final class FoodMapper {
         },
     ],
   };
+
+  /// The pack size as stored, or null when the row carries none.
+  ///
+  /// Shared with [SyncPayload.food] rather than written twice — the two
+  /// directions drifting apart is exactly how a column goes quietly missing.
+  static Quantity? _packFrom(FoodRow food) =>
+      packSizeFrom(food.packCanonical, food.packKind, food.packUnit);
+}
+
+/// Rebuilds a pack size from the three columns it is stored in.
+Quantity? packSizeFrom(double? canonical, String? kind, String? unit) {
+  if (canonical == null || kind == null) return null;
+  final UnitKind? parsed = switch (kind) {
+    'volume' => UnitKind.volume,
+    'mass' => UnitKind.mass,
+    'count' => UnitKind.count,
+    _ => null,
+  };
+  if (parsed == null) return null;
+  return Quantity.canonical(
+    canonicalAmount: canonical,
+    kind: parsed,
+    preferredUnit: unit == null ? null : Units.byId(unit),
+  );
 }

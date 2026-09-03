@@ -78,6 +78,8 @@ class Food {
     this.householdId,
     this.brand,
     this.storeTag,
+    this.walmartItemId,
+    this.packSize,
     this.barcode,
     this.gramsPerMillilitre,
     this.macrosOverridden = false,
@@ -98,6 +100,20 @@ class Food {
 
   /// Costco / Publix / Walmart, used to group the shopping list (spec §5.7).
   final String? storeTag;
+
+  /// The Walmart item id for the product actually bought, so the shopping
+  /// export can fill a basket rather than open a search (spec §5.7).
+  ///
+  /// Typed once per food you buy regularly. Null for most foods, and for
+  /// everything Hearth has not been told about.
+  final String? walmartItemId;
+
+  /// How much comes in one of those, when it is known.
+  ///
+  /// What turns "2 lb of beef" into a number of packets. Optional, because a
+  /// wrong pack size does not fail — it silently orders the wrong amount —
+  /// so it is better absent than guessed.
+  final Quantity? packSize;
 
   final String? barcode;
 

@@ -47,56 +47,70 @@ class _ExportSheet extends StatelessWidget {
             top: Radius.circular(HearthRadius.xl),
           ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(HearthSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text('Take the list with you', style: context.text.sectionHeader),
-              const SizedBox(height: HearthSpacing.xs),
-              Text(
-                items.isEmpty
-                    ? 'Everything on the list is ticked off.'
-                    : '${items.length} ${items.length == 1 ? 'item' : 'items'} '
-                          'still to buy. Ticked items are left out.',
-                style: context.text.metadata.copyWith(color: colors.textMuted),
-              ),
-              if (items.isNotEmpty) ...<Widget>[
-                const SizedBox(height: HearthSpacing.lg),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: () => _copy(context, items),
-                    icon: const Icon(Icons.copy_all_outlined),
-                    label: const Text('Copy the list'),
-                  ),
-                ),
-                const SizedBox(height: HearthSpacing.sm),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _openFirst(context, items),
-                    icon: const Icon(Icons.open_in_new),
-                    label: Text('Search ${adapter.displayName}'),
-                  ),
-                ),
-                const SizedBox(height: HearthSpacing.md),
-                // Said plainly rather than discovered: a button called
-                // "Walmart" that opens a search page instead of filling a
-                // basket should say so before it is pressed.
+        // Scrollable, and capped at most of the screen. A bottom sheet sizes
+        // itself to its content, so at accessibility text sizes this one grew
+        // taller than the phone and clipped its own buttons — which the screen
+        // sweep caught the moment the explanatory copy got longer (§6.3).
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(HearthSpacing.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
                 Text(
-                  'Hearth does not know ${adapter.displayName}\'s product '
-                  'codes yet, so this opens a search for the first item '
-                  'rather than filling a basket. Copying the list is usually '
-                  'quicker.',
+                  'Take the list with you',
+                  style: context.text.sectionHeader,
+                ),
+                const SizedBox(height: HearthSpacing.xs),
+                Text(
+                  items.isEmpty
+                      ? 'Everything on the list is ticked off.'
+                      : '${items.length} ${items.length == 1 ? 'item' : 'items'} '
+                            'still to buy. Ticked items are left out.',
                   style: context.text.metadata.copyWith(
-                    color: colors.textSecondary,
+                    color: colors.textMuted,
                   ),
                 ),
+                if (items.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: HearthSpacing.lg),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => _copy(context, items),
+                      icon: const Icon(Icons.copy_all_outlined),
+                      label: const Text('Copy the list'),
+                    ),
+                  ),
+                  const SizedBox(height: HearthSpacing.sm),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _openFirst(context, items),
+                      icon: const Icon(Icons.open_in_new),
+                      label: Text('Search ${adapter.displayName}'),
+                    ),
+                  ),
+                  const SizedBox(height: HearthSpacing.md),
+                  // Said plainly rather than discovered: a button called
+                  // "Walmart" that opens a search page instead of filling a
+                  // basket should say so before it is pressed.
+                  Text(
+                    'Hearth does not know ${adapter.displayName}\'s product '
+                    'codes yet, so this opens a search for the first item '
+                    'rather than filling a basket. Copying the list is usually '
+                    'quicker.',
+                    style: context.text.metadata.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: HearthSpacing.md),
               ],
-              const SizedBox(height: HearthSpacing.md),
-            ],
+            ),
           ),
         ),
       ),

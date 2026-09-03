@@ -89,6 +89,15 @@ abstract final class SyncPayload {
     name: '${json['name'] ?? ''}',
     brand: json['brand'] as String?,
     storeTag: json['store_tag'] as String?,
+    walmartItemId: json['walmart_item_id'] as String?,
+    packSize: packSizeFrom(
+      switch (json['pack_canonical']) {
+        final num n => n.toDouble(),
+        _ => null,
+      },
+      json['pack_kind'] as String?,
+      json['pack_unit'] as String?,
+    ),
     barcode: json['barcode'] as String?,
     gramsPerMillilitre: _double(json['grams_per_millilitre']),
     source: FoodMapper.sourceFromSql('${json['source'] ?? 'manual'}'),

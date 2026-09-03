@@ -49,7 +49,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -150,6 +150,15 @@ class HearthDatabase extends _$HearthDatabase {
         await m.addColumn(recipePhotos, recipePhotos.attemptedPath);
         await m.addColumn(shoppingListItems, shoppingListItems.plannedRest);
         await _mergeDuplicateShoppingKeys();
+      }
+      // v18 lets a food carry the Walmart product actually bought, so the
+      // shopping export can fill a basket instead of opening a search
+      // (spec §5.7). Additive.
+      if (from < 18) {
+        await m.addColumn(foods, foods.walmartItemId);
+        await m.addColumn(foods, foods.packCanonical);
+        await m.addColumn(foods, foods.packKind);
+        await m.addColumn(foods, foods.packUnit);
       }
     },
     beforeOpen: (OpeningDetails details) async {

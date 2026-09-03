@@ -3303,6 +3303,50 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _walmartItemIdMeta = const VerificationMeta(
+    'walmartItemId',
+  );
+  @override
+  late final GeneratedColumn<String> walmartItemId = GeneratedColumn<String>(
+    'walmart_item_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _packCanonicalMeta = const VerificationMeta(
+    'packCanonical',
+  );
+  @override
+  late final GeneratedColumn<double> packCanonical = GeneratedColumn<double>(
+    'pack_canonical',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _packKindMeta = const VerificationMeta(
+    'packKind',
+  );
+  @override
+  late final GeneratedColumn<String> packKind = GeneratedColumn<String>(
+    'pack_kind',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _packUnitMeta = const VerificationMeta(
+    'packUnit',
+  );
+  @override
+  late final GeneratedColumn<String> packUnit = GeneratedColumn<String>(
+    'pack_unit',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _barcodeMeta = const VerificationMeta(
     'barcode',
   );
@@ -3413,6 +3457,10 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
     name,
     brand,
     storeTag,
+    walmartItemId,
+    packCanonical,
+    packKind,
+    packUnit,
     barcode,
     gramsPerMillilitre,
     source,
@@ -3466,6 +3514,36 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
       context.handle(
         _storeTagMeta,
         storeTag.isAcceptableOrUnknown(data['store_tag']!, _storeTagMeta),
+      );
+    }
+    if (data.containsKey('walmart_item_id')) {
+      context.handle(
+        _walmartItemIdMeta,
+        walmartItemId.isAcceptableOrUnknown(
+          data['walmart_item_id']!,
+          _walmartItemIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('pack_canonical')) {
+      context.handle(
+        _packCanonicalMeta,
+        packCanonical.isAcceptableOrUnknown(
+          data['pack_canonical']!,
+          _packCanonicalMeta,
+        ),
+      );
+    }
+    if (data.containsKey('pack_kind')) {
+      context.handle(
+        _packKindMeta,
+        packKind.isAcceptableOrUnknown(data['pack_kind']!, _packKindMeta),
+      );
+    }
+    if (data.containsKey('pack_unit')) {
+      context.handle(
+        _packUnitMeta,
+        packUnit.isAcceptableOrUnknown(data['pack_unit']!, _packUnitMeta),
       );
     }
     if (data.containsKey('barcode')) {
@@ -3556,6 +3634,22 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
         DriftSqlType.string,
         data['${effectivePrefix}store_tag'],
       ),
+      walmartItemId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}walmart_item_id'],
+      ),
+      packCanonical: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}pack_canonical'],
+      ),
+      packKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pack_kind'],
+      ),
+      packUnit: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pack_unit'],
+      ),
       barcode: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}barcode'],
@@ -3605,6 +3699,13 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
   final String name;
   final String? brand;
   final String? storeTag;
+
+  /// The Walmart item id for the product bought, and how much is in one of
+  /// them — what lets the shopping export fill a basket (spec §5.7).
+  final String? walmartItemId;
+  final double? packCanonical;
+  final String? packKind;
+  final String? packUnit;
   final String? barcode;
   final double? gramsPerMillilitre;
   final String source;
@@ -3623,6 +3724,10 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     required this.name,
     this.brand,
     this.storeTag,
+    this.walmartItemId,
+    this.packCanonical,
+    this.packKind,
+    this.packUnit,
     this.barcode,
     this.gramsPerMillilitre,
     required this.source,
@@ -3645,6 +3750,18 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     }
     if (!nullToAbsent || storeTag != null) {
       map['store_tag'] = Variable<String>(storeTag);
+    }
+    if (!nullToAbsent || walmartItemId != null) {
+      map['walmart_item_id'] = Variable<String>(walmartItemId);
+    }
+    if (!nullToAbsent || packCanonical != null) {
+      map['pack_canonical'] = Variable<double>(packCanonical);
+    }
+    if (!nullToAbsent || packKind != null) {
+      map['pack_kind'] = Variable<String>(packKind);
+    }
+    if (!nullToAbsent || packUnit != null) {
+      map['pack_unit'] = Variable<String>(packUnit);
     }
     if (!nullToAbsent || barcode != null) {
       map['barcode'] = Variable<String>(barcode);
@@ -3674,6 +3791,18 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       storeTag: storeTag == null && nullToAbsent
           ? const Value.absent()
           : Value(storeTag),
+      walmartItemId: walmartItemId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(walmartItemId),
+      packCanonical: packCanonical == null && nullToAbsent
+          ? const Value.absent()
+          : Value(packCanonical),
+      packKind: packKind == null && nullToAbsent
+          ? const Value.absent()
+          : Value(packKind),
+      packUnit: packUnit == null && nullToAbsent
+          ? const Value.absent()
+          : Value(packUnit),
       barcode: barcode == null && nullToAbsent
           ? const Value.absent()
           : Value(barcode),
@@ -3700,6 +3829,10 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       name: serializer.fromJson<String>(json['name']),
       brand: serializer.fromJson<String?>(json['brand']),
       storeTag: serializer.fromJson<String?>(json['storeTag']),
+      walmartItemId: serializer.fromJson<String?>(json['walmartItemId']),
+      packCanonical: serializer.fromJson<double?>(json['packCanonical']),
+      packKind: serializer.fromJson<String?>(json['packKind']),
+      packUnit: serializer.fromJson<String?>(json['packUnit']),
       barcode: serializer.fromJson<String?>(json['barcode']),
       gramsPerMillilitre: serializer.fromJson<double?>(
         json['gramsPerMillilitre'],
@@ -3721,6 +3854,10 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       'name': serializer.toJson<String>(name),
       'brand': serializer.toJson<String?>(brand),
       'storeTag': serializer.toJson<String?>(storeTag),
+      'walmartItemId': serializer.toJson<String?>(walmartItemId),
+      'packCanonical': serializer.toJson<double?>(packCanonical),
+      'packKind': serializer.toJson<String?>(packKind),
+      'packUnit': serializer.toJson<String?>(packUnit),
       'barcode': serializer.toJson<String?>(barcode),
       'gramsPerMillilitre': serializer.toJson<double?>(gramsPerMillilitre),
       'source': serializer.toJson<String>(source),
@@ -3738,6 +3875,10 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     String? name,
     Value<String?> brand = const Value.absent(),
     Value<String?> storeTag = const Value.absent(),
+    Value<String?> walmartItemId = const Value.absent(),
+    Value<double?> packCanonical = const Value.absent(),
+    Value<String?> packKind = const Value.absent(),
+    Value<String?> packUnit = const Value.absent(),
     Value<String?> barcode = const Value.absent(),
     Value<double?> gramsPerMillilitre = const Value.absent(),
     String? source,
@@ -3752,6 +3893,14 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     name: name ?? this.name,
     brand: brand.present ? brand.value : this.brand,
     storeTag: storeTag.present ? storeTag.value : this.storeTag,
+    walmartItemId: walmartItemId.present
+        ? walmartItemId.value
+        : this.walmartItemId,
+    packCanonical: packCanonical.present
+        ? packCanonical.value
+        : this.packCanonical,
+    packKind: packKind.present ? packKind.value : this.packKind,
+    packUnit: packUnit.present ? packUnit.value : this.packUnit,
     barcode: barcode.present ? barcode.value : this.barcode,
     gramsPerMillilitre: gramsPerMillilitre.present
         ? gramsPerMillilitre.value
@@ -3772,6 +3921,14 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       name: data.name.present ? data.name.value : this.name,
       brand: data.brand.present ? data.brand.value : this.brand,
       storeTag: data.storeTag.present ? data.storeTag.value : this.storeTag,
+      walmartItemId: data.walmartItemId.present
+          ? data.walmartItemId.value
+          : this.walmartItemId,
+      packCanonical: data.packCanonical.present
+          ? data.packCanonical.value
+          : this.packCanonical,
+      packKind: data.packKind.present ? data.packKind.value : this.packKind,
+      packUnit: data.packUnit.present ? data.packUnit.value : this.packUnit,
       barcode: data.barcode.present ? data.barcode.value : this.barcode,
       gramsPerMillilitre: data.gramsPerMillilitre.present
           ? data.gramsPerMillilitre.value
@@ -3797,6 +3954,10 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
           ..write('name: $name, ')
           ..write('brand: $brand, ')
           ..write('storeTag: $storeTag, ')
+          ..write('walmartItemId: $walmartItemId, ')
+          ..write('packCanonical: $packCanonical, ')
+          ..write('packKind: $packKind, ')
+          ..write('packUnit: $packUnit, ')
           ..write('barcode: $barcode, ')
           ..write('gramsPerMillilitre: $gramsPerMillilitre, ')
           ..write('source: $source, ')
@@ -3816,6 +3977,10 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     name,
     brand,
     storeTag,
+    walmartItemId,
+    packCanonical,
+    packKind,
+    packUnit,
     barcode,
     gramsPerMillilitre,
     source,
@@ -3834,6 +3999,10 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
           other.name == this.name &&
           other.brand == this.brand &&
           other.storeTag == this.storeTag &&
+          other.walmartItemId == this.walmartItemId &&
+          other.packCanonical == this.packCanonical &&
+          other.packKind == this.packKind &&
+          other.packUnit == this.packUnit &&
           other.barcode == this.barcode &&
           other.gramsPerMillilitre == this.gramsPerMillilitre &&
           other.source == this.source &&
@@ -3850,6 +4019,10 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
   final Value<String> name;
   final Value<String?> brand;
   final Value<String?> storeTag;
+  final Value<String?> walmartItemId;
+  final Value<double?> packCanonical;
+  final Value<String?> packKind;
+  final Value<String?> packUnit;
   final Value<String?> barcode;
   final Value<double?> gramsPerMillilitre;
   final Value<String> source;
@@ -3865,6 +4038,10 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     this.name = const Value.absent(),
     this.brand = const Value.absent(),
     this.storeTag = const Value.absent(),
+    this.walmartItemId = const Value.absent(),
+    this.packCanonical = const Value.absent(),
+    this.packKind = const Value.absent(),
+    this.packUnit = const Value.absent(),
     this.barcode = const Value.absent(),
     this.gramsPerMillilitre = const Value.absent(),
     this.source = const Value.absent(),
@@ -3881,6 +4058,10 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     required String name,
     this.brand = const Value.absent(),
     this.storeTag = const Value.absent(),
+    this.walmartItemId = const Value.absent(),
+    this.packCanonical = const Value.absent(),
+    this.packKind = const Value.absent(),
+    this.packUnit = const Value.absent(),
     this.barcode = const Value.absent(),
     this.gramsPerMillilitre = const Value.absent(),
     this.source = const Value.absent(),
@@ -3899,6 +4080,10 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     Expression<String>? name,
     Expression<String>? brand,
     Expression<String>? storeTag,
+    Expression<String>? walmartItemId,
+    Expression<double>? packCanonical,
+    Expression<String>? packKind,
+    Expression<String>? packUnit,
     Expression<String>? barcode,
     Expression<double>? gramsPerMillilitre,
     Expression<String>? source,
@@ -3915,6 +4100,10 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
       if (name != null) 'name': name,
       if (brand != null) 'brand': brand,
       if (storeTag != null) 'store_tag': storeTag,
+      if (walmartItemId != null) 'walmart_item_id': walmartItemId,
+      if (packCanonical != null) 'pack_canonical': packCanonical,
+      if (packKind != null) 'pack_kind': packKind,
+      if (packUnit != null) 'pack_unit': packUnit,
       if (barcode != null) 'barcode': barcode,
       if (gramsPerMillilitre != null)
         'grams_per_millilitre': gramsPerMillilitre,
@@ -3934,6 +4123,10 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     Value<String>? name,
     Value<String?>? brand,
     Value<String?>? storeTag,
+    Value<String?>? walmartItemId,
+    Value<double?>? packCanonical,
+    Value<String?>? packKind,
+    Value<String?>? packUnit,
     Value<String?>? barcode,
     Value<double?>? gramsPerMillilitre,
     Value<String>? source,
@@ -3950,6 +4143,10 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
       name: name ?? this.name,
       brand: brand ?? this.brand,
       storeTag: storeTag ?? this.storeTag,
+      walmartItemId: walmartItemId ?? this.walmartItemId,
+      packCanonical: packCanonical ?? this.packCanonical,
+      packKind: packKind ?? this.packKind,
+      packUnit: packUnit ?? this.packUnit,
       barcode: barcode ?? this.barcode,
       gramsPerMillilitre: gramsPerMillilitre ?? this.gramsPerMillilitre,
       source: source ?? this.source,
@@ -3979,6 +4176,18 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     }
     if (storeTag.present) {
       map['store_tag'] = Variable<String>(storeTag.value);
+    }
+    if (walmartItemId.present) {
+      map['walmart_item_id'] = Variable<String>(walmartItemId.value);
+    }
+    if (packCanonical.present) {
+      map['pack_canonical'] = Variable<double>(packCanonical.value);
+    }
+    if (packKind.present) {
+      map['pack_kind'] = Variable<String>(packKind.value);
+    }
+    if (packUnit.present) {
+      map['pack_unit'] = Variable<String>(packUnit.value);
     }
     if (barcode.present) {
       map['barcode'] = Variable<String>(barcode.value);
@@ -4018,6 +4227,10 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
           ..write('name: $name, ')
           ..write('brand: $brand, ')
           ..write('storeTag: $storeTag, ')
+          ..write('walmartItemId: $walmartItemId, ')
+          ..write('packCanonical: $packCanonical, ')
+          ..write('packKind: $packKind, ')
+          ..write('packUnit: $packUnit, ')
           ..write('barcode: $barcode, ')
           ..write('gramsPerMillilitre: $gramsPerMillilitre, ')
           ..write('source: $source, ')
@@ -14566,6 +14779,10 @@ typedef $$FoodsTableCreateCompanionBuilder = FoodsCompanion Function({
   required String name,
   Value<String?> brand,
   Value<String?> storeTag,
+  Value<String?> walmartItemId,
+  Value<double?> packCanonical,
+  Value<String?> packKind,
+  Value<String?> packUnit,
   Value<String?> barcode,
   Value<double?> gramsPerMillilitre,
   Value<String> source,
@@ -14582,6 +14799,10 @@ typedef $$FoodsTableUpdateCompanionBuilder = FoodsCompanion Function({
   Value<String> name,
   Value<String?> brand,
   Value<String?> storeTag,
+  Value<String?> walmartItemId,
+  Value<double?> packCanonical,
+  Value<String?> packKind,
+  Value<String?> packUnit,
   Value<String?> barcode,
   Value<double?> gramsPerMillilitre,
   Value<String> source,
@@ -14674,6 +14895,26 @@ class $$FoodsTableFilterComposer
 
   ColumnFilters<String> get storeTag => $composableBuilder(
     column: $table.storeTag,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get walmartItemId => $composableBuilder(
+    column: $table.walmartItemId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get packCanonical => $composableBuilder(
+    column: $table.packCanonical,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get packKind => $composableBuilder(
+    column: $table.packKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get packUnit => $composableBuilder(
+    column: $table.packUnit,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -14802,6 +15043,26 @@ class $$FoodsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get walmartItemId => $composableBuilder(
+    column: $table.walmartItemId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get packCanonical => $composableBuilder(
+    column: $table.packCanonical,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get packKind => $composableBuilder(
+    column: $table.packKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get packUnit => $composableBuilder(
+    column: $table.packUnit,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get barcode => $composableBuilder(
     column: $table.barcode,
     builder: (column) => ColumnOrderings(column),
@@ -14868,6 +15129,22 @@ class $$FoodsTableAnnotationComposer
 
   GeneratedColumn<String> get storeTag =>
       $composableBuilder(column: $table.storeTag, builder: (column) => column);
+
+  GeneratedColumn<String> get walmartItemId => $composableBuilder(
+    column: $table.walmartItemId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get packCanonical => $composableBuilder(
+    column: $table.packCanonical,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get packKind =>
+      $composableBuilder(column: $table.packKind, builder: (column) => column);
+
+  GeneratedColumn<String> get packUnit =>
+      $composableBuilder(column: $table.packUnit, builder: (column) => column);
 
   GeneratedColumn<String> get barcode =>
       $composableBuilder(column: $table.barcode, builder: (column) => column);
@@ -14988,6 +15265,10 @@ class $$FoodsTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String?> brand = const Value.absent(),
                 Value<String?> storeTag = const Value.absent(),
+                Value<String?> walmartItemId = const Value.absent(),
+                Value<double?> packCanonical = const Value.absent(),
+                Value<String?> packKind = const Value.absent(),
+                Value<String?> packUnit = const Value.absent(),
                 Value<String?> barcode = const Value.absent(),
                 Value<double?> gramsPerMillilitre = const Value.absent(),
                 Value<String> source = const Value.absent(),
@@ -15003,6 +15284,10 @@ class $$FoodsTableTableManager
                 name: name,
                 brand: brand,
                 storeTag: storeTag,
+                walmartItemId: walmartItemId,
+                packCanonical: packCanonical,
+                packKind: packKind,
+                packUnit: packUnit,
                 barcode: barcode,
                 gramsPerMillilitre: gramsPerMillilitre,
                 source: source,
@@ -15020,6 +15305,10 @@ class $$FoodsTableTableManager
                 required String name,
                 Value<String?> brand = const Value.absent(),
                 Value<String?> storeTag = const Value.absent(),
+                Value<String?> walmartItemId = const Value.absent(),
+                Value<double?> packCanonical = const Value.absent(),
+                Value<String?> packKind = const Value.absent(),
+                Value<String?> packUnit = const Value.absent(),
                 Value<String?> barcode = const Value.absent(),
                 Value<double?> gramsPerMillilitre = const Value.absent(),
                 Value<String> source = const Value.absent(),
@@ -15035,6 +15324,10 @@ class $$FoodsTableTableManager
                 name: name,
                 brand: brand,
                 storeTag: storeTag,
+                walmartItemId: walmartItemId,
+                packCanonical: packCanonical,
+                packKind: packKind,
+                packUnit: packUnit,
                 barcode: barcode,
                 gramsPerMillilitre: gramsPerMillilitre,
                 source: source,

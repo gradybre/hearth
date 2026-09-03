@@ -113,6 +113,8 @@ class FoodRepository {
     householdId: _householdId,
     brand: food.brand,
     storeTag: food.storeTag,
+    walmartItemId: food.walmartItemId,
+    packSize: food.packSize,
     barcode: food.barcode,
     gramsPerMillilitre: food.gramsPerMillilitre,
     macrosOverridden: food.macrosOverridden,

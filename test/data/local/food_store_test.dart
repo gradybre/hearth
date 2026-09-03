@@ -2,8 +2,11 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/data/local/food_store.dart';
 import 'package:hearth/data/local/hearth_database.dart';
+import 'package:hearth/data/mappers/food_mapper.dart';
+import 'package:hearth/data/mappers/sync_payload.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
+import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/fixtures.dart';
@@ -258,6 +261,56 @@ void main() {
         ),
         isEmpty,
       );
+    });
+  });
+
+  group('the Walmart product a food is bought as (spec §5.7)', () {
+    Food withProduct() => Food(
+      id: 'food-walmart',
+      householdId: 'household-1',
+      name: 'Ground beef',
+      source: FoodSource.manual,
+      servingOptions: const <ServingOption>[],
+      walmartItemId: '10450479',
+      packSize: Quantity.of(1, Units.pound),
+    );
+
+    test('survives a save and a read back', () async {
+      await store.upsert(withProduct(), updatedAt: DateTime.utc(2026));
+
+      final Food back = (await store.byId('food-walmart'))!;
+      expect(back.walmartItemId, '10450479');
+      expect(back.packSize, Quantity.of(1, Units.pound));
+    });
+
+    test('and through the wire in both directions', () async {
+      // The two halves of the mapper drifting apart is how a column goes
+      // quietly missing, so the payload is read straight back.
+      final Map<String, Object?> json = FoodMapper.toJson(
+        withProduct(),
+        updatedAt: DateTime.utc(2026),
+      );
+      expect(json['walmart_item_id'], '10450479');
+      expect(json['pack_unit'], 'lb');
+
+      final Food back = SyncPayload.food(json);
+      expect(back.walmartItemId, '10450479');
+      expect(back.packSize, Quantity.of(1, Units.pound));
+    });
+
+    test('a food without one keeps null rather than an empty string', () async {
+      await store.upsert(
+        aFood('Plain').withHousehold('household-1'),
+        updatedAt: DateTime.utc(2026),
+      );
+
+      final Food back = (await store.byId(
+        (await store.all(householdId: 'household-1'))
+            .firstWhere((Food f) => f.name == 'Plain')
+            .id,
+      ))!;
+      expect(back.walmartItemId, isNull);
+      expect(back.packSize, isNull);
     });
   });
 }

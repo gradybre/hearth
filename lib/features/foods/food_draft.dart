@@ -2,9 +2,11 @@ import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../data/adapters/label_reader.dart';
+import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/parsing/amount_parser.dart';
+import '../../domain/shopping/walmart_product.dart';
 import '../../domain/units/quantity.dart';
 import '../../domain/units/unit.dart';
 
@@ -131,6 +133,8 @@ class FoodDraft {
     required this.servings,
     this.brand = '',
     this.storeTag = '',
+    this.walmartItemId = '',
+    this.packSize = '',
     this.barcode = '',
     this.existingId,
     this.source = FoodSource.manual,
@@ -148,6 +152,10 @@ class FoodDraft {
     name: food.name,
     brand: food.brand ?? '',
     storeTag: food.storeTag ?? '',
+    walmartItemId: food.walmartItemId ?? '',
+    packSize: food.packSize == null
+        ? ''
+        : QuantityFormat.format(food.packSize!),
     barcode: food.barcode ?? '',
     existingId: food.id,
     source: food.source,
@@ -297,6 +305,11 @@ class FoodDraft {
   final String name;
   final String brand;
   final String storeTag;
+
+  /// A pasted Walmart link or item id, and how much is in one pack — both
+  /// free text until [toFood] turns them into something storable.
+  final String walmartItemId;
+  final String packSize;
   final String barcode;
   final List<ServingDraft> servings;
   final String? existingId;
@@ -335,6 +348,10 @@ class FoodDraft {
       name: name.trim(),
       brand: brand.trim().isEmpty ? null : brand.trim(),
       storeTag: storeTag.trim().isEmpty ? null : storeTag.trim(),
+      // Stored as the id, never as whatever was pasted: a link that no longer
+      // parses is a link nothing can use.
+      walmartItemId: WalmartProduct.idFrom(walmartItemId),
+      packSize: parsePackSize(packSize),
       barcode: barcode.trim().isEmpty ? null : barcode.trim(),
       source: source,
       isDefault: isDefault,
@@ -355,6 +372,8 @@ class FoodDraft {
     String? name,
     String? brand,
     String? storeTag,
+    String? walmartItemId,
+    String? packSize,
     String? barcode,
     List<ServingDraft>? servings,
     bool? isDefault,
@@ -363,6 +382,8 @@ class FoodDraft {
     name: name ?? this.name,
     brand: brand ?? this.brand,
     storeTag: storeTag ?? this.storeTag,
+    walmartItemId: walmartItemId ?? this.walmartItemId,
+    packSize: packSize ?? this.packSize,
     barcode: barcode ?? this.barcode,
     servings: servings ?? this.servings,
     existingId: existingId,
@@ -378,4 +399,24 @@ class FoodDraft {
   /// never entered. Empty also lets the hint do its job.
   static String _macroText(double value) =>
       value == 0 ? '' : writeAmount(value);
+}
+
+/// A typed pack size — "1 lb", "7.2 oz" — as a quantity, or null.
+///
+/// Reuses the pieces already here rather than a new parser: [parseAmount] for
+/// the number, [Units.parse] for the unit, which is the pair the ingredient
+/// parser uses. Null when either half is missing, because half a pack size
+/// silently orders the wrong amount.
+Quantity? parsePackSize(String raw) {
+  final String text = raw.trim();
+  if (text.isEmpty) return null;
+
+  final Match? split = RegExp(r'^([^a-zA-Z]+)\s*(.*)$').firstMatch(text);
+  if (split == null) return null;
+  final double? amount = parseAmount(split.group(1)!);
+  if (amount == null || amount <= 0) return null;
+
+  final String unitWord = split.group(2)!.trim();
+  final Unit? unit = unitWord.isEmpty ? Units.item : Units.parse(unitWord);
+  return unit == null ? null : Quantity.of(amount, unit);
 }
