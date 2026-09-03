@@ -287,4 +287,56 @@ void main() {
       expect(find.text('Copy the list'), findsOneWidget);
     });
   });
+
+  group('taking a line off the list (spec §5.7)', () {
+    testWidgets('a swipe removes it, and Undo puts it back', (
+      WidgetTester tester,
+    ) async {
+      await openShopping(tester, entries: <MealPlanEntry>[tonight()]);
+      await build(tester);
+      expect(find.text('ground beef'), findsOneWidget);
+
+      await tester.drag(find.text('ground beef'), const Offset(-500, 0));
+      await pumpFrames(tester, frames: 20);
+      expect(find.text('ground beef'), findsNothing);
+
+      // Undo is the whole reason removal needs no confirmation dialog.
+      expect(find.text('Removed ground beef'), findsOneWidget);
+      await tester.tap(find.text('Undo'));
+      await pumpFrames(tester, frames: 20);
+      expect(find.text('ground beef'), findsOneWidget);
+    });
+
+    testWidgets('a long press no longer deletes — it belongs to the drag', (
+      WidgetTester tester,
+    ) async {
+      // Removal used to hang off `onLongPress`, competing with the reorder
+      // drag that `buildDefaultDragHandles` binds to the same gesture on a
+      // phone. Dragging the list into shop order is the point of §5.7's
+      // ordering, so the gesture went back to it.
+      await openShopping(tester, entries: <MealPlanEntry>[tonight()]);
+      await build(tester);
+
+      await tester.longPress(find.text('ground beef'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(find.text('ground beef'), findsOneWidget);
+    });
+
+    testWidgets('and there is a path that needs no gesture at all', (
+      WidgetTester tester,
+    ) async {
+      // A swipe is unreachable by a screen reader and hard for anyone who
+      // cannot make a confident horizontal drag (§6.3).
+      await openShopping(tester, entries: <MealPlanEntry>[tonight()]);
+      await build(tester);
+
+      await tester.tap(find.text('1 lb'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Remove from list'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(find.text('ground beef'), findsNothing);
+    });
+  });
 }

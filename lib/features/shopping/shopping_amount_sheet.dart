@@ -17,20 +17,28 @@ import '../../domain/units/unit.dart';
 /// freezer. Neither touches the recipe — the recipes' own number stays on
 /// screen throughout, so the difference is visible rather than silently
 /// resolved.
+/// [onRemove], when given, puts a Remove action in the sheet — the path to
+/// taking a line off the list that does not need a swipe. Someone who cannot
+/// make a confident horizontal drag still has to be able to do it (§6.3).
 Future<ShoppingLine?> showShoppingAmountSheet(
   BuildContext context,
-  ShoppingLine line,
-) => showModalBottomSheet<ShoppingLine>(
+  ShoppingLine line, {
+  VoidCallback? onRemove,
+}) => showModalBottomSheet<ShoppingLine>(
   context: context,
   isScrollControlled: true,
   backgroundColor: Colors.transparent,
-  builder: (BuildContext context) => _AmountSheet(line: line),
+  builder: (BuildContext context) =>
+      _AmountSheet(line: line, onRemove: onRemove),
 );
 
 class _AmountSheet extends StatefulWidget {
-  const _AmountSheet({required this.line});
+  const _AmountSheet({required this.line, this.onRemove});
 
   final ShoppingLine line;
+
+  /// Null where removal is not this sheet's business to offer.
+  final VoidCallback? onRemove;
 
   @override
   State<_AmountSheet> createState() => _AmountSheetState();
@@ -151,7 +159,29 @@ class _AmountSheetState extends State<_AmountSheet> {
                   unit: _unit,
                   hint: 'Leave empty if none',
                 ),
-                const SizedBox(height: HearthSpacing.lg),
+                const SizedBox(height: HearthSpacing.md),
+                // On its own line rather than beside Reset and Done: three
+                // buttons in one row overflows at 3x text, which is how the
+                // export sheet broke.
+                if (widget.onRemove case final VoidCallback remove)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: SizedBox(
+                      height: HearthTouch.minTarget,
+                      child: TextButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          remove();
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: context.colors.error,
+                        ),
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        label: const Text('Remove from list'),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: HearthSpacing.sm),
                 Row(
                   children: <Widget>[
                     TextButton(

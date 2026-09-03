@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
@@ -151,10 +152,7 @@ class _Body extends ConsumerWidget {
               onTick: (ShoppingLine line, bool value) =>
                   _save(ref, _replacing(line.ticked(value))),
               onEdit: (ShoppingLine line) => _edit(context, ref, line),
-              onRemove: (ShoppingLine line) => _save(ref, <ShoppingLine>[
-                for (final ShoppingLine other in lines)
-                  if (other.key != line.key) other,
-              ]),
+              onRemove: (ShoppingLine line) => _remove(context, ref, line),
             ),
             const SizedBox(height: HearthSpacing.lg),
           ],
@@ -222,12 +220,52 @@ class _Body extends ConsumerWidget {
     ];
   }
 
+  /// Takes a line off the list, with one tap to put it back.
+  ///
+  /// Undo rather than a confirmation dialog: taking something off because you
+  /// already have it is an action you perform a dozen times in one shop, and
+  /// two taps to confirm each is a tax on the common case. §5.7 already
+  /// promises undo for the chat's edits, so the list has the precedent.
+  ///
+  /// The *whole previous list* is handed back, not the one line re-appended,
+  /// so an undone removal returns to the position it was dragged into rather
+  /// than to the bottom of the shop.
+  Future<void> _remove(
+    BuildContext context,
+    WidgetRef ref,
+    ShoppingLine line,
+  ) async {
+    final List<ShoppingLine> before = <ShoppingLine>[...lines];
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+
+    await _save(ref, <ShoppingLine>[
+      for (final ShoppingLine other in lines)
+        if (other.key != line.key) other,
+    ]);
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('Removed ${line.name}'),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () => _save(ref, before),
+          ),
+        ),
+      );
+  }
+
   Future<void> _edit(
     BuildContext context,
     WidgetRef ref,
     ShoppingLine line,
   ) async {
-    final ShoppingLine? changed = await showShoppingAmountSheet(context, line);
+    final ShoppingLine? changed = await showShoppingAmountSheet(
+      context,
+      line,
+      onRemove: () => _remove(context, ref, line),
+    );
     if (changed != null) await _save(ref, _replacing(changed));
   }
 
@@ -417,14 +455,71 @@ class _StoreGroup extends StatelessWidget {
       onReorderItem: onReorder,
       itemBuilder: (BuildContext context, int index) {
         final ShoppingLine line = lines[index];
-        return _LineTile(
+        // The key belongs to the outermost widget, which the reorder needs to
+        // identify the item and the dismiss needs to animate it out.
+        return Dismissible(
           key: ValueKey<String>(line.key),
-          line: line,
-          onTick: (bool value) => onTick(line, value),
-          onEdit: () => onEdit(line),
-          onRemove: () => onRemove(line),
+          // One direction only. This tile already answers a tap, a long
+          // press-and-drag, and now a swipe; making it answer two swipes as
+          // well would be more gesture than one row can carry.
+          direction: DismissDirection.endToStart,
+          background: const SizedBox.shrink(),
+          secondaryBackground: const _RemoveBackground(),
+          // Removal is asked for here and answered by the store: `onRemove`
+          // saves, the provider re-reads, and the row goes because the list
+          // no longer has it. So this deliberately returns false — a true
+          // would leave a dismissed Dismissible in the tree until that round
+          // trip finished, which is an assertion in debug and a torn frame in
+          // release. The row still disappears; it is the list that removes
+          // it, not the gesture.
+          confirmDismiss: (DismissDirection _) async {
+            onRemove(line);
+            return false;
+          },
+          child: _LineTile(
+            line: line,
+            onTick: (bool value) => onTick(line, value),
+            onEdit: () => onEdit(line),
+            onRemove: () => onRemove(line),
+          ),
         );
       },
+    );
+  }
+}
+
+/// What a swiped line slides away to reveal.
+///
+/// Carries the word as well as the icon and the colour: red alone means
+/// nothing to a colour-blind reader and nothing at all to a screen reader
+/// (§6.3, and never colour alone).
+class _RemoveBackground extends StatelessWidget {
+  const _RemoveBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
+      child: Container(
+        decoration: BoxDecoration(
+          color: colors.error,
+          borderRadius: BorderRadius.circular(HearthRadius.md),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: HearthSpacing.md),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.delete_outline, size: 18, color: colors.onError),
+            const SizedBox(width: HearthSpacing.xs),
+            Text(
+              'Remove',
+              style: context.text.body.copyWith(color: colors.onError),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -435,7 +530,6 @@ class _LineTile extends StatelessWidget {
     required this.onTick,
     required this.onEdit,
     required this.onRemove,
-    super.key,
   });
 
   final ShoppingLine line;
@@ -480,12 +574,23 @@ class _LineTile extends StatelessWidget {
             '${_detail == null ? '' : ', ${_detail!}'}'
             '${done ? '. Already have it.' : ''}',
         excludeSemantics: true,
+        // `excludeSemantics` swallows the Dismissible's own action, and a
+        // swipe is unreachable to a screen reader in any case. Named the same
+        // way `ReorderableListView` names its "Move up / Move down", which is
+        // the pattern this list already relies on.
+        customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
+          const CustomSemanticsAction(label: 'Set amounts'): onEdit,
+          const CustomSemanticsAction(label: 'Remove'): onRemove,
+        },
         child: Material(
           color: colors.surface,
           borderRadius: BorderRadius.circular(HearthRadius.md),
           child: InkWell(
             onTap: () => onTick(!done),
-            onLongPress: onRemove,
+            // No long press. It starts a reorder drag — which is what
+            // `buildDefaultDragHandles` binds it to, and what dragging the
+            // list into the order you walk the shop in depends on. Removal
+            // moved to a swipe, where it is both discoverable and undoable.
             borderRadius: BorderRadius.circular(HearthRadius.md),
             child: Container(
               decoration: BoxDecoration(
