@@ -14,6 +14,7 @@ import '../features/plan/plan_screen.dart';
 import '../features/recipes/default_sweep_screen.dart';
 import '../features/recipes/recipe_chat_screen.dart';
 import '../features/recipes/recipe_detail_screen.dart';
+import '../features/recipes/recipe_draft.dart';
 import '../features/recipes/recipe_editor_screen.dart';
 import '../features/recipes/recipe_import_controller.dart';
 import '../features/recipes/recipe_import_screen.dart';
@@ -82,6 +83,11 @@ GoRouter buildRouter() => GoRouter(
             // step before anything is written (CLAUDE.md rule 4).
             imported: state.extra is RecipeImportResult
                 ? state.extra! as RecipeImportResult
+                : null,
+            // A duplicate pushes here with the copy already made, so it is
+            // reviewed and renamed before anything is written.
+            draft: state.extra is RecipeDraft
+                ? state.extra! as RecipeDraft
                 : null,
           ),
     ),

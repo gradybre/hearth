@@ -16,6 +16,7 @@ import '../../domain/recipes/recipe_scaler.dart';
 import 'collections_sheet.dart';
 import 'cook_along_screen.dart';
 import 'macro_stats_row.dart';
+import 'recipe_draft.dart';
 import 'recipe_library_screen.dart';
 import 'recipe_photo.dart';
 import 'scale_control.dart';
@@ -71,6 +72,18 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
             tooltip: 'Cookbooks',
             onPressed: () => showCollectionsSheet(context, recipeId: recipeId),
           ),
+          // "My usual bowl, but no rice" is a different meal, not an edit.
+          // Opens the copy unsaved, so the rename and the change happen
+          // before anything is written (spec §5.2).
+          if (recipe.value case final Recipe original)
+            IconButton(
+              icon: const Icon(Icons.content_copy_outlined),
+              tooltip: 'Duplicate this recipe',
+              onPressed: () => context.push(
+                '/recipe/new',
+                extra: RecipeDraft.fromRecipe(original).asCopy(),
+              ),
+            ),
           TextButton(
             onPressed: () => context.push('/recipe/$recipeId/edit'),
             child: const Text('Edit'),

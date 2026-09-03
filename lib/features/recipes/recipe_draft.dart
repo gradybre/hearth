@@ -268,6 +268,42 @@ class RecipeDraft {
 
   /// Rebuilds a draft from a saved recipe, so editing starts from what is
   /// actually stored rather than from a re-rendered guess.
+  /// This recipe again, as a new one (spec §5.2).
+  ///
+  /// "My usual bowl, but no rice" is a different meal, not an edit — editing
+  /// the shared one would rewrite what your partner planned and what the
+  /// library calls your usual. So a copy opens in the editor unsaved, which
+  /// is also where the rename happens: nothing is written until Save, the
+  /// same rule an import follows (CLAUDE.md rule 4).
+  ///
+  /// **Every existing id is dropped**, the recipe's and each section's. A
+  /// section id is a primary key; carrying one into a second recipe would
+  /// either collide or quietly re-parent the original's ingredients.
+  ///
+  /// Matches are kept, and they are most of the value — a duplicated bowl
+  /// arrives with its components already resolved, so the only work left is
+  /// the line you came to change.
+  RecipeDraft asCopy() => RecipeDraft(
+    title: title.trim().isEmpty ? title : '$title (copy)',
+    servings: servings,
+    sections: <DraftSection>[
+      for (final DraftSection section in sections)
+        DraftSection(
+          name: section.name,
+          ingredientsText: section.ingredientsText,
+          directionsText: section.directionsText,
+        ),
+    ],
+    prepMinutes: prepMinutes,
+    cookMinutes: cookMinutes,
+    cuisine: cuisine,
+    kind: kind,
+    tags: tags,
+    notes: notes,
+    matches: matches,
+    noMatch: noMatch,
+  );
+
   factory RecipeDraft.fromRecipe(Recipe recipe) => RecipeDraft(
     title: recipe.title,
     servings: recipe.servings,

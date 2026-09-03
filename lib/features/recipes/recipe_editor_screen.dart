@@ -42,7 +42,12 @@ enum _FixChoice { addServing, readLabel, pickAnother, scan, unmatch, noMatch }
 /// The parse is always shown back before saving, so a misread quantity is
 /// caught by eye rather than discovered later in a macro total.
 class RecipeEditorScreen extends ConsumerStatefulWidget {
-  const RecipeEditorScreen({this.recipeId, this.imported, super.key});
+  const RecipeEditorScreen({
+    this.recipeId,
+    this.imported,
+    this.draft,
+    super.key,
+  });
 
   /// Null when creating.
   final String? recipeId;
@@ -54,6 +59,11 @@ class RecipeEditorScreen extends ConsumerStatefulWidget {
   /// anything the model was unsure of is pointed at rather than left for the
   /// user to find.
   final RecipeImportResult? imported;
+
+  /// A draft to open with, for a recipe that is neither new nor an import —
+  /// today, a duplicate (spec §5.2). Unsaved, like an import: the copy is
+  /// written only when Save is pressed.
+  final RecipeDraft? draft;
 
   @override
   ConsumerState<RecipeEditorScreen> createState() => _RecipeEditorScreenState();
@@ -509,8 +519,8 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   @override
   void initState() {
     super.initState();
-    final RecipeImportResult? imported = widget.imported;
-    if (imported != null) _fill(imported.draft);
+    final RecipeDraft? initial = widget.imported?.draft ?? widget.draft;
+    if (initial != null) _fill(initial);
   }
 
   void _hydrate(Recipe recipe) => _fill(RecipeDraft.fromRecipe(recipe));
