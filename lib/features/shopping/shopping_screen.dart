@@ -7,6 +7,8 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
+import '../../app/widgets/swipe_to_delete.dart';
+import '../../app/widgets/undo_snackbar.dart';
 import '../../data/local/shopping_store.dart';
 import '../../domain/foods/no_match_rule.dart';
 import '../../domain/format/quantity_format.dart';
@@ -152,7 +154,10 @@ class _Body extends ConsumerWidget {
               onTick: (ShoppingLine line, bool value) =>
                   _save(ref, _replacing(line.ticked(value))),
               onEdit: (ShoppingLine line) => _edit(context, ref, line),
-              onRemove: (ShoppingLine line) => _remove(context, ref, line),
+              onRemove: (ShoppingLine line) => _remove(ref, line),
+              // Captured before the removal, so undo restores the order too.
+              onRestore: (ShoppingLine _) =>
+                  _restore(ref, <ShoppingLine>[...lines]),
             ),
             const SizedBox(height: HearthSpacing.lg),
           ],
@@ -220,51 +225,43 @@ class _Body extends ConsumerWidget {
     ];
   }
 
-  /// Takes a line off the list, with one tap to put it back.
+  /// Takes a line off the list.
   ///
-  /// Undo rather than a confirmation dialog: taking something off because you
-  /// already have it is an action you perform a dozen times in one shop, and
-  /// two taps to confirm each is a tax on the common case. §5.7 already
-  /// promises undo for the chat's edits, so the list has the precedent.
+  /// The snackbar and its undo belong to [SwipeToDelete], which every other
+  /// list in Hearth uses — one place for how long the window is and for the
+  /// fact that tapping Undo dismisses it immediately.
+  Future<void> _remove(WidgetRef ref, ShoppingLine line) =>
+      _save(ref, <ShoppingLine>[
+        for (final ShoppingLine other in lines)
+          if (other.key != line.key) other,
+      ]);
+
+  /// Puts a removed line back where it was.
   ///
-  /// The *whole previous list* is handed back, not the one line re-appended,
-  /// so an undone removal returns to the position it was dragged into rather
-  /// than to the bottom of the shop.
-  Future<void> _remove(
-    BuildContext context,
-    WidgetRef ref,
-    ShoppingLine line,
-  ) async {
-    final List<ShoppingLine> before = <ShoppingLine>[...lines];
-    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-
-    await _save(ref, <ShoppingLine>[
-      for (final ShoppingLine other in lines)
-        if (other.key != line.key) other,
-    ]);
-
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('Removed ${line.name}'),
-          action: SnackBarAction(
-            label: 'Undo',
-            onPressed: () => _save(ref, before),
-          ),
-        ),
-      );
-  }
+  /// The *whole previous list* is handed back rather than the one line
+  /// re-appended, so an undone removal returns to the position it was dragged
+  /// into rather than to the bottom of the shop (spec §5.7's ordering).
+  Future<void> _restore(WidgetRef ref, List<ShoppingLine> before) =>
+      _save(ref, before);
 
   Future<void> _edit(
     BuildContext context,
     WidgetRef ref,
     ShoppingLine line,
   ) async {
+    final List<ShoppingLine> before = <ShoppingLine>[...lines];
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     final ShoppingLine? changed = await showShoppingAmountSheet(
       context,
       line,
-      onRemove: () => _remove(context, ref, line),
+      onRemove: () async {
+        await _remove(ref, line);
+        showUndoSnackBar(
+          messenger,
+          message: 'Deleted ${line.name}',
+          onUndo: () => _restore(ref, before),
+        );
+      },
     );
     if (changed != null) await _save(ref, _replacing(changed));
   }
@@ -427,6 +424,7 @@ class _StoreGroup extends StatelessWidget {
     required this.onTick,
     required this.onEdit,
     required this.onRemove,
+    required this.onRestore,
   });
 
   final List<ShoppingLine> lines;
@@ -437,7 +435,10 @@ class _StoreGroup extends StatelessWidget {
   final void Function(int from, int to) onReorder;
   final void Function(ShoppingLine line, bool value) onTick;
   final ValueChanged<ShoppingLine> onEdit;
-  final ValueChanged<ShoppingLine> onRemove;
+  final Future<void> Function(ShoppingLine line) onRemove;
+
+  /// Puts back what [onRemove] took, at the position it was in.
+  final Future<void> Function(ShoppingLine line) onRestore;
 
   @override
   Widget build(BuildContext context) {
@@ -455,71 +456,32 @@ class _StoreGroup extends StatelessWidget {
       onReorderItem: onReorder,
       itemBuilder: (BuildContext context, int index) {
         final ShoppingLine line = lines[index];
-        // The key belongs to the outermost widget, which the reorder needs to
-        // identify the item and the dismiss needs to animate it out.
-        return Dismissible(
+        // The key belongs to the outermost widget, which the reorder needs
+        // to identify the item and the swipe needs to keep its open state
+        // with the right row when the list shifts.
+        //
+        // `SwipeToDelete` rather than a bespoke Dismissible: it is the
+        // gesture every other list in Hearth uses, and its two-step shape —
+        // swipe uncovers a Delete button, the button has to be pressed — is
+        // the point. One flick removing a line while you scroll a list
+        // one-handed in a shop is exactly the accident it exists to prevent.
+        //
+        // The undo is a real restore here as it is elsewhere, though by a
+        // different route: the whole previous list is handed back, so the
+        // line returns to the position it was dragged into rather than to
+        // the bottom of the shop.
+        return SwipeToDelete(
           key: ValueKey<String>(line.key),
-          // One direction only. This tile already answers a tap, a long
-          // press-and-drag, and now a swipe; making it answer two swipes as
-          // well would be more gesture than one row can carry.
-          direction: DismissDirection.endToStart,
-          background: const SizedBox.shrink(),
-          secondaryBackground: const _RemoveBackground(),
-          // Removal is asked for here and answered by the store: `onRemove`
-          // saves, the provider re-reads, and the row goes because the list
-          // no longer has it. So this deliberately returns false — a true
-          // would leave a dismissed Dismissible in the tree until that round
-          // trip finished, which is an assertion in debug and a torn frame in
-          // release. The row still disappears; it is the list that removes
-          // it, not the gesture.
-          confirmDismiss: (DismissDirection _) async {
-            onRemove(line);
-            return false;
-          },
+          name: line.name,
+          onDelete: () => onRemove(line),
+          onRestore: () => onRestore(line),
           child: _LineTile(
             line: line,
             onTick: (bool value) => onTick(line, value),
             onEdit: () => onEdit(line),
-            onRemove: () => onRemove(line),
           ),
         );
       },
-    );
-  }
-}
-
-/// What a swiped line slides away to reveal.
-///
-/// Carries the word as well as the icon and the colour: red alone means
-/// nothing to a colour-blind reader and nothing at all to a screen reader
-/// (§6.3, and never colour alone).
-class _RemoveBackground extends StatelessWidget {
-  const _RemoveBackground();
-
-  @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
-      child: Container(
-        decoration: BoxDecoration(
-          color: colors.error,
-          borderRadius: BorderRadius.circular(HearthRadius.md),
-        ),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.symmetric(horizontal: HearthSpacing.md),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(Icons.delete_outline, size: 18, color: colors.onError),
-            const SizedBox(width: HearthSpacing.xs),
-            Text(
-              'Remove',
-              style: context.text.body.copyWith(color: colors.onError),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -529,13 +491,11 @@ class _LineTile extends StatelessWidget {
     required this.line,
     required this.onTick,
     required this.onEdit,
-    required this.onRemove,
   });
 
   final ShoppingLine line;
   final ValueChanged<bool> onTick;
   final VoidCallback onEdit;
-  final VoidCallback onRemove;
 
   /// What the line says to buy, in words.
   String get _amount {
@@ -574,13 +534,12 @@ class _LineTile extends StatelessWidget {
             '${_detail == null ? '' : ', ${_detail!}'}'
             '${done ? '. Already have it.' : ''}',
         excludeSemantics: true,
-        // `excludeSemantics` swallows the Dismissible's own action, and a
-        // swipe is unreachable to a screen reader in any case. Named the same
-        // way `ReorderableListView` names its "Move up / Move down", which is
-        // the pattern this list already relies on.
+        // `excludeSemantics` swallows the amount field's own node, so the
+        // only way to reach it without sight is here. Removal is not listed:
+        // `SwipeToDelete` puts its own "Delete <name>" action on the node
+        // above this one, and two ways to say it would read as two controls.
         customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
           const CustomSemanticsAction(label: 'Set amounts'): onEdit,
-          const CustomSemanticsAction(label: 'Remove'): onRemove,
         },
         child: Material(
           color: colors.surface,

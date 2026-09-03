@@ -289,21 +289,48 @@ void main() {
   });
 
   group('taking a line off the list (spec §5.7)', () {
-    testWidgets('a swipe removes it, and Undo puts it back', (
+    testWidgets('a swipe uncovers Delete, and the button does the work', (
       WidgetTester tester,
     ) async {
+      // Two deliberate actions, which is `SwipeToDelete`'s whole shape and
+      // the reason this list uses it rather than a Dismissible of its own:
+      // one flick removing a line while you scroll one-handed in a shop is
+      // exactly the accident it exists to prevent.
       await openShopping(tester, entries: <MealPlanEntry>[tonight()]);
       await build(tester);
       expect(find.text('ground beef'), findsOneWidget);
+      // The button is behind the row all along; what the swipe changes is
+      // whether it can be pressed.
+      expect(
+        tester
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Delete'))
+            .onPressed,
+        isNull,
+      );
 
-      await tester.drag(find.text('ground beef'), const Offset(-500, 0));
+      await tester.drag(find.text('ground beef'), const Offset(-200, 0));
+      await pumpFrames(tester, frames: 20);
+
+      // The swipe on its own removes nothing.
+      expect(find.text('ground beef'), findsOneWidget);
+      await tester.tap(find.text('Delete'));
       await pumpFrames(tester, frames: 20);
       expect(find.text('ground beef'), findsNothing);
+    });
 
-      // Undo is the whole reason removal needs no confirmation dialog.
-      expect(find.text('Removed ground beef'), findsOneWidget);
+    testWidgets('and Undo puts it back', (WidgetTester tester) async {
+      await openShopping(tester, entries: <MealPlanEntry>[tonight()]);
+      await build(tester);
+
+      await tester.drag(find.text('ground beef'), const Offset(-200, 0));
+      await pumpFrames(tester, frames: 20);
+      await tester.tap(find.text('Delete'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(find.text('Deleted ground beef'), findsOneWidget);
       await tester.tap(find.text('Undo'));
       await pumpFrames(tester, frames: 20);
+
       expect(find.text('ground beef'), findsOneWidget);
     });
 
@@ -337,6 +364,8 @@ void main() {
       await pumpFrames(tester, frames: 20);
 
       expect(find.text('ground beef'), findsNothing);
+      // Same undo as the swipe, from the same one place.
+      expect(find.text('Deleted ground beef'), findsOneWidget);
     });
   });
 }

@@ -23,7 +23,7 @@ import '../../domain/units/unit.dart';
 Future<ShoppingLine?> showShoppingAmountSheet(
   BuildContext context,
   ShoppingLine line, {
-  VoidCallback? onRemove,
+  Future<void> Function()? onRemove,
 }) => showModalBottomSheet<ShoppingLine>(
   context: context,
   isScrollControlled: true,
@@ -38,7 +38,7 @@ class _AmountSheet extends StatefulWidget {
   final ShoppingLine line;
 
   /// Null where removal is not this sheet's business to offer.
-  final VoidCallback? onRemove;
+  final Future<void> Function()? onRemove;
 
   @override
   State<_AmountSheet> createState() => _AmountSheetState();
@@ -163,7 +163,7 @@ class _AmountSheetState extends State<_AmountSheet> {
                 // On its own line rather than beside Reset and Done: three
                 // buttons in one row overflows at 3x text, which is how the
                 // export sheet broke.
-                if (widget.onRemove case final VoidCallback remove)
+                if (widget.onRemove case final Future<void> Function() remove)
                   Align(
                     alignment: Alignment.centerLeft,
                     child: SizedBox(
