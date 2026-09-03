@@ -14,6 +14,7 @@ abstract final class FoodMapper {
     'usda': FoodSource.usda,
     'manual': FoodSource.manual,
     'ai_estimate': FoodSource.aiEstimate,
+    'restaurant': FoodSource.restaurant,
   };
 
   static String sourceToSql(FoodSource source) => switch (source) {
@@ -21,6 +22,7 @@ abstract final class FoodMapper {
     FoodSource.usda => 'usda',
     FoodSource.manual => 'manual',
     FoodSource.aiEstimate => 'ai_estimate',
+    FoodSource.restaurant => 'restaurant',
   };
 
   static FoodSource sourceFromSql(String value) =>

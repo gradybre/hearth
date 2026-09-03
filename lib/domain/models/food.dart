@@ -21,6 +21,21 @@ enum FoodSource {
   /// Produced by AI generation and not yet verified against a real source.
   /// Always labelled as an estimate (spec §5.4).
   aiEstimate,
+
+  /// Read off a restaurant's own published nutrition sheet (spec §5.2).
+  ///
+  /// Load-bearing, not decorative. A restaurant food is **never offered as an
+  /// automatic match for a cooking recipe's ingredient** — see
+  /// [IngredientMatcher]. Chipotle's menu contributes a Chicken, a Cheese, a
+  /// Sour Cream and a Romaine Lettuce to the library, and without this they
+  /// would join the pool every ingredient line is matched against. That is
+  /// worse than a wrong suggestion: the matcher only answers a line when the
+  /// answer is unambiguous, so a second Chicken makes lines that used to
+  /// resolve cleanly stop resolving at all.
+  ///
+  /// A food that only exists inside somebody else's kitchen can never be an
+  /// ingredient in yours. The rule is right regardless of Chipotle.
+  restaurant,
 }
 
 /// One way a food can be portioned, with the macros for that portion.

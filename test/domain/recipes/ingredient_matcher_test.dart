@@ -361,4 +361,78 @@ void defaultFoodTests() {
     expect(found.first.id, 'food-plain');
     expect(found, hasLength(2));
   });
+
+  group("somebody else's kitchen (spec §5.2)", () {
+    Food restaurantChicken() => aFood(
+      'Chicken',
+      id: 'f-chipotle-chicken',
+      brand: 'Chipotle',
+      source: FoodSource.restaurant,
+    );
+
+    test('a restaurant food is never suggested for a cooking line', () {
+      // Chipotle's menu puts a Chicken, a Cheese, a Sour Cream and a Romaine
+      // Lettuce in the library. None of them is something you cook with.
+      final MatchSuggestion? suggestion = IngredientMatcher.suggest(
+        ingredientName: 'chicken',
+        library: <Food>[restaurantChicken()],
+      );
+
+      expect(suggestion, isNull);
+    });
+
+    test('and does not make an unambiguous line ambiguous', () {
+      // The regression that matters more than the wrong suggestion. The
+      // library is only consulted when the answer is unambiguous, so a second
+      // Chicken would make a line that used to resolve cleanly stop resolving
+      // at all — a silent loss of matching quality across the whole existing
+      // library, caused by data that has nothing to do with cooking.
+      final Food ownChicken = aFood('Chicken breast', id: 'f-own-chicken');
+
+      final MatchSuggestion? before = IngredientMatcher.suggest(
+        ingredientName: 'chicken breast',
+        library: <Food>[ownChicken],
+      );
+      final MatchSuggestion? after = IngredientMatcher.suggest(
+        ingredientName: 'chicken breast',
+        library: <Food>[ownChicken, restaurantChicken()],
+      );
+
+      expect(before?.foodId, 'f-own-chicken');
+      expect(after?.foodId, 'f-own-chicken');
+    });
+
+    test('nor offered as a default, however it got marked as one', () {
+      final Food marked = aFood(
+        'Chicken',
+        id: 'f-chipotle-chicken',
+        brand: 'Chipotle',
+        source: FoodSource.restaurant,
+        isDefault: true,
+      );
+
+      expect(IngredientMatcher.defaultsFor('chicken', <Food>[marked]), isEmpty);
+    });
+
+    test('but a remembered match still wins, because a person chose it', () {
+      // Excluding these from *automatic* matching is the rule. Somebody who
+      // deliberately attached Chipotle's guacamole to a line has said what
+      // they meant, and Hearth does not second-guess a decision it was told.
+      final Food guac = aFood(
+        'Guacamole',
+        id: 'f-chipotle-guac',
+        brand: 'Chipotle',
+        source: FoodSource.restaurant,
+      );
+
+      final MatchSuggestion? suggestion = IngredientMatcher.suggest(
+        ingredientName: 'guacamole',
+        library: <Food>[guac],
+        remembered: <String, String>{'guacamole': 'f-chipotle-guac'},
+      );
+
+      expect(suggestion?.foodId, 'f-chipotle-guac');
+      expect(suggestion?.origin, MatchOrigin.remembered);
+    });
+  });
 }

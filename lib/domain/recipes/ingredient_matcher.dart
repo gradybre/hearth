@@ -81,6 +81,14 @@ abstract final class IngredientMatcher {
     final String key = normaliseKey(ingredientName);
     if (key.isEmpty) return null;
 
+    // Everything the *household* could be cooking with. A restaurant's own
+    // menu is in the same library and is not one of them — see [matchable].
+    final List<Food> candidates = matchable(library);
+
+    // `known` is still the whole live library on purpose: it only checks that
+    // a remembered or previously-used id still exists, and a person who
+    // deliberately attached Chipotle's guacamole to a line has said what they
+    // meant. The exclusion is of automatic matching, not of choice.
     final Set<String> known = library
         .where((Food f) => !f.isDeleted)
         .map((Food f) => f.id)
@@ -91,7 +99,7 @@ abstract final class IngredientMatcher {
     // "milk" against a fridge holding whole, 2% and non-fat has genuinely not
     // said which, and picking one would be a coin flip wearing a suggestion's
     // clothes. The caller offers the menu instead (see [defaultsFor]).
-    final List<Food> defaults = defaultsFor(ingredientName, library);
+    final List<Food> defaults = defaultsFor(ingredientName, candidates);
     if (defaults.length == 1) {
       return MatchSuggestion(
         foodId: defaults.single.id,
@@ -115,7 +123,7 @@ abstract final class IngredientMatcher {
       );
     }
 
-    return _bestGuess(key, library);
+    return _bestGuess(key, candidates);
   }
 
   /// Every default food whose name says what [ingredientName] asks for,
@@ -130,7 +138,7 @@ abstract final class IngredientMatcher {
     if (line.isEmpty) return const <Food>[];
 
     final List<(Food, int)> matched = <(Food, int)>[
-      for (final Food food in library)
+      for (final Food food in matchable(library))
         if (food.isDefault && !food.isDeleted)
           if (FoodConcept.of('${food.name} ${food.brand ?? ''}')
               case final FoodConcept c when c.covers(line))
@@ -141,6 +149,27 @@ abstract final class IngredientMatcher {
   }
 
   /// An exact normalised name match, or a single unambiguous partial one.
+  /// The foods an ingredient line may be matched to **automatically**.
+  ///
+  /// Everything live, less anything read off a restaurant's menu (spec §5.2).
+  /// Chipotle's sheet contributes a Chicken, a Cheese, a Sour Cream and a
+  /// Romaine Lettuce to the household library, and none of them is a thing
+  /// you cook with. Renaming them "Chipotle Chicken" would not help:
+  /// [FoodConcept.canAnswer] is asymmetric on purpose, so a line reading
+  /// "chicken" is still answered by a food whose name merely adds a brand.
+  ///
+  /// The damage is worse than a wrong suggestion. A best guess is only
+  /// offered when it is unambiguous, so a second Chicken makes lines that
+  /// used to resolve cleanly stop resolving at all — a silent loss of
+  /// matching quality across every recipe already in the library.
+  ///
+  /// Choosing one by hand is untouched, and so is a remembered match. This
+  /// excludes them from being picked *for* you, not from being picked.
+  static List<Food> matchable(List<Food> library) => <Food>[
+    for (final Food food in library)
+      if (!food.isDeleted && food.source != FoodSource.restaurant) food,
+  ];
+
   static MatchSuggestion? _bestGuess(String key, List<Food> library) {
     final List<Food> live = library
         .where((Food f) => !f.isDeleted)

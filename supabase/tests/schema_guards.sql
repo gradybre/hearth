@@ -485,3 +485,75 @@ begin
   raise notice 'recipe kind guards passed';
 end;
 $$;
+
+-- ── A chain's menu in the shared catalogue (spec §5.2, §8.2) ────────────────
+--
+-- The Chipotle seed writes global foods, and the claim that needed no new
+-- policy is that the existing ones already do the right thing with them. That
+-- claim is checked here rather than trusted: readable by a signed-in member,
+-- unwritable from the client, and carried by the ordinary pull.
+do $$
+declare
+  v_user  uuid := gen_random_uuid();
+  v_seen  int;
+  v_chicken uuid;
+begin
+  select id into v_chicken
+  from public.foods where brand = 'Chipotle' and name = 'Chicken';
+  if v_chicken is null then
+    raise exception 'the Chipotle seed did not land';
+  end if;
+
+  if exists (select 1 from public.foods where brand = 'Chipotle'
+             and (household_id is not null or source <> 'restaurant')) then
+    raise exception 'a seeded component is not a global restaurant food';
+  end if;
+
+  insert into auth.users (
+    id, instance_id, aud, role, email, encrypted_password,
+    email_confirmed_at, created_at, updated_at
+  )
+  values (
+    v_user, '00000000-0000-0000-0000-000000000000', 'authenticated',
+    'authenticated', 'menu-guard@example.test', 'x', now(), now(), now()
+  );
+
+  set local role authenticated;
+  perform set_config(
+    'request.jwt.claims',
+    json_build_object('sub', v_user, 'role', 'authenticated')::text,
+    true
+  );
+
+  select count(*) into v_seen from public.foods where brand = 'Chipotle';
+  if v_seen <> 29 then
+    raise exception 'a member could see % of the 29 components', v_seen;
+  end if;
+
+  -- And the pull carries them, which is what puts them on a phone.
+  if not exists (
+    select 1 from public.changed_foods(null) c
+    where (c ->> 'id')::uuid = v_chicken
+      and (c -> 'serving_options' -> 0 ->> 'protein_g')::numeric = 32
+  ) then
+    raise exception 'changed_foods did not carry a global food';
+  end if;
+
+  -- Unwritable from the client: the write policies are keyed on the caller's
+  -- own household, and a global row belongs to nobody's.
+  begin
+    update public.foods set name = 'Tampered' where id = v_chicken;
+    if found then
+      raise exception 'a client was able to rewrite a global food';
+    end if;
+  exception
+    when insufficient_privilege then null;
+  end;
+
+  reset role;
+  delete from public.profiles where id = v_user;
+  delete from public.households where owner_id = v_user;
+  delete from auth.users where id = v_user;
+  raise notice 'restaurant catalogue guards passed';
+end;
+$$;

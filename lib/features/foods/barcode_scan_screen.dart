@@ -1087,6 +1087,7 @@ class _SourceBadge extends StatelessWidget {
             FoodSource.usda => 'USDA',
             FoodSource.manual => 'Your library',
             FoodSource.aiEstimate => 'AI estimate',
+            FoodSource.restaurant => 'Restaurant menu',
           };
 
     return DecoratedBox(

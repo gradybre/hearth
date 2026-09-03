@@ -135,6 +135,7 @@ class _ExternalFood extends StatelessWidget {
     FoodSource.usda => 'USDA',
     FoodSource.manual => 'Elsewhere',
     FoodSource.aiEstimate => 'AI estimate',
+    FoodSource.restaurant => 'Restaurant menu',
   };
 
   Future<void> _choose(BuildContext context) async {

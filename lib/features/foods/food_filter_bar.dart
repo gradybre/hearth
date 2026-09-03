@@ -112,6 +112,9 @@ class FoodFilterBar extends ConsumerWidget {
     FoodSource.openFoodFacts => 'Open Food Facts',
     FoodSource.usda => 'USDA',
     FoodSource.aiEstimate => 'AI estimate',
+    // The chip that keeps a whole chain's menu out of the way of the
+    // household's own foods, and finds it again when a sheet is reissued.
+    FoodSource.restaurant => 'Restaurant',
   };
 }
 
