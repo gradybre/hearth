@@ -91,6 +91,16 @@ class $RecipesTable extends Recipes with TableInfo<$RecipesTable, RecipeRow> {
         requiredDuringInsert: false,
         defaultValue: const Constant('[]'),
       ).withConverter<List<String>>($RecipesTable.$convertertags);
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('cooked'),
+  );
   static const VerificationMeta _sourceMeta = const VerificationMeta('source');
   @override
   late final GeneratedColumn<String> source = GeneratedColumn<String>(
@@ -168,6 +178,7 @@ class $RecipesTable extends Recipes with TableInfo<$RecipesTable, RecipeRow> {
     cookSeconds,
     cuisine,
     tags,
+    kind,
     source,
     photoUrl,
     notes,
@@ -241,6 +252,12 @@ class $RecipesTable extends Recipes with TableInfo<$RecipesTable, RecipeRow> {
       context.handle(
         _cuisineMeta,
         cuisine.isAcceptableOrUnknown(data['cuisine']!, _cuisineMeta),
+      );
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
       );
     }
     if (data.containsKey('source')) {
@@ -324,6 +341,10 @@ class $RecipesTable extends Recipes with TableInfo<$RecipesTable, RecipeRow> {
           data['${effectivePrefix}tags'],
         )!,
       ),
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
       source: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}source'],
@@ -369,6 +390,10 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
   final int? cookSeconds;
   final String? cuisine;
   final List<String> tags;
+
+  /// Cooked, or eaten out (spec §5.2). An eaten-out recipe never reaches the
+  /// shopping list.
+  final String kind;
   final String source;
   final String? photoUrl;
   final String? notes;
@@ -384,6 +409,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
     this.cookSeconds,
     this.cuisine,
     required this.tags,
+    required this.kind,
     required this.source,
     this.photoUrl,
     this.notes,
@@ -410,6 +436,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
     {
       map['tags'] = Variable<String>($RecipesTable.$convertertags.toSql(tags));
     }
+    map['kind'] = Variable<String>(kind);
     map['source'] = Variable<String>(source);
     if (!nullToAbsent || photoUrl != null) {
       map['photo_url'] = Variable<String>(photoUrl);
@@ -441,6 +468,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
           ? const Value.absent()
           : Value(cuisine),
       tags: Value(tags),
+      kind: Value(kind),
       source: Value(source),
       photoUrl: photoUrl == null && nullToAbsent
           ? const Value.absent()
@@ -470,6 +498,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
       cookSeconds: serializer.fromJson<int?>(json['cookSeconds']),
       cuisine: serializer.fromJson<String?>(json['cuisine']),
       tags: serializer.fromJson<List<String>>(json['tags']),
+      kind: serializer.fromJson<String>(json['kind']),
       source: serializer.fromJson<String>(json['source']),
       photoUrl: serializer.fromJson<String?>(json['photoUrl']),
       notes: serializer.fromJson<String?>(json['notes']),
@@ -490,6 +519,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
       'cookSeconds': serializer.toJson<int?>(cookSeconds),
       'cuisine': serializer.toJson<String?>(cuisine),
       'tags': serializer.toJson<List<String>>(tags),
+      'kind': serializer.toJson<String>(kind),
       'source': serializer.toJson<String>(source),
       'photoUrl': serializer.toJson<String?>(photoUrl),
       'notes': serializer.toJson<String?>(notes),
@@ -508,6 +538,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
     Value<int?> cookSeconds = const Value.absent(),
     Value<String?> cuisine = const Value.absent(),
     List<String>? tags,
+    String? kind,
     String? source,
     Value<String?> photoUrl = const Value.absent(),
     Value<String?> notes = const Value.absent(),
@@ -523,6 +554,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
     cookSeconds: cookSeconds.present ? cookSeconds.value : this.cookSeconds,
     cuisine: cuisine.present ? cuisine.value : this.cuisine,
     tags: tags ?? this.tags,
+    kind: kind ?? this.kind,
     source: source ?? this.source,
     photoUrl: photoUrl.present ? photoUrl.value : this.photoUrl,
     notes: notes.present ? notes.value : this.notes,
@@ -546,6 +578,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
           : this.cookSeconds,
       cuisine: data.cuisine.present ? data.cuisine.value : this.cuisine,
       tags: data.tags.present ? data.tags.value : this.tags,
+      kind: data.kind.present ? data.kind.value : this.kind,
       source: data.source.present ? data.source.value : this.source,
       photoUrl: data.photoUrl.present ? data.photoUrl.value : this.photoUrl,
       notes: data.notes.present ? data.notes.value : this.notes,
@@ -566,6 +599,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
           ..write('cookSeconds: $cookSeconds, ')
           ..write('cuisine: $cuisine, ')
           ..write('tags: $tags, ')
+          ..write('kind: $kind, ')
           ..write('source: $source, ')
           ..write('photoUrl: $photoUrl, ')
           ..write('notes: $notes, ')
@@ -586,6 +620,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
     cookSeconds,
     cuisine,
     tags,
+    kind,
     source,
     photoUrl,
     notes,
@@ -605,6 +640,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
           other.cookSeconds == this.cookSeconds &&
           other.cuisine == this.cuisine &&
           other.tags == this.tags &&
+          other.kind == this.kind &&
           other.source == this.source &&
           other.photoUrl == this.photoUrl &&
           other.notes == this.notes &&
@@ -622,6 +658,7 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
   final Value<int?> cookSeconds;
   final Value<String?> cuisine;
   final Value<List<String>> tags;
+  final Value<String> kind;
   final Value<String> source;
   final Value<String?> photoUrl;
   final Value<String?> notes;
@@ -638,6 +675,7 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
     this.cookSeconds = const Value.absent(),
     this.cuisine = const Value.absent(),
     this.tags = const Value.absent(),
+    this.kind = const Value.absent(),
     this.source = const Value.absent(),
     this.photoUrl = const Value.absent(),
     this.notes = const Value.absent(),
@@ -655,6 +693,7 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
     this.cookSeconds = const Value.absent(),
     this.cuisine = const Value.absent(),
     this.tags = const Value.absent(),
+    this.kind = const Value.absent(),
     this.source = const Value.absent(),
     this.photoUrl = const Value.absent(),
     this.notes = const Value.absent(),
@@ -676,6 +715,7 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
     Expression<int>? cookSeconds,
     Expression<String>? cuisine,
     Expression<String>? tags,
+    Expression<String>? kind,
     Expression<String>? source,
     Expression<String>? photoUrl,
     Expression<String>? notes,
@@ -693,6 +733,7 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
       if (cookSeconds != null) 'cook_seconds': cookSeconds,
       if (cuisine != null) 'cuisine': cuisine,
       if (tags != null) 'tags': tags,
+      if (kind != null) 'kind': kind,
       if (source != null) 'source': source,
       if (photoUrl != null) 'photo_url': photoUrl,
       if (notes != null) 'notes': notes,
@@ -712,6 +753,7 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
     Value<int?>? cookSeconds,
     Value<String?>? cuisine,
     Value<List<String>>? tags,
+    Value<String>? kind,
     Value<String>? source,
     Value<String?>? photoUrl,
     Value<String?>? notes,
@@ -729,6 +771,7 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
       cookSeconds: cookSeconds ?? this.cookSeconds,
       cuisine: cuisine ?? this.cuisine,
       tags: tags ?? this.tags,
+      kind: kind ?? this.kind,
       source: source ?? this.source,
       photoUrl: photoUrl ?? this.photoUrl,
       notes: notes ?? this.notes,
@@ -768,6 +811,9 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
         $RecipesTable.$convertertags.toSql(tags.value),
       );
     }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
     if (source.present) {
       map['source'] = Variable<String>(source.value);
     }
@@ -803,6 +849,7 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
           ..write('cookSeconds: $cookSeconds, ')
           ..write('cuisine: $cuisine, ')
           ..write('tags: $tags, ')
+          ..write('kind: $kind, ')
           ..write('source: $source, ')
           ..write('photoUrl: $photoUrl, ')
           ..write('notes: $notes, ')
@@ -11862,6 +11909,7 @@ typedef $$RecipesTableCreateCompanionBuilder = RecipesCompanion Function({
   Value<int?> cookSeconds,
   Value<String?> cuisine,
   Value<List<String>> tags,
+  Value<String> kind,
   Value<String> source,
   Value<String?> photoUrl,
   Value<String?> notes,
@@ -11879,6 +11927,7 @@ typedef $$RecipesTableUpdateCompanionBuilder = RecipesCompanion Function({
   Value<int?> cookSeconds,
   Value<String?> cuisine,
   Value<List<String>> tags,
+  Value<String> kind,
   Value<String> source,
   Value<String?> photoUrl,
   Value<String?> notes,
@@ -12060,6 +12109,11 @@ class $$RecipesTableFilterComposer
         column: $table.tags,
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get source => $composableBuilder(
     column: $table.source,
@@ -12291,6 +12345,11 @@ class $$RecipesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get source => $composableBuilder(
     column: $table.source,
     builder: (column) => ColumnOrderings(column),
@@ -12360,6 +12419,9 @@ class $$RecipesTableAnnotationComposer
 
   GeneratedColumnWithTypeConverter<List<String>, String> get tags =>
       $composableBuilder(column: $table.tags, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
 
   GeneratedColumn<String> get source =>
       $composableBuilder(column: $table.source, builder: (column) => column);
@@ -12575,6 +12637,7 @@ class $$RecipesTableTableManager
                 Value<int?> cookSeconds = const Value.absent(),
                 Value<String?> cuisine = const Value.absent(),
                 Value<List<String>> tags = const Value.absent(),
+                Value<String> kind = const Value.absent(),
                 Value<String> source = const Value.absent(),
                 Value<String?> photoUrl = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
@@ -12591,6 +12654,7 @@ class $$RecipesTableTableManager
                 cookSeconds: cookSeconds,
                 cuisine: cuisine,
                 tags: tags,
+                kind: kind,
                 source: source,
                 photoUrl: photoUrl,
                 notes: notes,
@@ -12609,6 +12673,7 @@ class $$RecipesTableTableManager
                 Value<int?> cookSeconds = const Value.absent(),
                 Value<String?> cuisine = const Value.absent(),
                 Value<List<String>> tags = const Value.absent(),
+                Value<String> kind = const Value.absent(),
                 Value<String> source = const Value.absent(),
                 Value<String?> photoUrl = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
@@ -12625,6 +12690,7 @@ class $$RecipesTableTableManager
                 cookSeconds: cookSeconds,
                 cuisine: cuisine,
                 tags: tags,
+                kind: kind,
                 source: source,
                 photoUrl: photoUrl,
                 notes: notes,

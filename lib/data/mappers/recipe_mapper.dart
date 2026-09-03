@@ -45,6 +45,7 @@ abstract final class RecipeMapper {
         ? null
         : Duration(seconds: recipe.cookSeconds!),
     cuisine: recipe.cuisine,
+    kind: kindFromSql(recipe.kind),
     tags: recipe.tags,
     source: sourceFromSql(recipe.source),
     photoUrl: recipe.photoUrl,
@@ -95,6 +96,21 @@ abstract final class RecipeMapper {
         sortOrder: row.sortOrder,
       );
 
+  /// The wire and column spelling of [RecipeKind].
+  ///
+  /// Snake case, matching every other enum stored here, and unknown values
+  /// read as `cooked` rather than throwing — a row written by a newer client
+  /// should degrade to an ordinary recipe rather than break the pull.
+  static String kindToSql(RecipeKind kind) => switch (kind) {
+    RecipeKind.cooked => 'cooked',
+    RecipeKind.eatenOut => 'eaten_out',
+  };
+
+  static RecipeKind kindFromSql(String value) => switch (value) {
+    'eaten_out' => RecipeKind.eatenOut,
+    _ => RecipeKind.cooked,
+  };
+
   static RecipesCompanion toCompanion(Recipe recipe, DateTime updatedAt) =>
       RecipesCompanion.insert(
         id: recipe.id,
@@ -104,6 +120,7 @@ abstract final class RecipeMapper {
         prepSeconds: Value<int?>(recipe.prepTime?.inSeconds),
         cookSeconds: Value<int?>(recipe.cookTime?.inSeconds),
         cuisine: Value<String?>(recipe.cuisine),
+        kind: Value<String>(kindToSql(recipe.kind)),
         tags: Value<List<String>>(recipe.tags),
         source: Value<String>(sourceToSql(recipe.source)),
         photoUrl: Value<String?>(recipe.photoUrl),
@@ -181,6 +198,7 @@ abstract final class RecipeMapper {
     'prep_seconds': recipe.prepTime?.inSeconds,
     'cook_seconds': recipe.cookTime?.inSeconds,
     'cuisine': recipe.cuisine,
+    'kind': kindToSql(recipe.kind),
     'tags': recipe.tags,
     'source': sourceToSql(recipe.source),
     'photo_url': recipe.photoUrl,

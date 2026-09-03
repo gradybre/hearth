@@ -41,6 +41,10 @@ class Recipes extends Table {
   TextColumn get tags => text()
       .map(const StringListConverter())
       .withDefault(const Constant('[]'))();
+
+  /// Cooked, or eaten out (spec §5.2). An eaten-out recipe never reaches the
+  /// shopping list.
+  TextColumn get kind => text().withDefault(const Constant('cooked'))();
   TextColumn get source => text().withDefault(const Constant('manual'))();
   TextColumn get photoUrl => text().nullable()();
   TextColumn get notes => text().nullable()();

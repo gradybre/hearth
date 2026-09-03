@@ -31,6 +31,7 @@ abstract final class SyncPayload {
       prepTime: _duration(json['prep_seconds']),
       cookTime: _duration(json['cook_seconds']),
       cuisine: json['cuisine'] as String?,
+      kind: RecipeMapper.kindFromSql('${json['kind'] ?? 'cooked'}'),
       tags: <String>[
         for (final Object? tag in (json['tags'] as List<Object?>?) ?? const [])
           '$tag',

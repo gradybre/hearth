@@ -420,3 +420,68 @@ begin
   raise notice 'minor nutrient guards passed';
 end;
 $$;
+
+-- ── A recipe you order rather than cook (spec §5.2) ─────────────────────────
+--
+-- `kind` is the one column a shopping list consults to decide whether you are
+-- sent to the shop for a meal. Both halves of sync have to carry it, and a
+-- recipe that says nothing has to arrive as one you cook.
+do $$
+declare
+  v_owner uuid := gen_random_uuid();
+  v_house uuid := gen_random_uuid();
+  v_bowl  uuid := gen_random_uuid();
+  v_pot   uuid := gen_random_uuid();
+  v_kind  text;
+begin
+  insert into auth.users (
+    id, instance_id, aud, role, email, encrypted_password,
+    email_confirmed_at, created_at, updated_at
+  )
+  values (
+    v_owner, '00000000-0000-0000-0000-000000000000', 'authenticated',
+    'authenticated', 'kind-guard@example.test', 'x', now(), now(), now()
+  );
+  insert into public.households (id, name, owner_id)
+  values (v_house, 'Kind guard', v_owner);
+
+  perform public.upsert_recipe(jsonb_build_object(
+    'id', v_bowl, 'household_id', v_house, 'title', 'Burrito bowl',
+    'servings', 1, 'kind', 'eaten_out', 'sections', '[]'::jsonb
+  ));
+  select kind into v_kind from public.recipes where id = v_bowl;
+  if v_kind is distinct from 'eaten_out' then
+    raise exception 'upsert_recipe lost the kind: %', v_kind;
+  end if;
+
+  if not exists (
+    select 1 from public.changed_recipes(null) c
+    where (c ->> 'id')::uuid = v_bowl and c ->> 'kind' = 'eaten_out'
+  ) then
+    raise exception 'changed_recipes did not carry the kind';
+  end if;
+
+  -- A payload from a client that has never heard of `kind` is a recipe you
+  -- cook, which is what every recipe written before today is.
+  perform public.upsert_recipe(jsonb_build_object(
+    'id', v_pot, 'household_id', v_house, 'title', 'Chilli',
+    'servings', 4, 'sections', '[]'::jsonb
+  ));
+  select kind into v_kind from public.recipes where id = v_pot;
+  if v_kind is distinct from 'cooked' then
+    raise exception 'a recipe with no kind did not default to cooked: %', v_kind;
+  end if;
+
+  -- Unwound in reference order. A new auth user gets a profile and a
+  -- household of their own from a trigger, so tearing down only the rows this
+  -- guard created leaves those behind and the delete fails on a foreign key.
+  delete from public.recipes where household_id = v_house;
+  delete from public.profiles where household_id in (
+    select id from public.households where owner_id = v_owner
+  );
+  delete from public.profiles where id = v_owner;
+  delete from public.households where owner_id = v_owner;
+  delete from auth.users where id = v_owner;
+  raise notice 'recipe kind guards passed';
+end;
+$$;

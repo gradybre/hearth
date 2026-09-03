@@ -70,6 +70,7 @@ class RecipeDraft {
     this.prepMinutes,
     this.cookMinutes,
     this.cuisine,
+    this.kind = RecipeKind.cooked,
     this.tags = const <String>[],
     this.notes,
     this.existingId,
@@ -86,6 +87,10 @@ class RecipeDraft {
   final int? prepMinutes;
   final int? cookMinutes;
   final String? cuisine;
+
+  /// Cooked, or eaten out (spec §5.2). An eaten-out recipe never reaches
+  /// the shopping list and offers neither cook-along nor scaling.
+  final RecipeKind kind;
   final List<String> tags;
   final String? notes;
 
@@ -197,6 +202,7 @@ class RecipeDraft {
       prepTime: prepMinutes == null ? null : Duration(minutes: prepMinutes!),
       cookTime: cookMinutes == null ? null : Duration(minutes: cookMinutes!),
       cuisine: (cuisine ?? '').trim().isEmpty ? null : cuisine!.trim(),
+      kind: kind,
       tags: tags,
       notes: (notes ?? '').trim().isEmpty ? null : notes!.trim(),
       sections: <RecipeSection>[
@@ -293,6 +299,7 @@ class RecipeDraft {
     prepMinutes: recipe.prepTime?.inMinutes,
     cookMinutes: recipe.cookTime?.inMinutes,
     cuisine: recipe.cuisine,
+    kind: recipe.kind,
     tags: recipe.tags,
     notes: recipe.notes,
     existingId: recipe.id,
@@ -380,6 +387,7 @@ class RecipeDraft {
     prepMinutes: incoming.prepMinutes,
     cookMinutes: incoming.cookMinutes,
     cuisine: incoming.cuisine,
+    kind: kind,
     tags: incoming.tags,
     notes: notes,
     existingId: existingId,
@@ -394,6 +402,7 @@ class RecipeDraft {
     int? prepMinutes,
     int? cookMinutes,
     String? cuisine,
+    RecipeKind? kind,
     List<String>? tags,
     String? notes,
   }) => RecipeDraft(
@@ -403,6 +412,7 @@ class RecipeDraft {
     prepMinutes: prepMinutes ?? this.prepMinutes,
     cookMinutes: cookMinutes ?? this.cookMinutes,
     cuisine: cuisine ?? this.cuisine,
+    kind: kind ?? this.kind,
     tags: tags ?? this.tags,
     notes: notes ?? this.notes,
     existingId: existingId,
@@ -437,6 +447,7 @@ class RecipeDraft {
         prepMinutes: prepMinutes,
         cookMinutes: cookMinutes,
         cuisine: cuisine,
+        kind: kind,
         tags: tags,
         notes: notes,
         existingId: existingId,

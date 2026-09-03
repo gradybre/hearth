@@ -49,7 +49,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -191,6 +191,12 @@ class HearthDatabase extends _$HearthDatabase {
           foodServingOptions,
           foodServingOptions.cholesterolMg,
         );
+      }
+      // v20 lets a recipe be one you order rather than one you cook, so a
+      // restaurant meal can be planned and logged without being shopped for
+      // (spec §5.2). Additive, and defaulted to what every existing recipe is.
+      if (from < 20) {
+        await _addColumnIfMissing(m, recipes, recipes.kind);
       }
     },
     beforeOpen: (OpeningDetails details) async {
