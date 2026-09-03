@@ -144,6 +144,7 @@ class RecipeRepository {
     cookTime: recipe.cookTime,
     cuisine: recipe.cuisine,
     tags: recipe.tags,
+    kind: recipe.kind,
     source: recipe.source,
     photoUrl: recipe.photoUrl,
     notes: recipe.notes,

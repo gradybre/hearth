@@ -95,7 +95,13 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
       // shell's timer bar. Without this, opening a recipe mid-cook is the one
       // place a running timer would drop out of sight.
       bottomNavigationBar: const CookTimerBar(),
+      // No cook-along for a meal you ordered. It has no steps to walk anyway,
+      // but saying so by kind rather than by "it happens to have no steps"
+      // keeps a restaurant meal from sprouting one the day somebody writes a
+      // note in it (spec §5.2).
       floatingActionButton: recipe.value == null
+          ? null
+          : recipe.value!.isEatenOut
           ? null
           : recipe.value!.allSteps.isEmpty
           ? null
@@ -172,8 +178,11 @@ class _RecipeBodyState extends State<_RecipeBody> {
 
     final Recipe original = widget.recipe;
     // A recipe with no yield cannot be scaled to a yield, and the scaler says
-    // so by throwing. Offer the control only where it means something.
-    final bool scalable = original.servings > 0;
+    // so by throwing. Offer the control only where it means something — which
+    // a restaurant meal never is: you cannot make the burrito bowl bigger by
+    // wanting to, and doubling one would silently double its macros against a
+    // portion nobody served (spec §5.2).
+    final bool scalable = original.servings > 0 && !original.isEatenOut;
     final ScaledRecipe? scaled = scalable
         ? RecipeScaler.toServings(original, _targetServings)
         : null;

@@ -531,6 +531,8 @@ class RecipeFilterController extends Notifier<RecipeFilter> {
   void search(String text) => state = state.copyWith(text: text);
   void toggleFavoritesOnly() =>
       state = state.copyWith(favoritesOnly: !state.favoritesOnly);
+  void toggleEatenOutOnly() =>
+      state = state.copyWith(eatenOutOnly: !state.eatenOutOnly);
   void toggleTag(String tag) => state = state.toggleTag(tag);
   void toggleCuisine(String cuisine) => state = state.toggleCuisine(cuisine);
   void toggleCollection(String id) => state = state.toggleCollection(id);

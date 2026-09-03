@@ -58,6 +58,7 @@ class RecipeFilter {
   const RecipeFilter({
     this.text = '',
     this.favoritesOnly = false,
+    this.eatenOutOnly = false,
     this.tags = const <String>{},
     this.cuisines = const <String>{},
     this.collectionIds = const <String>{},
@@ -69,6 +70,13 @@ class RecipeFilter {
 
   final String text;
   final bool favoritesOnly;
+
+  /// Narrows to meals eaten out (spec §5.2).
+  ///
+  /// Only ever narrows. Restaurant meals are in the library by default,
+  /// because they are recipes and this is the recipe list — a chip that hid
+  /// them unless asked would make the tab lie about what it holds.
+  final bool eatenOutOnly;
   final Set<String> tags;
   final Set<String> cuisines;
   final Set<String> collectionIds;
@@ -85,6 +93,7 @@ class RecipeFilter {
   bool get isEmpty =>
       text.trim().isEmpty &&
       !favoritesOnly &&
+      !eatenOutOnly &&
       tags.isEmpty &&
       cuisines.isEmpty &&
       collectionIds.isEmpty &&
@@ -95,6 +104,7 @@ class RecipeFilter {
   /// How many chips are lit — for the "3 filters" badge and the clear button.
   int get activeCount =>
       (favoritesOnly ? 1 : 0) +
+      (eatenOutOnly ? 1 : 0) +
       tags.length +
       cuisines.length +
       collectionIds.length +
@@ -105,6 +115,7 @@ class RecipeFilter {
   RecipeFilter copyWith({
     String? text,
     bool? favoritesOnly,
+    bool? eatenOutOnly,
     Set<String>? tags,
     Set<String>? cuisines,
     Set<String>? collectionIds,
@@ -118,6 +129,7 @@ class RecipeFilter {
   }) => RecipeFilter(
     text: text ?? this.text,
     favoritesOnly: favoritesOnly ?? this.favoritesOnly,
+    eatenOutOnly: eatenOutOnly ?? this.eatenOutOnly,
     tags: tags ?? this.tags,
     cuisines: cuisines ?? this.cuisines,
     collectionIds: collectionIds ?? this.collectionIds,
@@ -230,6 +242,7 @@ abstract final class RecipeSearch {
   }) {
     if (recipe.isDeleted) return false;
     if (filter.favoritesOnly && !context.isFavorite) return false;
+    if (filter.eatenOutOnly && !recipe.isEatenOut) return false;
     if (!matchesText(recipe, filter.text)) return false;
 
     if (filter.tags.isNotEmpty) {

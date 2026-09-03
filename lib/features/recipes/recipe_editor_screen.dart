@@ -73,6 +73,10 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   final List<_SectionFields> _sections = <_SectionFields>[_SectionFields()];
 
   bool _loaded = false;
+
+  /// Cooked, or eaten out (spec §5.2). Held here rather than in a controller
+  /// because it is a switch, not text.
+  RecipeKind _kind = RecipeKind.cooked;
   bool _saving = false;
   String? _existingId;
   bool _showErrors = false;
@@ -469,6 +473,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
         .toList(growable: false),
     notes: _notes.text,
     existingId: _existingId,
+    kind: _kind,
     matches: _matches,
     noMatch: _noMatch,
   );
@@ -521,6 +526,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       ..clear()
       ..addAll(draft.sections.map(_SectionFields.from));
     _existingId = draft.existingId;
+    _kind = draft.kind;
     _matches = draft.matches;
     _noMatch = draft.noMatch;
     _loaded = true;
@@ -669,24 +675,28 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
                     onChanged: _rebuild,
                   ),
                 ),
-                const SizedBox(width: HearthSpacing.md),
-                Expanded(
-                  child: _Field(
-                    controller: _prep,
-                    label: 'Prep (min)',
-                    keyboardType: TextInputType.number,
-                    onChanged: _rebuild,
+                // Nothing to prep and nothing to cook when somebody else did
+                // both (spec §5.2).
+                if (_kind == RecipeKind.cooked) ...<Widget>[
+                  const SizedBox(width: HearthSpacing.md),
+                  Expanded(
+                    child: _Field(
+                      controller: _prep,
+                      label: 'Prep (min)',
+                      keyboardType: TextInputType.number,
+                      onChanged: _rebuild,
+                    ),
                   ),
-                ),
-                const SizedBox(width: HearthSpacing.md),
-                Expanded(
-                  child: _Field(
-                    controller: _cook,
-                    label: 'Cook (min)',
-                    keyboardType: TextInputType.number,
-                    onChanged: _rebuild,
+                  const SizedBox(width: HearthSpacing.md),
+                  Expanded(
+                    child: _Field(
+                      controller: _cook,
+                      label: 'Cook (min)',
+                      keyboardType: TextInputType.number,
+                      onChanged: _rebuild,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
             const SizedBox(height: HearthSpacing.xl),
@@ -803,6 +813,43 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: HearthSpacing.md),
+            // Merged so a screen reader says "Eaten out, switch, off" as one
+            // thing rather than three (§6.3).
+            MergeSemantics(
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text('Eaten out', style: context.text.body),
+                        Text(
+                          'A meal you ordered. Never goes on the shopping '
+                          'list.',
+                          style: context.text.metadata.copyWith(
+                            color: colors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _kind == RecipeKind.eatenOut,
+                    onChanged: (bool value) => setState(() {
+                      _kind = value ? RecipeKind.eatenOut : RecipeKind.cooked;
+                      // Times belong to a recipe you cook. Cleared rather than
+                      // hidden, so a bowl saved after the switch is flipped
+                      // does not keep a prep time nobody can see.
+                      if (value) {
+                        _prep.clear();
+                        _cook.clear();
+                      }
+                    }),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: HearthSpacing.lg),
             _Field(

@@ -98,6 +98,16 @@ class _RecipeFilterBarState extends ConsumerState<RecipeFilterBar> {
                 selected: filter.favoritesOnly,
                 onTap: control.toggleFavoritesOnly,
               ),
+              // Narrows to meals eaten out; it never hides them. They live in
+              // this library like anything else, and a tab that quietly
+              // omitted a third of what you eat would be worse than useless
+              // (spec §5.2).
+              _Chip(
+                label: 'Eaten out',
+                icon: Icons.storefront,
+                selected: filter.eatenOutOnly,
+                onTap: control.toggleEatenOutOnly,
+              ),
               for (final _TimeChoice choice in _TimeChoice.values)
                 _Chip(
                   label: choice.label,
