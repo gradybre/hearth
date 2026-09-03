@@ -90,17 +90,21 @@ class HearthDatabase extends _$HearthDatabase {
       }
       // v8 ties a timer to its step, so a step can only ever have one.
       if (from < 8) {
-        await m.addColumn(cookTimers, cookTimers.stepId);
+        await _addColumnIfMissing(m, cookTimers, cookTimers.stepId);
       }
       // v10 marks a food as one of the household's standing choices, so a
       // recipe line naming the same thing matches itself (spec §5.3).
       if (from < 10) {
-        await m.addColumn(foods, foods.isDefault);
+        await _addColumnIfMissing(m, foods, foods.isDefault);
       }
       // v11 marks a line as needing no food at all — salt, pepper, a spice —
       // so it stops being counted among the gaps (spec §5.3).
       if (from < 11) {
-        await m.addColumn(recipeIngredients, recipeIngredients.needsNoMatch);
+        await _addColumnIfMissing(
+          m,
+          recipeIngredients,
+          recipeIngredients.needsNoMatch,
+        );
         // `food_id` becomes nullable and gains a companion flag. SQLite
         // cannot drop a NOT NULL in place, so the table is rebuilt — which
         // also installs the CHECK that replaces the constraint.
@@ -109,7 +113,7 @@ class HearthDatabase extends _$HearthDatabase {
       // v12 lets a food say its zeros are the answer rather than a gap, so
       // the black coffee stops being flagged for ever (spec §5.5).
       if (from < 12) {
-        await m.addColumn(foods, foods.isZeroCalorie);
+        await _addColumnIfMissing(m, foods, foods.isZeroCalorie);
       }
       // v13 is the shopping list (spec §5.7, phase 4). Additive: the cached
       // library and plan are untouched, so no re-sync is needed to upgrade.
@@ -122,9 +126,13 @@ class HearthDatabase extends _$HearthDatabase {
       // every photo already on this device backfills through the ordinary
       // upload loop with no migration that reads a file or touches a network.
       if (from < 14) {
-        await m.addColumn(recipePhotos, recipePhotos.remotePath);
-        await m.addColumn(recipePhotos, recipePhotos.syncAttempts);
-        await m.addColumn(recipePhotos, recipePhotos.syncError);
+        await _addColumnIfMissing(m, recipePhotos, recipePhotos.remotePath);
+        await _addColumnIfMissing(m, recipePhotos, recipePhotos.syncAttempts);
+        await _addColumnIfMissing(m, recipePhotos, recipePhotos.syncError);
+        // Added here as well as in v17, because the alterTable below rebuilds
+        // this table from today's schema and would otherwise copy from a
+        // source missing a column it expects.
+        await _addColumnIfMissing(m, recipePhotos, recipePhotos.attemptedPath);
         // fileName becomes nullable: a device can know about a photo it has
         // not managed to download.
         await m.alterTable(TableMigration(recipePhotos));
@@ -147,18 +155,22 @@ class HearthDatabase extends _$HearthDatabase {
       // v16 re-key left sharing a key are merged, since two rows with one key
       // would derive one id and refuse the next save.
       if (from < 17) {
-        await m.addColumn(recipePhotos, recipePhotos.attemptedPath);
-        await m.addColumn(shoppingListItems, shoppingListItems.plannedRest);
+        await _addColumnIfMissing(m, recipePhotos, recipePhotos.attemptedPath);
+        await _addColumnIfMissing(
+          m,
+          shoppingListItems,
+          shoppingListItems.plannedRest,
+        );
         await _mergeDuplicateShoppingKeys();
       }
       // v18 lets a food carry the Walmart product actually bought, so the
       // shopping export can fill a basket instead of opening a search
       // (spec §5.7). Additive.
       if (from < 18) {
-        await m.addColumn(foods, foods.walmartItemId);
-        await m.addColumn(foods, foods.packCanonical);
-        await m.addColumn(foods, foods.packKind);
-        await m.addColumn(foods, foods.packUnit);
+        await _addColumnIfMissing(m, foods, foods.walmartItemId);
+        await _addColumnIfMissing(m, foods, foods.packCanonical);
+        await _addColumnIfMissing(m, foods, foods.packKind);
+        await _addColumnIfMissing(m, foods, foods.packUnit);
       }
     },
     beforeOpen: (OpeningDetails details) async {
@@ -167,6 +179,31 @@ class HearthDatabase extends _$HearthDatabase {
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );
+
+  /// Adds [column], treating "it is already there" as success.
+  ///
+  /// Migrations here are not as ordered as they look. v14 ends by recreating
+  /// `recipe_photos` with `alterTable`, which rebuilds it from the schema **as
+  /// it stands today** — so it silently creates columns belonging to later
+  /// versions. A later step then adds one of those again, the upgrade dies
+  /// partway, and `user_version` never advances: every launch after that
+  /// replays the same failing step and the app can no longer open its own
+  /// database. That put "duplicate column name: remote_path" on a phone.
+  ///
+  /// Asked by trying, never by reading. A query issued inside `onUpgrade`
+  /// waits for the migration to finish while the migration waits for the
+  /// query, which does not fail — it simply sits there.
+  Future<void> _addColumnIfMissing(
+    Migrator m,
+    TableInfo<Table, dynamic> table,
+    GeneratedColumn<Object> column,
+  ) async {
+    try {
+      await m.addColumn(table, column);
+    } on Object catch (error) {
+      if (!'$error'.toLowerCase().contains('duplicate column')) rethrow;
+    }
+  }
 
   /// Brings stored ingredient keys into line with [normaliseKey].
   ///
