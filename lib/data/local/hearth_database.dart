@@ -49,7 +49,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -140,6 +140,17 @@ class HearthDatabase extends _$HearthDatabase {
         await _renormaliseIngredientMatches();
         await _renormaliseShoppingKeys();
       }
+      // v17 answers a code review of v14 and v16. A photo row remembers which
+      // object its last failed download was for, so a replacement that keeps
+      // failing can be given up on without losing the old file; a shopping
+      // line keeps every planned amount rather than the first; and lines the
+      // v16 re-key left sharing a key are merged, since two rows with one key
+      // would derive one id and refuse the next save.
+      if (from < 17) {
+        await m.addColumn(recipePhotos, recipePhotos.attemptedPath);
+        await m.addColumn(shoppingListItems, shoppingListItems.plannedRest);
+        await _mergeDuplicateShoppingKeys();
+      }
     },
     beforeOpen: (OpeningDetails details) async {
       // Drift leaves foreign keys off by default; without this the cascade
@@ -157,6 +168,41 @@ class HearthDatabase extends _$HearthDatabase {
   Future<void> renormaliseForV16() async {
     await _renormaliseIngredientMatches();
     await _renormaliseShoppingKeys();
+    await _mergeDuplicateShoppingKeys();
+  }
+
+  /// Leaves one row per (list, key), keeping the newest.
+  ///
+  /// The v16 re-key could make two unmatched lines in one list share a key —
+  /// "sun-dried tomatoes" and "sun dried tomatoes" were distinct before it.
+  /// The local table has no unique index to object, but the ids are derived
+  /// from the key, so the next save would compute one id for both rows and
+  /// fail on the primary key. Newest wins, ties by id, as everywhere else.
+  Future<void> _mergeDuplicateShoppingKeys() async {
+    final List<ShoppingItemRow> rows = await select(shoppingListItems).get();
+    final Map<String, ShoppingItemRow> keep = <String, ShoppingItemRow>{};
+    for (final ShoppingItemRow row in rows) {
+      final String slot = '${row.listId}\u0000${row.itemKey}';
+      final ShoppingItemRow? held = keep[slot];
+      if (held == null ||
+          row.updatedAt.isAfter(held.updatedAt) ||
+          (row.updatedAt == held.updatedAt && row.id.compareTo(held.id) > 0)) {
+        keep[slot] = row;
+      }
+    }
+    if (keep.length == rows.length) return;
+
+    final Set<String> keepIds = <String>{
+      for (final ShoppingItemRow r in keep.values) r.id,
+    };
+    await transaction(() async {
+      for (final ShoppingItemRow row in rows) {
+        if (keepIds.contains(row.id)) continue;
+        await (delete(
+          shoppingListItems,
+        )..where(($ShoppingListItemsTable i) => i.id.equals(row.id))).go();
+      }
+    });
   }
 
   ///

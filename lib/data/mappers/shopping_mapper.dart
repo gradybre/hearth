@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../local/hearth_database.dart';
 
 /// The shopping list on the wire (spec §5.7, §7.2).
@@ -39,6 +41,7 @@ abstract final class ShoppingMapper {
         'store_tag': item.storeTag,
         'sort_order': item.sortOrder,
         'source_recipe_ids': sourceIdsToList(item.sourceRecipeIds),
+        'planned_rest': plannedRestToJson(item.plannedRest),
         'updated_at': item.updatedAt.toIso8601String(),
       };
 
@@ -64,6 +67,13 @@ abstract final class ShoppingMapper {
     final String joined => sourceIdsToList(joined).join(','),
     _ => '',
   };
+
+  /// The trailing planned amounts as a list for the jsonb column, never as a
+  /// string holding JSON.
+  static List<Object?> plannedRestToJson(String raw) {
+    final Object? decoded = raw.trim().isEmpty ? null : jsonDecode(raw);
+    return decoded is List<Object?> ? decoded : const <Object?>[];
+  }
 
   static String _dateOnly(DateTime date) =>
       '${date.year.toString().padLeft(4, '0')}-'

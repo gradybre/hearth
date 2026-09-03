@@ -186,6 +186,7 @@ void main() {
             hasUnquantified: false,
             sortOrder: 0,
             sourceRecipeIds: '',
+            plannedRest: '[]',
             updatedAt: now,
           ),
         );
@@ -205,6 +206,24 @@ void main() {
         expect(row.checked, isTrue);
       },
     );
+
+    test('two lines that collide after re-keying become one', () async {
+      // Review finding: the re-key had no merge step for shopping items. Two
+      // rows sharing (list, key) derive the same id, so the next save would
+      // insert both under one primary key and fail — and on the server the
+      // unique (shopping_list_id, item_key) refused the migration outright.
+      await list();
+      await item(id: 'i1', key: 'sun-dried tomatoes', checked: false);
+      await item(id: 'i2', key: 'sun dried tomatoes');
+
+      await db.renormaliseForV16();
+
+      final List<ShoppingItemRow> left = await db
+          .select(db.shoppingListItems)
+          .get();
+      expect(left, hasLength(1));
+      expect(left.single.itemKey, 'sun dried tomatoes');
+    });
 
     test(
       'a matched line is left alone, because its key is a food id',

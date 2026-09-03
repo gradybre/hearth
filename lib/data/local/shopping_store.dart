@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import '../../domain/shopping/shopping_line.dart';
@@ -150,11 +152,19 @@ class ShoppingStore {
     String id,
     DateTime updatedAt,
   ) {
-    // Only the first planned quantity is stored. A line the recipes could
-    // express only two ways at once keeps the first and is marked unmeasurable
-    // by having no single amount to show, which is the same thing the screen
-    // does with it.
+    // The first planned amount goes in the typed columns; any others ride in
+    // plannedRest as JSON. A line the recipes could only say two ways — 2 tbsp
+    // and 50 g, no density — has to come back with both, or on reload it reads
+    // as measurable and half the requirement is gone.
     final Quantity? planned = line.planned.isEmpty ? null : line.planned.first;
+    final List<Map<String, Object?>> rest = <Map<String, Object?>>[
+      for (final Quantity q in line.planned.skip(1))
+        <String, Object?>{
+          'canonical': q.canonicalAmount,
+          'kind': q.kind.name,
+          'unit': q.preferredUnit?.id,
+        },
+    ];
 
     return ShoppingItemRow(
       id: id,
@@ -177,6 +187,7 @@ class ShoppingStore {
       storeTag: line.storeTag,
       sortOrder: line.sortOrder,
       sourceRecipeIds: line.sourceRecipeIds.join(','),
+      plannedRest: jsonEncode(rest),
       updatedAt: updatedAt,
     );
   }
@@ -188,6 +199,7 @@ class ShoppingStore {
       if (_quantity(row.plannedCanonical, row.plannedKind, row.plannedUnit)
           case final Quantity q)
         q,
+      ...plannedRestFrom(row.plannedRest),
     ],
     wanted: _quantity(row.wantedCanonical, row.wantedKind, row.wantedUnit),
     onHand: _quantity(row.onHandCanonical, row.onHandKind, row.onHandUnit),
@@ -201,6 +213,26 @@ class ShoppingStore {
         ? const <String>[]
         : row.sourceRecipeIds.split(','),
   );
+
+  /// The trailing planned amounts, tolerant of an empty or unreadable column.
+  static List<Quantity> plannedRestFrom(String raw) {
+    final Object? decoded = raw.trim().isEmpty ? null : jsonDecode(raw);
+    if (decoded is! List<Object?>) return const <Quantity>[];
+    return <Quantity>[
+      for (final Object? item in decoded)
+        if (item is Map<String, Object?>)
+          if (_quantity(
+                switch (item['canonical']) {
+                  final num n => n.toDouble(),
+                  _ => null,
+                },
+                item['kind'] as String?,
+                item['unit'] as String?,
+              )
+              case final Quantity q)
+            q,
+    ];
+  }
 
   static Quantity? _quantity(double? canonical, String? kind, String? unit) {
     if (canonical == null || kind == null) return null;

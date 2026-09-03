@@ -302,6 +302,82 @@ void main() {
     });
   });
 
+  group('a photo taken here but not yet uploaded', () {
+    test('is never downloaded over', () async {
+      // Review finding: a local-only row (file, no remotePath) read as
+      // "stale", so when the partner's photo_url arrived before this
+      // device's upload budget reached the recipe, the pull overwrote the
+      // never-uploaded local file with the partner's. The local photo was
+      // simply gone.
+      await takePhoto();
+      final File mine = (await photos.fileFor('recipe-1'))!;
+      final List<int> myBytes = await mine.readAsBytes();
+
+      storage.objects['recipe-1/theirs.jpg'] = bytes(7);
+      await recipes.setPhotoUrl('recipe-1', 'recipe-1/theirs.jpg');
+
+      await sync.pull();
+
+      expect(storage.downloaded, isEmpty);
+      expect(await (await photos.fileFor('recipe-1'))!.readAsBytes(), myBytes);
+      expect((await row())!.remotePath, isNull);
+    });
+
+    test('and its own upload still wins the next push', () async {
+      await takePhoto();
+      storage.objects['recipe-1/theirs.jpg'] = bytes(7);
+      await recipes.setPhotoUrl('recipe-1', 'recipe-1/theirs.jpg');
+
+      await sync.push();
+
+      expect(storage.uploaded, hasLength(1));
+      expect(await photoUrl(), storage.uploaded.single);
+    });
+  });
+
+  group('a replaced photo that keeps failing to download', () {
+    test('stops being asked for after the cap', () async {
+      // The other half of the same finding: a stale row's attempt count
+      // could never become "exhausted" because remotePath != photoUrl kept
+      // reading as "changed", so a 404 on the replacement retried on every
+      // sync pass for ever.
+      storage.objects['recipe-1/first.jpg'] = bytes(1);
+      await recipes.setPhotoUrl('recipe-1', 'recipe-1/first.jpg');
+      await sync.pull();
+      expect(storage.downloaded, hasLength(1));
+
+      await recipes.setPhotoUrl('recipe-1', 'recipe-1/second.jpg');
+      storage.missing.add('recipe-1/second.jpg');
+      for (int i = 0; i < RecipePhotoStore.maxAttempts + 2; i++) {
+        await sync.pull();
+      }
+
+      expect((await row())!.syncAttempts, RecipePhotoStore.maxAttempts);
+      expect(await photos.pendingDownloads(), isEmpty);
+      // And the old photo is still there to show meanwhile.
+      expect(await photos.fileFor('recipe-1'), isNotNull);
+    });
+
+    test('but a further replacement is tried again', () async {
+      storage.objects['recipe-1/first.jpg'] = bytes(1);
+      await recipes.setPhotoUrl('recipe-1', 'recipe-1/first.jpg');
+      await sync.pull();
+      await recipes.setPhotoUrl('recipe-1', 'recipe-1/second.jpg');
+      storage.missing.add('recipe-1/second.jpg');
+      for (int i = 0; i < RecipePhotoStore.maxAttempts; i++) {
+        await sync.pull();
+      }
+      expect(await photos.pendingDownloads(), isEmpty);
+
+      storage.objects['recipe-1/third.jpg'] = bytes(3);
+      await recipes.setPhotoUrl('recipe-1', 'recipe-1/third.jpg');
+
+      expect(await photos.pendingDownloads(), hasLength(1));
+      await sync.pull();
+      expect(storage.downloaded.last, 'recipe-1/third.jpg');
+    });
+  });
+
   group('two phones photographing the same recipe', () {
     test('the later one wins and the other converges on it', () async {
       // Both uploads succeed to distinct paths — a collision is not possible —

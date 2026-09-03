@@ -349,6 +349,14 @@ class ShoppingListItems extends Table {
   TextColumn get plannedKind => text().nullable()();
   TextColumn get plannedUnit => text().nullable()();
 
+  /// The rest of what the recipes said, when they said it more than one way.
+  ///
+  /// JSON list of {canonical, kind, unit}. A line written as 2 tbsp *and*
+  /// 50 g with no density to reconcile them has two planned amounts; keeping
+  /// only the first made the line read as measurable on reload and quietly
+  /// dropped the other half of the requirement.
+  TextColumn get plannedRest => text().withDefault(const Constant('[]'))();
+
   RealColumn get wantedCanonical => real().nullable()();
   TextColumn get wantedKind => text().nullable()();
   TextColumn get wantedUnit => text().nullable()();
@@ -538,6 +546,14 @@ class RecipePhotos extends Table {
   IntColumn get syncAttempts => integer().withDefault(const Constant<int>(0))();
 
   TextColumn get syncError => text().nullable()();
+
+  /// The object path the last failed download was for.
+  ///
+  /// Separate from [remotePath], which says what [fileName] is a copy of. A
+  /// stale row keeps its old file while a replacement fails to arrive, so the
+  /// two paths genuinely differ — and "has the partner replaced it *again*
+  /// since we gave up" can only be answered by remembering what was tried.
+  TextColumn get attemptedPath => text().nullable()();
 
   DateTimeColumn get updatedAt => dateTime()();
 

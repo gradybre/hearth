@@ -191,6 +191,8 @@ class RemoteRows {
             sourceRecipeIds: ShoppingMapper.sourceIdsFromJson(
               json['source_recipe_ids'],
             ),
+            // jsonb arrives decoded; the local column holds the text.
+            plannedRest: jsonEncode(json['planned_rest'] ?? const <Object?>[]),
             updatedAt: _time(json['updated_at']),
           ),
         );

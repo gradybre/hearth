@@ -8368,6 +8368,17 @@ class $RecipePhotosTable extends RecipePhotos
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _attemptedPathMeta = const VerificationMeta(
+    'attemptedPath',
+  );
+  @override
+  late final GeneratedColumn<String> attemptedPath = GeneratedColumn<String>(
+    'attempted_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -8386,6 +8397,7 @@ class $RecipePhotosTable extends RecipePhotos
     remotePath,
     syncAttempts,
     syncError,
+    attemptedPath,
     updatedAt,
   ];
   @override
@@ -8435,6 +8447,15 @@ class $RecipePhotosTable extends RecipePhotos
         syncError.isAcceptableOrUnknown(data['sync_error']!, _syncErrorMeta),
       );
     }
+    if (data.containsKey('attempted_path')) {
+      context.handle(
+        _attemptedPathMeta,
+        attemptedPath.isAcceptableOrUnknown(
+          data['attempted_path']!,
+          _attemptedPathMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -8472,6 +8493,10 @@ class $RecipePhotosTable extends RecipePhotos
         DriftSqlType.string,
         data['${effectivePrefix}sync_error'],
       ),
+      attemptedPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}attempted_path'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -8503,6 +8528,14 @@ class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
   /// filters on this being under the limit.
   final int syncAttempts;
   final String? syncError;
+
+  /// The object path the last failed download was for.
+  ///
+  /// Separate from [remotePath], which says what [fileName] is a copy of. A
+  /// stale row keeps its old file while a replacement fails to arrive, so the
+  /// two paths genuinely differ — and "has the partner replaced it *again*
+  /// since we gave up" can only be answered by remembering what was tried.
+  final String? attemptedPath;
   final DateTime updatedAt;
   const RecipePhotoRow({
     required this.recipeId,
@@ -8510,6 +8543,7 @@ class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
     this.remotePath,
     required this.syncAttempts,
     this.syncError,
+    this.attemptedPath,
     required this.updatedAt,
   });
   @override
@@ -8525,6 +8559,9 @@ class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
     map['sync_attempts'] = Variable<int>(syncAttempts);
     if (!nullToAbsent || syncError != null) {
       map['sync_error'] = Variable<String>(syncError);
+    }
+    if (!nullToAbsent || attemptedPath != null) {
+      map['attempted_path'] = Variable<String>(attemptedPath);
     }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -8543,6 +8580,9 @@ class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
       syncError: syncError == null && nullToAbsent
           ? const Value.absent()
           : Value(syncError),
+      attemptedPath: attemptedPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(attemptedPath),
       updatedAt: Value(updatedAt),
     );
   }
@@ -8558,6 +8598,7 @@ class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
       remotePath: serializer.fromJson<String?>(json['remotePath']),
       syncAttempts: serializer.fromJson<int>(json['syncAttempts']),
       syncError: serializer.fromJson<String?>(json['syncError']),
+      attemptedPath: serializer.fromJson<String?>(json['attemptedPath']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -8570,6 +8611,7 @@ class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
       'remotePath': serializer.toJson<String?>(remotePath),
       'syncAttempts': serializer.toJson<int>(syncAttempts),
       'syncError': serializer.toJson<String?>(syncError),
+      'attemptedPath': serializer.toJson<String?>(attemptedPath),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -8580,6 +8622,7 @@ class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
     Value<String?> remotePath = const Value.absent(),
     int? syncAttempts,
     Value<String?> syncError = const Value.absent(),
+    Value<String?> attemptedPath = const Value.absent(),
     DateTime? updatedAt,
   }) => RecipePhotoRow(
     recipeId: recipeId ?? this.recipeId,
@@ -8587,6 +8630,9 @@ class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
     remotePath: remotePath.present ? remotePath.value : this.remotePath,
     syncAttempts: syncAttempts ?? this.syncAttempts,
     syncError: syncError.present ? syncError.value : this.syncError,
+    attemptedPath: attemptedPath.present
+        ? attemptedPath.value
+        : this.attemptedPath,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   RecipePhotoRow copyWithCompanion(RecipePhotosCompanion data) {
@@ -8600,6 +8646,9 @@ class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
           ? data.syncAttempts.value
           : this.syncAttempts,
       syncError: data.syncError.present ? data.syncError.value : this.syncError,
+      attemptedPath: data.attemptedPath.present
+          ? data.attemptedPath.value
+          : this.attemptedPath,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -8612,6 +8661,7 @@ class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
           ..write('remotePath: $remotePath, ')
           ..write('syncAttempts: $syncAttempts, ')
           ..write('syncError: $syncError, ')
+          ..write('attemptedPath: $attemptedPath, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -8624,6 +8674,7 @@ class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
     remotePath,
     syncAttempts,
     syncError,
+    attemptedPath,
     updatedAt,
   );
   @override
@@ -8635,6 +8686,7 @@ class RecipePhotoRow extends DataClass implements Insertable<RecipePhotoRow> {
           other.remotePath == this.remotePath &&
           other.syncAttempts == this.syncAttempts &&
           other.syncError == this.syncError &&
+          other.attemptedPath == this.attemptedPath &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -8644,6 +8696,7 @@ class RecipePhotosCompanion extends UpdateCompanion<RecipePhotoRow> {
   final Value<String?> remotePath;
   final Value<int> syncAttempts;
   final Value<String?> syncError;
+  final Value<String?> attemptedPath;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const RecipePhotosCompanion({
@@ -8652,6 +8705,7 @@ class RecipePhotosCompanion extends UpdateCompanion<RecipePhotoRow> {
     this.remotePath = const Value.absent(),
     this.syncAttempts = const Value.absent(),
     this.syncError = const Value.absent(),
+    this.attemptedPath = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -8661,6 +8715,7 @@ class RecipePhotosCompanion extends UpdateCompanion<RecipePhotoRow> {
     this.remotePath = const Value.absent(),
     this.syncAttempts = const Value.absent(),
     this.syncError = const Value.absent(),
+    this.attemptedPath = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : recipeId = Value(recipeId),
@@ -8671,6 +8726,7 @@ class RecipePhotosCompanion extends UpdateCompanion<RecipePhotoRow> {
     Expression<String>? remotePath,
     Expression<int>? syncAttempts,
     Expression<String>? syncError,
+    Expression<String>? attemptedPath,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -8680,6 +8736,7 @@ class RecipePhotosCompanion extends UpdateCompanion<RecipePhotoRow> {
       if (remotePath != null) 'remote_path': remotePath,
       if (syncAttempts != null) 'sync_attempts': syncAttempts,
       if (syncError != null) 'sync_error': syncError,
+      if (attemptedPath != null) 'attempted_path': attemptedPath,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -8691,6 +8748,7 @@ class RecipePhotosCompanion extends UpdateCompanion<RecipePhotoRow> {
     Value<String?>? remotePath,
     Value<int>? syncAttempts,
     Value<String?>? syncError,
+    Value<String?>? attemptedPath,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -8700,6 +8758,7 @@ class RecipePhotosCompanion extends UpdateCompanion<RecipePhotoRow> {
       remotePath: remotePath ?? this.remotePath,
       syncAttempts: syncAttempts ?? this.syncAttempts,
       syncError: syncError ?? this.syncError,
+      attemptedPath: attemptedPath ?? this.attemptedPath,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -8723,6 +8782,9 @@ class RecipePhotosCompanion extends UpdateCompanion<RecipePhotoRow> {
     if (syncError.present) {
       map['sync_error'] = Variable<String>(syncError.value);
     }
+    if (attemptedPath.present) {
+      map['attempted_path'] = Variable<String>(attemptedPath.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -8740,6 +8802,7 @@ class RecipePhotosCompanion extends UpdateCompanion<RecipePhotoRow> {
           ..write('remotePath: $remotePath, ')
           ..write('syncAttempts: $syncAttempts, ')
           ..write('syncError: $syncError, ')
+          ..write('attemptedPath: $attemptedPath, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -10111,6 +10174,18 @@ class $ShoppingListItemsTable extends ShoppingListItems
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _plannedRestMeta = const VerificationMeta(
+    'plannedRest',
+  );
+  @override
+  late final GeneratedColumn<String> plannedRest = GeneratedColumn<String>(
+    'planned_rest',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
   static const VerificationMeta _wantedCanonicalMeta = const VerificationMeta(
     'wantedCanonical',
   );
@@ -10278,6 +10353,7 @@ class $ShoppingListItemsTable extends ShoppingListItems
     plannedCanonical,
     plannedKind,
     plannedUnit,
+    plannedRest,
     wantedCanonical,
     wantedKind,
     wantedUnit,
@@ -10363,6 +10439,15 @@ class $ShoppingListItemsTable extends ShoppingListItems
         plannedUnit.isAcceptableOrUnknown(
           data['planned_unit']!,
           _plannedUnitMeta,
+        ),
+      );
+    }
+    if (data.containsKey('planned_rest')) {
+      context.handle(
+        _plannedRestMeta,
+        plannedRest.isAcceptableOrUnknown(
+          data['planned_rest']!,
+          _plannedRestMeta,
         ),
       );
     }
@@ -10505,6 +10590,10 @@ class $ShoppingListItemsTable extends ShoppingListItems
         DriftSqlType.string,
         data['${effectivePrefix}planned_unit'],
       ),
+      plannedRest: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}planned_rest'],
+      )!,
       wantedCanonical: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}wanted_canonical'],
@@ -10578,6 +10667,14 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
   final double? plannedCanonical;
   final String? plannedKind;
   final String? plannedUnit;
+
+  /// The rest of what the recipes said, when they said it more than one way.
+  ///
+  /// JSON list of {canonical, kind, unit}. A line written as 2 tbsp *and*
+  /// 50 g with no density to reconcile them has two planned amounts; keeping
+  /// only the first made the line read as measurable on reload and quietly
+  /// dropped the other half of the requirement.
+  final String plannedRest;
   final double? wantedCanonical;
   final String? wantedKind;
   final String? wantedUnit;
@@ -10603,6 +10700,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
     this.plannedCanonical,
     this.plannedKind,
     this.plannedUnit,
+    required this.plannedRest,
     this.wantedCanonical,
     this.wantedKind,
     this.wantedUnit,
@@ -10636,6 +10734,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
     if (!nullToAbsent || plannedUnit != null) {
       map['planned_unit'] = Variable<String>(plannedUnit);
     }
+    map['planned_rest'] = Variable<String>(plannedRest);
     if (!nullToAbsent || wantedCanonical != null) {
       map['wanted_canonical'] = Variable<double>(wantedCanonical);
     }
@@ -10684,6 +10783,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
       plannedUnit: plannedUnit == null && nullToAbsent
           ? const Value.absent()
           : Value(plannedUnit),
+      plannedRest: Value(plannedRest),
       wantedCanonical: wantedCanonical == null && nullToAbsent
           ? const Value.absent()
           : Value(wantedCanonical),
@@ -10728,6 +10828,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
       plannedCanonical: serializer.fromJson<double?>(json['plannedCanonical']),
       plannedKind: serializer.fromJson<String?>(json['plannedKind']),
       plannedUnit: serializer.fromJson<String?>(json['plannedUnit']),
+      plannedRest: serializer.fromJson<String>(json['plannedRest']),
       wantedCanonical: serializer.fromJson<double?>(json['wantedCanonical']),
       wantedKind: serializer.fromJson<String?>(json['wantedKind']),
       wantedUnit: serializer.fromJson<String?>(json['wantedUnit']),
@@ -10755,6 +10856,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
       'plannedCanonical': serializer.toJson<double?>(plannedCanonical),
       'plannedKind': serializer.toJson<String?>(plannedKind),
       'plannedUnit': serializer.toJson<String?>(plannedUnit),
+      'plannedRest': serializer.toJson<String>(plannedRest),
       'wantedCanonical': serializer.toJson<double?>(wantedCanonical),
       'wantedKind': serializer.toJson<String?>(wantedKind),
       'wantedUnit': serializer.toJson<String?>(wantedUnit),
@@ -10780,6 +10882,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
     Value<double?> plannedCanonical = const Value.absent(),
     Value<String?> plannedKind = const Value.absent(),
     Value<String?> plannedUnit = const Value.absent(),
+    String? plannedRest,
     Value<double?> wantedCanonical = const Value.absent(),
     Value<String?> wantedKind = const Value.absent(),
     Value<String?> wantedUnit = const Value.absent(),
@@ -10804,6 +10907,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
         : this.plannedCanonical,
     plannedKind: plannedKind.present ? plannedKind.value : this.plannedKind,
     plannedUnit: plannedUnit.present ? plannedUnit.value : this.plannedUnit,
+    plannedRest: plannedRest ?? this.plannedRest,
     wantedCanonical: wantedCanonical.present
         ? wantedCanonical.value
         : this.wantedCanonical,
@@ -10838,6 +10942,9 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
       plannedUnit: data.plannedUnit.present
           ? data.plannedUnit.value
           : this.plannedUnit,
+      plannedRest: data.plannedRest.present
+          ? data.plannedRest.value
+          : this.plannedRest,
       wantedCanonical: data.wantedCanonical.present
           ? data.wantedCanonical.value
           : this.wantedCanonical,
@@ -10881,6 +10988,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
           ..write('plannedCanonical: $plannedCanonical, ')
           ..write('plannedKind: $plannedKind, ')
           ..write('plannedUnit: $plannedUnit, ')
+          ..write('plannedRest: $plannedRest, ')
           ..write('wantedCanonical: $wantedCanonical, ')
           ..write('wantedKind: $wantedKind, ')
           ..write('wantedUnit: $wantedUnit, ')
@@ -10908,6 +11016,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
     plannedCanonical,
     plannedKind,
     plannedUnit,
+    plannedRest,
     wantedCanonical,
     wantedKind,
     wantedUnit,
@@ -10934,6 +11043,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
           other.plannedCanonical == this.plannedCanonical &&
           other.plannedKind == this.plannedKind &&
           other.plannedUnit == this.plannedUnit &&
+          other.plannedRest == this.plannedRest &&
           other.wantedCanonical == this.wantedCanonical &&
           other.wantedKind == this.wantedKind &&
           other.wantedUnit == this.wantedUnit &&
@@ -10958,6 +11068,7 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
   final Value<double?> plannedCanonical;
   final Value<String?> plannedKind;
   final Value<String?> plannedUnit;
+  final Value<String> plannedRest;
   final Value<double?> wantedCanonical;
   final Value<String?> wantedKind;
   final Value<String?> wantedUnit;
@@ -10981,6 +11092,7 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
     this.plannedCanonical = const Value.absent(),
     this.plannedKind = const Value.absent(),
     this.plannedUnit = const Value.absent(),
+    this.plannedRest = const Value.absent(),
     this.wantedCanonical = const Value.absent(),
     this.wantedKind = const Value.absent(),
     this.wantedUnit = const Value.absent(),
@@ -11005,6 +11117,7 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
     this.plannedCanonical = const Value.absent(),
     this.plannedKind = const Value.absent(),
     this.plannedUnit = const Value.absent(),
+    this.plannedRest = const Value.absent(),
     this.wantedCanonical = const Value.absent(),
     this.wantedKind = const Value.absent(),
     this.wantedUnit = const Value.absent(),
@@ -11033,6 +11146,7 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
     Expression<double>? plannedCanonical,
     Expression<String>? plannedKind,
     Expression<String>? plannedUnit,
+    Expression<String>? plannedRest,
     Expression<double>? wantedCanonical,
     Expression<String>? wantedKind,
     Expression<String>? wantedUnit,
@@ -11057,6 +11171,7 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
       if (plannedCanonical != null) 'planned_canonical': plannedCanonical,
       if (plannedKind != null) 'planned_kind': plannedKind,
       if (plannedUnit != null) 'planned_unit': plannedUnit,
+      if (plannedRest != null) 'planned_rest': plannedRest,
       if (wantedCanonical != null) 'wanted_canonical': wantedCanonical,
       if (wantedKind != null) 'wanted_kind': wantedKind,
       if (wantedUnit != null) 'wanted_unit': wantedUnit,
@@ -11083,6 +11198,7 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
     Value<double?>? plannedCanonical,
     Value<String?>? plannedKind,
     Value<String?>? plannedUnit,
+    Value<String>? plannedRest,
     Value<double?>? wantedCanonical,
     Value<String?>? wantedKind,
     Value<String?>? wantedUnit,
@@ -11107,6 +11223,7 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
       plannedCanonical: plannedCanonical ?? this.plannedCanonical,
       plannedKind: plannedKind ?? this.plannedKind,
       plannedUnit: plannedUnit ?? this.plannedUnit,
+      plannedRest: plannedRest ?? this.plannedRest,
       wantedCanonical: wantedCanonical ?? this.wantedCanonical,
       wantedKind: wantedKind ?? this.wantedKind,
       wantedUnit: wantedUnit ?? this.wantedUnit,
@@ -11150,6 +11267,9 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
     }
     if (plannedUnit.present) {
       map['planned_unit'] = Variable<String>(plannedUnit.value);
+    }
+    if (plannedRest.present) {
+      map['planned_rest'] = Variable<String>(plannedRest.value);
     }
     if (wantedCanonical.present) {
       map['wanted_canonical'] = Variable<double>(wantedCanonical.value);
@@ -11207,6 +11327,7 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
           ..write('plannedCanonical: $plannedCanonical, ')
           ..write('plannedKind: $plannedKind, ')
           ..write('plannedUnit: $plannedUnit, ')
+          ..write('plannedRest: $plannedRest, ')
           ..write('wantedCanonical: $wantedCanonical, ')
           ..write('wantedKind: $wantedKind, ')
           ..write('wantedUnit: $wantedUnit, ')
@@ -17692,6 +17813,7 @@ typedef $$RecipePhotosTableCreateCompanionBuilder =
       Value<String?> remotePath,
       Value<int> syncAttempts,
       Value<String?> syncError,
+      Value<String?> attemptedPath,
       required DateTime updatedAt,
       Value<int> rowid,
     });
@@ -17702,6 +17824,7 @@ typedef $$RecipePhotosTableUpdateCompanionBuilder =
       Value<String?> remotePath,
       Value<int> syncAttempts,
       Value<String?> syncError,
+      Value<String?> attemptedPath,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -17755,6 +17878,11 @@ class $$RecipePhotosTableFilterComposer
 
   ColumnFilters<String> get syncError => $composableBuilder(
     column: $table.syncError,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get attemptedPath => $composableBuilder(
+    column: $table.attemptedPath,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -17816,6 +17944,11 @@ class $$RecipePhotosTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get attemptedPath => $composableBuilder(
+    column: $table.attemptedPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -17869,6 +18002,11 @@ class $$RecipePhotosTableAnnotationComposer
 
   GeneratedColumn<String> get syncError =>
       $composableBuilder(column: $table.syncError, builder: (column) => column);
+
+  GeneratedColumn<String> get attemptedPath => $composableBuilder(
+    column: $table.attemptedPath,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
@@ -17930,6 +18068,7 @@ class $$RecipePhotosTableTableManager
                 Value<String?> remotePath = const Value.absent(),
                 Value<int> syncAttempts = const Value.absent(),
                 Value<String?> syncError = const Value.absent(),
+                Value<String?> attemptedPath = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RecipePhotosCompanion(
@@ -17938,6 +18077,7 @@ class $$RecipePhotosTableTableManager
                 remotePath: remotePath,
                 syncAttempts: syncAttempts,
                 syncError: syncError,
+                attemptedPath: attemptedPath,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -17948,6 +18088,7 @@ class $$RecipePhotosTableTableManager
                 Value<String?> remotePath = const Value.absent(),
                 Value<int> syncAttempts = const Value.absent(),
                 Value<String?> syncError = const Value.absent(),
+                Value<String?> attemptedPath = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => RecipePhotosCompanion.insert(
@@ -17956,6 +18097,7 @@ class $$RecipePhotosTableTableManager
                 remotePath: remotePath,
                 syncAttempts: syncAttempts,
                 syncError: syncError,
+                attemptedPath: attemptedPath,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -18726,6 +18868,7 @@ typedef $$ShoppingListItemsTableCreateCompanionBuilder =
       Value<double?> plannedCanonical,
       Value<String?> plannedKind,
       Value<String?> plannedUnit,
+      Value<String> plannedRest,
       Value<double?> wantedCanonical,
       Value<String?> wantedKind,
       Value<String?> wantedUnit,
@@ -18751,6 +18894,7 @@ typedef $$ShoppingListItemsTableUpdateCompanionBuilder =
       Value<double?> plannedCanonical,
       Value<String?> plannedKind,
       Value<String?> plannedUnit,
+      Value<String> plannedRest,
       Value<double?> wantedCanonical,
       Value<String?> wantedKind,
       Value<String?> wantedUnit,
@@ -18813,6 +18957,11 @@ class $$ShoppingListItemsTableFilterComposer
 
   ColumnFilters<String> get plannedUnit => $composableBuilder(
     column: $table.plannedUnit,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get plannedRest => $composableBuilder(
+    column: $table.plannedRest,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -18931,6 +19080,11 @@ class $$ShoppingListItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get plannedRest => $composableBuilder(
+    column: $table.plannedRest,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<double> get wantedCanonical => $composableBuilder(
     column: $table.wantedCanonical,
     builder: (column) => ColumnOrderings(column),
@@ -19033,6 +19187,11 @@ class $$ShoppingListItemsTableAnnotationComposer
 
   GeneratedColumn<String> get plannedUnit => $composableBuilder(
     column: $table.plannedUnit,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get plannedRest => $composableBuilder(
+    column: $table.plannedRest,
     builder: (column) => column,
   );
 
@@ -19140,6 +19299,7 @@ class $$ShoppingListItemsTableTableManager
                 Value<double?> plannedCanonical = const Value.absent(),
                 Value<String?> plannedKind = const Value.absent(),
                 Value<String?> plannedUnit = const Value.absent(),
+                Value<String> plannedRest = const Value.absent(),
                 Value<double?> wantedCanonical = const Value.absent(),
                 Value<String?> wantedKind = const Value.absent(),
                 Value<String?> wantedUnit = const Value.absent(),
@@ -19163,6 +19323,7 @@ class $$ShoppingListItemsTableTableManager
                 plannedCanonical: plannedCanonical,
                 plannedKind: plannedKind,
                 plannedUnit: plannedUnit,
+                plannedRest: plannedRest,
                 wantedCanonical: wantedCanonical,
                 wantedKind: wantedKind,
                 wantedUnit: wantedUnit,
@@ -19188,6 +19349,7 @@ class $$ShoppingListItemsTableTableManager
                 Value<double?> plannedCanonical = const Value.absent(),
                 Value<String?> plannedKind = const Value.absent(),
                 Value<String?> plannedUnit = const Value.absent(),
+                Value<String> plannedRest = const Value.absent(),
                 Value<double?> wantedCanonical = const Value.absent(),
                 Value<String?> wantedKind = const Value.absent(),
                 Value<String?> wantedUnit = const Value.absent(),
@@ -19211,6 +19373,7 @@ class $$ShoppingListItemsTableTableManager
                 plannedCanonical: plannedCanonical,
                 plannedKind: plannedKind,
                 plannedUnit: plannedUnit,
+                plannedRest: plannedRest,
                 wantedCanonical: wantedCanonical,
                 wantedKind: wantedKind,
                 wantedUnit: wantedUnit,

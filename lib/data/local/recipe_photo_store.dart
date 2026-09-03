@@ -192,11 +192,23 @@ class RecipePhotoStore {
       final RecipePhotoRow? photo = row.readTableOrNull(_db.recipePhotos);
       final String path = recipe.photoUrl!;
 
-      final bool cached = photo?.remotePath == path && photo?.fileName != null;
-      final bool changed = photo != null && photo.remotePath != path;
-      final bool exhausted =
-          (photo?.syncAttempts ?? 0) >= maxAttempts && !changed;
-      if (cached || exhausted) continue;
+      if (photo != null) {
+        // Already a copy of the object the recipe points at.
+        if (photo.remotePath == path && photo.fileName != null) continue;
+
+        // Taken here and not uploaded yet. Not stale — it has never been
+        // anything *but* local — and pulling the partner's object over it
+        // would delete a photo that was never sent. The push side owns this
+        // row until it has been uploaded.
+        if (photo.remotePath == null && photo.fileName != null) continue;
+
+        // Given up on, unless the recipe has moved on to a *different* object
+        // since the last failed try — a partner replacing a broken photo
+        // should unstick it without anyone clearing state by hand.
+        if (photo.syncAttempts >= maxAttempts && photo.attemptedPath == path) {
+          continue;
+        }
+      }
 
       wanted.add((recipeId: recipe.id, path: path));
       if (wanted.length >= limit) break;
@@ -217,6 +229,7 @@ class RecipePhotoStore {
           remotePath: Value<String?>(path),
           syncAttempts: const Value<int>(0),
           syncError: const Value<String?>(null),
+          attemptedPath: const Value<String?>(null),
         ),
       );
 
@@ -268,6 +281,7 @@ class RecipePhotoStore {
             RecipePhotoRow(
               recipeId: recipeId,
               remotePath: path,
+              attemptedPath: path,
               syncAttempts: 1,
               syncError: error,
               updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
@@ -276,12 +290,20 @@ class RecipePhotoStore {
       return;
     }
 
+    // A failure against a *different* object than the last one tried starts
+    // the count again: the recipe moved on, and the old tally was about
+    // something else. remotePath is left alone — it still describes the file
+    // that is here.
+    final bool freshTarget = path != null && row.attemptedPath != path;
     await (_db.update(
       _db.recipePhotos,
     )..where(($RecipePhotosTable p) => p.recipeId.equals(recipeId))).write(
       RecipePhotosCompanion(
-        syncAttempts: Value<int>(row.syncAttempts + 1),
+        syncAttempts: Value<int>(freshTarget ? 1 : row.syncAttempts + 1),
         syncError: Value<String?>(error),
+        attemptedPath: path == null
+            ? const Value<String?>.absent()
+            : Value<String?>(path),
       ),
     );
   }
