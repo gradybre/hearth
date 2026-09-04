@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/data/adapters/label_reader.dart';
+import 'package:hearth/data/adapters/menu_reader.dart';
 import 'package:hearth/data/adapters/nutrition_lookup.dart';
 import 'package:hearth/data/adapters/nutrition_source.dart';
+import 'package:hearth/data/adapters/pdf_pages.dart';
 import 'package:hearth/data/adapters/photo_picker.dart';
 import 'package:hearth/data/adapters/platform_shared_content.dart';
 import 'package:hearth/data/adapters/recipe_ai.dart';
@@ -73,6 +75,8 @@ Future<HearthDatabase> pumpHearthApp(
   List<NutritionSource> nutritionSources = const <NutritionSource>[],
   RecipeAiSource? recipeAi,
   LabelReader? labelReader,
+  MenuReader? menuReader,
+  PdfPages? pdfPages,
   ShoppingAssistant? shoppingAssistant,
   PhotoPicker? photoPicker,
   SharedContentSource? sharedContent,
@@ -147,6 +151,13 @@ Future<HearthDatabase> pumpHearthApp(
         // backend, and it is what the buttons check before offering
         // themselves.
         labelReaderProvider.overrideWithValue(labelReader),
+        // The menu reader, same shape: null is the honest state of a build
+        // with no backend, and it is what the read buttons check before
+        // offering themselves.
+        menuReaderProvider.overrideWithValue(menuReader),
+        // And the PDF renderer, which would otherwise open a file dialog no
+        // widget test can answer.
+        pdfPagesProvider.overrideWithValue(pdfPages ?? const _NoPdf()),
         // And the list's chat. Null hides the panel, which is what a build
         // with no backend honestly does.
         shoppingAssistantProvider.overrideWithValue(shoppingAssistant),
@@ -262,4 +273,15 @@ Future<void> pumpFrames(WidgetTester tester, {int frames = 5}) async {
   for (int i = 0; i < frames; i++) {
     await tester.pump(const Duration(milliseconds: 50));
   }
+}
+
+/// A device with no PDF support, which is what a widget test is.
+class _NoPdf implements PdfPages {
+  const _NoPdf();
+
+  @override
+  bool get isSupported => false;
+
+  @override
+  Future<RenderedPdf?> pick({int maxPages = 6}) async => null;
 }

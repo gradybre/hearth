@@ -55,6 +55,32 @@ class MenuImportLine {
   bool get isUsable => problem == null && !isHeading;
 }
 
+/// One item, before it has been written down as a line.
+///
+/// What a transcription hands over, and the input to [MenuImport.write]. It
+/// lives here rather than beside the adapter so the format's two halves —
+/// writing and reading — are testable against each other in one place, which
+/// is the only thing that stops them drifting apart.
+@immutable
+class MenuRow {
+  const MenuRow({
+    required this.name,
+    required this.portion,
+    required this.macros,
+    this.section,
+  });
+
+  final String name;
+
+  /// As the sheet printed it: "4 oz", "1 salad", "30 g".
+  final String portion;
+
+  final Macros macros;
+
+  /// The heading it sits under, or null above the first one.
+  final String? section;
+}
+
 /// Reading a menu pasted out of a nutrition sheet (spec §5.2).
 ///
 /// Deliberately a parser rather than a trip to the model. The input is a
@@ -85,6 +111,86 @@ abstract final class MenuImport {
     r'^\s*(<|trace)',
     caseSensitive: false,
   );
+
+  /// Writes rows back out as the text this same class reads.
+  ///
+  /// The join between a transcription and the review screen. A model returns
+  /// structured rows; they become **exactly what a person would have pasted**,
+  /// land in the same box, and go through the same parser and the same live
+  /// review. That is deliberate: the model does transcription, and the
+  /// deterministic half stays the thing that decides what a row means — so
+  /// nothing reaches the library along a path a human paste could not also
+  /// take, and every row is editable before it is saved.
+  ///
+  /// [read] of what this writes returns the rows it was given. There is a test
+  /// that says so, because a format with two halves has two places to drift.
+  static String write(Iterable<MenuRow> rows) {
+    final StringBuffer out = StringBuffer();
+    String? section;
+
+    for (final MenuRow row in rows) {
+      if (row.section != section) {
+        section = row.section;
+        if (section != null) out.writeln(_field(section));
+      }
+      out.writeln(
+        <String>[
+          _field(row.name),
+          _field(row.portion),
+          _amount(row.macros.kcal),
+          _amount(row.macros.proteinG),
+          _amount(row.macros.carbG),
+          _amount(row.macros.fatG),
+          ..._minor(row.macros),
+        ].join(', '),
+      );
+    }
+    return out.toString().trimRight();
+  }
+
+  /// A field with nothing in it that this format reads as a separator.
+  ///
+  /// The format cannot carry a comma, a tab, or a double space inside a
+  /// field — [_separator] is what splits the row, and a name is the one field
+  /// nobody can quote. So "Bacon, Egg & Cheese on Brioche" is written without
+  /// its comma rather than written and then read back as an item called
+  /// "Bacon" with a portion of "Egg & Cheese". The name loses a comma; the
+  /// alternative loses the item, and blames the picture for it.
+  static String _field(String value) => value
+      .replaceAll(RegExp(r'[,\t]'), ' ')
+      .replaceAll(RegExp(r'\s{2,}'), ' ')
+      .trim();
+
+  /// The three minor nutrients as fields, ending at the last one known.
+  ///
+  /// Two different silences, and conflating them is a bug the format cannot
+  /// detect:
+  ///
+  ///  * **Trailing** unknowns are simply absent. A short line is how this
+  ///    format already says the sheet did not print those columns, and a 0
+  ///    there would be a claim (spec §5.6).
+  ///  * A **gap** — no fibre but a known sodium — is written as `-`, which
+  ///    [_number] reads back as unknown. Leaving it empty instead would slide
+  ///    the sodium into the fibre column and every later value with it, and
+  ///    nothing downstream could tell.
+  static List<String> _minor(Macros macros) {
+    final List<double?> values = <double?>[
+      macros.fiberG,
+      macros.sodiumMg,
+      macros.cholesterolMg,
+    ];
+    final int last = values.lastIndexWhere((double? v) => v != null);
+    if (last < 0) return const <String>[];
+
+    return <String>[
+      for (final double? value in values.take(last + 1))
+        if (value == null) '-' else _amount(value),
+    ];
+  }
+
+  static String _amount(double value) => value == value.roundToDouble()
+      ? value.round().toString()
+      : value.toString();
 
   static List<MenuImportLine> read(String pasted) {
     final List<MenuImportLine> lines = <MenuImportLine>[];
@@ -196,10 +302,14 @@ abstract final class MenuImport {
     return parseAmount(field.replaceAll(RegExp(r'[^0-9./\s-]'), '').trim());
   }
 
-  /// "4 oz", "2 fl oz", "1 ea", "100 g".
+  /// "4 oz", "2 fl oz", "1 ea", "100 g", "4 oz (113g)".
   static Quantity? _portion(String field) {
+    // The parenthetical is the same portion said again in another unit, and
+    // half the sheets in the world print one. Refused, it sent the row to the
+    // unreadable pile over a restatement of a fact already read.
+    final String stated = field.replaceAll(RegExp(r'\([^)]*\)'), ' ').trim();
     final RegExpMatch? match = RegExp(r'^\s*([0-9./]+)\s*(.*)$')
-        .firstMatch(field);
+        .firstMatch(stated);
     if (match == null) return null;
 
     final double? amount = parseAmount(match.group(1)!);
@@ -208,7 +318,18 @@ abstract final class MenuImport {
     final String word = match.group(2)!.trim();
     // No unit word means a count — "2 tacos" is two of them. `Units.item` is
     // what a bare number has always meant elsewhere in Hearth.
-    if (word.isEmpty) return Quantity.of(amount, Units.item);
+    //
+    // And "serving" counts as no word. Units deliberately has no such unit —
+    // it names only itself — but it is the word nutrition sheets print more
+    // than any other, and refusing it would send half a pasted menu to the
+    // unreadable pile. Only this word, not any trailing noun: read loosely,
+    // "4 oz (113g)" would become four of something, which is wrong and looks
+    // right.
+    if (word.isEmpty ||
+        word.toLowerCase() == 'serving' ||
+        word.toLowerCase() == 'servings') {
+      return Quantity.of(amount, Units.item);
+    }
 
     final Unit? unit = Units.parse(word);
     return unit == null ? null : Quantity.of(amount, unit);

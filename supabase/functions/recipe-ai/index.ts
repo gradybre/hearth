@@ -258,6 +258,71 @@ const LABEL_UNITS = [
   'can',
 ] as const;
 
+const MENU_TOOL = {
+  name: 'read_menu',
+  description:
+    "Transcribe a restaurant's published nutrition table into rows.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      restaurant: {
+        type: 'string',
+        description:
+          "The restaurant's name if the page states it. Omit if it does not.",
+      },
+      rows: {
+        type: 'array',
+        description:
+          'Every item in the table, in the order the table prints them.',
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'The item, as printed.' },
+            section: {
+              type: 'string',
+              description:
+                'The heading this item sits under — "Proteins", "Salsas", ' +
+                '"Toppings". Omit for items above the first heading.',
+            },
+            portion: {
+              type: 'string',
+              description:
+                'The serving size as a measured amount — "4 oz", "2 fl oz", ' +
+                '"30 g", "1 ea" — or a bare count where the sheet portions ' +
+                'by the whole item: "1 salad" is "1", "2 tacos" is "2". ' +
+                'Give the amount only, without a restatement in brackets. ' +
+                'If the table states no portion at all, "1 serving".',
+            },
+            kcal: { type: 'number' },
+            protein_g: { type: 'number' },
+            carb_g: { type: 'number' },
+            fat_g: { type: 'number' },
+            fiber_g: { type: 'number' },
+            sodium_mg: { type: 'number' },
+            cholesterol_mg: { type: 'number' },
+          },
+          required: ['name', 'portion', 'kcal'],
+        },
+      },
+      uncertain: {
+        type: 'array',
+        description:
+          'Anything you could not read cleanly, or a column you had to ' +
+          'guess the meaning of.',
+        items: {
+          type: 'object',
+          properties: {
+            field: { type: 'string' },
+            note: { type: 'string' },
+          },
+          required: ['field', 'note'],
+        },
+      },
+    },
+    required: ['rows'],
+  },
+} as const;
+
 const LABEL_TOOL = {
   name: 'nutrition_label',
   description: "Return what the food's label states.",
@@ -404,6 +469,43 @@ Always fill in reply, in one sentence, saying what you changed. It is the only
 thing the user reads, and without it they have to check the list line by line
 to find out what happened.`;
 
+const MENU_PROMPT = `You transcribe a restaurant's published nutrition table.
+
+Read it as a table. These pages are wide grids with a dozen columns, and the
+one mistake that matters is taking a number from the wrong column or the wrong
+row — a value that belongs to the item above reads perfectly and is wrong
+forever. Work across each row and check the column headings as you go.
+
+The columns you want are the item, its serving size, calories, protein, total
+carbohydrate, total fat, dietary fibre, sodium and cholesterol. Ignore
+calories-from-fat, saturated and trans fat, sugars, vitamins and allergens.
+
+Transcribe. Never compute: do not derive calories from macros, do not scale a
+column, do not convert units the table does not itself give.
+
+Sections are the headings the sheet prints — "Proteins", "Salsas", "Craft Your
+Own". Carry each one down to the rows beneath it, so the menu keeps the shape
+the restaurant gave it.
+
+Serving sizes: the amount the table prints, as an amount. "4 oz", "2 fl oz",
+"30 g", "1 ea". Where the sheet portions by the whole item — "1 salad", "2
+tacos" — give the bare count, "1" or "2"; the name already says what it is.
+Give the amount once: "4 oz (113 g)" is "4 oz". If the table states no portion
+at all, use "1 serving" rather than inventing a weight.
+
+Calories, protein, carbohydrate and fat are always required. Where one of the
+four is printed as "< 1", give 0.
+
+Fibre, sodium and cholesterol are different: omit one the table does not print
+rather than writing 0 — a column that is not there is unknown, and zero is a
+claim. "< 1" in those three is also unknown; omit it.
+
+Skip drinks and kids' menus.
+
+If a digit is unclear, a row is cut off, or two rows have run together,
+transcribe your best reading AND list it in uncertain. A flagged guess is
+useful; a confident wrong number corrupts every day it is logged into.`;
+
 const LABEL_PROMPT = `You read Nutrition Facts panels off packaging.
 
 Transcribe the printed numbers. Never compute: do not scale a per-100 g column
@@ -465,10 +567,10 @@ Deno.serve(async (request: Request): Promise<Response> => {
   const mode = (body.mode ?? '').trim();
   if (
     mode !== 'extract' && mode !== 'generate' && mode !== 'label' &&
-    mode !== 'shopping'
+    mode !== 'shopping' && mode !== 'menu'
   ) {
     return json(
-      { error: 'mode must be extract, generate, label or shopping' },
+      { error: 'mode must be extract, generate, label, shopping or menu' },
       400,
     );
   }
@@ -490,6 +592,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
     const content = mode === 'shopping'
       ? shoppingContent(body.messages ?? [], (body.list ?? '').trim())
+      : mode === 'menu'
+      ? menuContent(body.images ?? [])
       : mode === 'label'
       ? labelContent(body.images ?? [])
       : mode === 'extract'
@@ -507,6 +611,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
     const system = mode === 'shopping'
       ? SHOPPING_PROMPT
+      : mode === 'menu'
+      ? MENU_PROMPT
       : mode === 'label'
       ? LABEL_PROMPT
       : mode === 'extract'
@@ -514,15 +620,29 @@ Deno.serve(async (request: Request): Promise<Response> => {
       : GENERATE_PROMPT;
     const tool = mode === 'shopping'
       ? SHOPPING_TOOL
+      : mode === 'menu'
+      ? MENU_TOOL
       : mode === 'label'
       ? LABEL_TOOL
       : RECIPE_TOOL;
 
-    const answer = await ask(system, content, key, tool);
+    // A menu is the one mode whose answer is as long as its input: a
+    // six-page guide is 150 rows, and at 4,096 tokens the transcription stops
+    // around row 60 — a short list that looks complete. The others answer
+    // with one recipe, one label, one basket.
+    const answer = await ask(
+      system,
+      content,
+      key,
+      tool,
+      mode === 'menu' ? 16_000 : 4096,
+    );
     const usage = await recordUsage(answer.usage);
 
     const shaped = mode === 'shopping'
       ? shapeShopping(answer.input)
+      : mode === 'menu'
+      ? shapeMenu(answer.input, answer.truncated)
       : mode === 'label'
       ? shapeLabel(answer.input)
       : shape(answer.input);
@@ -585,6 +705,27 @@ async function extractContent(
   });
 
   return content;
+}
+
+/// A nutrition guide, as Claude content blocks.
+///
+/// Several images are pages of one guide, not several menus — a restaurant's
+/// sheet runs to six pages and its section headings carry across them.
+function menuContent(images: string[]): unknown[] {
+  if (images.length === 0) {
+    throw new Error('bad request: give a picture of the menu');
+  }
+
+  return [
+    ...imageBlocks(images),
+    {
+      type: 'text',
+      text: images.length > 1
+        ? 'These are pages of one restaurant\'s nutrition guide. Transcribe ' +
+          'every item, in order, keeping the section headings.'
+        : 'Transcribe every item on this page, keeping the section headings.',
+    },
+  ];
 }
 
 /// A label, as Claude content blocks.
@@ -792,6 +933,13 @@ async function fetchPage(url: string): Promise<string> {
 interface Answer {
   input: Record<string, unknown>;
   usage: { input_tokens?: number; output_tokens?: number } | null;
+
+  /// The model ran out of room mid-answer.
+  ///
+  /// Worth carrying rather than ignoring: a truncated menu is a short list
+  /// that looks complete, and "68 to add" from a 150-item guide is a silent
+  /// half-import nobody would think to check.
+  truncated: boolean;
 }
 
 async function ask(
@@ -799,6 +947,7 @@ async function ask(
   content: unknown[],
   key: string,
   tool: { name: string },
+  maxTokens = 4096,
 ): Promise<Answer> {
   const response = await fetch(ANTHROPIC, {
     method: 'POST',
@@ -809,7 +958,7 @@ async function ask(
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 4096,
+      max_tokens: maxTokens,
       system,
       tools: [tool],
       tool_choice: { type: 'tool', name: tool.name },
@@ -824,16 +973,25 @@ async function ask(
   }
 
   const payload = await response.json();
+  const truncated = payload?.stop_reason === 'max_tokens';
   const block = (payload?.content ?? []).find(
     (c: { type?: string }) => c?.type === 'tool_use',
   );
   if (!block?.input) {
+    // A cut-off tool call often cannot be parsed at all, and "nothing
+    // readable" would send the user back to rephotograph a page that was
+    // fine.
+    if (truncated) {
+      throw new Error(
+        'That was too long to read in one go. Try fewer pages at a time.',
+      );
+    }
     throw new Error('Claude returned nothing readable');
   }
 
   // The token counts were always in this payload and were always thrown away.
   // They are what the ceiling is counted in.
-  return { input: block.input, usage: payload?.usage ?? null };
+  return { input: block.input, usage: payload?.usage ?? null, truncated };
 }
 
 /// What the month has cost, and whether that is already too much.
@@ -965,6 +1123,56 @@ function shape(input: Record<string, unknown>): Record<string, unknown> {
         .map((u) => ({ field: text(u.field), note: text(u.note) }))
       : [],
     reply: text(input.reply) || null,
+  };
+}
+
+/// Narrows a transcribed menu to the shape the app is promised.
+///
+/// Every nutrient is passed through `number`, which answers null for anything
+/// the model omitted or wrote as prose — and null is carried rather than
+/// flattened to zero, because a column the sheet never printed is unknown and
+/// zero would be a claim (spec §5.6).
+function shapeMenu(
+  input: Record<string, unknown>,
+  truncated = false,
+): Record<string, unknown> {
+  const rows = Array.isArray(input.rows) ? input.rows : [];
+
+  return {
+    restaurant: text(input.restaurant) || null,
+    rows: (rows as Record<string, unknown>[])
+      // A row with no name or no calories is not a row. Dropped here rather
+      // than sent on to be refused by the parser with a worse message.
+      .filter((r) => text(r?.name) !== '' && number(r?.kcal) !== null)
+      .map((r) => ({
+        name: text(r.name),
+        section: text(r.section) || null,
+        portion: text(r.portion) || '1 serving',
+        kcal: number(r.kcal),
+        protein_g: number(r.protein_g),
+        carb_g: number(r.carb_g),
+        fat_g: number(r.fat_g),
+        fiber_g: number(r.fiber_g),
+        sodium_mg: number(r.sodium_mg),
+        cholesterol_mg: number(r.cholesterol_mg),
+      })),
+    uncertain: [
+      // First, because it is about the list rather than about a row: the
+      // rows below it are fine, and the ones after them are simply missing.
+      ...(truncated
+        ? [{
+          field: 'The end of the guide',
+          note:
+            'The transcription ran out of room, so the last items are ' +
+            'missing. Read the remaining pages separately.',
+        }]
+        : []),
+      ...(Array.isArray(input.uncertain)
+        ? (input.uncertain as Uncertain[])
+          .filter((u) => u?.field || u?.note)
+          .map((u) => ({ field: text(u.field), note: text(u.note) }))
+        : []),
+    ],
   };
 }
 

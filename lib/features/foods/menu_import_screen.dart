@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -6,6 +8,10 @@ import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../data/adapters/menu_reader.dart';
+import '../../data/adapters/pdf_pages.dart';
+import '../../data/adapters/photo_picker.dart';
+import '../../data/adapters/recipe_ai.dart';
 import '../../data/repositories/food_repository.dart';
 import '../../domain/foods/menu_import.dart';
 import '../../domain/format/quantity_format.dart';
@@ -36,6 +42,19 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
   bool _saving = false;
   bool _showErrors = false;
 
+  /// True while a picture is being read. Its own flag rather than sharing
+  /// `_saving`: they disable different buttons and one can fail while the
+  /// other has not started.
+  bool _reading = false;
+
+  /// What the model could not read cleanly, kept where the rows it produced
+  /// can be seen beside it. The failure that matters here is silent — a value
+  /// taken from the wrong column reads perfectly — so an admission of doubt is
+  /// worth more than a clean-looking list.
+  List<AiUncertainty> _uncertain = const <AiUncertainty>[];
+
+  String? _readError;
+
   @override
   void dispose() {
     _restaurant.dispose();
@@ -47,6 +66,86 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
 
   String? get _restaurantError =>
       _restaurant.text.trim().isEmpty ? 'Which restaurant?' : null;
+
+  /// Reads a menu off pictures and puts the result **in the box**.
+  ///
+  /// Not straight into the library, and not into a list of its own. What the
+  /// model produces becomes exactly the text a person would have pasted, and
+  /// goes through the same parser and the same live review — so it is
+  /// editable before it is saved, and nothing reaches the library along a path
+  /// a hand paste could not also take (rule 4).
+  Future<void> _read(Future<List<AiImage>> Function() pages) async {
+    final MenuReader? reader = ref.read(menuReaderProvider);
+    if (reader == null) return;
+
+    setState(() {
+      _reading = true;
+      _readError = null;
+      // A doubt belongs to the rows it came with. Left standing over a new
+      // read, it points at an item no longer on the screen.
+      _uncertain = const <AiUncertainty>[];
+    });
+    try {
+      final List<AiImage> images = await pages();
+      // Backing out of the picker. A file that produced no pages says so for
+      // itself, from the picker.
+      if (images.isEmpty) return;
+
+      final MenuReading reading = await reader.read(images);
+      if (!mounted) return;
+      setState(() {
+        // Added to, not over. A guide is read a page at a time, and a
+        // hand-typed correction sits in the same box — overwriting destroys
+        // both, with no undo.
+        final String had = _pasted.text.trimRight();
+        final String read = MenuImport.write(reading.rows);
+        _pasted.text = had.isEmpty ? read : '$had\n$read';
+        _uncertain = reading.uncertain;
+        // Only where the field is still empty: a name already typed is a
+        // decision, and a page's own branding is a guess.
+        if (_restaurant.text.trim().isEmpty && reading.restaurant != null) {
+          _restaurant.text = reading.restaurant!;
+        }
+      });
+    } on RecipeAiException catch (error) {
+      if (mounted) setState(() => _readError = error.message);
+    } on Object {
+      // A file dialog refused a permission, a PDF would not open, a picker
+      // threw. None of those are a RecipeAiException, and catching only that
+      // left the button snapping back with nothing said.
+      if (mounted) {
+        setState(() => _readError = 'Could not read that. Try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _reading = false);
+    }
+  }
+
+  Future<List<AiImage>> _photos() async {
+    final List<PickedPhoto> picked = await ref
+        .read(photoPickerProvider)
+        .pickMultiple(max: 6);
+    return <AiImage>[
+      for (final PickedPhoto photo in picked) AiImage.ofPhoto(photo),
+    ];
+  }
+
+  Future<List<AiImage>> _pdf() async {
+    final RenderedPdf? rendered = await ref.read(pdfPagesProvider).pick();
+    if (rendered == null) return const <AiImage>[];
+    // Chosen, but nothing came out of it. Silent here, this is
+    // indistinguishable from backing out of the dialog.
+    if (rendered.pages.isEmpty) {
+      throw const RecipeAiException(
+        'None of that PDF would render. Try screenshots of it instead.',
+        isRetryable: false,
+      );
+    }
+    return <AiImage>[
+      for (final Uint8List page in rendered.pages)
+        AiImage(bytes: page, mediaType: 'image/png'),
+    ];
+  }
 
   Future<void> _save() async {
     final List<MenuImportLine> usable = <MenuImportLine>[
@@ -133,7 +232,8 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
             TextField(
               controller: _restaurant,
               textCapitalization: TextCapitalization.words,
-              onChanged: (String _) => setState(() {}),
+              onChanged: (String _) =>
+                  setState(() => _uncertain = const <AiUncertainty>[]),
               style: context.text.body,
               decoration: InputDecoration(
                 labelText: 'Restaurant',
@@ -152,11 +252,56 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
               style: context.text.metadata.copyWith(color: colors.textMuted),
             ),
             const SizedBox(height: HearthSpacing.sm),
+            // Above the box, because reading a picture is what fills it —
+            // offering it underneath would read as something you do after
+            // pasting. Hidden rather than disabled without a backend, the way
+            // the label reader's buttons are.
+            if (ref.watch(menuReaderProvider) != null) ...<Widget>[
+              Wrap(
+                spacing: HearthSpacing.sm,
+                runSpacing: HearthSpacing.sm,
+                children: <Widget>[
+                  OutlinedButton.icon(
+                    onPressed: _reading ? null : () => _read(_photos),
+                    icon: const Icon(Icons.photo_library_outlined, size: 18),
+                    label: Text(
+                      _reading ? 'Reading…' : 'Read from screenshots',
+                    ),
+                  ),
+                  if (ref.watch(pdfPagesProvider).isSupported)
+                    OutlinedButton.icon(
+                      onPressed: _reading ? null : () => _read(_pdf),
+                      icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                      label: const Text('Read from a PDF'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: HearthSpacing.sm),
+              if (_readError case final String message) ...<Widget>[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Icon(Icons.error_outline, size: 18, color: colors.error),
+                    const SizedBox(width: HearthSpacing.xs),
+                    Expanded(
+                      child: Text(
+                        message,
+                        style: context.text.metadata.copyWith(
+                          color: colors.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: HearthSpacing.sm),
+              ],
+            ],
             TextField(
               controller: _pasted,
               maxLines: 8,
               minLines: 4,
-              onChanged: (String _) => setState(() {}),
+              onChanged: (String _) =>
+                  setState(() => _uncertain = const <AiUncertainty>[]),
               style: context.text.body,
               decoration: const InputDecoration(
                 hintText: 'Chicken, 4 oz, 180, 32, 0, 7',
@@ -169,6 +314,49 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
                 style: context.text.body.copyWith(color: colors.textMuted),
               )
             else ...<Widget>[
+              // What the model would not vouch for, above the rows it
+              // produced. A value taken from the wrong column reads perfectly
+              // and is wrong in every day it is later logged into, so a
+              // flagged doubt is worth more than a clean-looking list.
+              if (_uncertain.isNotEmpty) ...<Widget>[
+                Container(
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    borderRadius: BorderRadius.circular(HearthRadius.md),
+                    border: Border.all(color: colors.overAccent),
+                  ),
+                  padding: const EdgeInsets.all(HearthSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Row(
+                        children: <Widget>[
+                          Icon(
+                            Icons.error_outline,
+                            size: 18,
+                            color: colors.overAccent,
+                          ),
+                          const SizedBox(width: HearthSpacing.xs),
+                          Text(
+                            'Check these before saving',
+                            style: context.text.body,
+                          ),
+                        ],
+                      ),
+                      for (final AiUncertainty doubt in _uncertain) ...<Widget>[
+                        const SizedBox(height: HearthSpacing.xs),
+                        Text(
+                          '${doubt.field}: ${doubt.note}',
+                          style: context.text.metadata.copyWith(
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: HearthSpacing.md),
+              ],
               Text(
                 unreadable == 0
                     ? '$usable to add'

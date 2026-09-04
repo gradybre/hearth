@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
 
+import 'photo_picker.dart';
+
 /// Something the model could not read confidently (spec §5.3).
 ///
 /// The whole point of carrying these separately is that a flagged guess is
@@ -146,6 +148,21 @@ class AiUsage {
 @immutable
 class AiImage {
   const AiImage({required this.bytes, required this.mediaType});
+
+  /// A chosen photo, told apart by its extension.
+  ///
+  /// One place rather than three: the API rejects a declared type that does
+  /// not match the bytes, so a `.webp` screenshot sent as jpeg comes back a
+  /// 400 that reads like a server fault and can only fail the same way again.
+  factory AiImage.ofPhoto(PickedPhoto photo) => AiImage(
+    bytes: photo.bytes,
+    mediaType: switch (photo.extension) {
+      'png' => 'image/png',
+      'gif' => 'image/gif',
+      'webp' => 'image/webp',
+      _ => 'image/jpeg',
+    },
+  );
 
   final Uint8List bytes;
 
