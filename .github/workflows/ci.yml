@@ -1,0 +1,86 @@
+# The checks that cannot be talked round.
+#
+# Every one of these runs locally too, and that is the point: locally they run
+# through a shell where a pipe can swallow an exit code. `flutter test | tail`
+# reports the tail's status, not the suite's — which is how a commit with a
+# failing test got made in this repo and had to be amended. CI reads the exit
+# code and nothing else.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A second push to a PR makes the first run pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Two jobs rather than one so a formatting slip is not found behind three
+  # minutes of Postgres, and so a red result names which half is wrong.
+  #
+  # Both run on every PR. Path filtering the schema job is easy to add and has
+  # been left out until the wasted minutes actually annoy somebody.
+  dart:
+    name: Analyze and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # Pinned rather than "stable": a toolchain that moves under the
+          # project turns an unrelated PR red and teaches everyone to ignore
+          # the light. Bump it deliberately.
+          flutter-version: 3.47.1
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # Formatting first — it is the cheapest failure and the least
+      # interesting, so it should not be found behind a two-minute test run.
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+  schema:
+    name: Migrations and guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          # Pinned for the same reason Flutter is. A CLI release that changes
+          # `db start` or renames the Postgres container would turn every open
+          # PR red for a reason belonging to none of them.
+          version: 2.116.0
+
+      # `db start` boots Postgres; `db reset` is the one CLAUDE.md names as
+      # applying every migration from scratch, and the guards below depend on
+      # the seeds having landed — the catalogue guard asserts Chipotle's 29
+      # components are readable. Resetting explicitly costs seconds and means
+      # the job does not rest on `db start` happening to migrate.
+      - name: Start Postgres
+        run: supabase db start
+
+      - name: Apply every migration from scratch
+        run: supabase db reset
+
+      # The guards are the half that `supabase db reset` cannot tell you: that
+      # upsert_food still carries the columns it was given, that unknown is
+      # not zero, that no menu section is interleaved. A migration can apply
+      # cleanly and still have deleted half a function body.
+      - name: Schema guards
+        run: |
+          docker exec -i supabase_db_hearth \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/tests/schema_guards.sql

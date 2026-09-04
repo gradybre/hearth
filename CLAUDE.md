@@ -59,6 +59,16 @@ task seems to require breaking one.
 
 ## Working style
 
+- **Finish through a pull request.** A coherent piece of work goes out via the
+  `ship` skill: branch, PR, a fresh-context review over the diff, the fixes
+  applied, CI green — then Brendan merges. Never merge on his behalf, and never
+  describe the reviewer as a second pair of eyes; it is the same model reading
+  without the reasoning that produced the code, which catches a great deal and
+  is not the same thing. CI is the half that cannot be talked round.
+  A typo fix asked for mid-conversation goes straight to `main`.
+- **Read the exit code, not the tail.** `flutter test | tail -3` reports the
+  tail's status, so a failing suite can look like a passing one. It has already
+  cost one commit here that had to be amended.
 - **Plan Mode first for anything non-trivial.** Read the relevant spec section, propose the
   plan, get agreement, then build.
 - **Build order is §10.** Don't pull work forward from a later phase without asking.
