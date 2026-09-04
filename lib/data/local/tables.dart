@@ -224,6 +224,12 @@ class MacroTargets extends Table {
   RealColumn get proteinG => real()();
   RealColumn get carbG => real()();
   RealColumn get fatG => real()();
+
+  /// The three minor nutrients (spec §5.6). Null means the Daily Value, not
+  /// "no target" — which is why there is no default here to confuse the two.
+  RealColumn get fiberG => real().nullable()();
+  RealColumn get sodiumMg => real().nullable()();
+  RealColumn get cholesterolMg => real().nullable()();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override

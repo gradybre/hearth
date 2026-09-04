@@ -10,12 +10,25 @@ class MacroTargets {
     required this.proteinG,
     required this.carbG,
     required this.fatG,
+    this.fiberG,
+    this.sodiumMg,
+    this.cholesterolMg,
   });
 
   final double kcal;
   final double proteinG;
   final double carbG;
   final double fatG;
+
+  /// The three minor nutrients, **null meaning "use the Daily Value"** rather
+  /// than "no target" (spec §5.6).
+  ///
+  /// Nullable and not required, so a week whose targets were set before these
+  /// existed still reads — and so the ordinary case is not four more numbers
+  /// to type before the screen works.
+  final double? fiberG;
+  final double? sodiumMg;
+  final double? cholesterolMg;
 
   double forKind(MacroKind kind) => switch (kind) {
     MacroKind.calories => kcal,
@@ -24,16 +37,38 @@ class MacroTargets {
     MacroKind.fat => fatG,
   };
 
+  /// This household's target for [nutrient], or the Daily Value.
+  double forNutrient(MinorNutrient nutrient) =>
+      switch (nutrient) {
+        MinorNutrient.fiber => fiberG,
+        MinorNutrient.sodium => sodiumMg,
+        MinorNutrient.cholesterol => cholesterolMg,
+      } ??
+      nutrient.dailyValue;
+
+  /// Whether [nutrient] is measured against a number somebody chose.
+  bool hasOwnTarget(MinorNutrient nutrient) =>
+      switch (nutrient) {
+        MinorNutrient.fiber => fiberG,
+        MinorNutrient.sodium => sodiumMg,
+        MinorNutrient.cholesterol => cholesterolMg,
+      } !=
+      null;
+
   @override
   bool operator ==(Object other) =>
       other is MacroTargets &&
       other.kcal == kcal &&
       other.proteinG == proteinG &&
       other.carbG == carbG &&
-      other.fatG == fatG;
+      other.fatG == fatG &&
+      other.fiberG == fiberG &&
+      other.sodiumMg == sodiumMg &&
+      other.cholesterolMg == cholesterolMg;
 
   @override
-  int get hashCode => Object.hash(kcal, proteinG, carbG, fatG);
+  int get hashCode =>
+      Object.hash(kcal, proteinG, carbG, fatG, fiberG, sodiumMg, cholesterolMg);
 }
 
 /// Where one macro stands against its target.
@@ -115,6 +150,51 @@ class MacroProgress {
   }
 }
 
+/// One minor nutrient's progress for a day (spec §5.6).
+///
+/// Deliberately its own type rather than a [MacroProgress] with a different
+/// enum on it. The four macros are always known and always shown; these three
+/// are shown only where something logged actually knows them, and a type that
+/// cannot be constructed without a number is what keeps "nobody asked" from
+/// being rendered as "none".
+@immutable
+class MinorProgress {
+  const MinorProgress({
+    required this.nutrient,
+    required this.consumed,
+    required this.target,
+    required this.state,
+  });
+
+  final MinorNutrient nutrient;
+  final double consumed;
+  final double target;
+  final MacroProgressState state;
+
+  /// What is left. For fibre that is what remains to get; for sodium and
+  /// cholesterol it is what remains to spend.
+  double get remaining => target - consumed;
+
+  double get fraction => target > 0 ? consumed / target : 0;
+
+  double get barFill => fraction.clamp(0.0, 1.0).toDouble();
+
+  bool get isOver => state == MacroProgressState.over;
+
+  /// How this number should read, as against merely where it sits.
+  ///
+  /// The same split [MacroProgress.tone] makes, applied to a different set:
+  /// [MinorNutrient.isFloor] says which way the nutrient points, and passing a
+  /// floor is an achievement while passing a ceiling is not.
+  MacroTone get tone {
+    if (target <= 0 || fraction < MacroProgress.goodFrom) {
+      return MacroTone.neutral;
+    }
+    if (nutrient.isFloor) return MacroTone.good;
+    return state == MacroProgressState.over ? MacroTone.over : MacroTone.good;
+  }
+}
+
 /// A day's totals against its targets (spec §5.6).
 ///
 /// Calories are the primary focus; protein, carbs, and fat are secondary.
@@ -174,6 +254,44 @@ class DayProgress {
     MacroKind.carbs => carbs,
     MacroKind.fat => fat,
   };
+
+  /// Where [nutrient] stands, or **null when nothing logged knows it**.
+  ///
+  /// Null rather than a zero: a bar reading "0 of 28 g" claims the day had no
+  /// fibre, when the truth is that nothing eaten has ever been asked. Those
+  /// are different statements and only one of them is true (spec §5.6).
+  MinorProgress? minor(MinorNutrient nutrient) {
+    final double? eaten = consumed.minor(nutrient);
+    if (eaten == null) return null;
+
+    final double target = targets.forNutrient(nutrient);
+    final MacroProgressState state;
+    if (target <= 0) {
+      state = MacroProgressState.under;
+    } else if (eaten > target) {
+      state = MacroProgressState.over;
+    } else if (eaten == target) {
+      state = MacroProgressState.met;
+    } else {
+      state = MacroProgressState.under;
+    }
+
+    return MinorProgress(
+      nutrient: nutrient,
+      consumed: eaten,
+      target: target,
+      state: state,
+    );
+  }
+
+  /// The minor nutrients worth drawing, in their declared order.
+  ///
+  /// Empty is the ordinary answer for a household whose foods predate these
+  /// columns, and an empty list draws nothing rather than three dashes.
+  List<MinorProgress> get knownMinor => <MinorProgress>[
+    for (final MinorNutrient nutrient in MinorNutrient.values)
+      if (minor(nutrient) case final MinorProgress progress) progress,
+  ];
 
   static MacroProgress _progress(
     MacroKind kind,

@@ -7,6 +7,7 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
 import '../../app/widgets/macro_rings.dart';
+import '../../app/widgets/minor_nutrient_bars.dart';
 import '../../app/widgets/swipe_to_delete.dart';
 import '../../data/repositories/plan_repository.dart';
 import '../../domain/models/food.dart';
@@ -15,7 +16,6 @@ import '../../domain/models/recipe.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/week.dart';
-import '../recipes/macro_stats_row.dart';
 import 'day_picker_sheet.dart';
 import 'entry_resolver.dart';
 import 'log_sheet.dart';
@@ -273,12 +273,13 @@ class _RemainingCard extends ConsumerWidget {
           ),
           const SizedBox(height: HearthSpacing.md),
           MacroRings(progress: progress),
-          // Below the rings and without one of its own: these have no target
-          // to fill, and a ring would say they did (spec §5.6). Absent on any
-          // day whose foods have never been asked, which is most of them.
+          // Below the rings and quieter than them: these have targets now,
+          // but calories are still meant to be the loudest thing here and a
+          // ring would put the three on a level with the four (spec §5.6).
+          // Draws nothing on a day whose foods have never been asked.
           if (eaten.knowsAnyMinor) ...<Widget>[
-            const SizedBox(height: HearthSpacing.md),
-            MinorNutrientsLine(macros: eaten),
+            const SizedBox(height: HearthSpacing.lg),
+            MinorNutrientBars(progress: progress),
           ],
         ],
       ),

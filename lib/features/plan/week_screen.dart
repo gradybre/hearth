@@ -7,6 +7,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/widgets/macro_rings.dart';
+import '../../app/widgets/minor_nutrient_bars.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
@@ -165,10 +166,20 @@ class _SelectedDay extends StatelessWidget {
               'No targets set for this week.',
               style: context.text.body.copyWith(color: colors.textSecondary),
             )
-          else
+          else ...<Widget>[
             MacroRings(
               progress: DayProgress.from(consumed: eaten, targets: targets!),
             ),
+            // The same three, on the day the week has selected. A trend is
+            // where these actually mean something, and the week is the only
+            // screen that shows one (spec §5.6).
+            if (eaten.knowsAnyMinor) ...<Widget>[
+              const SizedBox(height: HearthSpacing.lg),
+              MinorNutrientBars(
+                progress: DayProgress.from(consumed: eaten, targets: targets!),
+              ),
+            ],
+          ],
           const SizedBox(height: HearthSpacing.lg),
           SizedBox(
             width: double.infinity,

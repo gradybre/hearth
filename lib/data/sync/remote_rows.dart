@@ -82,6 +82,9 @@ class RemoteRows {
           proteinG: _double(json['protein_g']) ?? 0,
           carbG: _double(json['carb_g']) ?? 0,
           fatG: _double(json['fat_g']) ?? 0,
+          fiberG: _double(json['fiber_g']),
+          sodiumMg: _double(json['sodium_mg']),
+          cholesterolMg: _double(json['cholesterol_mg']),
           updatedAt: _time(json['updated_at']),
         ),
       );

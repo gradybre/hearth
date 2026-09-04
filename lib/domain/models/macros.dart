@@ -165,4 +165,25 @@ enum MinorNutrient {
   /// The unit it is stored and displayed in — grams for fibre, milligrams for
   /// the other two. Shown always, because "200 sodium" means nothing.
   final String unit;
+
+  /// Whether the target is a floor to reach rather than a ceiling to stay
+  /// under (spec §5.6).
+  ///
+  /// The three do not point the same way, and a screen that treated them
+  /// alike would be wrong about two of them. Fibre is something to get to —
+  /// 28 g is an achievement. Sodium and cholesterol are budgets, and passing
+  /// one is the thing you were trying not to do. Same distinction the four
+  /// macros already make between protein and the rest.
+  bool get isFloor => this == MinorNutrient.fiber;
+
+  /// What the Daily Value is, when nobody has set a target of their own.
+  ///
+  /// The FDA's, for a 2,000-calorie diet. Defaults rather than requirements:
+  /// a number to measure against beats no number, and "612 mg sodium" means
+  /// nothing until it sits next to 2,300.
+  double get dailyValue => switch (this) {
+    MinorNutrient.fiber => 28,
+    MinorNutrient.sodium => 2300,
+    MinorNutrient.cholesterol => 300,
+  };
 }
