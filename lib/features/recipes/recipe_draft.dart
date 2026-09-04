@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../domain/foods/restaurant_menu.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/parsing/direction_parser.dart';
 import '../../domain/parsing/ingredient_parser.dart';
@@ -268,6 +269,39 @@ class RecipeDraft {
 
   /// Rebuilds a draft from a saved recipe, so editing starts from what is
   /// actually stored rather than from a re-rendered guess.
+  /// A meal built from a restaurant's menu (spec §5.2).
+  ///
+  /// Eaten out, one serving, and **already matched** — the picks came from
+  /// foods, so there is nothing left for anybody to resolve. The lines are
+  /// written so the parser reads them straight back, and the match map is
+  /// keyed the way the parser will key them, which is the join between the
+  /// two and the thing worth testing.
+  ///
+  /// Untitled on purpose. What the meal is called is the one thing only the
+  /// person who ate it knows, so the editor opens asking for it rather than
+  /// inventing "Chipotle meal".
+  factory RecipeDraft.fromMenu({
+    required String restaurant,
+    required List<MenuPick> picks,
+  }) => RecipeDraft(
+    title: '',
+    servings: 1,
+    kind: RecipeKind.eatenOut,
+    // The restaurant is where it came from, which is what `notes` carries for
+    // an eaten-out recipe — there is no venue field and one column read by
+    // one screen would not earn itself.
+    notes: restaurant,
+    sections: <DraftSection>[
+      DraftSection(
+        ingredientsText: picks.map((MenuPick p) => p.line).join('\n'),
+      ),
+    ],
+    matches: <String, String>{
+      for (final MenuPick pick in picks)
+        normaliseKey(pick.food.name): pick.food.id,
+    },
+  );
+
   /// This recipe again, as a new one (spec §5.2).
   ///
   /// "My usual bowl, but no rice" is a different meal, not an edit — editing
