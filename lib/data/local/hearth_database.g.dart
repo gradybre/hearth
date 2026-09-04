@@ -6299,6 +6299,37 @@ class $MacroTargetsTable extends MacroTargets
     type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _fiberGMeta = const VerificationMeta('fiberG');
+  @override
+  late final GeneratedColumn<double> fiberG = GeneratedColumn<double>(
+    'fiber_g',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sodiumMgMeta = const VerificationMeta(
+    'sodiumMg',
+  );
+  @override
+  late final GeneratedColumn<double> sodiumMg = GeneratedColumn<double>(
+    'sodium_mg',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _cholesterolMgMeta = const VerificationMeta(
+    'cholesterolMg',
+  );
+  @override
+  late final GeneratedColumn<double> cholesterolMg = GeneratedColumn<double>(
+    'cholesterol_mg',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -6319,6 +6350,9 @@ class $MacroTargetsTable extends MacroTargets
     proteinG,
     carbG,
     fatG,
+    fiberG,
+    sodiumMg,
+    cholesterolMg,
     updatedAt,
   ];
   @override
@@ -6389,6 +6423,27 @@ class $MacroTargetsTable extends MacroTargets
     } else if (isInserting) {
       context.missing(_fatGMeta);
     }
+    if (data.containsKey('fiber_g')) {
+      context.handle(
+        _fiberGMeta,
+        fiberG.isAcceptableOrUnknown(data['fiber_g']!, _fiberGMeta),
+      );
+    }
+    if (data.containsKey('sodium_mg')) {
+      context.handle(
+        _sodiumMgMeta,
+        sodiumMg.isAcceptableOrUnknown(data['sodium_mg']!, _sodiumMgMeta),
+      );
+    }
+    if (data.containsKey('cholesterol_mg')) {
+      context.handle(
+        _cholesterolMgMeta,
+        cholesterolMg.isAcceptableOrUnknown(
+          data['cholesterol_mg']!,
+          _cholesterolMgMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -6438,6 +6493,18 @@ class $MacroTargetsTable extends MacroTargets
         DriftSqlType.double,
         data['${effectivePrefix}fat_g'],
       )!,
+      fiberG: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}fiber_g'],
+      ),
+      sodiumMg: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}sodium_mg'],
+      ),
+      cholesterolMg: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}cholesterol_mg'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -6459,6 +6526,12 @@ class MacroTargetRow extends DataClass implements Insertable<MacroTargetRow> {
   final double proteinG;
   final double carbG;
   final double fatG;
+
+  /// The three minor nutrients (spec §5.6). Null means the Daily Value, not
+  /// "no target" — which is why there is no default here to confuse the two.
+  final double? fiberG;
+  final double? sodiumMg;
+  final double? cholesterolMg;
   final DateTime updatedAt;
   const MacroTargetRow({
     required this.id,
@@ -6468,6 +6541,9 @@ class MacroTargetRow extends DataClass implements Insertable<MacroTargetRow> {
     required this.proteinG,
     required this.carbG,
     required this.fatG,
+    this.fiberG,
+    this.sodiumMg,
+    this.cholesterolMg,
     required this.updatedAt,
   });
   @override
@@ -6480,6 +6556,15 @@ class MacroTargetRow extends DataClass implements Insertable<MacroTargetRow> {
     map['protein_g'] = Variable<double>(proteinG);
     map['carb_g'] = Variable<double>(carbG);
     map['fat_g'] = Variable<double>(fatG);
+    if (!nullToAbsent || fiberG != null) {
+      map['fiber_g'] = Variable<double>(fiberG);
+    }
+    if (!nullToAbsent || sodiumMg != null) {
+      map['sodium_mg'] = Variable<double>(sodiumMg);
+    }
+    if (!nullToAbsent || cholesterolMg != null) {
+      map['cholesterol_mg'] = Variable<double>(cholesterolMg);
+    }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -6493,6 +6578,15 @@ class MacroTargetRow extends DataClass implements Insertable<MacroTargetRow> {
       proteinG: Value(proteinG),
       carbG: Value(carbG),
       fatG: Value(fatG),
+      fiberG: fiberG == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fiberG),
+      sodiumMg: sodiumMg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sodiumMg),
+      cholesterolMg: cholesterolMg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cholesterolMg),
       updatedAt: Value(updatedAt),
     );
   }
@@ -6510,6 +6604,9 @@ class MacroTargetRow extends DataClass implements Insertable<MacroTargetRow> {
       proteinG: serializer.fromJson<double>(json['proteinG']),
       carbG: serializer.fromJson<double>(json['carbG']),
       fatG: serializer.fromJson<double>(json['fatG']),
+      fiberG: serializer.fromJson<double?>(json['fiberG']),
+      sodiumMg: serializer.fromJson<double?>(json['sodiumMg']),
+      cholesterolMg: serializer.fromJson<double?>(json['cholesterolMg']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -6524,6 +6621,9 @@ class MacroTargetRow extends DataClass implements Insertable<MacroTargetRow> {
       'proteinG': serializer.toJson<double>(proteinG),
       'carbG': serializer.toJson<double>(carbG),
       'fatG': serializer.toJson<double>(fatG),
+      'fiberG': serializer.toJson<double?>(fiberG),
+      'sodiumMg': serializer.toJson<double?>(sodiumMg),
+      'cholesterolMg': serializer.toJson<double?>(cholesterolMg),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -6536,6 +6636,9 @@ class MacroTargetRow extends DataClass implements Insertable<MacroTargetRow> {
     double? proteinG,
     double? carbG,
     double? fatG,
+    Value<double?> fiberG = const Value.absent(),
+    Value<double?> sodiumMg = const Value.absent(),
+    Value<double?> cholesterolMg = const Value.absent(),
     DateTime? updatedAt,
   }) => MacroTargetRow(
     id: id ?? this.id,
@@ -6545,6 +6648,11 @@ class MacroTargetRow extends DataClass implements Insertable<MacroTargetRow> {
     proteinG: proteinG ?? this.proteinG,
     carbG: carbG ?? this.carbG,
     fatG: fatG ?? this.fatG,
+    fiberG: fiberG.present ? fiberG.value : this.fiberG,
+    sodiumMg: sodiumMg.present ? sodiumMg.value : this.sodiumMg,
+    cholesterolMg: cholesterolMg.present
+        ? cholesterolMg.value
+        : this.cholesterolMg,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   MacroTargetRow copyWithCompanion(MacroTargetsCompanion data) {
@@ -6558,6 +6666,11 @@ class MacroTargetRow extends DataClass implements Insertable<MacroTargetRow> {
       proteinG: data.proteinG.present ? data.proteinG.value : this.proteinG,
       carbG: data.carbG.present ? data.carbG.value : this.carbG,
       fatG: data.fatG.present ? data.fatG.value : this.fatG,
+      fiberG: data.fiberG.present ? data.fiberG.value : this.fiberG,
+      sodiumMg: data.sodiumMg.present ? data.sodiumMg.value : this.sodiumMg,
+      cholesterolMg: data.cholesterolMg.present
+          ? data.cholesterolMg.value
+          : this.cholesterolMg,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -6572,6 +6685,9 @@ class MacroTargetRow extends DataClass implements Insertable<MacroTargetRow> {
           ..write('proteinG: $proteinG, ')
           ..write('carbG: $carbG, ')
           ..write('fatG: $fatG, ')
+          ..write('fiberG: $fiberG, ')
+          ..write('sodiumMg: $sodiumMg, ')
+          ..write('cholesterolMg: $cholesterolMg, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -6586,6 +6702,9 @@ class MacroTargetRow extends DataClass implements Insertable<MacroTargetRow> {
     proteinG,
     carbG,
     fatG,
+    fiberG,
+    sodiumMg,
+    cholesterolMg,
     updatedAt,
   );
   @override
@@ -6599,6 +6718,9 @@ class MacroTargetRow extends DataClass implements Insertable<MacroTargetRow> {
           other.proteinG == this.proteinG &&
           other.carbG == this.carbG &&
           other.fatG == this.fatG &&
+          other.fiberG == this.fiberG &&
+          other.sodiumMg == this.sodiumMg &&
+          other.cholesterolMg == this.cholesterolMg &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -6610,6 +6732,9 @@ class MacroTargetsCompanion extends UpdateCompanion<MacroTargetRow> {
   final Value<double> proteinG;
   final Value<double> carbG;
   final Value<double> fatG;
+  final Value<double?> fiberG;
+  final Value<double?> sodiumMg;
+  final Value<double?> cholesterolMg;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const MacroTargetsCompanion({
@@ -6620,6 +6745,9 @@ class MacroTargetsCompanion extends UpdateCompanion<MacroTargetRow> {
     this.proteinG = const Value.absent(),
     this.carbG = const Value.absent(),
     this.fatG = const Value.absent(),
+    this.fiberG = const Value.absent(),
+    this.sodiumMg = const Value.absent(),
+    this.cholesterolMg = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -6631,6 +6759,9 @@ class MacroTargetsCompanion extends UpdateCompanion<MacroTargetRow> {
     required double proteinG,
     required double carbG,
     required double fatG,
+    this.fiberG = const Value.absent(),
+    this.sodiumMg = const Value.absent(),
+    this.cholesterolMg = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -6649,6 +6780,9 @@ class MacroTargetsCompanion extends UpdateCompanion<MacroTargetRow> {
     Expression<double>? proteinG,
     Expression<double>? carbG,
     Expression<double>? fatG,
+    Expression<double>? fiberG,
+    Expression<double>? sodiumMg,
+    Expression<double>? cholesterolMg,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -6660,6 +6794,9 @@ class MacroTargetsCompanion extends UpdateCompanion<MacroTargetRow> {
       if (proteinG != null) 'protein_g': proteinG,
       if (carbG != null) 'carb_g': carbG,
       if (fatG != null) 'fat_g': fatG,
+      if (fiberG != null) 'fiber_g': fiberG,
+      if (sodiumMg != null) 'sodium_mg': sodiumMg,
+      if (cholesterolMg != null) 'cholesterol_mg': cholesterolMg,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -6673,6 +6810,9 @@ class MacroTargetsCompanion extends UpdateCompanion<MacroTargetRow> {
     Value<double>? proteinG,
     Value<double>? carbG,
     Value<double>? fatG,
+    Value<double?>? fiberG,
+    Value<double?>? sodiumMg,
+    Value<double?>? cholesterolMg,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -6684,6 +6824,9 @@ class MacroTargetsCompanion extends UpdateCompanion<MacroTargetRow> {
       proteinG: proteinG ?? this.proteinG,
       carbG: carbG ?? this.carbG,
       fatG: fatG ?? this.fatG,
+      fiberG: fiberG ?? this.fiberG,
+      sodiumMg: sodiumMg ?? this.sodiumMg,
+      cholesterolMg: cholesterolMg ?? this.cholesterolMg,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -6713,6 +6856,15 @@ class MacroTargetsCompanion extends UpdateCompanion<MacroTargetRow> {
     if (fatG.present) {
       map['fat_g'] = Variable<double>(fatG.value);
     }
+    if (fiberG.present) {
+      map['fiber_g'] = Variable<double>(fiberG.value);
+    }
+    if (sodiumMg.present) {
+      map['sodium_mg'] = Variable<double>(sodiumMg.value);
+    }
+    if (cholesterolMg.present) {
+      map['cholesterol_mg'] = Variable<double>(cholesterolMg.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -6732,6 +6884,9 @@ class MacroTargetsCompanion extends UpdateCompanion<MacroTargetRow> {
           ..write('proteinG: $proteinG, ')
           ..write('carbG: $carbG, ')
           ..write('fatG: $fatG, ')
+          ..write('fiberG: $fiberG, ')
+          ..write('sodiumMg: $sodiumMg, ')
+          ..write('cholesterolMg: $cholesterolMg, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -17052,6 +17207,9 @@ typedef $$MacroTargetsTableCreateCompanionBuilder =
       required double proteinG,
       required double carbG,
       required double fatG,
+      Value<double?> fiberG,
+      Value<double?> sodiumMg,
+      Value<double?> cholesterolMg,
       required DateTime updatedAt,
       Value<int> rowid,
     });
@@ -17064,6 +17222,9 @@ typedef $$MacroTargetsTableUpdateCompanionBuilder =
       Value<double> proteinG,
       Value<double> carbG,
       Value<double> fatG,
+      Value<double?> fiberG,
+      Value<double?> sodiumMg,
+      Value<double?> cholesterolMg,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -17109,6 +17270,21 @@ class $$MacroTargetsTableFilterComposer
 
   ColumnFilters<double> get fatG => $composableBuilder(
     column: $table.fatG,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get fiberG => $composableBuilder(
+    column: $table.fiberG,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get sodiumMg => $composableBuilder(
+    column: $table.sodiumMg,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get cholesterolMg => $composableBuilder(
+    column: $table.cholesterolMg,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -17162,6 +17338,21 @@ class $$MacroTargetsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get fiberG => $composableBuilder(
+    column: $table.fiberG,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get sodiumMg => $composableBuilder(
+    column: $table.sodiumMg,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get cholesterolMg => $composableBuilder(
+    column: $table.cholesterolMg,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -17199,6 +17390,17 @@ class $$MacroTargetsTableAnnotationComposer
 
   GeneratedColumn<double> get fatG =>
       $composableBuilder(column: $table.fatG, builder: (column) => column);
+
+  GeneratedColumn<double> get fiberG =>
+      $composableBuilder(column: $table.fiberG, builder: (column) => column);
+
+  GeneratedColumn<double> get sodiumMg =>
+      $composableBuilder(column: $table.sodiumMg, builder: (column) => column);
+
+  GeneratedColumn<double> get cholesterolMg => $composableBuilder(
+    column: $table.cholesterolMg,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
@@ -17246,6 +17448,9 @@ class $$MacroTargetsTableTableManager
                 Value<double> proteinG = const Value.absent(),
                 Value<double> carbG = const Value.absent(),
                 Value<double> fatG = const Value.absent(),
+                Value<double?> fiberG = const Value.absent(),
+                Value<double?> sodiumMg = const Value.absent(),
+                Value<double?> cholesterolMg = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MacroTargetsCompanion(
@@ -17256,6 +17461,9 @@ class $$MacroTargetsTableTableManager
                 proteinG: proteinG,
                 carbG: carbG,
                 fatG: fatG,
+                fiberG: fiberG,
+                sodiumMg: sodiumMg,
+                cholesterolMg: cholesterolMg,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -17268,6 +17476,9 @@ class $$MacroTargetsTableTableManager
                 required double proteinG,
                 required double carbG,
                 required double fatG,
+                Value<double?> fiberG = const Value.absent(),
+                Value<double?> sodiumMg = const Value.absent(),
+                Value<double?> cholesterolMg = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => MacroTargetsCompanion.insert(
@@ -17278,6 +17489,9 @@ class $$MacroTargetsTableTableManager
                 proteinG: proteinG,
                 carbG: carbG,
                 fatG: fatG,
+                fiberG: fiberG,
+                sodiumMg: sodiumMg,
+                cholesterolMg: cholesterolMg,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),

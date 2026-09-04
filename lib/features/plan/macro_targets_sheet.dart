@@ -32,6 +32,13 @@ class _MacroTargetsSheetState extends ConsumerState<_MacroTargetsSheet> {
   final TextEditingController _protein = TextEditingController();
   final TextEditingController _carbs = TextEditingController();
   final TextEditingController _fat = TextEditingController();
+
+  /// The minor three. Left empty means the Daily Value, which is why these
+  /// are never seeded with one — a field showing 28 is indistinguishable
+  /// afterwards from a 28 somebody typed (spec §5.6).
+  final TextEditingController _fibre = TextEditingController();
+  final TextEditingController _sodium = TextEditingController();
+  final TextEditingController _cholesterol = TextEditingController();
   bool _seeded = false;
   bool _saving = false;
 
@@ -42,6 +49,9 @@ class _MacroTargetsSheetState extends ConsumerState<_MacroTargetsSheet> {
       _protein,
       _carbs,
       _fat,
+      _fibre,
+      _sodium,
+      _cholesterol,
     ]) {
       c.dispose();
     }
@@ -54,6 +64,12 @@ class _MacroTargetsSheetState extends ConsumerState<_MacroTargetsSheet> {
     _protein.text = _trim(existing.proteinG);
     _carbs.text = _trim(existing.carbG);
     _fat.text = _trim(existing.fatG);
+    // Only where the household set one. A blank field is the Daily Value.
+    if (existing.fiberG case final double v) _fibre.text = _trim(v);
+    if (existing.sodiumMg case final double v) _sodium.text = _trim(v);
+    if (existing.cholesterolMg case final double v) {
+      _cholesterol.text = _trim(v);
+    }
     _seeded = true;
   }
 
@@ -72,6 +88,11 @@ class _MacroTargetsSheetState extends ConsumerState<_MacroTargetsSheet> {
               proteinG: double.tryParse(_protein.text.trim()) ?? 0,
               carbG: double.tryParse(_carbs.text.trim()) ?? 0,
               fatG: double.tryParse(_fat.text.trim()) ?? 0,
+              // No `?? 0` — an empty field means the Daily Value, and a zero
+              // would be a target of nothing.
+              fiberG: double.tryParse(_fibre.text.trim()),
+              sodiumMg: double.tryParse(_sodium.text.trim()),
+              cholesterolMg: double.tryParse(_cholesterol.text.trim()),
             ),
           );
       ref.invalidate(dayTargetsProvider);
@@ -121,6 +142,26 @@ class _MacroTargetsSheetState extends ConsumerState<_MacroTargetsSheet> {
                     _TargetField(controller: _carbs, label: 'Carbs'),
                     const SizedBox(width: HearthSpacing.sm),
                     _TargetField(controller: _fat, label: 'Fat'),
+                  ],
+                ),
+                const SizedBox(height: HearthSpacing.lg),
+                Text('Fibre, sodium, cholesterol', style: context.text.body),
+                const SizedBox(height: HearthSpacing.xxs),
+                Text(
+                  'Leave blank for the Daily Values — 28 g, 2,300 mg and '
+                  '300 mg. Fibre is one to reach; the other two are budgets.',
+                  style: context.text.metadata.copyWith(
+                    color: colors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: HearthSpacing.sm),
+                Row(
+                  children: <Widget>[
+                    _TargetField(controller: _fibre, label: 'Fibre g'),
+                    const SizedBox(width: HearthSpacing.sm),
+                    _TargetField(controller: _sodium, label: 'Sodium mg'),
+                    const SizedBox(width: HearthSpacing.sm),
+                    _TargetField(controller: _cholesterol, label: 'Chol. mg'),
                   ],
                 ),
                 const SizedBox(height: HearthSpacing.lg),

@@ -234,6 +234,9 @@ class PlanStore {
             proteinG: targets.proteinG,
             carbG: targets.carbG,
             fatG: targets.fatG,
+            fiberG: Value<double?>(targets.fiberG),
+            sodiumMg: Value<double?>(targets.sodiumMg),
+            cholesterolMg: Value<double?>(targets.cholesterolMg),
             updatedAt: updatedAt,
           ),
         );

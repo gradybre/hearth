@@ -118,6 +118,11 @@ abstract final class PlanMapper {
     proteinG: row.proteinG,
     carbG: row.carbG,
     fatG: row.fatG,
+    // No `?? 0`: null is "use the Daily Value", and a zero would be a target
+    // of nothing (spec §5.6).
+    fiberG: row.fiberG,
+    sodiumMg: row.sodiumMg,
+    cholesterolMg: row.cholesterolMg,
   );
 
   static Map<String, Object?> targetsToJson({
@@ -132,6 +137,9 @@ abstract final class PlanMapper {
     'week_start_date': _dateOnly(weekStart),
     'kcal': targets.kcal,
     'protein_g': targets.proteinG,
+    'fiber_g': targets.fiberG,
+    'sodium_mg': targets.sodiumMg,
+    'cholesterol_mg': targets.cholesterolMg,
     'carb_g': targets.carbG,
     'fat_g': targets.fatG,
     'updated_at': updatedAt.toIso8601String(),

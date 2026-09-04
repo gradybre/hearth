@@ -49,7 +49,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -204,6 +204,14 @@ class HearthDatabase extends _$HearthDatabase {
       if (from < 21) {
         await _addColumnIfMissing(m, foods, foods.menuGroup);
         await _addColumnIfMissing(m, foods, foods.menuOrder);
+      }
+      // v22 lets a week carry targets for fibre, sodium and cholesterol
+      // (spec §5.6). Additive and nullable — a week with none falls back to
+      // the Daily Value, which is what every existing week now does.
+      if (from < 22) {
+        await _addColumnIfMissing(m, macroTargets, macroTargets.fiberG);
+        await _addColumnIfMissing(m, macroTargets, macroTargets.sodiumMg);
+        await _addColumnIfMissing(m, macroTargets, macroTargets.cholesterolMg);
       }
     },
     beforeOpen: (OpeningDetails details) async {
