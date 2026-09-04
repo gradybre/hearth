@@ -59,18 +59,34 @@ git switch -c <short-kebab-branch>
 git push -u origin HEAD
 ```
 
-If the commits were already made on `main`, move them: branch from where they
-are, then reset `main` back to `origin/main`.
+If the commits were already made on `main`, move them — but **check before
+resetting**:
+
+```bash
+git switch -c <branch>              # takes the commits with it
+git log --oneline origin/main..main # must be empty before the next line
+git switch main && git reset --hard origin/main
+```
+
+That middle line is not ceremony. If work was committed across two sittings,
+an earlier commit can sit on `main` and not on the new branch, and the reset
+discards it silently.
 
 ### 3. Open the pull request
 
 ```bash
-gh pr create --fill --draft
+gh pr create --draft --title "<the commit's subject>" --body "$(cat <<'BODY'
+<what changed and why>
+BODY
+)"
 ```
 
-Draft, so review happens before it looks ready. The body should say what
-changed and **why**, in the register the commit messages use — the reasoning,
-the decisions taken, and the risks being carried. Do not restate the diff.
+Draft, so review happens before it looks ready.
+
+**Not `--fill`.** That copies the commit message into the body, which quietly
+skips the paragraph below. The body should say what changed and **why**, in
+the register the commit messages use — the reasoning, the decisions taken, and
+the risks being carried. Do not restate the diff.
 
 ### 4. Review it with fresh eyes
 
