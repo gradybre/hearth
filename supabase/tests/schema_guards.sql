@@ -569,11 +569,14 @@ declare
   v_group text;
   v_order integer;
 begin
+  -- Every seeded menu, not just Chipotle: each restaurant added since is one
+  -- more chance to paste a sheet in the wrong order.
   if exists (
     select 1 from public.foods
-    where brand = 'Chipotle' and (menu_group is null or menu_order is null)
+    where source = 'restaurant' and household_id is null
+      and (menu_group is null or menu_order is null)
   ) then
-    raise exception 'a Chipotle component has no place on the menu';
+    raise exception 'a seeded menu item has no place on its menu';
   end if;
 
   -- Sections are ordered by where each first appears, so the positions have
@@ -582,15 +585,28 @@ begin
   if exists (
     select 1
     from (
-      select menu_group,
+      select brand,
+             menu_group,
              min(menu_order) as first,
              max(menu_order) as last,
              count(*) as items
-      from public.foods where brand = 'Chipotle' group by menu_group
+      from public.foods
+      where source = 'restaurant' and household_id is null
+      group by brand, menu_group
     ) as s
     where s.last - s.first + 1 <> s.items
   ) then
-    raise exception 'a Chipotle section is interleaved with another';
+    raise exception 'a seeded section is interleaved with another';
+  end if;
+
+  -- And no two items on one menu share a position, which would make the
+  -- order of those two arbitrary.
+  if exists (
+    select 1 from public.foods
+    where source = 'restaurant' and household_id is null
+    group by brand, menu_order having count(*) > 1
+  ) then
+    raise exception 'two items on one menu claim the same position';
   end if;
 
   select id into v_food from public.foods
