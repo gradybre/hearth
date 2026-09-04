@@ -1,6 +1,15 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:hearth/data/adapters/menu_reader.dart';
+import 'package:hearth/data/adapters/photo_picker.dart';
+import 'package:hearth/data/adapters/recipe_ai.dart';
 import 'package:hearth/data/local/hearth_database.dart';
+import 'package:hearth/domain/foods/menu_import.dart';
+import 'package:hearth/domain/models/macros.dart';
 
 import '../../support/app_harness.dart';
 
@@ -168,4 +177,188 @@ void main() {
     expect(find.text('No restaurants yet'), findsOneWidget);
     expect(await db.select(db.foods).get(), hasLength(1));
   });
+
+  group('reading a menu off pictures (spec §5.2)', () {
+    testWidgets('the read buttons are hidden without a backend', (
+      WidgetTester tester,
+    ) async {
+      // Null is the honest state of a build with no backend, and a button
+      // that fails on tap is worse than one that is not there.
+      await pumpHearthApp(tester);
+      await openImporter(tester);
+
+      expect(find.text('Read from screenshots'), findsNothing);
+    });
+
+    testWidgets('what it read lands in the box, not in the library', (
+      WidgetTester tester,
+    ) async {
+      // The whole design: a transcription becomes exactly the text a person
+      // would have pasted, and goes through the same parser and the same live
+      // review — editable before it is saved, and nothing written yet
+      // (rule 4).
+      final HearthDatabase db = await pumpHearthApp(
+        tester,
+        photoPicker: _OnePhoto(),
+        menuReader: _FakeMenuReader(
+          const MenuReading(
+            restaurant: 'Cava',
+            rows: <MenuRow>[
+              MenuRow(
+                name: 'Falafel',
+                portion: '1 serving',
+                section: 'Mains',
+                macros: Macros(kcal: 350, proteinG: 6, carbG: 24, fatG: 26),
+              ),
+            ],
+          ),
+        ),
+      );
+      await openImporter(tester);
+
+      await tester.tap(find.text('Read from screenshots'));
+      await pumpFrames(tester, frames: 20);
+
+      // The box holds exactly what a person would have pasted…
+      final TextField box = tester.widget(find.byType(TextField).at(1));
+      expect(box.controller!.text, contains('Falafel'));
+      // …including the section, so it becomes a heading the same way.
+      expect(box.controller!.text, contains('Mains'));
+
+      // …and the same parser read it back. The list is lazy, so the review's
+      // tail is scrolled to rather than assumed built.
+      expect(find.text('1 to add'), findsOneWidget);
+
+      // The page named the restaurant, so the field is filled rather than
+      // asked for.
+      final TextField name = tester.widget(find.byType(TextField).first);
+      expect(name.controller!.text, 'Cava');
+
+      // And none of it is in the library until Save (rule 4).
+      expect(await db.select(db.foods).get(), isEmpty);
+    });
+
+    testWidgets('and it fills the restaurant only when it is still empty', (
+      WidgetTester tester,
+    ) async {
+      await pumpHearthApp(
+        tester,
+        photoPicker: _OnePhoto(),
+        menuReader: _FakeMenuReader(
+          const MenuReading(
+            restaurant: 'Cava',
+            rows: <MenuRow>[
+              MenuRow(
+                name: 'Falafel',
+                portion: '1 serving',
+                macros: Macros(kcal: 350),
+              ),
+            ],
+          ),
+        ),
+      );
+      await openImporter(tester);
+      // A name already typed is a decision; a page's branding is a guess.
+      await tester.enterText(find.byType(TextField).first, 'Cava Mezze');
+      await pumpFrames(tester);
+
+      await tester.tap(find.text('Read from screenshots'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(find.text('Cava Mezze'), findsWidgets);
+    });
+
+    testWidgets('what the model would not vouch for is shown, not swallowed', (
+      WidgetTester tester,
+    ) async {
+      // A value taken from the wrong column reads perfectly and is wrong in
+      // every day it is later logged into.
+      await pumpHearthApp(
+        tester,
+        photoPicker: _OnePhoto(),
+        menuReader: _FakeMenuReader(
+          const MenuReading(
+            rows: <MenuRow>[
+              MenuRow(
+                name: 'Barbacoa',
+                portion: '4 oz',
+                macros: Macros(kcal: 170),
+              ),
+            ],
+            uncertain: <AiUncertainty>[
+              AiUncertainty(
+                field: 'Barbacoa sodium',
+                note: 'Row ran into the one above it.',
+              ),
+            ],
+          ),
+        ),
+      );
+      await openImporter(tester);
+
+      await tester.tap(find.text('Read from screenshots'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(find.text('Check these before saving'), findsOneWidget);
+      expect(find.textContaining('ran into the one above'), findsOneWidget);
+    });
+
+    testWidgets('a failed read says why and writes nothing', (
+      WidgetTester tester,
+    ) async {
+      final HearthDatabase db = await pumpHearthApp(
+        tester,
+        photoPicker: _OnePhoto(),
+        menuReader: _FailingMenuReader(),
+      );
+      await openImporter(tester);
+
+      await tester.tap(find.text('Read from screenshots'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(find.textContaining('looked like a menu'), findsOneWidget);
+      expect(find.text('Nothing pasted yet.'), findsOneWidget);
+      expect(await db.select(db.foods).get(), isEmpty);
+    });
+  });
+}
+
+/// Answers with one prepared reading, however many pictures it is given.
+class _FakeMenuReader implements MenuReader {
+  _FakeMenuReader(this._reading);
+
+  final MenuReading _reading;
+
+  @override
+  Future<MenuReading> read(List<AiImage> images) async => _reading;
+}
+
+class _FailingMenuReader implements MenuReader {
+  @override
+  Future<MenuReading> read(List<AiImage> images) async =>
+      throw const RecipeAiException(
+        'Nothing on that page looked like a menu.',
+        isRetryable: false,
+      );
+}
+
+/// One picture, which is all the reader is asked to be given.
+class _OnePhoto implements PhotoPicker {
+  /// A 1x1 transparent PNG — the smallest thing a decoder will accept.
+  static final Uint8List _pixel = base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk'
+    '+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  );
+
+  @override
+  bool get canUseCamera => false;
+
+  @override
+  Future<PickedPhoto?> pick(PhotoOrigin origin) async =>
+      PickedPhoto(bytes: _pixel, extension: 'png');
+
+  @override
+  Future<List<PickedPhoto>> pickMultiple({int max = 10}) async => <PickedPhoto>[
+    PickedPhoto(bytes: _pixel, extension: 'png'),
+  ];
 }

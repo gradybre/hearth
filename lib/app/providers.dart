@@ -7,15 +7,19 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/adapters/data_export.dart';
 import '../data/adapters/edge_function_label_reader.dart';
+import '../data/adapters/edge_function_menu_reader.dart';
 import '../data/adapters/edge_function_recipe_ai.dart';
 import '../data/adapters/edge_function_shopping_assistant.dart';
 import '../data/adapters/image_picker_photos.dart';
 import '../data/adapters/kitchen_devices.dart';
 import '../data/adapters/label_reader.dart';
 import '../data/adapters/library_nutrition_source.dart';
+import '../data/adapters/menu_reader.dart';
 import '../data/adapters/nutrition_lookup.dart';
 import '../data/adapters/nutrition_source.dart';
 import '../data/adapters/open_food_facts_source.dart';
+import '../data/adapters/pdf_pages.dart';
+import '../data/adapters/pdfx_pages.dart';
 import '../data/adapters/photo_picker.dart';
 import '../data/adapters/platform_kitchen_devices.dart';
 import '../data/adapters/platform_shared_content.dart';
@@ -685,6 +689,11 @@ final Provider<PhotoPicker> photoPickerProvider = Provider<PhotoPicker>(
   (Ref ref) => ImagePickerPhotos(),
 );
 
+/// Turning a PDF's pages into pictures, for reading a menu off one (§5.2).
+final Provider<PdfPages> pdfPagesProvider = Provider<PdfPages>(
+  (Ref ref) => const PdfxPages(),
+);
+
 final Provider<RecipePhotoStore> recipePhotoStoreProvider =
     Provider<RecipePhotoStore>(
       (Ref ref) => RecipePhotoStore(
@@ -871,6 +880,16 @@ final Provider<RecipeAiSource?> recipeAiProvider = Provider<RecipeAiSource?>(
 final Provider<LabelReader?> labelReaderProvider = Provider<LabelReader?>(
   (Ref ref) => ref.watch(supabaseReadyProvider)
       ? EdgeFunctionLabelReader(Supabase.instance.client)
+      : null,
+);
+
+/// Reads a restaurant's nutrition table off pictures of it (spec §5.2).
+///
+/// Null without a backend, the same way the label reader is: the screens that
+/// offer it hide the button rather than failing on tap.
+final Provider<MenuReader?> menuReaderProvider = Provider<MenuReader?>(
+  (Ref ref) => ref.watch(supabaseReadyProvider)
+      ? EdgeFunctionMenuReader(Supabase.instance.client)
       : null,
 );
 

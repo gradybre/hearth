@@ -1,4 +1,5 @@
 import 'package:hearth/domain/foods/menu_import.dart';
+import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/units/unit.dart';
 import 'package:test/test.dart';
 
@@ -94,6 +95,26 @@ void main() {
         one('Flour Tortilla, 1 ea, 320, 8, 50, 9').portion!.kind,
         UnitKind.count,
       );
+    });
+
+    test('and so is "serving", which is what a menu actually prints', () {
+      // Not a unit — Units deliberately has none, because "1 serving" names
+      // only itself. But it is the word a nutrition sheet uses more than any
+      // other, and refusing it would send half of a pasted menu to the
+      // unreadable pile over a word that means exactly one of the thing.
+      final MenuImportLine line = one('Falafel, 1 serving, 350, 6, 24, 26');
+
+      expect(line.isUsable, isTrue);
+      expect(line.portion!.kind, UnitKind.count);
+      expect(line.portion!.amountIn(Units.item), closeTo(1, 1e-9));
+      expect(one('Pita, 2 servings, 220, 8, 42, 2').isUsable, isTrue);
+    });
+
+    test('but a word it does not know is still refused, not guessed', () {
+      // The reason the line above is a two-word allowance rather than "treat
+      // any trailing word as a count": read that way, "4 oz (113g)" becomes
+      // four of something, which is wrong and looks right.
+      expect(one('Chicken, 4 oz (113g), 180, 32, 0, 7').isUsable, isFalse);
     });
 
     test('a fraction is a portion too', () {
@@ -217,6 +238,127 @@ void main() {
       expect(lines.first.isHeading, isTrue);
       expect(MenuImport.usableIn(lines), 1);
       expect(lines.last.section, 'Item');
+    });
+  });
+
+  group('writing rows back out as the text this reads', () {
+    // The join between a transcription and the review screen. A model returns
+    // rows; they become exactly what a person would have pasted, and go
+    // through this same parser and the same live review. A format with two
+    // halves has two places to drift, so the halves are tested against each
+    // other rather than each against a fixture.
+    List<MenuImportLine> roundTrip(List<MenuRow> rows) =>
+        MenuImport.read(MenuImport.write(rows));
+
+    test('a row comes back as the row it was', () {
+      final MenuImportLine line = roundTrip(<MenuRow>[
+        const MenuRow(
+          name: 'Chicken',
+          portion: '4 oz',
+          macros: Macros(kcal: 180, proteinG: 32, carbG: 0, fatG: 7),
+        ),
+      ]).single;
+
+      expect(line.isUsable, isTrue);
+      expect(line.name, 'Chicken');
+      expect(line.portion!.amountIn(Units.ounce), closeTo(4, 1e-9));
+      expect(line.macros.kcal, 180);
+      expect(line.macros.proteinG, 32);
+      expect(line.macros.fatG, 7);
+    });
+
+    test('sections survive, and carry down to what follows', () {
+      final List<MenuImportLine> lines = roundTrip(<MenuRow>[
+        const MenuRow(
+          name: 'Chicken',
+          portion: '4 oz',
+          macros: Macros(kcal: 180),
+          section: 'Proteins',
+        ),
+        const MenuRow(
+          name: 'Steak',
+          portion: '4 oz',
+          macros: Macros(kcal: 150),
+          section: 'Proteins',
+        ),
+        const MenuRow(
+          name: 'Salsa',
+          portion: '4 oz',
+          macros: Macros(kcal: 25),
+          section: 'Salsas',
+        ),
+      ]);
+
+      // One heading per section, not one per row.
+      expect(lines.where((MenuImportLine l) => l.isHeading), hasLength(2));
+      expect(MenuImport.usableIn(lines), 3);
+      expect(
+        lines
+            .where((MenuImportLine l) => l.isUsable)
+            .map((MenuImportLine l) => l.section),
+        <String>['Proteins', 'Proteins', 'Salsas'],
+      );
+    });
+
+    test('an unknown minor nutrient stays unknown, never zero', () {
+      final MenuImportLine line = roundTrip(<MenuRow>[
+        const MenuRow(
+          name: 'Chicken',
+          portion: '4 oz',
+          macros: Macros(kcal: 180, proteinG: 32),
+        ),
+      ]).single;
+
+      expect(line.macros.fiberG, isNull);
+      expect(line.macros.sodiumMg, isNull);
+      expect(line.macros.cholesterolMg, isNull);
+    });
+
+    test('a stated zero survives as a zero', () {
+      final MenuImportLine line = roundTrip(<MenuRow>[
+        const MenuRow(
+          name: 'Chicken',
+          portion: '4 oz',
+          macros: Macros(kcal: 180, fiberG: 0, sodiumMg: 310),
+        ),
+      ]).single;
+
+      expect(line.macros.fiberG, 0);
+      expect(line.macros.sodiumMg, 310);
+    });
+
+    test('a gap in the middle does not slide the columns along', () {
+      // The failure this format cannot otherwise detect: no fibre but a known
+      // sodium. Written empty, the sodium would land in the fibre column and
+      // everything after it would follow.
+      final MenuImportLine line = roundTrip(<MenuRow>[
+        const MenuRow(
+          name: 'Chicken',
+          portion: '4 oz',
+          macros: Macros(kcal: 180, sodiumMg: 310, cholesterolMg: 125),
+        ),
+      ]).single;
+
+      expect(line.macros.fiberG, isNull);
+      expect(line.macros.sodiumMg, 310);
+      expect(line.macros.cholesterolMg, 125);
+    });
+
+    test('a countable portion survives, unit word and all', () {
+      final MenuImportLine line = roundTrip(<MenuRow>[
+        const MenuRow(
+          name: 'Flour Tortilla',
+          portion: '1 ea',
+          macros: Macros(kcal: 320),
+        ),
+      ]).single;
+
+      expect(line.portion!.kind, UnitKind.count);
+    });
+
+    test('nothing in, nothing out', () {
+      expect(MenuImport.write(const <MenuRow>[]), isEmpty);
+      expect(roundTrip(const <MenuRow>[]), isEmpty);
     });
   });
 }

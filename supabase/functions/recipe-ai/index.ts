@@ -258,6 +258,68 @@ const LABEL_UNITS = [
   'can',
 ] as const;
 
+const MENU_TOOL = {
+  name: 'read_menu',
+  description:
+    "Transcribe a restaurant's published nutrition table into rows.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      restaurant: {
+        type: 'string',
+        description:
+          "The restaurant's name if the page states it. Omit if it does not.",
+      },
+      rows: {
+        type: 'array',
+        description:
+          'Every item in the table, in the order the table prints them.',
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'The item, as printed.' },
+            section: {
+              type: 'string',
+              description:
+                'The heading this item sits under — "Proteins", "Salsas", ' +
+                '"Toppings". Omit for items above the first heading.',
+            },
+            portion: {
+              type: 'string',
+              description:
+                'The serving size as printed: "4 oz", "2 fl oz", "1 ea", ' +
+                '"1 salad", "30 g". If the table states none, "1 serving".',
+            },
+            kcal: { type: 'number' },
+            protein_g: { type: 'number' },
+            carb_g: { type: 'number' },
+            fat_g: { type: 'number' },
+            fiber_g: { type: 'number' },
+            sodium_mg: { type: 'number' },
+            cholesterol_mg: { type: 'number' },
+          },
+          required: ['name', 'portion', 'kcal'],
+        },
+      },
+      uncertain: {
+        type: 'array',
+        description:
+          'Anything you could not read cleanly, or a column you had to ' +
+          'guess the meaning of.',
+        items: {
+          type: 'object',
+          properties: {
+            field: { type: 'string' },
+            note: { type: 'string' },
+          },
+          required: ['field', 'note'],
+        },
+      },
+    },
+    required: ['rows'],
+  },
+} as const;
+
 const LABEL_TOOL = {
   name: 'nutrition_label',
   description: "Return what the food's label states.",
@@ -404,6 +466,36 @@ Always fill in reply, in one sentence, saying what you changed. It is the only
 thing the user reads, and without it they have to check the list line by line
 to find out what happened.`;
 
+const MENU_PROMPT = `You transcribe a restaurant's published nutrition table.
+
+Read it as a table. These pages are wide grids with a dozen columns, and the
+one mistake that matters is taking a number from the wrong column or the wrong
+row — a value that belongs to the item above reads perfectly and is wrong
+forever. Work across each row and check the column headings as you go.
+
+The columns you want are the item, its serving size, calories, protein, total
+carbohydrate, total fat, dietary fibre, sodium and cholesterol. Ignore
+calories-from-fat, saturated and trans fat, sugars, vitamins and allergens.
+
+Transcribe. Never compute: do not derive calories from macros, do not scale a
+column, do not convert units the table does not itself give.
+
+Sections are the headings the sheet prints — "Proteins", "Salsas", "Craft Your
+Own". Carry each one down to the rows beneath it, so the menu keeps the shape
+the restaurant gave it.
+
+Serving sizes: use exactly what is printed. If the table states none at all,
+use "1 serving" rather than inventing a weight.
+
+Omit a nutrient the table does not print rather than writing 0 — a column that
+is not there is unknown, and zero is a claim. "< 1" is also unknown; omit it.
+
+Skip drinks and kids' menus.
+
+If a digit is unclear, a row is cut off, or two rows have run together,
+transcribe your best reading AND list it in uncertain. A flagged guess is
+useful; a confident wrong number corrupts every day it is logged into.`;
+
 const LABEL_PROMPT = `You read Nutrition Facts panels off packaging.
 
 Transcribe the printed numbers. Never compute: do not scale a per-100 g column
@@ -465,10 +557,10 @@ Deno.serve(async (request: Request): Promise<Response> => {
   const mode = (body.mode ?? '').trim();
   if (
     mode !== 'extract' && mode !== 'generate' && mode !== 'label' &&
-    mode !== 'shopping'
+    mode !== 'shopping' && mode !== 'menu'
   ) {
     return json(
-      { error: 'mode must be extract, generate, label or shopping' },
+      { error: 'mode must be extract, generate, label, shopping or menu' },
       400,
     );
   }
@@ -490,6 +582,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
     const content = mode === 'shopping'
       ? shoppingContent(body.messages ?? [], (body.list ?? '').trim())
+      : mode === 'menu'
+      ? menuContent(body.images ?? [])
       : mode === 'label'
       ? labelContent(body.images ?? [])
       : mode === 'extract'
@@ -507,6 +601,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
     const system = mode === 'shopping'
       ? SHOPPING_PROMPT
+      : mode === 'menu'
+      ? MENU_PROMPT
       : mode === 'label'
       ? LABEL_PROMPT
       : mode === 'extract'
@@ -514,6 +610,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
       : GENERATE_PROMPT;
     const tool = mode === 'shopping'
       ? SHOPPING_TOOL
+      : mode === 'menu'
+      ? MENU_TOOL
       : mode === 'label'
       ? LABEL_TOOL
       : RECIPE_TOOL;
@@ -523,6 +621,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
     const shaped = mode === 'shopping'
       ? shapeShopping(answer.input)
+      : mode === 'menu'
+      ? shapeMenu(answer.input)
       : mode === 'label'
       ? shapeLabel(answer.input)
       : shape(answer.input);
@@ -592,6 +692,23 @@ async function extractContent(
 /// Several images are the same packet from more than one angle — a panel is
 /// often easier to read in two shots than one — so they are stitched into a
 /// single reading rather than treated as several foods.
+function menuContent(images: string[]): unknown[] {
+  if (images.length === 0) {
+    throw new Error('bad request: give a picture of the menu');
+  }
+
+  return [
+    ...imageBlocks(images),
+    {
+      type: 'text',
+      text: images.length > 1
+        ? 'These are pages of one restaurant\'s nutrition guide. Transcribe ' +
+          'every item, in order, keeping the section headings.'
+        : 'Transcribe every item on this page, keeping the section headings.',
+    },
+  ];
+}
+
 function labelContent(images: string[]): unknown[] {
   if (images.length === 0) {
     throw new Error('bad request: give a photo of the label');
@@ -974,6 +1091,41 @@ function shape(input: Record<string, unknown>): Record<string, unknown> {
 /// to grams: a portion silently reinterpreted as a weight it is not would put
 /// a wrong number into a day, which is the one failure mode a review screen
 /// cannot catch, because it looks correct.
+/// Narrows a transcribed menu to the shape the app is promised.
+///
+/// Every nutrient is passed through `number`, which answers null for anything
+/// the model omitted or wrote as prose — and null is carried rather than
+/// flattened to zero, because a column the sheet never printed is unknown and
+/// zero would be a claim (spec §5.6).
+function shapeMenu(input: Record<string, unknown>): Record<string, unknown> {
+  const rows = Array.isArray(input.rows) ? input.rows : [];
+
+  return {
+    restaurant: text(input.restaurant) || null,
+    rows: (rows as Record<string, unknown>[])
+      // A row with no name or no calories is not a row. Dropped here rather
+      // than sent on to be refused by the parser with a worse message.
+      .filter((r) => text(r?.name) !== '' && number(r?.kcal) !== null)
+      .map((r) => ({
+        name: text(r.name),
+        section: text(r.section) || null,
+        portion: text(r.portion) || '1 serving',
+        kcal: number(r.kcal),
+        protein_g: number(r.protein_g),
+        carb_g: number(r.carb_g),
+        fat_g: number(r.fat_g),
+        fiber_g: number(r.fiber_g),
+        sodium_mg: number(r.sodium_mg),
+        cholesterol_mg: number(r.cholesterol_mg),
+      })),
+    uncertain: Array.isArray(input.uncertain)
+      ? (input.uncertain as Uncertain[])
+        .filter((u) => u?.field || u?.note)
+        .map((u) => ({ field: text(u.field), note: text(u.note) }))
+      : [],
+  };
+}
+
 function shapeLabel(input: Record<string, unknown>): Record<string, unknown> {
   // Must stay in step with LABEL_TOOL's own enum. It did not: the packet units
   // were added to what the model may answer and not to what this accepts, so
