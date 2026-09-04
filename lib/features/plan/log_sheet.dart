@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
@@ -407,6 +408,29 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
                   decoration: InputDecoration(
                     hintText: 'Search recipes and foods',
                     prefixIcon: Icon(Icons.search, color: colors.textMuted),
+                  ),
+                ),
+                const SizedBox(height: HearthSpacing.sm),
+                // The other way in, for the meal that is not in the library
+                // yet because you are standing in the queue. Closes the sheet
+                // first: the builder ends in the recipe editor, and a sheet
+                // left open underneath would be waiting for a choice nobody
+                // is going to make.
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: SizedBox(
+                    height: HearthTouch.minTarget,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        context.push('/recipe/eat-out');
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: colors.textSecondary,
+                      ),
+                      icon: const Icon(Icons.storefront, size: 18),
+                      label: const Text('Ate out — build it from a menu'),
+                    ),
                   ),
                 ),
               ],

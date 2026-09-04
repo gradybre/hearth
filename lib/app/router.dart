@@ -12,6 +12,7 @@ import '../features/foods/food_library_screen.dart';
 import '../features/foods/seasonings_screen.dart';
 import '../features/plan/plan_screen.dart';
 import '../features/recipes/default_sweep_screen.dart';
+import '../features/recipes/eat_out_screen.dart';
 import '../features/recipes/recipe_chat_screen.dart';
 import '../features/recipes/recipe_detail_screen.dart';
 import '../features/recipes/recipe_draft.dart';
@@ -74,6 +75,11 @@ GoRouter buildRouter() => GoRouter(
                 ? state.extra! as SharedContent
                 : null,
           ),
+    ),
+    GoRoute(
+      path: '/recipe/eat-out',
+      builder: (BuildContext context, GoRouterState state) =>
+          const EatOutScreen(),
     ),
     GoRoute(
       path: '/recipe/new',

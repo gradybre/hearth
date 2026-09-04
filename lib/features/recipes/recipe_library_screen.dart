@@ -68,6 +68,18 @@ class RecipeLibraryScreen extends ConsumerWidget {
             child: const Icon(Icons.document_scanner_outlined),
           ),
           const SizedBox(height: HearthSpacing.sm),
+          // Building a meal you ordered is a different act from writing a
+          // recipe, and it produces one anyway — so it sits with the other
+          // ways in rather than behind the editor (spec §5.2).
+          FloatingActionButton.small(
+            heroTag: 'recipe-eat-out',
+            onPressed: () => context.push('/recipe/eat-out'),
+            backgroundColor: colors.surfaceElevated,
+            foregroundColor: colors.textPrimary,
+            tooltip: 'Build a meal you ate out',
+            child: const Icon(Icons.storefront),
+          ),
+          const SizedBox(height: HearthSpacing.sm),
           FloatingActionButton.extended(
             heroTag: 'recipe-new',
             onPressed: () => context.push('/recipe/new'),
