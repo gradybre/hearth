@@ -112,8 +112,29 @@ dart format . && flutter analyze
 flutter test > /tmp/hearth-test.log 2>&1; echo "EXIT: $?"
 git push
 gh pr ready <PR number>
-gh pr checks <PR number> --watch
 ```
+
+Then wait for CI **in the background**, never in the foreground:
+
+```bash
+until s=$(gh pr checks <PR number> --json bucket 2>/dev/null || true); \
+  [ -n "$s" ] && echo "$s" | jq -e 'length > 0 and all(.[]; .bucket != "pending")' \
+  >/dev/null; do sleep 30; done; gh pr checks <PR number>
+```
+
+Run that with **`run_in_background: true`**. The loop exits when the last check
+leaves `pending`, and its completion re-invokes the session with the results.
+
+`gh pr checks --watch` in the foreground is the wrong tool here and it has now
+cost Brendan twice: the `dart` job takes seven or eight minutes, and a
+foreground call blocks the whole session for all of it — he cannot ask
+anything, sees nothing, cannot tell a live watch from a hung one, and ends up
+stopping the task and saying "CI is complete" by hand. Backgrounding costs
+nothing and keeps the session his.
+
+`length > 0` is not ceremony: `gh pr checks` answers with an empty array in the
+seconds before GitHub has registered the workflow, and `all` over nothing is
+true — so without it the loop reports green immediately, before CI has started.
 
 ### 6. Report
 
