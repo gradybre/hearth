@@ -417,4 +417,50 @@ void main() {
       expect(back.servingOptions.single.macros.cholesterolMg, isNull);
     });
   });
+
+  group('where an item sits on a menu (spec §5.2)', () {
+    Food menuItem() => const Food(
+      id: 'food-chicken',
+      householdId: household,
+      name: 'Chicken',
+      brand: 'Chipotle',
+      source: FoodSource.restaurant,
+      menuGroup: 'Proteins',
+      menuOrder: 9,
+      servingOptions: <ServingOption>[],
+    );
+
+    test('survives a save and a read back', () async {
+      await store.upsert(menuItem(), updatedAt: DateTime.utc(2026));
+
+      final Food back = (await store.byId('food-chicken'))!;
+      expect(back.menuGroup, 'Proteins');
+      expect(back.menuOrder, 9);
+    });
+
+    test('and through the wire in both directions', () async {
+      final Map<String, Object?> json = FoodMapper.toJson(
+        menuItem(),
+        updatedAt: DateTime.utc(2026),
+      );
+      expect(json['menu_group'], 'Proteins');
+      expect(json['menu_order'], 9);
+
+      final Food back = SyncPayload.food(json);
+      expect(back.menuGroup, 'Proteins');
+      expect(back.menuOrder, 9);
+    });
+
+    test('a food off nobody\'s menu keeps both null', () async {
+      await store.upsert(
+        aFood('Ground beef').withHousehold(household),
+        updatedAt: DateTime.utc(2026),
+      );
+
+      final Food back = (await store.all(householdId: household))
+          .firstWhere((Food f) => f.name == 'Ground beef');
+      expect(back.menuGroup, isNull);
+      expect(back.menuOrder, isNull);
+    });
+  });
 }

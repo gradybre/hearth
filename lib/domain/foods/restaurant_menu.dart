@@ -28,18 +28,67 @@ abstract final class RestaurantMenu {
     return names.toList()..sort(_byName);
   }
 
-  /// One restaurant's menu, alphabetically.
+  /// One restaurant's menu, in the order the restaurant lays it out.
   ///
-  /// Not in the order the sheet printed them, because a [Food] carries no
-  /// order to preserve. Alphabetical at least answers "where would I look for
-  /// guacamole" the same way every time.
+  /// `menuOrder` is the position on the sheet, so items come out where the
+  /// sheet put them. Anything without one falls to the end, alphabetically —
+  /// an item added by hand has no place on a sheet nobody pasted, and putting
+  /// it first would push the menu down the screen.
   static List<Food> itemsFor(String restaurant, Iterable<Food> library) {
     final String wanted = restaurant.trim().toLowerCase();
     return <Food>[
       for (final Food food in library)
         if (_isMenuItem(food) && food.brand!.trim().toLowerCase() == wanted)
           food,
-    ]..sort((Food a, Food b) => _byName(a.name, b.name));
+    ]..sort(_bySheet);
+  }
+
+  /// One restaurant's menu in its sections, in the order they are printed.
+  ///
+  /// A menu is not an alphabetical list: meats sit together, salsas sit
+  /// together, and somebody looking for guacamole looks under the toppings.
+  /// A builder that sorts A to Z asks them to read the whole thing instead.
+  ///
+  /// Sections are ordered by **where each first appears on the sheet**, not
+  /// by name — which is what makes this the restaurant's own order rather
+  /// than one imposed on it. Items with no section come last under a null
+  /// heading, so an item added by hand is never lost, only unlabelled.
+  static List<MenuSection> sectionsFor(
+    String restaurant,
+    Iterable<Food> library,
+  ) {
+    final List<Food> items = itemsFor(restaurant, library);
+    final Map<String?, List<Food>> grouped = <String?, List<Food>>{};
+    for (final Food food in items) {
+      final String? section = (food.menuGroup ?? '').trim().isEmpty
+          ? null
+          : food.menuGroup!.trim();
+      grouped.putIfAbsent(section, () => <Food>[]).add(food);
+    }
+
+    // `items` is already in sheet order, so insertion order *is* first
+    // appearance — the map has done the ordering by being filled in order.
+    final List<MenuSection> sections = <MenuSection>[
+      for (final MapEntry<String?, List<Food>> entry in grouped.entries)
+        MenuSection(name: entry.key, items: entry.value),
+    ];
+
+    // The unnamed one is last wherever it turned up.
+    final int unnamed = sections.indexWhere((MenuSection s) => s.name == null);
+    if (unnamed >= 0 && unnamed != sections.length - 1) {
+      sections.add(sections.removeAt(unnamed));
+    }
+    return sections;
+  }
+
+  /// Sheet order, then name for anything the sheet never numbered.
+  static int _bySheet(Food a, Food b) {
+    final int? left = a.menuOrder;
+    final int? right = b.menuOrder;
+    if (left != null && right != null) return left.compareTo(right);
+    if (left != null) return -1;
+    if (right != null) return 1;
+    return _byName(a.name, b.name);
   }
 
   /// A live food read off a restaurant's own menu, with a restaurant on it.
@@ -55,6 +104,18 @@ abstract final class RestaurantMenu {
 
   static int _byName(String a, String b) =>
       a.toLowerCase().compareTo(b.toLowerCase());
+}
+
+/// One part of a menu — "Proteins", "Salsas" — and what is in it.
+///
+/// A null [name] is the items the sheet never sectioned, which the builder
+/// shows without a heading rather than under one it invented.
+@immutable
+class MenuSection {
+  const MenuSection({required this.name, required this.items});
+
+  final String? name;
+  final List<Food> items;
 }
 
 /// One thing picked off a menu, and how much of it.

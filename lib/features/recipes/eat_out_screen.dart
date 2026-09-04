@@ -122,7 +122,7 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
                 gutter: gutter,
               )
             : _Menu(
-                menu: menu,
+                sections: RestaurantMenu.sectionsFor(chosen, library),
                 picks: _picks,
                 onToggle: _toggle,
                 onCount: _setCount,
@@ -232,14 +232,14 @@ class _Restaurants extends StatelessWidget {
 
 class _Menu extends StatelessWidget {
   const _Menu({
-    required this.menu,
+    required this.sections,
     required this.picks,
     required this.onToggle,
     required this.onCount,
     required this.gutter,
   });
 
-  final List<Food> menu;
+  final List<MenuSection> sections;
   final Map<String, double> picks;
   final ValueChanged<Food> onToggle;
   final void Function(Food food, double count) onCount;
@@ -248,7 +248,7 @@ class _Menu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    if (menu.isEmpty) {
+    if (sections.isEmpty) {
       return Padding(
         padding: EdgeInsets.all(gutter * 2),
         child: Center(
@@ -260,20 +260,32 @@ class _Menu extends StatelessWidget {
       );
     }
 
-    return ListView.separated(
+    return ListView(
       padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, gutter * 5),
-      itemCount: menu.length,
-      separatorBuilder: (BuildContext _, int _) =>
-          const SizedBox(height: HearthSpacing.sm),
-      itemBuilder: (BuildContext context, int index) {
-        final Food food = menu[index];
-        return _MenuRow(
-          food: food,
-          count: picks[food.id],
-          onToggle: () => onToggle(food),
-          onCount: (double count) => onCount(food, count),
-        );
-      },
+      children: <Widget>[
+        for (final MenuSection section in sections) ...<Widget>[
+          // A section with no name is the items the sheet never grouped.
+          // Shown without a heading rather than under one Hearth invented.
+          if (section.name case final String name) ...<Widget>[
+            Padding(
+              padding: const EdgeInsets.only(
+                top: HearthSpacing.sm,
+                bottom: HearthSpacing.sm,
+              ),
+              child: Text(name, style: context.text.sectionHeader),
+            ),
+          ],
+          for (final Food food in section.items) ...<Widget>[
+            _MenuRow(
+              food: food,
+              count: picks[food.id],
+              onToggle: () => onToggle(food),
+              onCount: (double count) => onCount(food, count),
+            ),
+            const SizedBox(height: HearthSpacing.sm),
+          ],
+        ],
+      ],
     );
   }
 }

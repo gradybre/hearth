@@ -116,6 +116,8 @@ class FoodRepository {
     walmartItemId: food.walmartItemId,
     packSize: food.packSize,
     barcode: food.barcode,
+    menuGroup: food.menuGroup,
+    menuOrder: food.menuOrder,
     gramsPerMillilitre: food.gramsPerMillilitre,
     macrosOverridden: food.macrosOverridden,
     isDefault: food.isDefault,

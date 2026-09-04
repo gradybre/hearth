@@ -100,6 +100,8 @@ abstract final class SyncPayload {
       json['pack_unit'] as String?,
     ),
     barcode: json['barcode'] as String?,
+    menuGroup: json['menu_group'] as String?,
+    menuOrder: (json['menu_order'] as num?)?.toInt(),
     gramsPerMillilitre: _double(json['grams_per_millilitre']),
     source: FoodMapper.sourceFromSql('${json['source'] ?? 'manual'}'),
     macrosOverridden: json['macros_overridden'] == true,

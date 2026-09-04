@@ -308,21 +308,34 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
                         setState(() => _draft = _draft.copyWith(brand: v)),
                   ),
                 ),
-                if (!_isRestaurant) ...<Widget>[
-                  const SizedBox(width: HearthSpacing.md),
-                  Expanded(
-                    child: _TextField(
+                const SizedBox(width: HearthSpacing.md),
+                Expanded(
+                  child: _isRestaurant
+                      // Where it sits on their menu, so the builder can lay it
+                      // out the way they do rather than A to Z (spec §5.2).
+                      // Optional: an unsectioned item is listed last, not
+                      // hidden.
+                      ? _TextField(
+                          label: 'Menu section',
+                          value: _draft.menuGroup,
+                          hint: 'Proteins',
+                          textCapitalization: TextCapitalization.words,
+                          onChanged: (String v) => setState(
+                            () => _draft = _draft.copyWith(menuGroup: v),
+                          ),
+                        )
                       // Nothing to tag with a shop. You do not buy a burrito
                       // bowl's chicken at Costco.
-                      label: 'Store',
-                      value: _draft.storeTag,
-                      hint: 'Costco',
-                      textCapitalization: TextCapitalization.words,
-                      onChanged: (String v) =>
-                          setState(() => _draft = _draft.copyWith(storeTag: v)),
-                    ),
-                  ),
-                ],
+                      : _TextField(
+                          label: 'Store',
+                          value: _draft.storeTag,
+                          hint: 'Costco',
+                          textCapitalization: TextCapitalization.words,
+                          onChanged: (String v) => setState(
+                            () => _draft = _draft.copyWith(storeTag: v),
+                          ),
+                        ),
+                ),
               ],
             ),
             const SizedBox(height: HearthSpacing.sm),

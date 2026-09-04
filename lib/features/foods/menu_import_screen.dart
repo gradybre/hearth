@@ -72,6 +72,8 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
             name: line.name,
             brand: restaurant,
             source: FoodSource.restaurant,
+            menuGroup: line.section,
+            menuOrder: line.order,
             servingOptions: <ServingOption>[
               ServingOption(
                 id: uuid.v4(),
@@ -94,6 +96,10 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
     final HearthColors colors = context.colors;
     final List<MenuImportLine> lines = _lines;
     final int usable = MenuImport.usableIn(lines);
+    // A heading is neither added nor unread — it is the shape of the menu.
+    final int unreadable = lines
+        .where((MenuImportLine l) => !l.isUsable && !l.isHeading)
+        .length;
     final double gutter = MediaQuery.sizeOf(context).width >= 840
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
@@ -140,7 +146,9 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
               'One item per line: name, portion, calories, protein, carbs, '
               'fat — then fibre, sodium and cholesterol if the sheet gives '
               'them. Commas, tabs or a couple of spaces all separate, so a '
-              'row copied out of a table works as it lands.',
+              'row copied out of a table works as it lands.\n\n'
+              'A line with no numbers on it is read as a section — paste the '
+              'sheet\'s own headings and the menu keeps its shape.',
               style: context.text.metadata.copyWith(color: colors.textMuted),
             ),
             const SizedBox(height: HearthSpacing.sm),
@@ -162,15 +170,20 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
               )
             else ...<Widget>[
               Text(
-                usable == lines.length
+                unreadable == 0
                     ? '$usable to add'
-                    : '$usable to add · ${lines.length - usable} Hearth '
-                          'could not read',
+                    : '$usable to add · $unreadable Hearth could not read',
                 style: context.text.sectionHeader,
               ),
               const SizedBox(height: HearthSpacing.sm),
               for (final MenuImportLine line in lines) ...<Widget>[
-                _LineRow(line: line),
+                if (line.isHeading)
+                  Padding(
+                    padding: const EdgeInsets.only(top: HearthSpacing.sm),
+                    child: Text(line.name, style: context.text.sectionHeader),
+                  )
+                else
+                  _LineRow(line: line),
                 const SizedBox(height: HearthSpacing.sm),
               ],
             ],

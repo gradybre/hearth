@@ -557,3 +557,66 @@ begin
   raise notice 'restaurant catalogue guards passed';
 end;
 $$;
+
+-- ── A menu keeps its own shape (spec §5.2) ──────────────────────────────────
+--
+-- The builder lays a menu out by `menu_group` and `menu_order`, and both have
+-- to survive the sync round trip or the list falls back to alphabetical with
+-- the barbacoa between the beans and the cheese.
+do $$
+declare
+  v_food uuid;
+  v_group text;
+  v_order integer;
+begin
+  if exists (
+    select 1 from public.foods
+    where brand = 'Chipotle' and (menu_group is null or menu_order is null)
+  ) then
+    raise exception 'a Chipotle component has no place on the menu';
+  end if;
+
+  -- Sections are ordered by where each first appears, so the positions have
+  -- to be contiguous and grouped — an interleaved menu_order would scatter
+  -- the sections however well each one is named.
+  if exists (
+    select 1
+    from (
+      select menu_group,
+             min(menu_order) as first,
+             max(menu_order) as last,
+             count(*) as items
+      from public.foods where brand = 'Chipotle' group by menu_group
+    ) as s
+    where s.last - s.first + 1 <> s.items
+  ) then
+    raise exception 'a Chipotle section is interleaved with another';
+  end if;
+
+  select id into v_food from public.foods
+  where brand = 'Chipotle' and name = 'Chicken';
+
+  perform public.upsert_food(jsonb_build_object(
+    'id', v_food, 'name', 'Chicken', 'brand', 'Chipotle',
+    'source', 'restaurant', 'menu_group', 'Proteins', 'menu_order', 9,
+    'serving_options', '[]'::jsonb
+  ));
+
+  select menu_group, menu_order into v_group, v_order
+  from public.foods where id = v_food;
+  if v_group is distinct from 'Proteins' or v_order is distinct from 9 then
+    raise exception 'upsert_food lost the menu place: % %', v_group, v_order;
+  end if;
+
+  if not exists (
+    select 1 from public.changed_foods(null) c
+    where (c ->> 'id')::uuid = v_food
+      and c ->> 'menu_group' = 'Proteins'
+      and (c ->> 'menu_order')::integer = 9
+  ) then
+    raise exception 'changed_foods did not carry the menu place';
+  end if;
+
+  raise notice 'menu section guards passed';
+end;
+$$;

@@ -127,6 +127,11 @@ class Foods extends Table {
   TextColumn get packKind => text().nullable()();
   TextColumn get packUnit => text().nullable()();
   TextColumn get barcode => text().nullable()();
+
+  /// Where this sits on a restaurant's menu, and how far down the sheet
+  /// (spec §5.2). Null for anything that is not off a menu.
+  TextColumn get menuGroup => text().nullable()();
+  IntColumn get menuOrder => integer().nullable()();
   RealColumn get gramsPerMillilitre => real().nullable()();
   TextColumn get source => text().withDefault(const Constant('manual'))();
   BoolColumn get macrosOverridden =>

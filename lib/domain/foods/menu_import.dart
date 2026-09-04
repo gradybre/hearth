@@ -18,7 +18,10 @@ class MenuImportLine {
     this.name = '',
     this.portion,
     this.macros = Macros.zero,
+    this.section,
+    this.order = 0,
     this.problem,
+    this.isHeading = false,
   });
 
   /// The line exactly as pasted, so the review can point at it.
@@ -32,10 +35,24 @@ class MenuImportLine {
 
   final Macros macros;
 
+  /// The section heading this line sits under, or null above the first one.
+  final String? section;
+
+  /// Where it fell in the paste, which is where it fell on the sheet — the
+  /// order items keep inside a section, and sections keep against each other
+  /// (spec §5.2).
+  final int order;
+
   /// Why this line cannot be used, or null.
   final String? problem;
 
-  bool get isUsable => problem == null;
+  /// A line with no numbers on it, taken as the heading for what follows
+  /// rather than as a failure. Pasting the headings with the table is what
+  /// everybody does, and on a nutrition sheet they are exactly the sections
+  /// the menu is laid out in.
+  final bool isHeading;
+
+  bool get isUsable => problem == null && !isHeading;
 }
 
 /// Reading a menu pasted out of a nutrition sheet (spec §5.2).
@@ -69,16 +86,33 @@ abstract final class MenuImport {
     caseSensitive: false,
   );
 
-  static List<MenuImportLine> read(String pasted) => <MenuImportLine>[
-    for (final String raw in pasted.split('\n'))
-      if (raw.trim().isNotEmpty) _line(raw),
-  ];
+  static List<MenuImportLine> read(String pasted) {
+    final List<MenuImportLine> lines = <MenuImportLine>[];
+    String? section;
+    int order = 0;
+
+    for (final String raw in pasted.split('\n')) {
+      if (raw.trim().isEmpty) continue;
+      final MenuImportLine line = _line(raw, section: section, order: order);
+      if (line.isHeading) {
+        section = line.name;
+      } else {
+        order++;
+      }
+      lines.add(line);
+    }
+    return lines;
+  }
 
   /// How many of [lines] are worth saving.
   static int usableIn(Iterable<MenuImportLine> lines) =>
       lines.where((MenuImportLine l) => l.isUsable).length;
 
-  static MenuImportLine _line(String raw) {
+  static MenuImportLine _line(
+    String raw, {
+    required String? section,
+    required int order,
+  }) {
     final List<String> fields = raw
         .trim()
         .split(_separator)
@@ -86,22 +120,22 @@ abstract final class MenuImport {
         .where((String f) => f.isNotEmpty)
         .toList(growable: false);
 
+    final String name = fields.first;
+
+    // A line with no numbers anywhere on it is a heading, and on a nutrition
+    // sheet a heading is a section — "Proteins", "Salsas". Read as one rather
+    // than refused, which turns what everybody pastes by accident into the
+    // thing that lays the menu out.
+    if (fields.every((String f) => _number(f) == null)) {
+      return MenuImportLine(raw: raw, name: name, isHeading: true);
+    }
+
     if (fields.length < 3) {
       return MenuImportLine(
         raw: raw,
+        section: section,
+        order: order,
         problem: 'Needs at least a name, a portion and calories',
-      );
-    }
-
-    final String name = fields.first;
-    // A header row — "Item, Portion, Calories" — reads as a name followed by
-    // words. Caught here rather than by asking the user to delete it, because
-    // pasting the header with the table is what everybody does.
-    if (_number(fields[2]) == null && _number(fields[1]) == null) {
-      return MenuImportLine(
-        raw: raw,
-        name: name,
-        problem: 'No numbers on this line — a heading?',
       );
     }
 
@@ -110,6 +144,8 @@ abstract final class MenuImport {
       return MenuImportLine(
         raw: raw,
         name: name,
+        section: section,
+        order: order,
         problem: 'Could not read "${fields[1]}" as a portion',
       );
     }
@@ -120,6 +156,8 @@ abstract final class MenuImport {
         raw: raw,
         name: name,
         portion: portion,
+        section: section,
+        order: order,
         problem: 'Could not read "${fields[2]}" as calories',
       );
     }
@@ -128,6 +166,8 @@ abstract final class MenuImport {
       raw: raw,
       name: name,
       portion: portion,
+      section: section,
+      order: order,
       macros: Macros(
         kcal: kcal,
         proteinG: _number(_at(fields, 3)) ?? 0,

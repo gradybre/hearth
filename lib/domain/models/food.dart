@@ -96,6 +96,8 @@ class Food {
     this.walmartItemId,
     this.packSize,
     this.barcode,
+    this.menuGroup,
+    this.menuOrder,
     this.gramsPerMillilitre,
     this.macrosOverridden = false,
     this.isDefault = false,
@@ -131,6 +133,16 @@ class Food {
   final Quantity? packSize;
 
   final String? barcode;
+
+  /// The section of a restaurant's menu this sits in — "Proteins", "Salsas"
+  /// (spec §5.2). Null for anything that is not off a menu.
+  final String? menuGroup;
+
+  /// Its position on the sheet. Orders items inside a section, and the
+  /// sections against each other by where each one first appears — which is
+  /// the only way to lay a menu out the way the restaurant does rather than
+  /// alphabetically.
+  final int? menuOrder;
 
   final List<ServingOption> servingOptions;
 

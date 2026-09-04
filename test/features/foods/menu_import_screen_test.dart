@@ -47,18 +47,49 @@ void main() {
 
     await paste(
       tester,
-      'Item, Portion, Calories\n'
+      'Proteins\n'
       'Chicken, 4 oz, 180, 32, 0, 7\n'
       'Steak, one scoopful, 150',
     );
 
+    // The heading is neither added nor unread — it is the shape of the menu,
+    // and it renders as a heading in the review too.
     expect(find.textContaining('1 to add'), findsOneWidget);
-    expect(find.textContaining('2 Hearth could not read'), findsOneWidget);
+    expect(find.textContaining('1 Hearth could not read'), findsOneWidget);
     // `findsWidgets`, not one: the pasted text is still in the box above, so
     // the words appear there too. The counts on the summary line are the
     // precise assertion.
-    expect(find.textContaining('heading'), findsWidgets);
     expect(find.textContaining('one scoopful'), findsWidgets);
+  });
+
+  testWidgets('a pasted heading becomes a section, shown as one', (
+    WidgetTester tester,
+  ) async {
+    final HearthDatabase db = await pumpHearthApp(tester);
+    await openImporter(tester);
+    await tester.enterText(find.byType(TextField).first, 'Cava');
+    await pumpFrames(tester);
+    await paste(
+      tester,
+      'Proteins\nFalafel, 4 oz, 330, 12, 30, 18\n'
+      'Dips\nHarissa, 2 oz, 60, 1, 4, 5',
+    );
+
+    expect(find.text('2 to add'), findsOneWidget);
+
+    await tester.tap(find.text('Save 2'));
+    await pumpFrames(tester, frames: 20);
+
+    final List<FoodRow> foods = await db.select(db.foods).get();
+    expect(
+      <String?>{for (final FoodRow f in foods) f.menuGroup},
+      <String>{'Proteins', 'Dips'},
+    );
+    // The order the sheet had them in, which is what lays the menu out.
+    expect(
+      foods.firstWhere((FoodRow f) => f.name == 'Falafel').menuOrder,
+      lessThan(foods.firstWhere((FoodRow f) => f.name == 'Harissa').menuOrder!),
+    );
   });
 
   testWidgets('saving writes them as that restaurant\'s foods', (

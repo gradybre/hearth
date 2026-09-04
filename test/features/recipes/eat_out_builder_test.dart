@@ -15,12 +15,16 @@ void main() {
     required String restaurant,
     num amount = 4,
     Unit? unit,
+    String? section,
+    int? order,
     Macros macros = const Macros(kcal: 180, proteinG: 32),
   }) => aFood(
     name,
     id: 'f-${restaurant.toLowerCase()}-${name.toLowerCase()}',
     brand: restaurant,
     source: FoodSource.restaurant,
+    menuGroup: section,
+    menuOrder: order,
     servingOptions: <ServingOption>[
       aServing(amount: amount, unit: unit ?? Units.ounce, macros: macros),
     ],
@@ -172,5 +176,59 @@ void main() {
     await pumpFrames(tester, frames: 12);
 
     expect(find.textContaining('Build ('), findsNothing);
+  });
+
+  testWidgets('the menu is laid out the way the restaurant lays it out', (
+    WidgetTester tester,
+  ) async {
+    // A to Z puts the barbacoa between the beans and the cheese, which is
+    // nobody's menu. Sections come out in the order the sheet prints them,
+    // not alphabetically — Proteins before Salsas, though S precedes P.
+    await pumpHearthApp(
+      tester,
+      foods: <Food>[
+        item(
+          'Fresh Tomato Salsa',
+          restaurant: 'Chipotle',
+          section: 'Salsas',
+          order: 3,
+        ),
+        item('Chicken', restaurant: 'Chipotle', section: 'Proteins', order: 2),
+        item('Barbacoa', restaurant: 'Chipotle', section: 'Proteins', order: 1),
+        item('Black Beans', restaurant: 'Chipotle', section: 'Beans', order: 0),
+      ],
+    );
+    await openBuilder(tester);
+    await tester.tap(find.text('Chipotle'));
+    await pumpFrames(tester, frames: 12);
+
+    double y(String text) => tester.getTopLeft(find.text(text)).dy;
+
+    expect(find.text('Beans'), findsOneWidget);
+    expect(find.text('Proteins'), findsOneWidget);
+    expect(find.text('Salsas'), findsOneWidget);
+
+    expect(y('Beans'), lessThan(y('Proteins')));
+    expect(y('Proteins'), lessThan(y('Salsas')));
+    // And within a section, the sheet's order rather than the alphabet.
+    expect(y('Barbacoa'), lessThan(y('Chicken')));
+  });
+
+  testWidgets('a menu nobody sectioned still lists, without headings', (
+    WidgetTester tester,
+  ) async {
+    await pumpHearthApp(
+      tester,
+      foods: <Food>[
+        item('Falafel', restaurant: 'Cava'),
+        item('Harissa', restaurant: 'Cava'),
+      ],
+    );
+    await openBuilder(tester);
+    await tester.tap(find.text('Cava'));
+    await pumpFrames(tester, frames: 12);
+
+    expect(find.text('Falafel'), findsOneWidget);
+    expect(find.text('Harissa'), findsOneWidget);
   });
 }

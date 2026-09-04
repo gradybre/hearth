@@ -156,6 +156,8 @@ class FoodDraft {
     required this.name,
     required this.servings,
     this.brand = '',
+    this.menuGroup = '',
+    this.menuOrder,
     this.storeTag = '',
     this.walmartItemId = '',
     this.packSize = '',
@@ -175,6 +177,8 @@ class FoodDraft {
   factory FoodDraft.fromFood(Food food) => FoodDraft(
     name: food.name,
     brand: food.brand ?? '',
+    menuGroup: food.menuGroup ?? '',
+    menuOrder: food.menuOrder,
     storeTag: food.storeTag ?? '',
     walmartItemId: food.walmartItemId ?? '',
     packSize: food.packSize == null
@@ -225,6 +229,7 @@ class FoodDraft {
     return FoodDraft(
       name: mapped.name,
       brand: mapped.brand,
+      menuGroup: mapped.menuGroup,
       storeTag: mapped.storeTag,
       barcode: mapped.barcode,
       source: food.source,
@@ -345,6 +350,14 @@ class FoodDraft {
 
   final String name;
   final String brand;
+
+  /// The section of a restaurant menu this sits in (spec §5.2). Empty for
+  /// anything not off a menu, and for a menu item nobody sectioned.
+  final String menuGroup;
+
+  /// Its place on the sheet, carried through an edit untouched. Set by the
+  /// menu importer, which is the only thing that knows what the sheet said.
+  final int? menuOrder;
   final String storeTag;
 
   /// A pasted Walmart link or item id, and how much is in one pack — both
@@ -388,6 +401,8 @@ class FoodDraft {
       id: existingId ?? newId(),
       name: name.trim(),
       brand: brand.trim().isEmpty ? null : brand.trim(),
+      menuGroup: menuGroup.trim().isEmpty ? null : menuGroup.trim(),
+      menuOrder: menuOrder,
       storeTag: storeTag.trim().isEmpty ? null : storeTag.trim(),
       // Stored as the id, never as whatever was pasted: a link that no longer
       // parses is a link nothing can use.
@@ -412,6 +427,7 @@ class FoodDraft {
   FoodDraft copyWith({
     String? name,
     String? brand,
+    String? menuGroup,
     String? storeTag,
     String? walmartItemId,
     String? packSize,
@@ -427,6 +443,8 @@ class FoodDraft {
   }) => FoodDraft(
     name: name ?? this.name,
     brand: brand ?? this.brand,
+    menuGroup: menuGroup ?? this.menuGroup,
+    menuOrder: menuOrder,
     storeTag: storeTag ?? this.storeTag,
     walmartItemId: walmartItemId ?? this.walmartItemId,
     packSize: packSize ?? this.packSize,

@@ -13,11 +13,15 @@ void main() {
     required String restaurant,
     num amount = 4,
     Unit? unit,
+    String? section,
+    int? order,
   }) => aFood(
     name,
     id: 'f-${restaurant.toLowerCase()}-${name.toLowerCase()}',
     brand: restaurant,
     source: FoodSource.restaurant,
+    menuGroup: section,
+    menuOrder: order,
     servingOptions: <ServingOption>[
       aServing(
         amount: amount,
@@ -151,6 +155,113 @@ void main() {
 
       expect(pick.quantity, isNull);
       expect(pick.line, 'Mystery');
+    });
+  });
+
+  group('laid out the way the restaurant lays it out', () {
+    // Chipotle's own sheet: tortillas, then rice, then beans, then the
+    // proteins, then the salsas. Not one of those is where the alphabet
+    // would put it.
+    List<Food> sheet() => <Food>[
+      menuItem(
+        'Chicken',
+        restaurant: 'Chipotle',
+        section: 'Proteins',
+        order: 4,
+      ),
+      menuItem(
+        'Barbacoa',
+        restaurant: 'Chipotle',
+        section: 'Proteins',
+        order: 3,
+      ),
+      menuItem(
+        'Fresh Tomato Salsa',
+        restaurant: 'Chipotle',
+        section: 'Salsas',
+        order: 5,
+      ),
+      menuItem(
+        'Flour Tortilla',
+        restaurant: 'Chipotle',
+        section: 'Tortillas',
+        order: 0,
+      ),
+      menuItem(
+        'Black Beans',
+        restaurant: 'Chipotle',
+        section: 'Beans',
+        order: 2,
+      ),
+      menuItem('White Rice', restaurant: 'Chipotle', section: 'Rice', order: 1),
+    ];
+
+    test('items come out where the sheet put them', () {
+      expect(
+        RestaurantMenu.itemsFor('Chipotle', sheet()).map((Food f) => f.name),
+        <String>[
+          'Flour Tortilla',
+          'White Rice',
+          'Black Beans',
+          'Barbacoa',
+          'Chicken',
+          'Fresh Tomato Salsa',
+        ],
+      );
+    });
+
+    test('and the sections do too, by where each one first appears', () {
+      // Alphabetically this would be Beans, Proteins, Rice, Salsas,
+      // Tortillas — which is nobody's menu.
+      expect(
+        RestaurantMenu.sectionsFor(
+          'Chipotle',
+          sheet(),
+        ).map((MenuSection s) => s.name),
+        <String>['Tortillas', 'Rice', 'Beans', 'Proteins', 'Salsas'],
+      );
+    });
+
+    test('a section keeps its own items together and in order', () {
+      final MenuSection proteins = RestaurantMenu.sectionsFor(
+        'Chipotle',
+        sheet(),
+      ).firstWhere((MenuSection s) => s.name == 'Proteins');
+
+      expect(proteins.items.map((Food f) => f.name), <String>[
+        'Barbacoa',
+        'Chicken',
+      ]);
+    });
+
+    test('an item added by hand is last, not lost', () {
+      // No section and no place on a sheet nobody pasted. Putting it first
+      // would push the whole menu down the screen.
+      final List<Food> library = <Food>[
+        ...sheet(),
+        menuItem('Extra tortilla on the side', restaurant: 'Chipotle'),
+      ];
+      final List<MenuSection> sections = RestaurantMenu.sectionsFor(
+        'Chipotle',
+        library,
+      );
+
+      expect(sections.last.name, isNull);
+      expect(sections.last.items.single.name, 'Extra tortilla on the side');
+    });
+
+    test('a menu nobody sectioned is one unnamed section, not none', () {
+      final List<MenuSection> sections = RestaurantMenu.sectionsFor(
+        'Cava',
+        <Food>[
+          menuItem('Falafel', restaurant: 'Cava'),
+          menuItem('Harissa', restaurant: 'Cava'),
+        ],
+      );
+
+      expect(sections, hasLength(1));
+      expect(sections.single.name, isNull);
+      expect(sections.single.items, hasLength(2));
     });
   });
 }

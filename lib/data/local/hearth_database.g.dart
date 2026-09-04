@@ -3405,6 +3405,28 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _menuGroupMeta = const VerificationMeta(
+    'menuGroup',
+  );
+  @override
+  late final GeneratedColumn<String> menuGroup = GeneratedColumn<String>(
+    'menu_group',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _menuOrderMeta = const VerificationMeta(
+    'menuOrder',
+  );
+  @override
+  late final GeneratedColumn<int> menuOrder = GeneratedColumn<int>(
+    'menu_order',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _gramsPerMillilitreMeta =
       const VerificationMeta('gramsPerMillilitre');
   @override
@@ -3509,6 +3531,8 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
     packKind,
     packUnit,
     barcode,
+    menuGroup,
+    menuOrder,
     gramsPerMillilitre,
     source,
     macrosOverridden,
@@ -3597,6 +3621,18 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
       context.handle(
         _barcodeMeta,
         barcode.isAcceptableOrUnknown(data['barcode']!, _barcodeMeta),
+      );
+    }
+    if (data.containsKey('menu_group')) {
+      context.handle(
+        _menuGroupMeta,
+        menuGroup.isAcceptableOrUnknown(data['menu_group']!, _menuGroupMeta),
+      );
+    }
+    if (data.containsKey('menu_order')) {
+      context.handle(
+        _menuOrderMeta,
+        menuOrder.isAcceptableOrUnknown(data['menu_order']!, _menuOrderMeta),
       );
     }
     if (data.containsKey('grams_per_millilitre')) {
@@ -3701,6 +3737,14 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
         DriftSqlType.string,
         data['${effectivePrefix}barcode'],
       ),
+      menuGroup: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}menu_group'],
+      ),
+      menuOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}menu_order'],
+      ),
       gramsPerMillilitre: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}grams_per_millilitre'],
@@ -3754,6 +3798,11 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
   final String? packKind;
   final String? packUnit;
   final String? barcode;
+
+  /// Where this sits on a restaurant's menu, and how far down the sheet
+  /// (spec §5.2). Null for anything that is not off a menu.
+  final String? menuGroup;
+  final int? menuOrder;
   final double? gramsPerMillilitre;
   final String source;
   final bool macrosOverridden;
@@ -3776,6 +3825,8 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     this.packKind,
     this.packUnit,
     this.barcode,
+    this.menuGroup,
+    this.menuOrder,
     this.gramsPerMillilitre,
     required this.source,
     required this.macrosOverridden,
@@ -3812,6 +3863,12 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     }
     if (!nullToAbsent || barcode != null) {
       map['barcode'] = Variable<String>(barcode);
+    }
+    if (!nullToAbsent || menuGroup != null) {
+      map['menu_group'] = Variable<String>(menuGroup);
+    }
+    if (!nullToAbsent || menuOrder != null) {
+      map['menu_order'] = Variable<int>(menuOrder);
     }
     if (!nullToAbsent || gramsPerMillilitre != null) {
       map['grams_per_millilitre'] = Variable<double>(gramsPerMillilitre);
@@ -3853,6 +3910,12 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       barcode: barcode == null && nullToAbsent
           ? const Value.absent()
           : Value(barcode),
+      menuGroup: menuGroup == null && nullToAbsent
+          ? const Value.absent()
+          : Value(menuGroup),
+      menuOrder: menuOrder == null && nullToAbsent
+          ? const Value.absent()
+          : Value(menuOrder),
       gramsPerMillilitre: gramsPerMillilitre == null && nullToAbsent
           ? const Value.absent()
           : Value(gramsPerMillilitre),
@@ -3881,6 +3944,8 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       packKind: serializer.fromJson<String?>(json['packKind']),
       packUnit: serializer.fromJson<String?>(json['packUnit']),
       barcode: serializer.fromJson<String?>(json['barcode']),
+      menuGroup: serializer.fromJson<String?>(json['menuGroup']),
+      menuOrder: serializer.fromJson<int?>(json['menuOrder']),
       gramsPerMillilitre: serializer.fromJson<double?>(
         json['gramsPerMillilitre'],
       ),
@@ -3906,6 +3971,8 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       'packKind': serializer.toJson<String?>(packKind),
       'packUnit': serializer.toJson<String?>(packUnit),
       'barcode': serializer.toJson<String?>(barcode),
+      'menuGroup': serializer.toJson<String?>(menuGroup),
+      'menuOrder': serializer.toJson<int?>(menuOrder),
       'gramsPerMillilitre': serializer.toJson<double?>(gramsPerMillilitre),
       'source': serializer.toJson<String>(source),
       'macrosOverridden': serializer.toJson<bool>(macrosOverridden),
@@ -3927,6 +3994,8 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     Value<String?> packKind = const Value.absent(),
     Value<String?> packUnit = const Value.absent(),
     Value<String?> barcode = const Value.absent(),
+    Value<String?> menuGroup = const Value.absent(),
+    Value<int?> menuOrder = const Value.absent(),
     Value<double?> gramsPerMillilitre = const Value.absent(),
     String? source,
     bool? macrosOverridden,
@@ -3949,6 +4018,8 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     packKind: packKind.present ? packKind.value : this.packKind,
     packUnit: packUnit.present ? packUnit.value : this.packUnit,
     barcode: barcode.present ? barcode.value : this.barcode,
+    menuGroup: menuGroup.present ? menuGroup.value : this.menuGroup,
+    menuOrder: menuOrder.present ? menuOrder.value : this.menuOrder,
     gramsPerMillilitre: gramsPerMillilitre.present
         ? gramsPerMillilitre.value
         : this.gramsPerMillilitre,
@@ -3977,6 +4048,8 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       packKind: data.packKind.present ? data.packKind.value : this.packKind,
       packUnit: data.packUnit.present ? data.packUnit.value : this.packUnit,
       barcode: data.barcode.present ? data.barcode.value : this.barcode,
+      menuGroup: data.menuGroup.present ? data.menuGroup.value : this.menuGroup,
+      menuOrder: data.menuOrder.present ? data.menuOrder.value : this.menuOrder,
       gramsPerMillilitre: data.gramsPerMillilitre.present
           ? data.gramsPerMillilitre.value
           : this.gramsPerMillilitre,
@@ -4006,6 +4079,8 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
           ..write('packKind: $packKind, ')
           ..write('packUnit: $packUnit, ')
           ..write('barcode: $barcode, ')
+          ..write('menuGroup: $menuGroup, ')
+          ..write('menuOrder: $menuOrder, ')
           ..write('gramsPerMillilitre: $gramsPerMillilitre, ')
           ..write('source: $source, ')
           ..write('macrosOverridden: $macrosOverridden, ')
@@ -4029,6 +4104,8 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     packKind,
     packUnit,
     barcode,
+    menuGroup,
+    menuOrder,
     gramsPerMillilitre,
     source,
     macrosOverridden,
@@ -4051,6 +4128,8 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
           other.packKind == this.packKind &&
           other.packUnit == this.packUnit &&
           other.barcode == this.barcode &&
+          other.menuGroup == this.menuGroup &&
+          other.menuOrder == this.menuOrder &&
           other.gramsPerMillilitre == this.gramsPerMillilitre &&
           other.source == this.source &&
           other.macrosOverridden == this.macrosOverridden &&
@@ -4071,6 +4150,8 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
   final Value<String?> packKind;
   final Value<String?> packUnit;
   final Value<String?> barcode;
+  final Value<String?> menuGroup;
+  final Value<int?> menuOrder;
   final Value<double?> gramsPerMillilitre;
   final Value<String> source;
   final Value<bool> macrosOverridden;
@@ -4090,6 +4171,8 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     this.packKind = const Value.absent(),
     this.packUnit = const Value.absent(),
     this.barcode = const Value.absent(),
+    this.menuGroup = const Value.absent(),
+    this.menuOrder = const Value.absent(),
     this.gramsPerMillilitre = const Value.absent(),
     this.source = const Value.absent(),
     this.macrosOverridden = const Value.absent(),
@@ -4110,6 +4193,8 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     this.packKind = const Value.absent(),
     this.packUnit = const Value.absent(),
     this.barcode = const Value.absent(),
+    this.menuGroup = const Value.absent(),
+    this.menuOrder = const Value.absent(),
     this.gramsPerMillilitre = const Value.absent(),
     this.source = const Value.absent(),
     this.macrosOverridden = const Value.absent(),
@@ -4132,6 +4217,8 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     Expression<String>? packKind,
     Expression<String>? packUnit,
     Expression<String>? barcode,
+    Expression<String>? menuGroup,
+    Expression<int>? menuOrder,
     Expression<double>? gramsPerMillilitre,
     Expression<String>? source,
     Expression<bool>? macrosOverridden,
@@ -4152,6 +4239,8 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
       if (packKind != null) 'pack_kind': packKind,
       if (packUnit != null) 'pack_unit': packUnit,
       if (barcode != null) 'barcode': barcode,
+      if (menuGroup != null) 'menu_group': menuGroup,
+      if (menuOrder != null) 'menu_order': menuOrder,
       if (gramsPerMillilitre != null)
         'grams_per_millilitre': gramsPerMillilitre,
       if (source != null) 'source': source,
@@ -4175,6 +4264,8 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     Value<String?>? packKind,
     Value<String?>? packUnit,
     Value<String?>? barcode,
+    Value<String?>? menuGroup,
+    Value<int?>? menuOrder,
     Value<double?>? gramsPerMillilitre,
     Value<String>? source,
     Value<bool>? macrosOverridden,
@@ -4195,6 +4286,8 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
       packKind: packKind ?? this.packKind,
       packUnit: packUnit ?? this.packUnit,
       barcode: barcode ?? this.barcode,
+      menuGroup: menuGroup ?? this.menuGroup,
+      menuOrder: menuOrder ?? this.menuOrder,
       gramsPerMillilitre: gramsPerMillilitre ?? this.gramsPerMillilitre,
       source: source ?? this.source,
       macrosOverridden: macrosOverridden ?? this.macrosOverridden,
@@ -4239,6 +4332,12 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     if (barcode.present) {
       map['barcode'] = Variable<String>(barcode.value);
     }
+    if (menuGroup.present) {
+      map['menu_group'] = Variable<String>(menuGroup.value);
+    }
+    if (menuOrder.present) {
+      map['menu_order'] = Variable<int>(menuOrder.value);
+    }
     if (gramsPerMillilitre.present) {
       map['grams_per_millilitre'] = Variable<double>(gramsPerMillilitre.value);
     }
@@ -4279,6 +4378,8 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
           ..write('packKind: $packKind, ')
           ..write('packUnit: $packUnit, ')
           ..write('barcode: $barcode, ')
+          ..write('menuGroup: $menuGroup, ')
+          ..write('menuOrder: $menuOrder, ')
           ..write('gramsPerMillilitre: $gramsPerMillilitre, ')
           ..write('source: $source, ')
           ..write('macrosOverridden: $macrosOverridden, ')
@@ -15006,6 +15107,8 @@ typedef $$FoodsTableCreateCompanionBuilder = FoodsCompanion Function({
   Value<String?> packKind,
   Value<String?> packUnit,
   Value<String?> barcode,
+  Value<String?> menuGroup,
+  Value<int?> menuOrder,
   Value<double?> gramsPerMillilitre,
   Value<String> source,
   Value<bool> macrosOverridden,
@@ -15026,6 +15129,8 @@ typedef $$FoodsTableUpdateCompanionBuilder = FoodsCompanion Function({
   Value<String?> packKind,
   Value<String?> packUnit,
   Value<String?> barcode,
+  Value<String?> menuGroup,
+  Value<int?> menuOrder,
   Value<double?> gramsPerMillilitre,
   Value<String> source,
   Value<bool> macrosOverridden,
@@ -15142,6 +15247,16 @@ class $$FoodsTableFilterComposer
 
   ColumnFilters<String> get barcode => $composableBuilder(
     column: $table.barcode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get menuGroup => $composableBuilder(
+    column: $table.menuGroup,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get menuOrder => $composableBuilder(
+    column: $table.menuOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -15290,6 +15405,16 @@ class $$FoodsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get menuGroup => $composableBuilder(
+    column: $table.menuGroup,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get menuOrder => $composableBuilder(
+    column: $table.menuOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<double> get gramsPerMillilitre => $composableBuilder(
     column: $table.gramsPerMillilitre,
     builder: (column) => ColumnOrderings(column),
@@ -15370,6 +15495,12 @@ class $$FoodsTableAnnotationComposer
 
   GeneratedColumn<String> get barcode =>
       $composableBuilder(column: $table.barcode, builder: (column) => column);
+
+  GeneratedColumn<String> get menuGroup =>
+      $composableBuilder(column: $table.menuGroup, builder: (column) => column);
+
+  GeneratedColumn<int> get menuOrder =>
+      $composableBuilder(column: $table.menuOrder, builder: (column) => column);
 
   GeneratedColumn<double> get gramsPerMillilitre => $composableBuilder(
     column: $table.gramsPerMillilitre,
@@ -15492,6 +15623,8 @@ class $$FoodsTableTableManager
                 Value<String?> packKind = const Value.absent(),
                 Value<String?> packUnit = const Value.absent(),
                 Value<String?> barcode = const Value.absent(),
+                Value<String?> menuGroup = const Value.absent(),
+                Value<int?> menuOrder = const Value.absent(),
                 Value<double?> gramsPerMillilitre = const Value.absent(),
                 Value<String> source = const Value.absent(),
                 Value<bool> macrosOverridden = const Value.absent(),
@@ -15511,6 +15644,8 @@ class $$FoodsTableTableManager
                 packKind: packKind,
                 packUnit: packUnit,
                 barcode: barcode,
+                menuGroup: menuGroup,
+                menuOrder: menuOrder,
                 gramsPerMillilitre: gramsPerMillilitre,
                 source: source,
                 macrosOverridden: macrosOverridden,
@@ -15532,6 +15667,8 @@ class $$FoodsTableTableManager
                 Value<String?> packKind = const Value.absent(),
                 Value<String?> packUnit = const Value.absent(),
                 Value<String?> barcode = const Value.absent(),
+                Value<String?> menuGroup = const Value.absent(),
+                Value<int?> menuOrder = const Value.absent(),
                 Value<double?> gramsPerMillilitre = const Value.absent(),
                 Value<String> source = const Value.absent(),
                 Value<bool> macrosOverridden = const Value.absent(),
@@ -15551,6 +15688,8 @@ class $$FoodsTableTableManager
                 packKind: packKind,
                 packUnit: packUnit,
                 barcode: barcode,
+                menuGroup: menuGroup,
+                menuOrder: menuOrder,
                 gramsPerMillilitre: gramsPerMillilitre,
                 source: source,
                 macrosOverridden: macrosOverridden,

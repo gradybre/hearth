@@ -105,15 +105,6 @@ void main() {
   });
 
   group('what it refuses, and says why', () {
-    test('a heading pasted with the table', () {
-      // Everybody pastes the header. Naming it beats asking people to delete
-      // it first.
-      final MenuImportLine line = one('Item, Portion, Calories, Protein');
-
-      expect(line.isUsable, isFalse);
-      expect(line.problem, contains('heading'));
-    });
-
     test('a portion it cannot read', () {
       final MenuImportLine line = one('Chicken, one scoopful, 180, 32');
 
@@ -168,6 +159,64 @@ void main() {
 
     test('and a macro it will not state sends the line back', () {
       expect(one('Chicken, 4 oz, <5, 32').isUsable, isFalse);
+    });
+  });
+
+  group('the headings on the sheet', () {
+    test('a line with no numbers is a section, not a failure', () {
+      // Everybody pastes the headings with the table. On a nutrition sheet
+      // they are exactly the sections the menu is laid out in, so reading
+      // them is worth more than refusing them.
+      final List<MenuImportLine> lines = MenuImport.read(
+        'Proteins\n'
+        'Chicken, 4 oz, 180, 32, 0, 7\n'
+        'Steak, 4 oz, 150, 21, 1, 6\n'
+        'Salsas\n'
+        'Fresh Tomato Salsa, 4 oz, 25, 0, 4, 0',
+      );
+
+      expect(lines, hasLength(5));
+      expect(MenuImport.usableIn(lines), 3);
+      expect(lines[0].isHeading, isTrue);
+      expect(lines[1].section, 'Proteins');
+      expect(lines[2].section, 'Proteins');
+      expect(lines[4].section, 'Salsas');
+    });
+
+    test(
+      'items above the first heading have none, rather than a made-up one',
+      () {
+        final List<MenuImportLine> lines = MenuImport.read(
+          'Chicken, 4 oz, 180, 32, 0, 7\nSalsas\nSalsa, 4 oz, 25, 0, 4, 0',
+        );
+
+        expect(lines.first.section, isNull);
+        expect(lines.last.section, 'Salsas');
+      },
+    );
+
+    test('order follows the sheet and skips the headings', () {
+      // The heading is not an item, so it does not consume a position — the
+      // numbers have to line up with the menu, not with the paste.
+      final List<MenuImportLine> lines = MenuImport.read(
+        'Proteins\nChicken, 4 oz, 180\nSalsas\nSalsa, 4 oz, 25',
+      );
+
+      expect(lines[1].order, 0);
+      expect(lines[3].order, 1);
+    });
+
+    test('a column header still reads as a section, harmlessly', () {
+      // "Item, Portion, Calories" is indistinguishable from a section name,
+      // and treating it as one costs a heading nobody wanted rather than a
+      // row of food nobody got.
+      final List<MenuImportLine> lines = MenuImport.read(
+        'Item, Portion, Calories\nChicken, 4 oz, 180, 32, 0, 7',
+      );
+
+      expect(lines.first.isHeading, isTrue);
+      expect(MenuImport.usableIn(lines), 1);
+      expect(lines.last.section, 'Item');
     });
   });
 }
