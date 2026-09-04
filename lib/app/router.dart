@@ -9,6 +9,7 @@ import '../features/foods/barcode_scan_screen.dart';
 import '../features/foods/food_draft.dart';
 import '../features/foods/food_editor_screen.dart';
 import '../features/foods/food_library_screen.dart';
+import '../features/foods/menu_import_screen.dart';
 import '../features/foods/seasonings_screen.dart';
 import '../features/plan/plan_screen.dart';
 import '../features/recipes/default_sweep_screen.dart';
@@ -75,6 +76,11 @@ GoRouter buildRouter() => GoRouter(
                 ? state.extra! as SharedContent
                 : null,
           ),
+    ),
+    GoRoute(
+      path: '/food/menu-import',
+      builder: (BuildContext context, GoRouterState state) =>
+          const MenuImportScreen(),
     ),
     GoRoute(
       path: '/recipe/eat-out',

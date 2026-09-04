@@ -164,10 +164,16 @@ class _Restaurants extends StatelessWidget {
             ),
             const SizedBox(height: HearthSpacing.sm),
             Text(
-              'Add a food in the Foods tab, turn on "From a restaurant", and '
-              'name the place. Everything you add under that name lands here.',
+              'Paste a menu off a nutrition sheet, or add items one at a time '
+              'in the Foods tab with "From a restaurant" turned on.',
               style: context.text.body.copyWith(color: colors.textSecondary),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: HearthSpacing.lg),
+            FilledButton.icon(
+              onPressed: () => context.push('/food/menu-import'),
+              icon: const Icon(Icons.content_paste),
+              label: const Text('Paste a menu'),
             ),
           ],
         ),
@@ -176,10 +182,25 @@ class _Restaurants extends StatelessWidget {
 
     return ListView.separated(
       padding: EdgeInsets.all(gutter),
-      itemCount: restaurants.length,
+      // One past the end: adding the next restaurant belongs with the list of
+      // them, not behind a menu you have to open one of the others to find.
+      itemCount: restaurants.length + 1,
       separatorBuilder: (BuildContext _, int _) =>
           const SizedBox(height: HearthSpacing.sm),
       itemBuilder: (BuildContext context, int index) {
+        if (index == restaurants.length) {
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              height: HearthTouch.minTarget,
+              child: TextButton.icon(
+                onPressed: () => context.push('/food/menu-import'),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Paste another menu'),
+              ),
+            ),
+          );
+        }
         final String name = restaurants[index];
         return Material(
           color: colors.surface,
