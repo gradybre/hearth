@@ -167,17 +167,20 @@ class _SelectedDay extends StatelessWidget {
               style: context.text.body.copyWith(color: colors.textSecondary),
             )
           else ...<Widget>[
-            MacroRings(
-              progress: DayProgress.from(consumed: eaten, targets: targets!),
-            ),
-            // The same three, on the day the week has selected. A trend is
-            // where these actually mean something, and the week is the only
-            // screen that shows one (spec §5.6).
-            if (eaten.knowsAnyMinor) ...<Widget>[
-              const SizedBox(height: HearthSpacing.lg),
-              MinorNutrientBars(
-                progress: DayProgress.from(consumed: eaten, targets: targets!),
-              ),
+            // Computed once for both, rather than once each: two calls with
+            // the same inputs can drift the moment either gains an argument,
+            // and rings and bars disagreeing about one day would be a bug
+            // nobody could see.
+            if (DayProgress.from(consumed: eaten, targets: targets!)
+                case final DayProgress day) ...<Widget>[
+              MacroRings(progress: day),
+              // The same three, on the day the week has selected. A trend is
+              // where these actually mean something, and the week is the only
+              // screen that shows one (spec §5.6).
+              if (eaten.knowsAnyMinor) ...<Widget>[
+                const SizedBox(height: HearthSpacing.lg),
+                MinorNutrientBars(progress: day),
+              ],
             ],
           ],
           const SizedBox(height: HearthSpacing.lg),

@@ -90,6 +90,17 @@ void main() {
   });
 
   group('sodium and cholesterol are ceilings', () {
+    test('nearly spent is still neutral, not an achievement', () {
+      // The rule inherited from MacroProgress says 90% of a target is good,
+      // which is true of calories — a number you are trying to hit — and
+      // false of sodium, which is a number you are trying to avoid. Being at
+      // 2,200 of 2,300 mg is not doing well; it is nearly over.
+      expect(
+        dayOf(const Macros(sodiumMg: 2200)).minor(MinorNutrient.sodium)!.tone,
+        MacroTone.neutral,
+      );
+    });
+
     test('under budget reads neutral', () {
       expect(
         dayOf(const Macros(sodiumMg: 900)).minor(MinorNutrient.sodium)!.tone,

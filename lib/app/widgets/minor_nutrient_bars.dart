@@ -71,13 +71,13 @@ class _Bar extends StatelessWidget {
     // else, so the state is also a word.
     final TargetIndicator? indicator = switch (nutrient.tone) {
       MacroTone.neutral => null,
-      MacroTone.good => TargetIndicator.forState(
-        kind.isFloor ? TargetState.met : TargetState.under,
-      ),
+      // Only a floor is ever good — a ceiling is neutral until it is over —
+      // so this is always "on target" and never the bare word "left".
+      MacroTone.good => TargetIndicator.forState(TargetState.met),
       MacroTone.over => TargetIndicator.forState(
         TargetState.over,
         amount:
-            '${nutrient.consumed.round() - nutrient.target.round()}'
+            '${nutrient.consumed.round() - nutrient.target.round()} '
             '${kind.unit}',
       ),
     };

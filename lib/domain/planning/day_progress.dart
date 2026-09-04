@@ -183,15 +183,31 @@ class MinorProgress {
 
   /// How this number should read, as against merely where it sits.
   ///
-  /// The same split [MacroProgress.tone] makes, applied to a different set:
-  /// [MinorNutrient.isFloor] says which way the nutrient points, and passing a
-  /// floor is an achievement while passing a ceiling is not.
+  /// [MinorNutrient.isFloor] decides which of two rules applies, and they are
+  /// genuinely different rules rather than one with a sign flipped:
+  ///
+  ///  * A **floor** is a number to reach. Most of the way there is neutral,
+  ///    nearly there is good, and past it is still good — the same shape
+  ///    [MacroProgress.tone] gives protein.
+  ///  * A **ceiling** is a number to avoid. It is neutral all the way up and
+  ///    over once passed, with no good in between.
+  ///
+  /// That last part is why this is not [MacroProgress.tone] with a different
+  /// enum. There, 90% of a calorie target is good, because calories are a
+  /// number you are trying to hit. Sodium is a number you are trying not to
+  /// hit, and 2,200 of a 2,300 mg budget is not doing well — it is nearly
+  /// over, and colouring it as an achievement would encourage exactly the
+  /// thing the budget exists to discourage.
   MacroTone get tone {
-    if (target <= 0 || fraction < MacroProgress.goodFrom) {
-      return MacroTone.neutral;
+    if (target <= 0) return MacroTone.neutral;
+    if (!nutrient.isFloor) {
+      return state == MacroProgressState.over
+          ? MacroTone.over
+          : MacroTone.neutral;
     }
-    if (nutrient.isFloor) return MacroTone.good;
-    return state == MacroProgressState.over ? MacroTone.over : MacroTone.good;
+    return fraction < MacroProgress.goodFrom
+        ? MacroTone.neutral
+        : MacroTone.good;
   }
 }
 

@@ -95,7 +95,22 @@ void main() {
 
     expect(find.text('Sodium'), findsOneWidget);
     expect(find.text('2600 of 2300 mg'), findsOneWidget);
-    expect(find.textContaining('over'), findsOneWidget);
+    // The unit spaced the way the rest of the row spaces it.
+    expect(find.text('300 mg over'), findsOneWidget);
+  });
+
+  testWidgets('sodium nearly spent is quiet, not encouraging', (
+    WidgetTester tester,
+  ) async {
+    // 2,200 of 2,300 mg is not doing well, it is nearly over — and a row that
+    // said "on target" there would praise the thing the budget exists to
+    // discourage.
+    await openDay(tester, eaten: const Macros(kcal: 400, sodiumMg: 2200));
+
+    expect(find.text('2200 of 2300 mg'), findsOneWidget);
+    expect(find.text('on target'), findsNothing);
+    expect(find.textContaining('over'), findsNothing);
+    expect(find.text('left'), findsNothing);
   });
 
   testWidgets('and a household target replaces the Daily Value', (
