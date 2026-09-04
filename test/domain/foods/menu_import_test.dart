@@ -112,9 +112,20 @@ void main() {
 
     test('but a word it does not know is still refused, not guessed', () {
       // The reason the line above is a two-word allowance rather than "treat
-      // any trailing word as a count": read that way, "4 oz (113g)" becomes
-      // four of something, which is wrong and looks right.
-      expect(one('Chicken, 4 oz (113g), 180, 32, 0, 7').isUsable, isFalse);
+      // any trailing word as a count": read that way, "1 salad" would become
+      // one of something the sheet never weighed, which is wrong and looks
+      // right. The function is told to send a bare count instead.
+      expect(one('Chicken, 1 salad, 180, 32, 0, 7').isUsable, isFalse);
+    });
+
+    test('a parenthetical after the unit is ignored, not fatal', () {
+      // "4 oz (113g)" is how half the sheets in the world print a portion,
+      // and refusing it sent the row to the unreadable pile over a
+      // restatement of the same fact.
+      final MenuImportLine line = one('Chicken, 4 oz (113g), 180, 32, 0, 7');
+
+      expect(line.isUsable, isTrue);
+      expect(line.portion!.amountIn(Units.ounce), closeTo(4, 1e-9));
     });
 
     test('a fraction is a portion too', () {
@@ -242,6 +253,26 @@ void main() {
   });
 
   group('writing rows back out as the text this reads', () {
+    test('a name with a comma in it survives the round trip', () {
+      // The format separates on commas, so a field cannot hold one. Left
+      // alone, "Bacon, Egg & Cheese" is written out and read back as an item
+      // called "Bacon" with a portion of "Egg & Cheese" — every
+      // comma-bearing item on a sheet lost from a menu the model read
+      // correctly, with a message blaming the user's picture.
+      final String text = MenuImport.write(const <MenuRow>[
+        MenuRow(
+          name: 'Bacon, Egg & Cheese on Brioche',
+          portion: '1 ea',
+          macros: Macros(kcal: 480, proteinG: 22, carbG: 39, fatG: 26),
+        ),
+      ]);
+      final MenuImportLine line = MenuImport.read(text).single;
+
+      expect(line.isUsable, isTrue);
+      expect(line.name, 'Bacon Egg & Cheese on Brioche');
+      expect(line.macros.kcal, 480);
+    });
+
     // The join between a transcription and the review screen. A model returns
     // rows; they become exactly what a person would have pasted, and go
     // through this same parser and the same live review. A format with two

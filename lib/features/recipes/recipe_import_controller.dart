@@ -259,8 +259,7 @@ class RecipeImportController extends Notifier<RecipeImportState> {
     try {
       final AiRecipe recipe = await ai.extract(
         images: <AiImage>[
-          for (final PickedPhoto photo in _images)
-            AiImage(bytes: photo.bytes, mediaType: _mediaTypeOf(photo)),
+          for (final PickedPhoto photo in _images) AiImage.ofPhoto(photo),
         ],
         url: _url.trim().isEmpty ? null : _url.trim(),
         text: _text.trim().isEmpty ? null : _text.trim(),
@@ -328,15 +327,6 @@ class RecipeImportController extends Notifier<RecipeImportState> {
         ? 'your picture'
         : 'your ${_images.length} pictures';
   }
-
-  /// Claude accepts jpeg, png, gif and webp; anything else is sent as jpeg and
-  /// left to fail loudly rather than be guessed at here.
-  static String _mediaTypeOf(PickedPhoto photo) => switch (photo.extension) {
-    'png' => 'image/png',
-    'gif' => 'image/gif',
-    'webp' => 'image/webp',
-    _ => 'image/jpeg',
-  };
 }
 
 final NotifierProvider<RecipeImportController, RecipeImportState>

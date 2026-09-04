@@ -131,12 +131,12 @@ abstract final class MenuImport {
     for (final MenuRow row in rows) {
       if (row.section != section) {
         section = row.section;
-        if (section != null) out.writeln(section);
+        if (section != null) out.writeln(_field(section));
       }
       out.writeln(
         <String>[
-          row.name,
-          row.portion,
+          _field(row.name),
+          _field(row.portion),
           _amount(row.macros.kcal),
           _amount(row.macros.proteinG),
           _amount(row.macros.carbG),
@@ -147,6 +147,19 @@ abstract final class MenuImport {
     }
     return out.toString().trimRight();
   }
+
+  /// A field with nothing in it that this format reads as a separator.
+  ///
+  /// The format cannot carry a comma, a tab, or a double space inside a
+  /// field — [_separator] is what splits the row, and a name is the one field
+  /// nobody can quote. So "Bacon, Egg & Cheese on Brioche" is written without
+  /// its comma rather than written and then read back as an item called
+  /// "Bacon" with a portion of "Egg & Cheese". The name loses a comma; the
+  /// alternative loses the item, and blames the picture for it.
+  static String _field(String value) => value
+      .replaceAll(RegExp(r'[,\t]'), ' ')
+      .replaceAll(RegExp(r'\s{2,}'), ' ')
+      .trim();
 
   /// The three minor nutrients as fields, ending at the last one known.
   ///
@@ -289,10 +302,14 @@ abstract final class MenuImport {
     return parseAmount(field.replaceAll(RegExp(r'[^0-9./\s-]'), '').trim());
   }
 
-  /// "4 oz", "2 fl oz", "1 ea", "100 g".
+  /// "4 oz", "2 fl oz", "1 ea", "100 g", "4 oz (113g)".
   static Quantity? _portion(String field) {
+    // The parenthetical is the same portion said again in another unit, and
+    // half the sheets in the world print one. Refused, it sent the row to the
+    // unreadable pile over a restatement of a fact already read.
+    final String stated = field.replaceAll(RegExp(r'\([^)]*\)'), ' ').trim();
     final RegExpMatch? match = RegExp(r'^\s*([0-9./]+)\s*(.*)$')
-        .firstMatch(field);
+        .firstMatch(stated);
     if (match == null) return null;
 
     final double? amount = parseAmount(match.group(1)!);

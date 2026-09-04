@@ -287,8 +287,11 @@ const MENU_TOOL = {
             portion: {
               type: 'string',
               description:
-                'The serving size as printed: "4 oz", "2 fl oz", "1 ea", ' +
-                '"1 salad", "30 g". If the table states none, "1 serving".',
+                'The serving size as a measured amount — "4 oz", "2 fl oz", ' +
+                '"30 g", "1 ea" — or a bare count where the sheet portions ' +
+                'by the whole item: "1 salad" is "1", "2 tacos" is "2". ' +
+                'Give the amount only, without a restatement in brackets. ' +
+                'If the table states no portion at all, "1 serving".',
             },
             kcal: { type: 'number' },
             protein_g: { type: 'number' },
@@ -484,11 +487,18 @@ Sections are the headings the sheet prints — "Proteins", "Salsas", "Craft Your
 Own". Carry each one down to the rows beneath it, so the menu keeps the shape
 the restaurant gave it.
 
-Serving sizes: use exactly what is printed. If the table states none at all,
-use "1 serving" rather than inventing a weight.
+Serving sizes: the amount the table prints, as an amount. "4 oz", "2 fl oz",
+"30 g", "1 ea". Where the sheet portions by the whole item — "1 salad", "2
+tacos" — give the bare count, "1" or "2"; the name already says what it is.
+Give the amount once: "4 oz (113 g)" is "4 oz". If the table states no portion
+at all, use "1 serving" rather than inventing a weight.
 
-Omit a nutrient the table does not print rather than writing 0 — a column that
-is not there is unknown, and zero is a claim. "< 1" is also unknown; omit it.
+Calories, protein, carbohydrate and fat are always required. Where one of the
+four is printed as "< 1", give 0.
+
+Fibre, sodium and cholesterol are different: omit one the table does not print
+rather than writing 0 — a column that is not there is unknown, and zero is a
+claim. "< 1" in those three is also unknown; omit it.
 
 Skip drinks and kids' menus.
 
@@ -616,13 +626,23 @@ Deno.serve(async (request: Request): Promise<Response> => {
       ? LABEL_TOOL
       : RECIPE_TOOL;
 
-    const answer = await ask(system, content, key, tool);
+    // A menu is the one mode whose answer is as long as its input: a
+    // six-page guide is 150 rows, and at 4,096 tokens the transcription stops
+    // around row 60 — a short list that looks complete. The others answer
+    // with one recipe, one label, one basket.
+    const answer = await ask(
+      system,
+      content,
+      key,
+      tool,
+      mode === 'menu' ? 16_000 : 4096,
+    );
     const usage = await recordUsage(answer.usage);
 
     const shaped = mode === 'shopping'
       ? shapeShopping(answer.input)
       : mode === 'menu'
-      ? shapeMenu(answer.input)
+      ? shapeMenu(answer.input, answer.truncated)
       : mode === 'label'
       ? shapeLabel(answer.input)
       : shape(answer.input);
@@ -687,11 +707,10 @@ async function extractContent(
   return content;
 }
 
-/// A label, as Claude content blocks.
+/// A nutrition guide, as Claude content blocks.
 ///
-/// Several images are the same packet from more than one angle — a panel is
-/// often easier to read in two shots than one — so they are stitched into a
-/// single reading rather than treated as several foods.
+/// Several images are pages of one guide, not several menus — a restaurant's
+/// sheet runs to six pages and its section headings carry across them.
 function menuContent(images: string[]): unknown[] {
   if (images.length === 0) {
     throw new Error('bad request: give a picture of the menu');
@@ -709,6 +728,11 @@ function menuContent(images: string[]): unknown[] {
   ];
 }
 
+/// A label, as Claude content blocks.
+///
+/// Several images are the same packet from more than one angle — a panel is
+/// often easier to read in two shots than one — so they are stitched into a
+/// single reading rather than treated as several foods.
 function labelContent(images: string[]): unknown[] {
   if (images.length === 0) {
     throw new Error('bad request: give a photo of the label');
@@ -909,6 +933,13 @@ async function fetchPage(url: string): Promise<string> {
 interface Answer {
   input: Record<string, unknown>;
   usage: { input_tokens?: number; output_tokens?: number } | null;
+
+  /// The model ran out of room mid-answer.
+  ///
+  /// Worth carrying rather than ignoring: a truncated menu is a short list
+  /// that looks complete, and "68 to add" from a 150-item guide is a silent
+  /// half-import nobody would think to check.
+  truncated: boolean;
 }
 
 async function ask(
@@ -916,6 +947,7 @@ async function ask(
   content: unknown[],
   key: string,
   tool: { name: string },
+  maxTokens = 4096,
 ): Promise<Answer> {
   const response = await fetch(ANTHROPIC, {
     method: 'POST',
@@ -926,7 +958,7 @@ async function ask(
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 4096,
+      max_tokens: maxTokens,
       system,
       tools: [tool],
       tool_choice: { type: 'tool', name: tool.name },
@@ -941,16 +973,25 @@ async function ask(
   }
 
   const payload = await response.json();
+  const truncated = payload?.stop_reason === 'max_tokens';
   const block = (payload?.content ?? []).find(
     (c: { type?: string }) => c?.type === 'tool_use',
   );
   if (!block?.input) {
+    // A cut-off tool call often cannot be parsed at all, and "nothing
+    // readable" would send the user back to rephotograph a page that was
+    // fine.
+    if (truncated) {
+      throw new Error(
+        'That was too long to read in one go. Try fewer pages at a time.',
+      );
+    }
     throw new Error('Claude returned nothing readable');
   }
 
   // The token counts were always in this payload and were always thrown away.
   // They are what the ceiling is counted in.
-  return { input: block.input, usage: payload?.usage ?? null };
+  return { input: block.input, usage: payload?.usage ?? null, truncated };
 }
 
 /// What the month has cost, and whether that is already too much.
@@ -1085,19 +1126,16 @@ function shape(input: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
-/// Narrows a label reading the same way, and drops what the app cannot use.
-///
-/// A serving with a unit Hearth does not know is dropped rather than defaulted
-/// to grams: a portion silently reinterpreted as a weight it is not would put
-/// a wrong number into a day, which is the one failure mode a review screen
-/// cannot catch, because it looks correct.
 /// Narrows a transcribed menu to the shape the app is promised.
 ///
 /// Every nutrient is passed through `number`, which answers null for anything
 /// the model omitted or wrote as prose — and null is carried rather than
 /// flattened to zero, because a column the sheet never printed is unknown and
 /// zero would be a claim (spec §5.6).
-function shapeMenu(input: Record<string, unknown>): Record<string, unknown> {
+function shapeMenu(
+  input: Record<string, unknown>,
+  truncated = false,
+): Record<string, unknown> {
   const rows = Array.isArray(input.rows) ? input.rows : [];
 
   return {
@@ -1118,14 +1156,32 @@ function shapeMenu(input: Record<string, unknown>): Record<string, unknown> {
         sodium_mg: number(r.sodium_mg),
         cholesterol_mg: number(r.cholesterol_mg),
       })),
-    uncertain: Array.isArray(input.uncertain)
-      ? (input.uncertain as Uncertain[])
-        .filter((u) => u?.field || u?.note)
-        .map((u) => ({ field: text(u.field), note: text(u.note) }))
-      : [],
+    uncertain: [
+      // First, because it is about the list rather than about a row: the
+      // rows below it are fine, and the ones after them are simply missing.
+      ...(truncated
+        ? [{
+          field: 'The end of the guide',
+          note:
+            'The transcription ran out of room, so the last items are ' +
+            'missing. Read the remaining pages separately.',
+        }]
+        : []),
+      ...(Array.isArray(input.uncertain)
+        ? (input.uncertain as Uncertain[])
+          .filter((u) => u?.field || u?.note)
+          .map((u) => ({ field: text(u.field), note: text(u.note) }))
+        : []),
+    ],
   };
 }
 
+/// Narrows a label reading the same way, and drops what the app cannot use.
+///
+/// A serving with a unit Hearth does not know is dropped rather than defaulted
+/// to grams: a portion silently reinterpreted as a weight it is not would put
+/// a wrong number into a day, which is the one failure mode a review screen
+/// cannot catch, because it looks correct.
 function shapeLabel(input: Record<string, unknown>): Record<string, unknown> {
   // Must stay in step with LABEL_TOOL's own enum. It did not: the packet units
   // were added to what the model may answer and not to what this accepts, so

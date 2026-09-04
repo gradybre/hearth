@@ -81,15 +81,25 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
     setState(() {
       _reading = true;
       _readError = null;
+      // A doubt belongs to the rows it came with. Left standing over a new
+      // read, it points at an item no longer on the screen.
+      _uncertain = const <AiUncertainty>[];
     });
     try {
       final List<AiImage> images = await pages();
+      // Backing out of the picker. A file that produced no pages says so for
+      // itself, from the picker.
       if (images.isEmpty) return;
 
       final MenuReading reading = await reader.read(images);
       if (!mounted) return;
       setState(() {
-        _pasted.text = MenuImport.write(reading.rows);
+        // Added to, not over. A guide is read a page at a time, and a
+        // hand-typed correction sits in the same box — overwriting destroys
+        // both, with no undo.
+        final String had = _pasted.text.trimRight();
+        final String read = MenuImport.write(reading.rows);
+        _pasted.text = had.isEmpty ? read : '$had\n$read';
         _uncertain = reading.uncertain;
         // Only where the field is still empty: a name already typed is a
         // decision, and a page's own branding is a guess.
@@ -99,6 +109,13 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
       });
     } on RecipeAiException catch (error) {
       if (mounted) setState(() => _readError = error.message);
+    } on Object {
+      // A file dialog refused a permission, a PDF would not open, a picker
+      // threw. None of those are a RecipeAiException, and catching only that
+      // left the button snapping back with nothing said.
+      if (mounted) {
+        setState(() => _readError = 'Could not read that. Try again.');
+      }
     } finally {
       if (mounted) setState(() => _reading = false);
     }
@@ -109,17 +126,21 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
         .read(photoPickerProvider)
         .pickMultiple(max: 6);
     return <AiImage>[
-      for (final PickedPhoto photo in picked)
-        AiImage(
-          bytes: photo.bytes,
-          mediaType: photo.extension == 'png' ? 'image/png' : 'image/jpeg',
-        ),
+      for (final PickedPhoto photo in picked) AiImage.ofPhoto(photo),
     ];
   }
 
   Future<List<AiImage>> _pdf() async {
     final RenderedPdf? rendered = await ref.read(pdfPagesProvider).pick();
     if (rendered == null) return const <AiImage>[];
+    // Chosen, but nothing came out of it. Silent here, this is
+    // indistinguishable from backing out of the dialog.
+    if (rendered.pages.isEmpty) {
+      throw const RecipeAiException(
+        'None of that PDF would render. Try screenshots of it instead.',
+        isRetryable: false,
+      );
+    }
     return <AiImage>[
       for (final Uint8List page in rendered.pages)
         AiImage(bytes: page, mediaType: 'image/png'),
@@ -211,7 +232,8 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
             TextField(
               controller: _restaurant,
               textCapitalization: TextCapitalization.words,
-              onChanged: (String _) => setState(() {}),
+              onChanged: (String _) =>
+                  setState(() => _uncertain = const <AiUncertainty>[]),
               style: context.text.body,
               decoration: InputDecoration(
                 labelText: 'Restaurant',
@@ -278,7 +300,8 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
               controller: _pasted,
               maxLines: 8,
               minLines: 4,
-              onChanged: (String _) => setState(() {}),
+              onChanged: (String _) =>
+                  setState(() => _uncertain = const <AiUncertainty>[]),
               style: context.text.body,
               decoration: const InputDecoration(
                 hintText: 'Chicken, 4 oz, 180, 32, 0, 7',

@@ -303,6 +303,97 @@ void main() {
       expect(find.textContaining('ran into the one above'), findsOneWidget);
     });
 
+    testWidgets('a second read adds to the box rather than wiping it', (
+      WidgetTester tester,
+    ) async {
+      // A guide is read a page at a time, and hand-typed corrections sit in
+      // the same box. Overwriting destroys both, with no undo.
+      await pumpHearthApp(
+        tester,
+        photoPicker: _OnePhoto(),
+        menuReader: _FakeMenuReader(
+          const MenuReading(
+            rows: <MenuRow>[
+              MenuRow(
+                name: 'Falafel',
+                portion: '1 serving',
+                macros: Macros(kcal: 350),
+              ),
+            ],
+          ),
+        ),
+      );
+      await openImporter(tester);
+      await tester.enterText(
+        find.byType(TextField).at(1),
+        'Chicken, 4 oz, 180, 32, 0, 7',
+      );
+      await pumpFrames(tester, frames: 12);
+
+      await tester.tap(find.text('Read from screenshots'));
+      await pumpFrames(tester, frames: 20);
+
+      final TextField box = tester.widget(find.byType(TextField).at(1));
+      expect(box.controller!.text, contains('Chicken'));
+      expect(box.controller!.text, contains('Falafel'));
+    });
+
+    testWidgets('a doubt from an earlier read does not outlive its rows', (
+      WidgetTester tester,
+    ) async {
+      // A warning pointing at an item no longer on screen is worse than no
+      // warning: it teaches you to ignore the panel.
+      await pumpHearthApp(
+        tester,
+        photoPicker: _OnePhoto(),
+        menuReader: _FakeMenuReader(
+          const MenuReading(
+            rows: <MenuRow>[
+              MenuRow(
+                name: 'Barbacoa',
+                portion: '4 oz',
+                macros: Macros(kcal: 170),
+              ),
+            ],
+            uncertain: <AiUncertainty>[
+              AiUncertainty(field: 'Barbacoa sodium', note: 'Smudged.'),
+            ],
+          ),
+        ),
+      );
+      await openImporter(tester);
+      await tester.tap(find.text('Read from screenshots'));
+      await pumpFrames(tester, frames: 20);
+      expect(find.text('Check these before saving'), findsOneWidget);
+
+      await tester.enterText(
+        find.byType(TextField).at(1),
+        'Chicken, 4 oz, 180, 32, 0, 7',
+      );
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('Check these before saving'), findsNothing);
+    });
+
+    testWidgets('a read that fails for any other reason still says so', (
+      WidgetTester tester,
+    ) async {
+      // A file dialog throwing a PlatformException is not a RecipeAiException,
+      // and catching only the latter leaves the button snapping back with
+      // nothing said.
+      await pumpHearthApp(
+        tester,
+        photoPicker: _ThrowingPicker(),
+        menuReader: _FakeMenuReader(const MenuReading(rows: <MenuRow>[])),
+      );
+      await openImporter(tester);
+
+      await tester.tap(find.text('Read from screenshots'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(find.textContaining('Could not read'), findsOneWidget);
+    });
+
     testWidgets('a failed read says why and writes nothing', (
       WidgetTester tester,
     ) async {
@@ -361,4 +452,18 @@ class _OnePhoto implements PhotoPicker {
   Future<List<PickedPhoto>> pickMultiple({int max = 10}) async => <PickedPhoto>[
     PickedPhoto(bytes: _pixel, extension: 'png'),
   ];
+}
+
+/// A picker that fails the way a permission refusal does.
+class _ThrowingPicker implements PhotoPicker {
+  @override
+  bool get canUseCamera => false;
+
+  @override
+  Future<PickedPhoto?> pick(PhotoOrigin origin) async =>
+      throw Exception('photo access denied');
+
+  @override
+  Future<List<PickedPhoto>> pickMultiple({int max = 10}) async =>
+      throw Exception('photo access denied');
 }

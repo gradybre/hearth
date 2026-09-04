@@ -105,7 +105,7 @@ class LabelScanController extends Notifier<LabelScanState> {
 
     try {
       final LabelReading reading = await reader.read(<AiImage>[
-        AiImage(bytes: photo.bytes, mediaType: _mediaTypeOf(photo)),
+        AiImage.ofPhoto(photo),
       ]);
       if (_run != run) return;
 
@@ -134,13 +134,6 @@ class LabelScanController extends Notifier<LabelScanState> {
     _photo = null;
     state = const LabelScanIdle();
   }
-
-  static String _mediaTypeOf(PickedPhoto photo) => switch (photo.extension) {
-    'png' => 'image/png',
-    'gif' => 'image/gif',
-    'webp' => 'image/webp',
-    _ => 'image/jpeg',
-  };
 }
 
 /// Auto-disposed, which is what makes reopening the sheet safe.

@@ -149,6 +149,27 @@ void main() {
       expect(reading.rows.single.name, 'Steak');
     });
 
+    test(
+      'an "uncertain" that came back malformed is refused, not thrown at',
+      () {
+        // A TypeError here would escape as an unhandled async error rather than
+        // the sentence the screen knows how to show.
+        expect(
+          () => EdgeFunctionMenuReader.readingFrom(<Object?, Object?>{
+            'rows': <Object?>[
+              <String, Object?>{
+                'name': 'Chicken',
+                'portion': '4 oz',
+                'kcal': 1,
+              },
+            ],
+            'uncertain': 'the sodium column was smudged',
+          }),
+          returnsNormally,
+        );
+      },
+    );
+
     test('a row with no portion gets one rather than being refused later', () {
       // Blaming the user's picture for a gap upstream would send them back to
       // photograph a page that was fine.

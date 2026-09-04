@@ -91,13 +91,16 @@ class EdgeFunctionMenuReader implements MenuReader {
       rows: read,
       restaurant: _text(envelope['restaurant']),
       uncertain: <AiUncertainty>[
-        for (final Object? note
-            in (envelope['uncertain'] as List<Object?>?) ?? const <Object?>[])
-          if (note is Map<Object?, Object?>)
-            AiUncertainty(
-              field: '${note['field'] ?? ''}',
-              note: '${note['note'] ?? ''}',
-            ),
+        // A pattern rather than a cast: a response whose `uncertain` came
+        // back as a string would otherwise throw a TypeError, which is not
+        // the exception the screen knows how to show.
+        if (envelope['uncertain'] case final List<Object?> notes)
+          for (final Object? note in notes)
+            if (note is Map<Object?, Object?>)
+              AiUncertainty(
+                field: '${note['field'] ?? ''}',
+                note: '${note['note'] ?? ''}',
+              ),
       ],
     );
   }
@@ -160,7 +163,9 @@ class EdgeFunctionMenuReader implements MenuReader {
       } on FormatException {
         return details.trim();
       }
-      return details.trim();
+      // Decoded, but with no sentence in it: showing the raw JSON would put a
+      // gateway's internals in front of the user.
+      return null;
     }
     return null;
   }
