@@ -112,3 +112,8 @@ Release/
 *.swp
 *~
 Thumbs.db
+
+# Per-machine Claude Code settings — permissions granted on this Mac are not
+# a fact about the project. Covered by a global ignore on Brendan's machine,
+# which says nothing about anybody else's.
+.claude/settings.local.json
