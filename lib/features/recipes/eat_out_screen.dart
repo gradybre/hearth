@@ -314,9 +314,12 @@ class _MenuRow extends StatelessWidget {
     final bool isPicked = picked != null;
     final MenuPick pick = MenuPick(food: food, count: picked ?? 1);
     final ServingOption? serving = food.defaultServing;
+    // What you are actually having, not the serving *and* what you are having
+    // beside it. A picked half-scoop read "2.0000000088184904 oz · 4 oz · 65
+    // kcal", which is two portions and a float for one line of one item.
     final String portion = serving == null
         ? ''
-        : '${serving.label} · '
+        : '${isPicked ? pick.portionLabel : serving.label} · '
               '${MacroCalculator.forServings(serving, picked ?? 1).kcal.round()} kcal';
 
     return Semantics(
@@ -356,10 +359,7 @@ class _MenuRow extends StatelessWidget {
                       if (portion.isNotEmpty) ...<Widget>[
                         const SizedBox(height: HearthSpacing.xxs),
                         Text(
-                          isPicked && picked != 1
-                              ? '${pick.line.split(' ').take(2).join(' ')}'
-                                    ' · $portion'
-                              : portion,
+                          portion,
                           style: context.text.metadata.copyWith(
                             color: colors.textMuted,
                           ),

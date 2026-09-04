@@ -231,4 +231,36 @@ void main() {
     expect(find.text('Falafel'), findsOneWidget);
     expect(find.text('Harissa'), findsOneWidget);
   });
+
+  testWidgets('a row shows one portion, and it reads like a portion', (
+    WidgetTester tester,
+  ) async {
+    // Brendan's screenshot: a picked half-scoop read
+    // "2.0000000088184904 oz · 4 oz · 65 kcal" — two portions and a float,
+    // for one line of one item.
+    await pumpHearthApp(
+      tester,
+      foods: <Food>[
+        item(
+          'Black Beans',
+          restaurant: 'Chipotle',
+          macros: const Macros(kcal: 130),
+        ),
+      ],
+    );
+    await openBuilder(tester);
+    await tester.tap(find.text('Chipotle'));
+    await pumpFrames(tester, frames: 12);
+
+    // Unpicked: the serving as the menu states it.
+    expect(find.text('4 oz · 130 kcal'), findsOneWidget);
+
+    await tester.tap(find.text('Black Beans'));
+    await pumpFrames(tester, frames: 12);
+    await tester.tap(find.byTooltip('One less'));
+    await pumpFrames(tester, frames: 12);
+
+    // Picked at a half: what you are having, and what it costs.
+    expect(find.text('2 oz · 65 kcal'), findsOneWidget);
+  });
 }

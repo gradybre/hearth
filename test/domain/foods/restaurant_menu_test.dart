@@ -1,6 +1,7 @@
 import 'package:hearth/domain/foods/restaurant_menu.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
+import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 import 'package:test/test.dart';
 
@@ -262,6 +263,84 @@ void main() {
       expect(sections, hasLength(1));
       expect(sections.single.name, isNull);
       expect(sections.single.items, hasLength(2));
+    });
+  });
+
+  group('a portion is a portion, not a float', () {
+    // Brendan's screenshot: "4.000000017636981 oz Cilantro-Lime Brown Rice"
+    // in the ingredients, and "2.0000000088184904 oz" on the row.
+    //
+    // Two faults compounding. The seed stored 4 oz as 113.398093 g — rounded
+    // to six places by the generator — so converting back gives 4.000000018.
+    // And this wrote whatever double came out, so the residue was shown at
+    // full width. The data is fixed separately; a portion that reads as a
+    // portion is this half, and it has to hold against residue from any
+    // source, not just that one.
+    Food noisy({double ounces = 4}) => aFood(
+      'Cilantro-Lime Brown Rice',
+      brand: 'Chipotle',
+      source: FoodSource.restaurant,
+      servingOptions: <ServingOption>[
+        ServingOption(
+          id: 'serving-noisy',
+          label: '$ounces oz',
+          // What the seeded row actually holds, to six decimal places.
+          amount: Quantity.canonical(
+            canonicalAmount: 113.398093 * (ounces / 4),
+            kind: UnitKind.mass,
+            preferredUnit: Units.ounce,
+          ),
+          macros: const Macros(kcal: 210),
+        ),
+      ],
+    );
+
+    test('reads as the round number it is meant to be', () {
+      expect(MenuPick(food: noisy()).line, '4 oz Cilantro-Lime Brown Rice');
+    });
+
+    test('and half a 4 oz scoop is 2 oz, not eight decimal places of it', () {
+      expect(
+        MenuPick(food: noisy(), count: 0.5).line,
+        '2 oz Cilantro-Lime Brown Rice',
+      );
+    });
+
+    test('a real fraction is still written as one the parser can read', () {
+      final Food half = aFood(
+        'Guacamole',
+        brand: 'Chipotle',
+        source: FoodSource.restaurant,
+        servingOptions: <ServingOption>[
+          aServing(
+            amount: 1,
+            unit: Units.ounce,
+            macros: const Macros(kcal: 60),
+          ),
+        ],
+      );
+
+      expect(MenuPick(food: half, count: 0.5).line, '1/2 oz Guacamole');
+      expect(MenuPick(food: half, count: 1.5).line, '1 1/2 oz Guacamole');
+    });
+
+    test('and a genuinely odd amount is not rounded away', () {
+      // Rounding is for floating-point residue, not for numbers somebody
+      // meant. A third of a cup is a third of a cup.
+      final Food third = aFood(
+        'Rice',
+        brand: 'Chipotle',
+        source: FoodSource.restaurant,
+        servingOptions: <ServingOption>[
+          aServing(
+            amount: 1 / 3,
+            unit: Units.cup,
+            macros: const Macros(kcal: 70),
+          ),
+        ],
+      );
+
+      expect(MenuPick(food: third).line, '1/3 cup Rice');
     });
   });
 }

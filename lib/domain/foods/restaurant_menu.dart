@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../models/food.dart';
+import '../parsing/amount_parser.dart';
 import '../units/quantity.dart';
 import '../units/unit.dart';
 
@@ -143,6 +144,16 @@ class MenuPick {
     );
   }
 
+  /// Just the amount — "8 oz", "2 oz" — for a row that already names the
+  /// thing beside it.
+  String get portionLabel {
+    final Quantity? amount = quantity;
+    if (amount == null) return '';
+    final Unit unit = amount.preferredUnit ?? Units.canonicalFor(amount.kind);
+    final String label = unit.label.isEmpty ? 'ea' : unit.label;
+    return '${_number(amount.amountIn(unit))} $label';
+  }
+
   /// The ingredient line this pick writes into a recipe.
   ///
   /// Written so the parser reads it straight back — the amount, the unit as
@@ -153,14 +164,31 @@ class MenuPick {
     final Quantity? amount = quantity;
     if (amount == null) return food.name;
 
-    final Unit unit = amount.preferredUnit ?? Units.canonicalFor(amount.kind);
-    final String label = unit.label.isEmpty ? 'ea' : unit.label;
-    return '${_number(amount.amountIn(unit))} $label ${food.name}';
+    return '$portionLabel ${food.name}';
   }
 
-  static String _number(double value) => value == value.roundToDouble()
-      ? value.round().toString()
-      : value.toString();
+  /// A portion, written the way a person would write it.
+  ///
+  /// [writeAmount] gives whole numbers and friendly fractions — both of which
+  /// [parseAmount] reads straight back, which matters because this string is
+  /// parsed again by the recipe editor.
+  ///
+  /// The rounding in front of it is the fix for a real report: a bowl arrived
+  /// reading "4.000000017636981 oz Cilantro-Lime Brown Rice". Converting out
+  /// of a canonical amount and back is floating-point arithmetic, so a
+  /// portion stored as 4 oz can return 4.000000018 — and that is not a
+  /// quantity anybody typed or would recognise.
+  ///
+  /// Snapped rather than rounded, and the difference matters: rounding to a
+  /// fixed number of places turns a third of a cup into "0.333333", because
+  /// [writeAmount] recognises 1/3 only to within a billionth. So the value is
+  /// moved to the nearest thousandth **only when it is already essentially
+  /// there** — which erases conversion residue and leaves anything anybody
+  /// actually meant exactly where it was.
+  static String _number(double value) {
+    final double snapped = (value * 1000).roundToDouble() / 1000;
+    return writeAmount((value - snapped).abs() < 1e-6 ? snapped : value);
+  }
 
   @override
   bool operator ==(Object other) =>
