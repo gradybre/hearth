@@ -153,10 +153,11 @@ class MacroProgress {
 /// One minor nutrient's progress for a day (spec §5.6).
 ///
 /// Deliberately its own type rather than a [MacroProgress] with a different
-/// enum on it. The four macros are always known and always shown; these three
-/// are shown only where something logged actually knows them, and a type that
-/// cannot be constructed without a number is what keeps "nobody asked" from
-/// being rendered as "none".
+/// enum on it. The four macros are always known; these three often are not,
+/// and [consumed] is nullable precisely so that "nobody asked" can never be
+/// rendered as "none". All three are shown either way — hiding an unknown one
+/// made the whole feature invisible, because an absent row and a feature that
+/// was never built look the same.
 @immutable
 class MinorProgress {
   const MinorProgress({
@@ -164,18 +165,49 @@ class MinorProgress {
     required this.consumed,
     required this.target,
     required this.state,
+    this.unknownCount = 0,
+    this.countedParts = 0,
   });
 
   final MinorNutrient nutrient;
-  final double consumed;
+
+  /// **Null when nothing that counted has stated a value.**
+  ///
+  /// Not zero, and the difference is the whole of §5.6: a bar reading "0 of
+  /// 28 g" claims the day had no fibre, when the truth is that nothing eaten
+  /// has ever been asked. Those are different statements and only one of them
+  /// is true.
+  final double? consumed;
+
   final double target;
   final MacroProgressState state;
 
+  /// How many of the things that counted said nothing about this nutrient.
+  ///
+  /// A running total is only as good as its coverage, and a partial one looks
+  /// exactly like a whole one on screen — which is how "12 g of fibre" from
+  /// two foods out of six becomes a number somebody trusts.
+  final int unknownCount;
+
+  /// How many things counted towards the day at all.
+  ///
+  /// Zero means nothing has been logged yet, which is a different silence
+  /// from "six foods were asked and none of them knew" — and saying the wrong
+  /// one of those is how a row stops being read.
+  final int countedParts;
+
+  bool get isKnown => consumed != null;
+
   /// What is left. For fibre that is what remains to get; for sodium and
   /// cholesterol it is what remains to spend.
-  double get remaining => target - consumed;
+  ///
+  /// **Null when nothing has said**, rather than the whole target. "2,300 mg
+  /// left" on a day nobody asked about sodium is a number this cannot know,
+  /// and returning one would be a `?? 0` wearing a different hat.
+  double? get remaining => consumed == null ? null : target - consumed!;
 
-  double get fraction => target > 0 ? consumed / target : 0;
+  double get fraction =>
+      target > 0 && consumed != null ? consumed! / target : 0;
 
   double get barFill => fraction.clamp(0.0, 1.0).toDouble();
 
@@ -199,7 +231,8 @@ class MinorProgress {
   /// over, and colouring it as an achievement would encourage exactly the
   /// thing the budget exists to discourage.
   MacroTone get tone {
-    if (target <= 0) return MacroTone.neutral;
+    // Nothing has said, so there is nothing to say about it either.
+    if (target <= 0 || consumed == null) return MacroTone.neutral;
     if (!nutrient.isFloor) {
       return state == MacroProgressState.over
           ? MacroTone.over
@@ -223,6 +256,8 @@ class DayProgress {
     required this.protein,
     required this.carbs,
     required this.fat,
+    this.unknownCounts = const <MinorNutrient, int>{},
+    this.countedParts = 0,
   });
 
   /// Builds a day's progress from what's been eaten and the day's targets.
@@ -234,7 +269,11 @@ class DayProgress {
     required Macros consumed,
     required MacroTargets targets,
     double tolerance = 0,
+    Map<MinorNutrient, int> unknownCounts = const <MinorNutrient, int>{},
+    int countedParts = 0,
   }) => DayProgress(
+    unknownCounts: unknownCounts,
+    countedParts: countedParts,
     consumed: consumed,
     targets: targets,
     calories: _progress(
@@ -253,8 +292,43 @@ class DayProgress {
     fat: _progress(MacroKind.fat, consumed.fatG, targets.fatG, tolerance),
   );
 
+  /// The same, from the parts rather than the total, so each bar can say how
+  /// much of the day it actually covers.
+  ///
+  /// A running total looks the same whether it came from everything eaten or
+  /// from one food out of six, and only one of those is worth reading.
+  factory DayProgress.fromParts({
+    required Iterable<Macros> parts,
+    required MacroTargets targets,
+    double tolerance = 0,
+  }) {
+    final List<Macros> all = parts.toList(growable: false);
+    return DayProgress.from(
+      consumed: Macros.sum(all),
+      targets: targets,
+      tolerance: tolerance,
+      countedParts: all.length,
+      unknownCounts: <MinorNutrient, int>{
+        for (final MinorNutrient nutrient in MinorNutrient.values)
+          nutrient: all
+              .where((Macros macros) => !macros.knows(nutrient))
+              .length,
+      },
+    );
+  }
+
   final Macros consumed;
   final MacroTargets targets;
+
+  /// How many of the contributing parts said nothing about each nutrient.
+  ///
+  /// Empty when the day was built from a total rather than from its parts, in
+  /// which case a bar reports what it knows and claims nothing about coverage.
+  final Map<MinorNutrient, int> unknownCounts;
+
+  /// How many things counted towards the day, or zero when it was built from
+  /// a total. Distinguishes "nothing logged" from "nothing knew".
+  final int countedParts;
 
   final MacroProgress calories;
   final MacroProgress protein;
@@ -271,18 +345,13 @@ class DayProgress {
     MacroKind.fat => fat,
   };
 
-  /// Where [nutrient] stands, or **null when nothing logged knows it**.
-  ///
-  /// Null rather than a zero: a bar reading "0 of 28 g" claims the day had no
-  /// fibre, when the truth is that nothing eaten has ever been asked. Those
-  /// are different statements and only one of them is true (spec §5.6).
-  MinorProgress? minor(MinorNutrient nutrient) {
+  /// Where [nutrient] stands. Its `consumed` is **null when nothing that
+  /// counted has stated a value** — which is not the same as none (spec §5.6).
+  MinorProgress minor(MinorNutrient nutrient) {
     final double? eaten = consumed.minor(nutrient);
-    if (eaten == null) return null;
-
     final double target = targets.forNutrient(nutrient);
     final MacroProgressState state;
-    if (target <= 0) {
+    if (eaten == null || target <= 0) {
       state = MacroProgressState.under;
     } else if (eaten > target) {
       state = MacroProgressState.over;
@@ -297,16 +366,26 @@ class DayProgress {
       consumed: eaten,
       target: target,
       state: state,
+      unknownCount: unknownCounts[nutrient] ?? 0,
+      countedParts: countedParts,
     );
   }
 
-  /// The minor nutrients worth drawing, in their declared order.
+  /// All three, in their declared order, whether or not anything knows them.
   ///
-  /// Empty is the ordinary answer for a household whose foods predate these
-  /// columns, and an empty list draws nothing rather than three dashes.
+  /// They are shown even on a day where nothing has stated a value, saying so
+  /// rather than vanishing. An absent row and an unbuilt feature look
+  /// identical from the sofa, and for a household whose foods predate these
+  /// columns "nothing has said" is the ordinary answer — which made the whole
+  /// thing invisible.
+  List<MinorProgress> get allMinor => <MinorProgress>[
+    for (final MinorNutrient nutrient in MinorNutrient.values) minor(nutrient),
+  ];
+
+  /// The ones something actually knows.
   List<MinorProgress> get knownMinor => <MinorProgress>[
-    for (final MinorNutrient nutrient in MinorNutrient.values)
-      if (minor(nutrient) case final MinorProgress progress) progress,
+    for (final MinorProgress progress in allMinor)
+      if (progress.isKnown) progress,
   ];
 
   static MacroProgress _progress(

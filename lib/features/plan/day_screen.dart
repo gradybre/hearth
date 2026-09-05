@@ -222,7 +222,6 @@ class _RemainingCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final HearthColors colors = context.colors;
-    final Macros eaten = EntryResolver.eaten(entries);
     final Macros planned = EntryResolver.stillPlanned(entries);
 
     if (targets == null) {
@@ -246,8 +245,8 @@ class _RemainingCard extends ConsumerWidget {
       );
     }
 
-    final DayProgress progress = DayProgress.from(
-      consumed: eaten,
+    final DayProgress progress = DayProgress.fromParts(
+      parts: EntryResolver.eatenParts(entries),
       targets: targets!,
     );
 
@@ -276,11 +275,14 @@ class _RemainingCard extends ConsumerWidget {
           // Below the rings and quieter than them: these have targets now,
           // but calories are still meant to be the loudest thing here and a
           // ring would put the three on a level with the four (spec §5.6).
-          // Draws nothing on a day whose foods have never been asked.
-          if (eaten.knowsAnyMinor) ...<Widget>[
-            const SizedBox(height: HearthSpacing.lg),
-            MinorNutrientBars(progress: progress),
-          ],
+          //
+          // Shown whether or not anything has stated a value; the bars say so
+          // themselves. Hiding them was the first design and it made the
+          // feature invisible — most foods in an established library predate
+          // these columns, so "nothing has said" is the ordinary answer, and
+          // an absent row reads as a feature that was never built.
+          const SizedBox(height: HearthSpacing.lg),
+          MinorNutrientBars(progress: progress),
         ],
       ),
     );

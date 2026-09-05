@@ -21,9 +21,15 @@ import '../theme/hearth_typography.dart';
 /// [MinorNutrient.isFloor], and it is the whole reason this is not four more
 /// identical rows.
 ///
-/// Draws nothing when nothing logged knows any of them — which today is most
-/// days, since only restaurant foods and newly-looked-up ones carry the
-/// numbers. Three rows of dashes would be worse than an absence.
+/// **Always drawn, even where nothing has said.** Hiding them was the first
+/// design, and it made the feature invisible: most foods in an established
+/// library predate these columns, so "nothing has said" is the ordinary
+/// answer — and an absent row and an unbuilt feature look identical from the
+/// sofa. A bar that says "no food today has said" is a bar you can act on; a
+/// missing one is a thing you report as broken.
+///
+/// What it will not do is print a zero. "0 of 28 g" claims the day had no
+/// fibre, when the truth is that nothing eaten was ever asked.
 class MinorNutrientBars extends StatelessWidget {
   const MinorNutrientBars({required this.progress, super.key});
 
@@ -31,15 +37,14 @@ class MinorNutrientBars extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<MinorProgress> known = progress.knownMinor;
-    if (known.isEmpty) return const SizedBox.shrink();
+    final List<MinorProgress> all = progress.allMinor;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        for (final MinorProgress nutrient in known) ...<Widget>[
+        for (final MinorProgress nutrient in all) ...<Widget>[
           _Bar(nutrient: nutrient),
-          if (nutrient != known.last) const SizedBox(height: HearthSpacing.sm),
+          if (nutrient != all.last) const SizedBox(height: HearthSpacing.sm),
         ],
       ],
     );
@@ -53,6 +58,16 @@ class _Bar extends StatelessWidget {
 
   /// Thinner than a macro's. The difference in weight is the point.
   static const double _height = 4;
+
+  /// Keeps a decimal below ten, the same rule the recipe card uses.
+  ///
+  /// Half a gram of stated fibre rounding to "0 g" would report the opposite
+  /// of the truth — and would be indistinguishable from the stated zero this
+  /// whole widget exists to tell apart from silence.
+  static String _number(double value) =>
+      value >= 10 || value == value.roundToDouble()
+      ? value.round().toString()
+      : value.toStringAsFixed(1);
 
   @override
   Widget build(BuildContext context) {
@@ -69,28 +84,58 @@ class _Bar extends StatelessWidget {
     // Never colour alone (§6.3). A filled bar and a warm colour say the same
     // thing twice to somebody who can see both and nothing at all to anybody
     // else, so the state is also a word.
-    final TargetIndicator? indicator = switch (nutrient.tone) {
-      MacroTone.neutral => null,
-      // Only a floor is ever good — a ceiling is neutral until it is over —
-      // so this is always "on target" and never the bare word "left".
-      MacroTone.good => TargetIndicator.forState(TargetState.met),
-      MacroTone.over => TargetIndicator.forState(
-        TargetState.over,
-        amount:
-            '${nutrient.consumed.round() - nutrient.target.round()} '
-            '${kind.unit}',
-      ),
-    };
+    final TargetIndicator? indicator = !nutrient.isKnown
+        ? null
+        : switch (nutrient.tone) {
+            MacroTone.neutral => null,
+            // Only a floor is ever good — a ceiling is neutral until it is
+            // over — so this is always "on target", never the bare "left".
+            MacroTone.good => TargetIndicator.forState(TargetState.met),
+            MacroTone.over => TargetIndicator.forState(
+              TargetState.over,
+              amount:
+                  '${nutrient.consumed!.round() - nutrient.target.round()} '
+                  '${kind.unit}',
+            ),
+          };
 
-    final String amounts =
-        '${nutrient.consumed.round()} of ${nutrient.target.round()} '
-        '${kind.unit}';
+    // "— of 28 g" rather than "0 of 28 g". The dash is the honest character
+    // for a number nobody has stated, and it keeps the target visible so the
+    // row still says what it is for.
+    final String amounts = nutrient.isKnown
+        ? '${_number(nutrient.consumed!)} of ${_number(nutrient.target)} '
+              '${kind.unit}'
+        : '— of ${_number(nutrient.target)} ${kind.unit}';
+
+    // Coverage, said plainly. A running total looks the same whether it came
+    // from everything eaten or from one food out of six, and only one of
+    // those is worth trusting. The denominator is there because "2 did not
+    // say" reads very differently against three foods and against nine.
+    final String? coverage;
+    if (nutrient.countedParts == 0) {
+      coverage = 'nothing logged yet';
+    } else if (!nutrient.isKnown) {
+      coverage = nutrient.countedParts == 1
+          ? 'the one thing logged did not say'
+          : 'none of the ${nutrient.countedParts} things logged said';
+    } else if (nutrient.unknownCount > 0) {
+      coverage =
+          '${nutrient.unknownCount} of ${nutrient.countedParts} did not say';
+    } else {
+      coverage = null;
+    }
 
     return Semantics(
       // One sentence for the row, so a screen reader is not read a label, a
       // number and a bar as three separate things.
+      // A dash is punctuation, and most screen readers pass over it at
+      // default verbosity — "Sodium, of 2300 mg" is both ungrammatical and
+      // silent about the thing that matters. The word carries it instead.
       label:
-          '${kind.label}, $amounts.'
+          '${kind.label}, '
+          '${nutrient.isKnown ? amounts : 'not stated, '
+                    'of ${_number(nutrient.target)} ${kind.unit}'}.'
+          '${coverage == null ? '' : ' $coverage.'}'
           '${indicator == null ? '' : ' ${indicator.semanticLabel}'}',
       excludeSemantics: true,
       child: Column(
@@ -129,6 +174,10 @@ class _Bar extends StatelessWidget {
               valueColor: AlwaysStoppedAnimation<Color>(fill),
             ),
           ),
+          if (coverage case final String note) ...<Widget>[
+            const SizedBox(height: HearthSpacing.xxs),
+            Text(note, style: text.metadata.copyWith(color: colors.textMuted)),
+          ],
         ],
       ),
     );
