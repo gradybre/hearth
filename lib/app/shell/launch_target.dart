@@ -37,7 +37,10 @@ class LaunchTarget {
   );
 
   /// Straight into a section, skipping the home screen.
-  factory LaunchTarget.section(AppSection section) => LaunchTarget._(
+  ///
+  /// Takes a [BuiltSection], so a room that is only named cannot be handed to
+  /// it — the registry has no way to produce one and the type would refuse it.
+  factory LaunchTarget.section(BuiltSection section) => LaunchTarget._(
     stored: 'section:${section.id}',
     path: section.path,
     label: section.label,
@@ -48,7 +51,7 @@ class LaunchTarget {
   /// Everywhere the app can be told to open, in the order they are offered.
   static List<LaunchTarget> get options => <LaunchTarget>[
     home,
-    for (final AppSection section in builtSections)
+    for (final BuiltSection section in builtSections)
       LaunchTarget.section(section),
   ];
 
@@ -75,7 +78,7 @@ class LaunchTarget {
     if (stored == null || stored == home.stored) return home;
     const String prefix = 'section:';
     if (!stored.startsWith(prefix)) return home;
-    final AppSection? section = sectionById(stored.substring(prefix.length));
+    final BuiltSection? section = sectionById(stored.substring(prefix.length));
     return section == null ? home : LaunchTarget.section(section);
   }
 

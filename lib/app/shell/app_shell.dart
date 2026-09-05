@@ -34,8 +34,9 @@ class AppShell extends StatelessWidget {
   /// Width at or above which the sidebar replaces bottom tabs.
   static const double sidebarBreakpoint = 840;
 
-  /// Which room this is. Supplies the tabs and the name in the chrome.
-  final AppSection section;
+  /// Which room this is. Supplies the tabs and the name in the chrome — so it
+  /// is a built one, which is the only kind with tabs to supply.
+  final BuiltSection section;
 
   final Widget child;
   final int currentIndex;
@@ -65,12 +66,30 @@ class AppShell extends StatelessWidget {
             : Column(
                 children: <Widget>[
                   _SectionBar(section: section, onLeave: onLeaveSection),
-                  Expanded(child: child),
+                  // The section bar has already stood clear of the status bar,
+                  // and every screen behind these tabs is a Scaffold whose body
+                  // is a SafeArea with no app bar above it. Left alone they
+                  // would each clear the same 47 points a second time, which
+                  // reads as a band of empty paper under the bar. The wide
+                  // layout has no bar above the content, so it keeps its inset.
+                  Expanded(
+                    child: MediaQuery.removePadding(
+                      context: context,
+                      removeTop: true,
+                      child: child,
+                    ),
+                  ),
                 ],
               ),
         // The timer bar sits above the tabs rather than inside a screen: a
         // running timer belongs to the app, not to the recipe you happen to be
         // looking at (spec §5.2). It renders nothing when nothing is on.
+        //
+        // Carried here rather than once around the whole router, because it is
+        // laid out as a Scaffold's bottom bar — which is what keeps it clear of
+        // the keyboard and the home indicator. So the screens that can be the
+        // whole of what you are looking at each carry one: this, the recipe
+        // detail screen, and the home screen.
         bottomNavigationBar: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
@@ -144,7 +163,7 @@ class _Sidebar extends StatelessWidget {
 
   static const double width = 208;
 
-  final AppSection section;
+  final BuiltSection section;
   final int currentIndex;
   final ValueChanged<int> onDestinationSelected;
   final VoidCallback onLeave;
@@ -162,41 +181,48 @@ class _Sidebar extends StatelessWidget {
       ),
       child: SafeArea(
         right: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            // The way out, above everything it is a way out of.
-            _HomeItem(section: section, onTap: onLeave),
-            const SizedBox(height: HearthSpacing.sm),
-            // Which room you are in, so the tabs below are read as this
-            // section's rather than as the whole app's.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                HearthSpacing.md,
-                0,
-                HearthSpacing.md,
-                HearthSpacing.sm,
-              ),
-              child: Semantics(
-                header: true,
-                container: true,
-                child: Text(
-                  section.label,
-                  style: context.text.sectionHeader,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
-            for (int i = 0; i < tabs.length; i++)
+        // Scrollable, because the rail is a fixed 208pt column of text in a
+        // window whose height the user chooses. A way home, a section heading
+        // and four rows already run past the bottom of a 400pt window at 3x —
+        // dynamic type is honoured, not capped (spec §6.3), so the rail has to
+        // give way rather than the text.
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              // The way out, above everything it is a way out of.
+              _HomeItem(section: section, onTap: onLeave),
+              const SizedBox(height: HearthSpacing.sm),
+              // Which room you are in, so the tabs below are read as this
+              // section's rather than as the whole app's.
               Padding(
-                padding: const EdgeInsets.only(bottom: HearthSpacing.xs),
-                child: _SidebarItem(
-                  destination: tabs[i],
-                  selected: i == currentIndex,
-                  onTap: () => onDestinationSelected(i),
+                padding: const EdgeInsets.fromLTRB(
+                  HearthSpacing.md,
+                  0,
+                  HearthSpacing.md,
+                  HearthSpacing.sm,
+                ),
+                child: Semantics(
+                  header: true,
+                  container: true,
+                  child: Text(
+                    section.label,
+                    style: context.text.sectionHeader,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
-          ],
+              for (int i = 0; i < tabs.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: HearthSpacing.xs),
+                  child: _SidebarItem(
+                    destination: tabs[i],
+                    selected: i == currentIndex,
+                    onTap: () => onDestinationSelected(i),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
