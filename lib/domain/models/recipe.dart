@@ -200,6 +200,7 @@ class Recipe {
     this.kind = RecipeKind.cooked,
     this.source = RecipeSource.manual,
     this.photoUrl,
+    this.iconSvg,
     this.notes,
     this.createdBy,
     this.isDeleted = false,
@@ -232,6 +233,19 @@ class Recipe {
 
   final RecipeSource source;
   final String? photoUrl;
+
+  /// A small hand-drawn sketch of the dish, as SVG markup (spec §5.2, §6.1).
+  ///
+  /// Markup rather than a picture: it is a few hundred bytes, it sits in a
+  /// column instead of a bucket, it stays crisp at any size, and — because it
+  /// carries no colours of its own — it takes the theme's at render time,
+  /// which is what lets one icon look right in both light and dark.
+  ///
+  /// Null is the ordinary state, not a failure: a recipe with no icon shows
+  /// none. Nothing reads this without putting it through
+  /// [SketchIcon.parse] first — it is written by a model, and it renders.
+  final String? iconSvg;
+
   final String? notes;
   final String? createdBy;
 
@@ -292,10 +306,15 @@ class Recipe {
     List<RecipeSection>? sections,
     String? title,
     String? photoUrl,
+    String? iconSvg,
 
     /// Removing a photo is a real value, which a nullable argument cannot say
     /// on its own — the same shape [ShoppingLine.copyWith] uses.
     bool clearPhotoUrl = false,
+
+    /// The same, for an icon the user has thrown away or that is about to be
+    /// redrawn because the title changed.
+    bool clearIconSvg = false,
   }) => Recipe(
     id: id,
     title: title ?? this.title,
@@ -309,6 +328,7 @@ class Recipe {
     kind: kind,
     source: source,
     photoUrl: clearPhotoUrl ? null : (photoUrl ?? this.photoUrl),
+    iconSvg: clearIconSvg ? null : (iconSvg ?? this.iconSvg),
     notes: notes,
     createdBy: createdBy,
     isDeleted: isDeleted,

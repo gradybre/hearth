@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -26,6 +28,8 @@ import 'match_review_controller.dart';
 import 'match_review_screen.dart';
 import 'recipe_chat_controller.dart' show ChatMessage;
 import 'recipe_draft.dart';
+import 'recipe_icon.dart';
+import 'recipe_icon_controller.dart';
 import 'recipe_import_controller.dart';
 import 'recipe_photo.dart';
 import 'recipe_revise_controller.dart';
@@ -90,6 +94,21 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   bool _saving = false;
   String? _existingId;
   bool _showErrors = false;
+
+  /// The sketch icon this recipe already has (spec §5.2).
+  ///
+  /// Held rather than derived, because [_draft] is rebuilt from the text
+  /// controllers on every keystroke and a field the draft does not carry is a
+  /// field the next save deletes.
+  String? _iconSvg;
+
+  /// The title as it stood when the editor opened.
+  ///
+  /// The whole of the "regenerate only when the title changes materially"
+  /// rule lives in this one field. Comparing against it at save time is what
+  /// stops a note keystroke or an ingredient edit from spending money to
+  /// redraw the same muffin.
+  String _titleWhenOpened = '';
 
   /// Normalised ingredient name to food id, mirroring [RecipeDraft.matches].
   Map<String, String> _matches = <String, String>{};
@@ -493,6 +512,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
         .toList(growable: false),
     notes: _notes.text,
     existingId: _existingId,
+    iconSvg: _iconSvg,
     kind: _kind,
     matches: _matches,
     noMatch: _noMatch,
@@ -546,6 +566,8 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       ..clear()
       ..addAll(draft.sections.map(_SectionFields.from));
     _existingId = draft.existingId;
+    _iconSvg = draft.iconSvg;
+    _titleWhenOpened = draft.title;
     _kind = draft.kind;
     _matches = draft.matches;
     _noMatch = draft.noMatch;
@@ -561,8 +583,31 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
 
     setState(() => _saving = true);
     try {
-      final Recipe saved = draft.toRecipe();
+      // Read before the await: the editor pops the moment the save lands, and
+      // the drawing outlives it.
+      final RecipeIconController icons = ref.read(recipeIconControllerProvider);
+      final Recipe drafted = draft.toRecipe();
+      final bool redraw = RecipeIconController.needsDrawing(
+        currentIcon: drafted.iconSvg,
+        titleWhenOpened: _titleWhenOpened,
+        titleNow: drafted.title,
+      );
+
+      // The old sketch goes at the moment the title stops describing it.
+      // Keeping it until a replacement arrives would be gentler, and it would
+      // also mean muffins beside "Chicken noodle soup" for ever if the call
+      // never came back.
+      final Recipe saved = redraw
+          ? drafted.copyWith(clearIconSvg: true)
+          : drafted;
       await ref.read(recipeRepositoryProvider).save(saved);
+
+      // Not awaited, deliberately (spec §5.2): saving a recipe must never sit
+      // waiting on a picture. It lands in the store, so it appears on
+      // whatever screen is showing the recipe by the time it arrives.
+      if (redraw) {
+        unawaited(icons.drawFor(recipeId: saved.id, title: saved.title));
+      }
       // Pops the id, not nothing: an import needs to tell a save from a
       // cancel, because cancelling should leave you on the import screen to
       // try different pictures rather than throwing you back to the library.
@@ -679,6 +724,12 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
             // A photo needs a recipe to belong to, so it is offered only once
             // there is one to attach it to (spec §5.2).
             RecipePhotoField(recipeId: _existingId),
+            const SizedBox(height: HearthSpacing.lg),
+            RecipeIconField(
+              recipeId: _existingId,
+              svg: _iconSvg,
+              onCleared: () => setState(() => _iconSvg = null),
+            ),
             Row(
               children: <Widget>[
                 Expanded(

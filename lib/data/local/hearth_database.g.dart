@@ -122,6 +122,17 @@ class $RecipesTable extends Recipes with TableInfo<$RecipesTable, RecipeRow> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _iconSvgMeta = const VerificationMeta(
+    'iconSvg',
+  );
+  @override
+  late final GeneratedColumn<String> iconSvg = GeneratedColumn<String>(
+    'icon_svg',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _notesMeta = const VerificationMeta('notes');
   @override
   late final GeneratedColumn<String> notes = GeneratedColumn<String>(
@@ -181,6 +192,7 @@ class $RecipesTable extends Recipes with TableInfo<$RecipesTable, RecipeRow> {
     kind,
     source,
     photoUrl,
+    iconSvg,
     notes,
     createdBy,
     isDeleted,
@@ -272,6 +284,12 @@ class $RecipesTable extends Recipes with TableInfo<$RecipesTable, RecipeRow> {
         photoUrl.isAcceptableOrUnknown(data['photo_url']!, _photoUrlMeta),
       );
     }
+    if (data.containsKey('icon_svg')) {
+      context.handle(
+        _iconSvgMeta,
+        iconSvg.isAcceptableOrUnknown(data['icon_svg']!, _iconSvgMeta),
+      );
+    }
     if (data.containsKey('notes')) {
       context.handle(
         _notesMeta,
@@ -353,6 +371,10 @@ class $RecipesTable extends Recipes with TableInfo<$RecipesTable, RecipeRow> {
         DriftSqlType.string,
         data['${effectivePrefix}photo_url'],
       ),
+      iconSvg: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}icon_svg'],
+      ),
       notes: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
@@ -396,6 +418,14 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
   final String kind;
   final String source;
   final String? photoUrl;
+
+  /// A little hand-drawn sketch of the dish, as SVG markup (spec §5.2).
+  ///
+  /// Cached like the rest of the recipe so the library draws itself with no
+  /// network. Never rendered without going through `SketchIcon.parse` — a
+  /// row here can have arrived from another device, and it is model output
+  /// either way.
+  final String? iconSvg;
   final String? notes;
   final String? createdBy;
   final bool isDeleted;
@@ -412,6 +442,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
     required this.kind,
     required this.source,
     this.photoUrl,
+    this.iconSvg,
     this.notes,
     this.createdBy,
     required this.isDeleted,
@@ -440,6 +471,9 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
     map['source'] = Variable<String>(source);
     if (!nullToAbsent || photoUrl != null) {
       map['photo_url'] = Variable<String>(photoUrl);
+    }
+    if (!nullToAbsent || iconSvg != null) {
+      map['icon_svg'] = Variable<String>(iconSvg);
     }
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
@@ -473,6 +507,9 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
       photoUrl: photoUrl == null && nullToAbsent
           ? const Value.absent()
           : Value(photoUrl),
+      iconSvg: iconSvg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(iconSvg),
       notes: notes == null && nullToAbsent
           ? const Value.absent()
           : Value(notes),
@@ -501,6 +538,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
       kind: serializer.fromJson<String>(json['kind']),
       source: serializer.fromJson<String>(json['source']),
       photoUrl: serializer.fromJson<String?>(json['photoUrl']),
+      iconSvg: serializer.fromJson<String?>(json['iconSvg']),
       notes: serializer.fromJson<String?>(json['notes']),
       createdBy: serializer.fromJson<String?>(json['createdBy']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
@@ -522,6 +560,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
       'kind': serializer.toJson<String>(kind),
       'source': serializer.toJson<String>(source),
       'photoUrl': serializer.toJson<String?>(photoUrl),
+      'iconSvg': serializer.toJson<String?>(iconSvg),
       'notes': serializer.toJson<String?>(notes),
       'createdBy': serializer.toJson<String?>(createdBy),
       'isDeleted': serializer.toJson<bool>(isDeleted),
@@ -541,6 +580,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
     String? kind,
     String? source,
     Value<String?> photoUrl = const Value.absent(),
+    Value<String?> iconSvg = const Value.absent(),
     Value<String?> notes = const Value.absent(),
     Value<String?> createdBy = const Value.absent(),
     bool? isDeleted,
@@ -557,6 +597,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
     kind: kind ?? this.kind,
     source: source ?? this.source,
     photoUrl: photoUrl.present ? photoUrl.value : this.photoUrl,
+    iconSvg: iconSvg.present ? iconSvg.value : this.iconSvg,
     notes: notes.present ? notes.value : this.notes,
     createdBy: createdBy.present ? createdBy.value : this.createdBy,
     isDeleted: isDeleted ?? this.isDeleted,
@@ -581,6 +622,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
       kind: data.kind.present ? data.kind.value : this.kind,
       source: data.source.present ? data.source.value : this.source,
       photoUrl: data.photoUrl.present ? data.photoUrl.value : this.photoUrl,
+      iconSvg: data.iconSvg.present ? data.iconSvg.value : this.iconSvg,
       notes: data.notes.present ? data.notes.value : this.notes,
       createdBy: data.createdBy.present ? data.createdBy.value : this.createdBy,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
@@ -602,6 +644,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
           ..write('kind: $kind, ')
           ..write('source: $source, ')
           ..write('photoUrl: $photoUrl, ')
+          ..write('iconSvg: $iconSvg, ')
           ..write('notes: $notes, ')
           ..write('createdBy: $createdBy, ')
           ..write('isDeleted: $isDeleted, ')
@@ -623,6 +666,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
     kind,
     source,
     photoUrl,
+    iconSvg,
     notes,
     createdBy,
     isDeleted,
@@ -643,6 +687,7 @@ class RecipeRow extends DataClass implements Insertable<RecipeRow> {
           other.kind == this.kind &&
           other.source == this.source &&
           other.photoUrl == this.photoUrl &&
+          other.iconSvg == this.iconSvg &&
           other.notes == this.notes &&
           other.createdBy == this.createdBy &&
           other.isDeleted == this.isDeleted &&
@@ -661,6 +706,7 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
   final Value<String> kind;
   final Value<String> source;
   final Value<String?> photoUrl;
+  final Value<String?> iconSvg;
   final Value<String?> notes;
   final Value<String?> createdBy;
   final Value<bool> isDeleted;
@@ -678,6 +724,7 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
     this.kind = const Value.absent(),
     this.source = const Value.absent(),
     this.photoUrl = const Value.absent(),
+    this.iconSvg = const Value.absent(),
     this.notes = const Value.absent(),
     this.createdBy = const Value.absent(),
     this.isDeleted = const Value.absent(),
@@ -696,6 +743,7 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
     this.kind = const Value.absent(),
     this.source = const Value.absent(),
     this.photoUrl = const Value.absent(),
+    this.iconSvg = const Value.absent(),
     this.notes = const Value.absent(),
     this.createdBy = const Value.absent(),
     this.isDeleted = const Value.absent(),
@@ -718,6 +766,7 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
     Expression<String>? kind,
     Expression<String>? source,
     Expression<String>? photoUrl,
+    Expression<String>? iconSvg,
     Expression<String>? notes,
     Expression<String>? createdBy,
     Expression<bool>? isDeleted,
@@ -736,6 +785,7 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
       if (kind != null) 'kind': kind,
       if (source != null) 'source': source,
       if (photoUrl != null) 'photo_url': photoUrl,
+      if (iconSvg != null) 'icon_svg': iconSvg,
       if (notes != null) 'notes': notes,
       if (createdBy != null) 'created_by': createdBy,
       if (isDeleted != null) 'is_deleted': isDeleted,
@@ -756,6 +806,7 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
     Value<String>? kind,
     Value<String>? source,
     Value<String?>? photoUrl,
+    Value<String?>? iconSvg,
     Value<String?>? notes,
     Value<String?>? createdBy,
     Value<bool>? isDeleted,
@@ -774,6 +825,7 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
       kind: kind ?? this.kind,
       source: source ?? this.source,
       photoUrl: photoUrl ?? this.photoUrl,
+      iconSvg: iconSvg ?? this.iconSvg,
       notes: notes ?? this.notes,
       createdBy: createdBy ?? this.createdBy,
       isDeleted: isDeleted ?? this.isDeleted,
@@ -820,6 +872,9 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
     if (photoUrl.present) {
       map['photo_url'] = Variable<String>(photoUrl.value);
     }
+    if (iconSvg.present) {
+      map['icon_svg'] = Variable<String>(iconSvg.value);
+    }
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
@@ -852,6 +907,7 @@ class RecipesCompanion extends UpdateCompanion<RecipeRow> {
           ..write('kind: $kind, ')
           ..write('source: $source, ')
           ..write('photoUrl: $photoUrl, ')
+          ..write('iconSvg: $iconSvg, ')
           ..write('notes: $notes, ')
           ..write('createdBy: $createdBy, ')
           ..write('isDeleted: $isDeleted, ')
@@ -12282,6 +12338,7 @@ typedef $$RecipesTableCreateCompanionBuilder = RecipesCompanion Function({
   Value<String> kind,
   Value<String> source,
   Value<String?> photoUrl,
+  Value<String?> iconSvg,
   Value<String?> notes,
   Value<String?> createdBy,
   Value<bool> isDeleted,
@@ -12300,6 +12357,7 @@ typedef $$RecipesTableUpdateCompanionBuilder = RecipesCompanion Function({
   Value<String> kind,
   Value<String> source,
   Value<String?> photoUrl,
+  Value<String?> iconSvg,
   Value<String?> notes,
   Value<String?> createdBy,
   Value<bool> isDeleted,
@@ -12492,6 +12550,11 @@ class $$RecipesTableFilterComposer
 
   ColumnFilters<String> get photoUrl => $composableBuilder(
     column: $table.photoUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get iconSvg => $composableBuilder(
+    column: $table.iconSvg,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -12730,6 +12793,11 @@ class $$RecipesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get iconSvg => $composableBuilder(
+    column: $table.iconSvg,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get notes => $composableBuilder(
     column: $table.notes,
     builder: (column) => ColumnOrderings(column),
@@ -12798,6 +12866,9 @@ class $$RecipesTableAnnotationComposer
 
   GeneratedColumn<String> get photoUrl =>
       $composableBuilder(column: $table.photoUrl, builder: (column) => column);
+
+  GeneratedColumn<String> get iconSvg =>
+      $composableBuilder(column: $table.iconSvg, builder: (column) => column);
 
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
@@ -13010,6 +13081,7 @@ class $$RecipesTableTableManager
                 Value<String> kind = const Value.absent(),
                 Value<String> source = const Value.absent(),
                 Value<String?> photoUrl = const Value.absent(),
+                Value<String?> iconSvg = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<String?> createdBy = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
@@ -13027,6 +13099,7 @@ class $$RecipesTableTableManager
                 kind: kind,
                 source: source,
                 photoUrl: photoUrl,
+                iconSvg: iconSvg,
                 notes: notes,
                 createdBy: createdBy,
                 isDeleted: isDeleted,
@@ -13046,6 +13119,7 @@ class $$RecipesTableTableManager
                 Value<String> kind = const Value.absent(),
                 Value<String> source = const Value.absent(),
                 Value<String?> photoUrl = const Value.absent(),
+                Value<String?> iconSvg = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<String?> createdBy = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
@@ -13063,6 +13137,7 @@ class $$RecipesTableTableManager
                 kind: kind,
                 source: source,
                 photoUrl: photoUrl,
+                iconSvg: iconSvg,
                 notes: notes,
                 createdBy: createdBy,
                 isDeleted: isDeleted,

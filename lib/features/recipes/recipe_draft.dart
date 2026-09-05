@@ -75,6 +75,7 @@ class RecipeDraft {
     this.tags = const <String>[],
     this.notes,
     this.existingId,
+    this.iconSvg,
     this.matches = const <String, String>{},
     this.noMatch = const <String>{},
   });
@@ -97,6 +98,16 @@ class RecipeDraft {
 
   /// Set when editing, so a save updates rather than creating a duplicate.
   final String? existingId;
+
+  /// The sketch icon the recipe already has, carried through untouched
+  /// (spec §5.2).
+  ///
+  /// Here at all because [toRecipe] builds a whole recipe out of this draft,
+  /// so anything the draft does not hold is a field an edit silently deletes.
+  /// Whether the icon should be *kept* is decided at save time by the title,
+  /// not here: the editor knows what the title was when it opened, and this
+  /// does not.
+  final String? iconSvg;
 
   /// Normalised ingredient name to food id.
   ///
@@ -205,6 +216,7 @@ class RecipeDraft {
       cuisine: (cuisine ?? '').trim().isEmpty ? null : cuisine!.trim(),
       kind: kind,
       tags: tags,
+      iconSvg: iconSvg,
       notes: (notes ?? '').trim().isEmpty ? null : notes!.trim(),
       sections: <RecipeSection>[
         for (int index = 0; index < effective.length; index++)
@@ -334,6 +346,10 @@ class RecipeDraft {
     kind: kind,
     tags: tags,
     notes: notes,
+    // A duplicate looks like what it was copied from, straight away and for
+    // nothing. "My usual bowl, but no rice" is the same dish; redrawing it
+    // would spend money arriving at the same sketch a moment later.
+    iconSvg: iconSvg,
     matches: matches,
     noMatch: noMatch,
   );
@@ -373,6 +389,7 @@ class RecipeDraft {
     tags: recipe.tags,
     notes: recipe.notes,
     existingId: recipe.id,
+    iconSvg: recipe.iconSvg,
     noMatch: <String>{
       for (final RecipeIngredient ingredient in recipe.allIngredients)
         if (ingredient.needsNoMatch)
@@ -461,6 +478,7 @@ class RecipeDraft {
     tags: incoming.tags,
     notes: notes,
     existingId: existingId,
+    iconSvg: iconSvg,
     matches: matches,
     noMatch: noMatch,
   );
@@ -486,6 +504,7 @@ class RecipeDraft {
     tags: tags ?? this.tags,
     notes: notes ?? this.notes,
     existingId: existingId,
+    iconSvg: iconSvg,
     matches: matches,
     noMatch: noMatch,
   );
@@ -521,6 +540,7 @@ class RecipeDraft {
         tags: tags,
         notes: notes,
         existingId: existingId,
+        iconSvg: iconSvg,
         matches: matches ?? this.matches,
         noMatch: noMatch ?? this.noMatch,
       );

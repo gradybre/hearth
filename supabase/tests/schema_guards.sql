@@ -863,3 +863,92 @@ begin
   raise notice 'menu section guards passed';
 end;
 $$;
+
+-- ── A recipe's sketch icon survives the round trip (spec §5.2) ──────────────
+--
+-- `upsert_recipe` and `changed_recipes` are restated in full every time a
+-- column is added to `recipes`, and `create or replace` deletes whatever is
+-- not repeated. Three migrations once sat local-only for want of this check
+-- and three features were silently broken (CLAUDE.md rule 8) — so the column
+-- is proved to make it out and back, not merely to exist.
+
+do $$
+declare
+  v_owner uuid := gen_random_uuid();
+  v_house uuid := gen_random_uuid();
+  v_soup  uuid := gen_random_uuid();
+  v_plain uuid := gen_random_uuid();
+  v_icon  text :=
+    '<svg viewBox="0 0 24 24"><path d="M3 11h18c0 5-4 9-9 9s-9-4-9-9z"/></svg>';
+  v_stored text;
+begin
+  insert into auth.users (
+    id, instance_id, aud, role, email, encrypted_password,
+    email_confirmed_at, created_at, updated_at
+  )
+  values (
+    v_owner, '00000000-0000-0000-0000-000000000000', 'authenticated',
+    'authenticated', 'icon-guard@example.test', 'x', now(), now(), now()
+  );
+  insert into public.households (id, name, owner_id)
+  values (v_house, 'Icon guard', v_owner);
+
+  perform public.upsert_recipe(jsonb_build_object(
+    'id', v_soup, 'household_id', v_house, 'title', 'Chicken noodle soup',
+    'servings', 4, 'icon_svg', v_icon, 'sections', '[]'::jsonb
+  ));
+
+  select icon_svg into v_stored from public.recipes where id = v_soup;
+  if v_stored is distinct from v_icon then
+    raise exception 'upsert_recipe lost the icon: %', v_stored;
+  end if;
+
+  if not exists (
+    select 1 from public.changed_recipes(null) c
+    where (c ->> 'id')::uuid = v_soup and c ->> 'icon_svg' = v_icon
+  ) then
+    raise exception 'changed_recipes did not carry the icon';
+  end if;
+
+  -- No icon is the ordinary state, not a failure. A client that has never
+  -- heard of the column must still be able to save a recipe.
+  perform public.upsert_recipe(jsonb_build_object(
+    'id', v_plain, 'household_id', v_house, 'title', 'Chilli',
+    'servings', 4, 'sections', '[]'::jsonb
+  ));
+  select icon_svg into v_stored from public.recipes where id = v_plain;
+  if v_stored is not null then
+    raise exception 'a recipe with no icon did not stay without one: %', v_stored;
+  end if;
+
+  -- Clearing one is a real value, not an absence: a user who dislikes a
+  -- drawing must be able to be rid of it, and the next pull must agree.
+  perform public.upsert_recipe(jsonb_build_object(
+    'id', v_soup, 'household_id', v_house, 'title', 'Chicken noodle soup',
+    'servings', 4, 'icon_svg', null, 'sections', '[]'::jsonb
+  ));
+  select icon_svg into v_stored from public.recipes where id = v_soup;
+  if v_stored is not null then
+    raise exception 'clearing the icon did not take: %', v_stored;
+  end if;
+
+  -- A sketch is a few hundred bytes. Forty kilobytes of it is a traced
+  -- photograph, and this column is read on every row of the library.
+  begin
+    update public.recipes
+    set icon_svg = repeat('x', 4097) where id = v_soup;
+    raise exception 'an oversized icon was accepted';
+  exception
+    when check_violation then null;
+  end;
+
+  delete from public.recipes where household_id = v_house;
+  delete from public.profiles where household_id in (
+    select id from public.households where owner_id = v_owner
+  );
+  delete from public.profiles where id = v_owner;
+  delete from public.households where owner_id = v_owner;
+  delete from auth.users where id = v_owner;
+  raise notice 'recipe icon guards passed';
+end;
+$$;
