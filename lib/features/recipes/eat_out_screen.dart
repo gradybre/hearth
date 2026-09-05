@@ -8,6 +8,7 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../domain/foods/restaurant_menu.dart';
 import '../../domain/models/food.dart';
+import '../../domain/models/macros.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import 'recipe_draft.dart';
 
@@ -81,12 +82,32 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
   /// only the direction of the pick is new.
   ///
   /// A modifier is never removable. It is already a deduction, so taking one
-  /// out would be an addition the chain never published.
-  void _remove(Food food, List<Food> menu) => setState(() {
-    if (food.isModifier) return;
-    if (!_hasSomethingToApplyTo(menu, excluding: food)) return;
-    _picks[food.id] = -1;
-  });
+  /// out would be an addition the chain never published. Neither is a row the
+  /// sheet gave no portion: with no amount for the sign to sit on, the line
+  /// comes out as a bare name that deducts nothing and is flagged for having
+  /// no quantity — a deduction that silently does not deduct.
+  void _remove(Food food, List<Food> menu) {
+    if (!RestaurantMenu.canBeTakenOut(food)) return;
+    if (!_hasSomethingToApplyTo(menu, excluding: food)) {
+      // Said out loud, not left to a tooltip. The button stays enabled so the
+      // tap cannot fall through to the row behind and *add* the component
+      // (see the note on it), which leaves this as the only place the refusal
+      // can be explained to somebody using a finger rather than a mouse or a
+      // screen reader (§6.3).
+      _say('Pick something for ${food.name} to come out of first.');
+      return;
+    }
+    setState(() => _picks[food.id] = -1);
+  }
+
+  /// One sentence, where the tap happened, in words rather than a colour.
+  void _say(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      );
+  }
 
   void _setCount(Food food, double count, List<Food> menu) => setState(() {
     if (count != 0) {
@@ -117,6 +138,16 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
         MenuPick(food: food, count: count),
   ];
 
+  /// What the picks come to, for the guard below.
+  ///
+  /// A food with no serving contributes nothing and is not a gap here: it is
+  /// an unquantified line, which the editor flags in its own right.
+  Macros _total(List<MenuPick> picks) => Macros.sum(<Macros>[
+    for (final MenuPick pick in picks)
+      if (pick.food.defaultServing case final ServingOption serving)
+        MacroCalculator.forServings(serving, pick.count),
+  ]);
+
   void _build(List<Food> menu) {
     final List<MenuPick> picks = _picked(menu);
     if (picks.isEmpty) return;
@@ -125,6 +156,19 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
     // and a greyed row cannot be tapped to unpick it. Refusing here is the
     // last place before a −180 kcal meal becomes a recipe.
     if (!_hasSomethingToApplyTo(menu)) return;
+    // And "something real is picked" is not the same question as "this adds
+    // up". Three calories of lettuce satisfied the rule above while a burger
+    // came out underneath it, and the builder assembled a meal of −377 kcal —
+    // which §5.2 says cannot happen, and which the macro calculator, the
+    // spec and the tests all said the builder would not do. Same predicate
+    // the calculator uses, so the two cannot disagree about one meal.
+    if (_total(picks).isBelowNothing) {
+      _say(
+        'That comes to less than nothing. Take out less, or add what it is '
+        'coming out of.',
+      );
+      return;
+    }
     context.pushReplacement(
       '/recipe/new',
       extra: RecipeDraft.fromMenu(restaurant: _restaurant!, picks: picks),
@@ -467,7 +511,13 @@ class _MenuRow extends StatelessWidget {
                       '${food.name}'
                       '${deduction == null ? '' : ', $deduction'}'
                       '${portion.isEmpty ? '' : ', $portion'}',
-                  selected: isPicked,
+                  // Only where the row can actually be picked. A modifier
+                  // waiting for something to apply to has no tap, and a node
+                  // that announces itself as selected-or-not and then cannot
+                  // be activated tells a screen-reader user they made the
+                  // mistake (§6.3). Unselectable, it is a line of text
+                  // saying what it is waiting for, which is the truth.
+                  selected: canPick || isPicked ? isPicked : null,
                   excludeSemantics: true,
                   child: Row(
                     children: <Widget>[
@@ -528,7 +578,10 @@ class _MenuRow extends StatelessWidget {
               // on a modifier, which is a deduction already, and never on
               // something already picked — unpick it first, which is the one
               // tap that says what it does.
-              if (!food.isModifier && !isPicked) ...<Widget>[
+              // And never on a row the sheet gave no portion — see
+              // [RestaurantMenu.canBeTakenOut], which is where both rules
+              // live so this screen and the domain cannot disagree.
+              if (RestaurantMenu.canBeTakenOut(food) && !isPicked) ...<Widget>[
                 const SizedBox(width: HearthSpacing.sm),
                 IconButton(
                   // Enabled even when it will refuse, and that is deliberate:
@@ -608,30 +661,48 @@ class _Stepper extends StatelessWidget {
     final String label = removing ? '−$number×' : '$number×';
     void set(double next) => onChanged(removing ? -next : next);
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        IconButton(
-          onPressed: portions <= _step ? null : () => set(portions - _step),
-          visualDensity: VisualDensity.compact,
-          tooltip: removing ? 'Take out less' : 'One less',
-          icon: const Icon(Icons.remove_circle_outline, size: 20),
-        ),
-        SizedBox(
-          width: 34,
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: context.text.ingredient.copyWith(color: colors.textPrimary),
+    // A disabled `IconButton` does not take the tap. It falls through to
+    // whatever is behind it — here the row's own `InkWell`, which unpicks the
+    // item — so "One less" at half a portion deleted the burger from the
+    // meal, and "One more" at four did the same. The same mechanism the
+    // take-out button beside this one already works around, and the reason it
+    // is enabled even when it will refuse.
+    //
+    // Swallowed rather than worked around, because a stepper at its limit
+    // *should* be disabled: Material greys it and a screen reader says so,
+    // which is a truer answer than a button that looks live and declines.
+    // This stops the tap at the stepper instead, including in the gaps
+    // between the buttons.
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {},
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          IconButton(
+            onPressed: portions <= _step ? null : () => set(portions - _step),
+            visualDensity: VisualDensity.compact,
+            tooltip: removing ? 'Take out less' : 'One less',
+            icon: const Icon(Icons.remove_circle_outline, size: 20),
           ),
-        ),
-        IconButton(
-          onPressed: portions >= _max ? null : () => set(portions + _step),
-          visualDensity: VisualDensity.compact,
-          tooltip: removing ? 'Take out more' : 'One more',
-          icon: const Icon(Icons.add_circle_outline, size: 20),
-        ),
-      ],
+          SizedBox(
+            width: 34,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: context.text.ingredient.copyWith(
+                color: colors.textPrimary,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: portions >= _max ? null : () => set(portions + _step),
+            visualDensity: VisualDensity.compact,
+            tooltip: removing ? 'Take out more' : 'One more',
+            icon: const Icon(Icons.add_circle_outline, size: 20),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -101,5 +101,23 @@ void main() {
         expect(parseAmount(writeAmount(value)), value);
       }
     });
+
+    test('but two signs is not an amount, it is a typo', () {
+      // The sign strip used to recurse into itself, so a second sign negated
+      // the first and "--1" came back as +1 — the opposite of both readings.
+      // Reachable: a pasted menu cell written "- -180" goes through
+      // `MenuImport._number`, whose filter keeps hyphens, and a published
+      // deduction read as an addition of the same size.
+      //
+      // Null, not a guess. This parser's stated policy is that anything it
+      // cannot read is left empty rather than turned into a number nobody
+      // meant.
+      expect(parseAmount('--1'), isNull);
+      expect(parseAmount('−−1'), isNull);
+      expect(parseAmount('−-1'), isNull);
+      expect(parseAmount('-−1'), isNull);
+      expect(parseAmount('- -180'), isNull);
+      expect(parseAmount('--1/2'), isNull);
+    });
   });
 }

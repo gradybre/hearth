@@ -435,7 +435,7 @@ class RecipeDraft {
   /// This draft's content replaced by [incoming], keeping what is not the
   /// model's to decide.
   ///
-  /// Three things must survive a revision, and each is a way this could
+  /// Four things must survive a revision, and each is a way this could
   /// quietly do damage:
   ///
   ///  * **[existingId]** — without it, editing a saved recipe and asking for
@@ -446,14 +446,15 @@ class RecipeDraft {
   ///    for the sake of reordering two steps.
   ///  * **[notes]** — the model is not asked about them and must not be able
   ///    to remove them by not mentioning them.
+  ///  * **the sign on a deduction** — see [_withDeductionsKept].
   ///
   /// A line the model genuinely renamed does lose its match, which is correct:
   /// the match was to the old wording, and the food it named may no longer be
-  /// what the line says.
+  /// what the line says. The sign follows the same key for the same reason.
   RecipeDraft revisedWith(RecipeDraft incoming) => RecipeDraft(
     title: incoming.title,
     servings: incoming.servings,
-    sections: incoming.sections,
+    sections: _withDeductionsKept(incoming.sections),
     prepMinutes: incoming.prepMinutes,
     cookMinutes: incoming.cookMinutes,
     cuisine: incoming.cuisine,
@@ -464,6 +465,77 @@ class RecipeDraft {
     matches: matches,
     noMatch: noMatch,
   );
+
+  /// [incoming] with the minus put back on any line this draft was taking out.
+  ///
+  /// The one thing a lossy round trip can *invert* rather than lose.
+  /// [toPrompt] writes "−1 oz Lettuce" with the real minus, U+2212; a model
+  /// answering with the keyboard's hyphen sends back "-1 oz Lettuce", and the
+  /// parser reads a leading hyphen as the bullet it is nine times in ten and
+  /// strips it. One ounce of lettuce is then *added* to a meal somebody
+  /// ordered without any — and on screen the two characters are near enough
+  /// identical that the review screen cannot catch it, which is what makes
+  /// this worse than losing the line outright.
+  ///
+  /// The fix cannot live in the parser: reading a hyphen as a minus would
+  /// invert every pasted bulleted list, which is exactly why U+2212 was
+  /// chosen. So the sign is carried the way the food matches are carried —
+  /// keyed by normalised ingredient name, restored on a line the model handed
+  /// back without one.
+  ///
+  /// Only where **every** line of that name was a deduction here, and only
+  /// onto a line that came back with a real positive amount. A recipe holding
+  /// both "4 oz Lettuce" and "−1 oz Lettuce" says nothing about which the
+  /// model meant, and a line with no amount at all has nothing for a sign to
+  /// attach to.
+  ///
+  /// What it cannot tell apart is a revision that was *meant* to put the
+  /// lettuce back: asked to, the model returns a positive line and this puts
+  /// the minus back on. That is a real cost, and the reason it is worth
+  /// paying is that the failure it replaces is invisible while this one is
+  /// not — the line still reads "−1 oz Lettuce" on the screen the user is
+  /// looking at, and deleting it is one tap.
+  List<DraftSection> _withDeductionsKept(List<DraftSection> incoming) {
+    final Set<String> takenOut = _deductionKeys();
+    if (takenOut.isEmpty) return incoming;
+
+    return <DraftSection>[
+      for (final DraftSection section in incoming)
+        section.copyWith(
+          ingredientsText: <String>[
+            for (final String line in section.ingredientsText.split('\n'))
+              _keepingDeduction(line, takenOut),
+          ].join('\n'),
+        ),
+    ];
+  }
+
+  /// The normalised names this draft takes out, and takes out every time.
+  Set<String> _deductionKeys() {
+    final Map<String, bool> everyLineDeducts = <String, bool>{};
+    for (final ParsedIngredient line in parsedIngredients) {
+      final String key = normaliseKey(line.name);
+      if (key.isEmpty) continue;
+      final bool deducts = (line.quantity?.canonicalAmount ?? 0) < 0;
+      everyLineDeducts[key] = (everyLineDeducts[key] ?? true) && deducts;
+    }
+    return <String>{
+      for (final MapEntry<String, bool> entry in everyLineDeducts.entries)
+        if (entry.value) entry.key,
+    };
+  }
+
+  static final RegExp _leadingSign = RegExp('^[-–−]\\s*');
+
+  static String _keepingDeduction(String line, Set<String> takenOut) {
+    final ParsedIngredient parsed = IngredientParser.parse(line);
+    final double amount = parsed.quantity?.canonicalAmount ?? 0;
+    if (amount <= 0) return line;
+    if (!takenOut.contains(normaliseKey(parsed.name))) return line;
+    // Whatever bullet the model put in front goes with it: "−-1 oz Lettuce"
+    // is not a deduction to the parser, it is a minus followed by a hyphen.
+    return '−${line.trimLeft().replaceFirst(_leadingSign, '')}';
+  }
 
   RecipeDraft copyWith({
     String? title,

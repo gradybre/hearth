@@ -44,6 +44,19 @@ void main() {
     test('having more than enough means buying none, never less than none', () {
       expect(beef(onHand: 5).toBuy!.isZero, isTrue);
     });
+
+    test('and a line that asks for less than none buys none either', () {
+      // A meal built with "no lettuce" carries a −1 oz line. Flip its "Ate
+      // out" switch off in the editor and the recipe stops being skipped:
+      // the consolidator sums the negative, and this getter used to hand it
+      // straight on whenever the cupboard had said nothing. Downstream,
+      // `CartQuantity` clamps to at least one — so the export ordered one of
+      // the very thing being subtracted.
+      //
+      // The floor belongs here, where this getter has always claimed it was.
+      expect(beef(planned: -1).toBuy!.isZero, isTrue);
+      expect(beef(planned: 2, wanted: -1).toBuy!.isZero, isTrue);
+    });
   });
 
   group('the tick is the whole-line case of having some', () {

@@ -51,8 +51,16 @@ double? parseAmount(String raw) {
   // as nothing at all. Both minus characters are read — the keyboard's hyphen
   // and the real minus that `QuantityFormat` prints — because this is the one
   // place that reads amounts back off a screen.
+  //
+  // **One sign, not a run of them.** Reading the rest recursively let a second
+  // sign cancel the first, so "--1" came back +1 — the opposite of either
+  // reading of it, and reachable from a pasted menu cell written "- -180",
+  // whose published deduction then read as an addition of the same size. Two
+  // signs is a typo, and a typo is what this parser returns null for.
   if (text.startsWith('-') || text.startsWith('−')) {
-    final double? magnitude = parseAmount(text.substring(1));
+    final String rest = text.substring(1).trimLeft();
+    if (rest.startsWith('-') || rest.startsWith('−')) return null;
+    final double? magnitude = parseAmount(rest);
     return magnitude == null ? null : -magnitude;
   }
 

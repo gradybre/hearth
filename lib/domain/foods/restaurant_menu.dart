@@ -92,6 +92,24 @@ abstract final class RestaurantMenu {
     return _byName(a.name, b.name);
   }
 
+  /// Whether this row can be picked in the *other* direction — taken out of a
+  /// meal rather than put into one (spec §5.2).
+  ///
+  /// Two rows cannot be, and for opposite reasons:
+  ///
+  ///  * a **modifier** is a deduction the chain published, so taking one out
+  ///    would be an addition it never published;
+  ///  * a row the sheet gave **no portion** has no amount for the sign to sit
+  ///    on. [MenuPick.line] writes the bare name for one, so "take out X"
+  ///    would become an unquantified ingredient that subtracts nothing and is
+  ///    flagged for having no amount — a deduction that silently does not
+  ///    deduct, which is worse than one that is never offered.
+  ///
+  /// Whether anything is picked yet for it to come *out of* is a separate
+  /// question, and one only the builder can answer.
+  static bool canBeTakenOut(Food food) =>
+      !food.isModifier && food.defaultServing != null;
+
   /// A live food read off a restaurant's own menu, with a restaurant on it.
   ///
   /// The brand check is not belt-and-braces: a restaurant food with no brand

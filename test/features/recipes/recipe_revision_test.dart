@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/domain/parsing/ingredient_parser.dart';
 import 'package:hearth/features/recipes/recipe_draft.dart';
 
 /// Revising a draft without losing what the model was never asked about
@@ -82,6 +83,96 @@ void main() {
       expect(
         original().revisedWith(reordered()).notes,
         'Doubles well. Freeze half.',
+      );
+    });
+  });
+
+  group('a deduction across the round trip (spec §5.2, §5.4)', () {
+    // The one thing in a recipe that a lossy round trip can invert rather
+    // than lose. `toPrompt` writes "−1 oz Lettuce" with the real minus; a
+    // model that types the keyboard's hyphen instead sends back
+    // "-1 oz Lettuce", the parser reads that leading hyphen as the bullet it
+    // usually is and strips it, and one ounce of lettuce is *added* to a meal
+    // somebody ordered without any. On screen the two characters are the same
+    // width and nearly the same glyph, so the review screen cannot catch it.
+    RecipeDraft noLettuce({String sign = '−'}) => RecipeDraft(
+      title: 'Burger, no salad',
+      servings: 1,
+      sections: <DraftSection>[
+        DraftSection(
+          ingredientsText: '1 Single Steakburger\n${sign}1 oz Lettuce',
+          directionsText: 'Order it.',
+        ),
+      ],
+    );
+
+    test('survives the model writing it back with a plain hyphen', () {
+      final RecipeDraft revised = noLettuce().revisedWith(noLettuce(sign: '-'));
+
+      expect(
+        revised.sections.single.ingredientsText,
+        contains('−1 oz Lettuce'),
+      );
+      final ParsedIngredient lettuce = revised.parsedIngredients.last;
+      expect(lettuce.name, 'Lettuce');
+      expect(lettuce.quantity!.canonicalAmount, lessThan(0));
+    });
+
+    test('and survives it being written back with no sign at all', () {
+      final RecipeDraft revised = noLettuce().revisedWith(noLettuce(sign: ''));
+
+      expect(
+        revised.parsedIngredients.last.quantity!.canonicalAmount,
+        lessThan(0),
+      );
+    });
+
+    test('a line nobody took out is left exactly as it was written', () {
+      // The other half of the rule, and the reason a hyphen can never be read
+      // as a minus: every pasted ingredient list in the world is bulleted with
+      // one, and a model answering in bullets writes them by the dozen.
+      final RecipeDraft plain = const RecipeDraft(
+        title: 'Omelette',
+        servings: 1,
+        sections: <DraftSection>[
+          DraftSection(ingredientsText: '2 eggs\n1 oz Lettuce'),
+        ],
+      );
+      final RecipeDraft revised = plain.revisedWith(
+        const RecipeDraft(
+          title: 'Omelette',
+          servings: 1,
+          sections: <DraftSection>[
+            DraftSection(ingredientsText: '- 3 eggs\n- 1 oz Lettuce'),
+          ],
+        ),
+      );
+
+      expect(
+        revised.sections.single.ingredientsText,
+        '- 3 eggs\n- 1 oz Lettuce',
+      );
+      for (final ParsedIngredient line in revised.parsedIngredients) {
+        expect(line.quantity!.canonicalAmount, greaterThan(0));
+      }
+    });
+
+    test('and a name the model genuinely changed keeps its own sign', () {
+      // Same rule the food matches follow: what the model renamed is the
+      // model's, because the old line is no longer the thing it said.
+      final RecipeDraft revised = noLettuce().revisedWith(
+        const RecipeDraft(
+          title: 'Burger, no salad',
+          servings: 1,
+          sections: <DraftSection>[
+            DraftSection(ingredientsText: '1 Single Steakburger\n1 oz Tomato'),
+          ],
+        ),
+      );
+
+      expect(
+        revised.parsedIngredients.last.quantity!.canonicalAmount,
+        greaterThan(0),
       );
     });
   });

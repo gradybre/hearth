@@ -418,6 +418,157 @@ void main() {
       expect(lettuce.rawText, startsWith('−'));
     });
 
+    testWidgets('and the refusal says why rather than doing nothing', (
+      WidgetTester tester,
+    ) async {
+      // The button is enabled even when it will refuse, so that the tap does
+      // not fall through to the row and *add* the component. What was left
+      // was a control that took the tap and did nothing at all with it: no
+      // state change, no message, and the reason only in a tooltip that a
+      // touch user has to long-press to find. Colour was the whole of it,
+      // which rule 6 does not allow.
+      await pumpHearthApp(tester, foods: freddys());
+      await openFreddys(tester);
+
+      await tester.tap(
+        find.byTooltip(
+          'Take Lettuce out — pick something '
+          'first',
+        ),
+      );
+      await pumpFrames(tester, frames: 12);
+
+      expect(
+        find.text('Pick something for Lettuce to come out of first.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a row the sheet gave no portion is not offered at all', (
+      WidgetTester tester,
+    ) async {
+      // With no serving there is no amount for the sign to sit on, so the
+      // line came out as a bare "Pickles" — an unquantified ingredient that
+      // contributes nothing and raises `noQuantity`. A deduction that
+      // silently deducts nothing is worse than one that is never offered.
+      await pumpHearthApp(
+        tester,
+        foods: <Food>[
+          ...freddys(),
+          aFood(
+            'Pickles',
+            id: 'f-freddys-pickles',
+            brand: "Freddy's",
+            source: FoodSource.restaurant,
+            menuGroup: 'Toppings',
+            menuOrder: 2,
+          ),
+        ],
+      );
+      await openFreddys(tester);
+      await tester.tap(find.text('Single Steakburger'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.byTooltip('Take Lettuce out'), findsOneWidget);
+      expect(find.byTooltip('Take Pickles out'), findsNothing);
+
+      // It is still an ordinary row you can say you had.
+      await tester.tap(find.text('Pickles'));
+      await pumpFrames(tester, frames: 12);
+      expect(find.text('Build (2)'), findsOneWidget);
+    });
+
+    testWidgets('a meal that comes to less than nothing cannot be built', (
+      WidgetTester tester,
+    ) async {
+      // The guard asked whether *something* positive was picked, not whether
+      // the meal came to anything. Three calories of lettuce satisfied it
+      // while the burger came out underneath, and the builder assembled a
+      // recipe of −377 kcal — which the spec, the calculator and this file
+      // all say it will not.
+      await pumpHearthApp(tester, foods: freddys());
+      await openFreddys(tester);
+
+      await tester.tap(find.text('Lettuce'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.byTooltip('Take Single Steakburger out'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('Build (2)'), findsOneWidget);
+      await tester.tap(find.text('Build (2)'));
+      await pumpFrames(tester, frames: 20);
+
+      // Still on the menu, and told why rather than left tapping a button
+      // that does nothing.
+      expect(find.text('New recipe'), findsNothing);
+      expect(find.textContaining('less than nothing'), findsOneWidget);
+    });
+
+    testWidgets('the stepper at its floor does not unpick the row beneath', (
+      WidgetTester tester,
+    ) async {
+      // A disabled IconButton does not take the tap: it falls through to the
+      // row's own InkWell behind it, which toggles the pick. So a second
+      // "One less" at half a portion deleted the item from the meal — the
+      // same mechanism this screen already fixed for its take-out button,
+      // sitting one widget along.
+      await pumpHearthApp(tester, foods: freddys());
+      await openFreddys(tester);
+      await tester.tap(find.text('Single Steakburger'));
+      await pumpFrames(tester, frames: 12);
+
+      await tester.tap(find.byTooltip('One less'));
+      await pumpFrames(tester, frames: 12);
+      expect(find.text('0.5×'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('One less'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('0.5×'), findsOneWidget);
+      expect(find.text('Build (1)'), findsOneWidget);
+    });
+
+    testWidgets('nor at its ceiling', (WidgetTester tester) async {
+      await pumpHearthApp(tester, foods: freddys());
+      await openFreddys(tester);
+      await tester.tap(find.text('Single Steakburger'));
+      await pumpFrames(tester, frames: 12);
+
+      for (int i = 0; i < 6; i++) {
+        await tester.tap(find.byTooltip('One more'));
+        await pumpFrames(tester, frames: 4);
+      }
+      expect(find.text('4×'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('One more'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('4×'), findsOneWidget);
+      expect(find.text('Build (1)'), findsOneWidget);
+    });
+
+    testWidgets('and neither does the one on a row being taken out', (
+      WidgetTester tester,
+    ) async {
+      await pumpHearthApp(tester, foods: freddys());
+      await openFreddys(tester);
+      await tester.tap(find.text('Single Steakburger'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.byTooltip('Take Lettuce out'));
+      await pumpFrames(tester, frames: 12);
+
+      await tester.tap(find.byTooltip('Take out less'));
+      await pumpFrames(tester, frames: 12);
+      expect(find.text('−0.5×'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Take out less'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('−0.5×'), findsOneWidget);
+      expect(find.text('Taking it out'), findsOneWidget);
+      expect(find.text('Build (2)'), findsOneWidget);
+    });
+
     testWidgets('a meal of nothing but deductions cannot be built', (
       WidgetTester tester,
     ) async {
