@@ -58,6 +58,37 @@ void main() {
       expect(find.text('Cover and cook'), findsOneWidget);
     });
 
+    testWidgets('and does not go out when you leave the section for home', (
+      WidgetTester tester,
+    ) async {
+      // "Anywhere" has to include the home screen, which is above the shell
+      // rather than inside it: going home is a route swap, so the shell — and
+      // the bar it carries — is unmounted on the way. Set a twenty-minute
+      // timer, tap Home, and the pot goes out of sight.
+      await pumpHearthApp(
+        tester,
+        timers: <CookTimer>[
+          aTimer(
+            label: 'Cover and cook',
+            duration: const Duration(minutes: 20),
+            ago: const Duration(minutes: 1),
+          ),
+        ],
+      );
+      await pumpFrames(tester);
+
+      await tester.tap(find.text('Home'));
+      await pumpFrames(tester, frames: 10);
+
+      expect(find.textContaining('Still being built'), findsOneWidget);
+      expect(
+        find.text('Cover and cook'),
+        findsOneWidget,
+        reason: 'the running timer dropped out of sight on the home screen',
+      );
+      expect(find.textContaining(RegExp(r'^18:5\d$')), findsOneWidget);
+    });
+
     testWidgets('several timers collapse to the most urgent plus a count', (
       WidgetTester tester,
     ) async {

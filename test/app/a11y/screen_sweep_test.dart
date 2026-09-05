@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/app/shell/launch_target.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
@@ -83,12 +84,21 @@ void main() {
   /// accessibility size.
   const List<double> scales = <double>[1.0, 1.4, 2.0, 3.0];
 
+  /// A phone, and a desk. The shell swaps layouts on width, so a sweep that
+  /// only ever pumps a phone leaves the sidebar — a fixed-width rail full of
+  /// text — untested at every size that matters.
+  const Size phone = Size(390, 844);
+  const Size desktop = Size(900, 500);
+
   Future<void> open(
     WidgetTester tester, {
     required double scale,
     required Brightness brightness,
+    Size size = phone,
+    LaunchTarget? launchTarget,
   }) => pumpHearthApp(
     tester,
+    size: size,
     recipes: <Recipe>[chilli()],
     foods: <Food>[yoghurt()],
     entries: <MealPlanEntry>[tonight()],
@@ -100,6 +110,7 @@ void main() {
     ),
     textScale: scale,
     brightness: brightness,
+    launchTarget: launchTarget,
   );
 
   for (final Brightness brightness in Brightness.values) {
@@ -124,6 +135,94 @@ void main() {
       });
     }
   }
+
+  group('the same four tabs on a desk, where the sidebar is', () {
+    // The sidebar is a fixed 208pt rail with a way home, a section heading and
+    // four labelled rows in it, and none of that was ever pumped at a size
+    // larger than 1x. A short window is the honest case: half a laptop screen.
+    for (final double scale in scales) {
+      testWidgets('the sidebar survives ${scale}x text', (
+        WidgetTester tester,
+      ) async {
+        await open(
+          tester,
+          scale: scale,
+          brightness: Brightness.light,
+          size: desktop,
+        );
+        await pumpFrames(tester);
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'the sidebar overflowed at ${scale}x text',
+        );
+
+        for (final String tab in tabs) {
+          await tester.tap(find.text(tab).last);
+          await pumpFrames(tester, frames: 10);
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: '$tab overflowed at ${scale}x text on a desktop window',
+          );
+        }
+      });
+    }
+
+    testWidgets('and so does a window short enough to be a palette', (
+      WidgetTester tester,
+    ) async {
+      // 400 tall at 3x is where the rail ran out of room by 106 points.
+      await open(
+        tester,
+        scale: 3.0,
+        brightness: Brightness.light,
+        size: const Size(900, 400),
+      );
+      await pumpFrames(tester);
+
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('the home screen, which is above the shell (spec §6.2)', () {
+    // Neither sweep passed a launch target, so both always started inside
+    // Nutrition and the front door of the app was swept by nobody.
+    for (final double scale in scales) {
+      for (final Brightness brightness in Brightness.values) {
+        final String theme = brightness == Brightness.light ? 'light' : 'dark';
+        testWidgets('survives ${scale}x text in $theme', (
+          WidgetTester tester,
+        ) async {
+          await open(
+            tester,
+            scale: scale,
+            brightness: brightness,
+            launchTarget: LaunchTarget.home,
+          );
+          await pumpFrames(tester);
+
+          expect(find.text('Hearth'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        });
+      }
+    }
+
+    testWidgets('and survives it on a desk, where the column is centred', (
+      WidgetTester tester,
+    ) async {
+      await open(
+        tester,
+        scale: 3.0,
+        brightness: Brightness.light,
+        size: desktop,
+        launchTarget: LaunchTarget.home,
+      );
+      await pumpFrames(tester);
+
+      expect(tester.takeException(), isNull);
+    });
+  });
 
   group('the screens behind the tabs', () {
     testWidgets('a recipe reads at 3x text', (WidgetTester tester) async {

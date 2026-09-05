@@ -65,6 +65,14 @@ Future<HearthDatabase> pumpHearthApp(
 
   /// The app is ThemeMode.system, so this is the switch the OS actually flips.
   Brightness brightness = Brightness.light,
+
+  /// What the OS reserves at the edges of the screen — the status bar, the
+  /// notch, the home indicator.
+  ///
+  /// Zero by default, which is what a test view has and what no real device
+  /// has. A layout that applies the inset twice looks identical to a correct
+  /// one until this is set, which is how a doubled status bar shipped once.
+  EdgeInsets viewPadding = EdgeInsets.zero,
   List<Recipe> recipes = const <Recipe>[],
   Stream<List<Recipe>>? recipeStream,
   List<Food> foods = const <Food>[],
@@ -97,6 +105,17 @@ Future<HearthDatabase> pumpHearthApp(
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
+  // Both, because MediaQuery reads `padding` while a SafeArea consults
+  // `viewPadding` to decide what a keyboard has already covered — a view that
+  // set only one of them would not be any device.
+  final FakeViewPadding fakePadding = FakeViewPadding(
+    left: viewPadding.left,
+    top: viewPadding.top,
+    right: viewPadding.right,
+    bottom: viewPadding.bottom,
+  );
+  tester.view.viewPadding = fakePadding;
+  tester.view.padding = fakePadding;
   addTearDown(tester.view.reset);
 
   tester.platformDispatcher.textScaleFactorTestValue = textScale;

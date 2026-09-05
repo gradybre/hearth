@@ -5,6 +5,7 @@ import '../../app/shell/sections.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../recipes/timer_bar.dart';
 
 /// The way into the house (spec §6.2).
 ///
@@ -40,6 +41,12 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: colors.background,
+      // A running timer belongs to the app, not to the recipe you happen to be
+      // looking at (spec §5.2) — and going home is a route swap, which takes
+      // the shell and the bar it carries with it. So every screen that can be
+      // the whole of what you are looking at carries one: the shell, the recipe
+      // you opened from it, and this. It renders nothing when nothing is on.
+      bottomNavigationBar: const CookTimerBar(),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -54,7 +61,7 @@ class HomeScreen extends StatelessWidget {
               children: <Widget>[
                 const _Masthead(),
                 const SizedBox(height: HearthSpacing.xl),
-                for (final AppSection section in builtSections) ...<Widget>[
+                for (final BuiltSection section in builtSections) ...<Widget>[
                   _SectionCard(section: section),
                   const SizedBox(height: HearthSpacing.md),
                 ],
@@ -116,7 +123,9 @@ class _Masthead extends StatelessWidget {
 class _SectionCard extends StatelessWidget {
   const _SectionCard({required this.section});
 
-  final AppSection section;
+  /// Built, because the card's whole job is to be the way in. A room that is
+  /// only named has no `path` to offer, and the type says so.
+  final BuiltSection section;
 
   @override
   Widget build(BuildContext context) {
@@ -208,7 +217,7 @@ class _ComingLater extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<AppSection> later = unbuiltSections;
+    final List<PlannedSection> later = unbuiltSections;
     if (later.isEmpty) return const SizedBox.shrink();
 
     final HearthColors colors = context.colors;
@@ -216,7 +225,7 @@ class _ComingLater extends StatelessWidget {
     // are proper nouns, and one of them is "The house" — which reads as a
     // typo halfway through a sentence and as a list item perfectly well.
     final String listed = <String>[
-      for (final AppSection section in later) section.label,
+      for (final PlannedSection section in later) section.label,
     ].join(', ');
 
     return Padding(

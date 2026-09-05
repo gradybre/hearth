@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/app/shell/launch_target.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
@@ -66,20 +67,31 @@ void main() {
 
   const List<String> tabs = <String>['Recipes', 'Plan', 'Shopping', 'Foods'];
 
-  Future<void> open(WidgetTester tester, Brightness brightness) =>
-      pumpHearthApp(
-        tester,
-        recipes: <Recipe>[chilli()],
-        foods: <Food>[yoghurt()],
-        entries: <MealPlanEntry>[tonight()],
-        targets: const MacroTargets(
-          kcal: 2200,
-          proteinG: 170,
-          carbG: 200,
-          fatG: 70,
-        ),
-        brightness: brightness,
-      );
+  const Size phone = Size(390, 844);
+  const Size desktop = Size(900, 500);
+
+  Future<void> open(
+    WidgetTester tester,
+    Brightness brightness, {
+    Size size = phone,
+    double textScale = 1.0,
+    LaunchTarget? launchTarget,
+  }) => pumpHearthApp(
+    tester,
+    size: size,
+    recipes: <Recipe>[chilli()],
+    foods: <Food>[yoghurt()],
+    entries: <MealPlanEntry>[tonight()],
+    targets: const MacroTargets(
+      kcal: 2200,
+      proteinG: 170,
+      carbG: 200,
+      fatG: 70,
+    ),
+    textScale: textScale,
+    brightness: brightness,
+    launchTarget: launchTarget,
+  );
 
   for (final Brightness brightness in Brightness.values) {
     final String theme = brightness == Brightness.light ? 'light' : 'dark';
@@ -133,6 +145,54 @@ void main() {
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
       await expectLater(tester, meetsGuideline(textContrastGuideline));
     }
+
+    // The front door of the app, which this sweep never reached: it passed no
+    // launch target, so every run above started inside Nutrition. Both themes,
+    // because the cards are the one place on it carrying the accent.
+    for (final Brightness brightness in Brightness.values) {
+      testWidgets('the home screen, in '
+          '${brightness == Brightness.light ? 'light' : 'dark'}', (
+        WidgetTester tester,
+      ) async {
+        final SemanticsHandle handle = tester.ensureSemantics();
+        await open(tester, brightness, launchTarget: LaunchTarget.home);
+        await pumpFrames(tester);
+
+        expect(find.text('Hearth'), findsOneWidget);
+        await check(tester);
+        handle.dispose();
+      });
+    }
+
+    testWidgets('the home screen on a desk, at the largest text', (
+      WidgetTester tester,
+    ) async {
+      // A desktop window at 3x is where the shell's own chrome grows: nothing
+      // in this sweep had ever been pumped anywhere but a phone at 1x.
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await open(
+        tester,
+        Brightness.light,
+        size: desktop,
+        textScale: 3.0,
+        launchTarget: LaunchTarget.home,
+      );
+      await pumpFrames(tester);
+
+      await check(tester);
+      handle.dispose();
+    });
+
+    testWidgets('and the sidebar beside a section, at the largest text', (
+      WidgetTester tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await open(tester, Brightness.light, size: desktop, textScale: 3.0);
+      await pumpFrames(tester);
+
+      await check(tester);
+      handle.dispose();
+    });
 
     testWidgets('a recipe', (WidgetTester tester) async {
       final SemanticsHandle handle = tester.ensureSemantics();

@@ -93,6 +93,72 @@ void main() {
     });
   });
 
+  group('the inset the OS reserves at the top of the screen', () {
+    // A phone with a notch. Every one of the four tab screens is a Scaffold
+    // with a SafeArea body and no app bar, so the shell must not hand them a
+    // MediaQuery that still has the status bar in it — its own section bar has
+    // already stood clear of it.
+    const EdgeInsets notch = EdgeInsets.only(top: 47);
+
+    /// The library's own heading, which is the topmost thing a section screen
+    /// draws. Scoped to the shell's content slot, because "Recipes" is also
+    /// the name of a tab.
+    final Finder header = find.descendant(
+      of: find.byType(IndexedStack),
+      matching: find.text('Recipes'),
+    );
+
+    testWidgets('is spent once, not once by the shell and again by the '
+        'screen inside it', (WidgetTester tester) async {
+      await _pumpAt(tester, phone);
+      await pumpFrames(tester);
+      final double flat = tester.getTopLeft(header).dy;
+
+      await pumpHearthApp(tester, size: phone, viewPadding: notch);
+      await pumpFrames(tester);
+      final double inset = tester.getTopLeft(header).dy;
+
+      // The whole layout moves down by the status bar, once. Twice — which is
+      // what shipped — is 94, and looks like a stray band of empty paper above
+      // every screen in the app.
+      expect(
+        inset - flat,
+        notch.top,
+        reason:
+            'the status bar inset was applied ${(inset - flat) / notch.top}'
+            ' times',
+      );
+    });
+
+    testWidgets('because the shell spends it and passes on what is left', (
+      WidgetTester tester,
+    ) async {
+      // The guarantee behind the measurement above, stated where a future
+      // reader will find it: whatever the shell draws its section bar clear
+      // of, the screen below must not be asked to clear again.
+      await pumpHearthApp(tester, size: phone, viewPadding: notch);
+      await pumpFrames(tester);
+
+      final MediaQueryData inner = MediaQuery.of(
+        tester.element(find.byType(IndexedStack)),
+      );
+      expect(inner.padding.top, 0);
+    });
+
+    testWidgets('and the sidebar layout is left alone, having never doubled '
+        'it', (WidgetTester tester) async {
+      await pumpHearthApp(tester, size: desktop, viewPadding: notch);
+      await pumpFrames(tester);
+
+      // No horizontal bar above the content on a desktop window, so the
+      // section screen keeps its own status-bar inset to spend.
+      final MediaQueryData inner = MediaQuery.of(
+        tester.element(find.byType(IndexedStack)),
+      );
+      expect(inner.padding.top, notch.top);
+    });
+  });
+
   group('accessibility of the shell (spec §6.3)', () {
     testWidgets('the sidebar labels every destination for a screen reader', (
       WidgetTester tester,

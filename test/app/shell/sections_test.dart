@@ -35,6 +35,32 @@ void main() {
       expect(ids, hasLength(appSections.length));
     });
 
+    test('only a built section can be asked where it goes', () {
+      // The type carries it, not a convention. `AppSection.path` used to exist
+      // on every section and read `destinations.first`, so naming an unbuilt
+      // one — `LaunchTarget.section(appSections[1])` — threw a StateError at
+      // runtime where a compile error belonged. Now `path` lives on
+      // BuiltSection alone, and the registry hands out nothing else: the two
+      // lines this test replaces would not compile.
+      expect(builtSections, isA<List<BuiltSection>>());
+      expect(unbuiltSections, isA<List<PlannedSection>>());
+      for (final AppSection section in appSections) {
+        expect(section.isBuilt, section is BuiltSection);
+      }
+    });
+
+    test('and no room is declared built with nowhere to go', () {
+      // The other half of the guarantee, and the half a const constructor
+      // cannot assert for itself: `path` reads `destinations.first`, so a
+      // BuiltSection written with an empty list would put the old StateError
+      // back. The registry is the only place either kind is written, and this
+      // is what holds it to writing them correctly.
+      for (final BuiltSection section in builtSections) {
+        expect(section.destinations, isNotEmpty, reason: section.label);
+        expect(section.path, section.destinations.first.path);
+      }
+    });
+
     test('entering a section lands on its first tab', () {
       // Hearth opened on the recipe library before there was a home screen,
       // and going into Nutrition should still land there.

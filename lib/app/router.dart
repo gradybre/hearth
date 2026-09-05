@@ -55,14 +55,26 @@ import 'shell/sections.dart';
 /// a frame late is a visible flash of the wrong screen.
 GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
   initialLocation: initialLocation,
+  // A path that matches nothing goes home, the same as an unknown section
+  // does below. The `/:section` redirect only ever saw single-segment paths,
+  // so anything deeper — a stale link, a share carrying a URL Hearth used to
+  // understand — landed on go_router's own error page, which is a red screen
+  // with nothing on it to tap. Home says where you are and lets you carry on.
+  onException: (BuildContext context, GoRouterState state, GoRouter router) =>
+      router.go('/'),
   routes: <RouteBase>[
     GoRoute(
       path: '/',
       builder: (BuildContext context, GoRouterState state) =>
           const HomeScreen(),
     ),
-    // Listed before the section route: these have two or more segments, so
-    // they can never be mistaken for a section.
+    // Everything from here down is listed before `/:section`, and that order
+    // is what makes it work: go_router matches in declaration order, so a
+    // concrete path wins over the wildcard that would otherwise swallow it.
+    // `/household` and `/profile` are single-segment and would match
+    // `/:section` exactly — moving either below it would route them into the
+    // shell instead, so nothing here is safe to reorder.
+    //
     // Still `/household`: the screen grew from the household page into the
     // settings page, and renaming the path is a separate change that has to
     // move the library's link with it.
@@ -207,7 +219,8 @@ class _ShellHost extends StatelessWidget {
     // Never null in practice — the route above redirects anything unmatched
     // home — but a section that has been taken out should land somewhere real
     // rather than throw.
-    final AppSection section = sectionForPath(location) ?? builtSections.first;
+    final BuiltSection section =
+        sectionForPath(location) ?? builtSections.first;
     final List<AppDestination> tabs = section.destinations;
     final int index = tabs.indexWhere((AppDestination d) => d.path == location);
 
