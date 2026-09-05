@@ -79,4 +79,56 @@ void main() {
       }
     });
   });
+
+  group('what a refused password reset says (spec §8.3)', () {
+    test(
+      'rate limiting is named, so the answer is to wait rather than retry',
+      () {
+        // Supabase throttles this endpoint hard. "Something went wrong" would
+        // have someone hammering the button that is being throttled.
+        for (final String message in <String>[
+          'For security purposes, you can only request this after 51 seconds.',
+          'Email rate limit exceeded',
+          'Too many requests',
+        ]) {
+          expect(
+            SupabaseAuthGateway.readableResetFailure(AuthException(message)),
+            contains('Wait a minute'),
+            reason: '$message should read as throttling, not as breakage',
+          );
+        }
+      },
+    );
+
+    test('a malformed address is said plainly', () {
+      expect(
+        SupabaseAuthGateway.readableResetFailure(
+          const AuthException(
+            'Unable to validate email address: invalid format',
+          ),
+        ),
+        'That does not look like an email address.',
+      );
+    });
+
+    test('nothing it can say reveals whether an account exists', () {
+      // The endpoint deliberately answers the same either way, and no message
+      // here may leak the difference — this screen must not become a way to
+      // test which addresses are registered.
+      for (final String message in <String>[
+        'User not found',
+        'Email not confirmed',
+        'Signups not allowed for this instance',
+        'boom',
+      ]) {
+        final String readable = SupabaseAuthGateway.readableResetFailure(
+          AuthException(message),
+        );
+        expect(
+          readable,
+          'The reset email could not be sent just now. Try again.',
+        );
+      }
+    });
+  });
 }

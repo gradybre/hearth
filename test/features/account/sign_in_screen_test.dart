@@ -151,4 +151,110 @@ void main() {
       expect(find.text('Nope.'), findsNothing);
     });
   });
+
+  group('forgetting the password (spec §8.3)', () {
+    testWidgets('the way out is offered on the screen where you got stuck', (
+      WidgetTester tester,
+    ) async {
+      // The moment a person needs this is the moment they have just failed to
+      // sign in. Burying it anywhere else is burying it.
+      await pumpSignIn(tester);
+
+      expect(find.text('Forgot password?'), findsOneWidget);
+    });
+
+    testWidgets('it is not offered while creating an account', (
+      WidgetTester tester,
+    ) async {
+      // There is nothing to reset yet, and the row would only be one more
+      // thing to read past.
+      await pumpSignIn(tester);
+      await tester.tap(find.text('Create an account'));
+      await tester.pump();
+
+      expect(find.text('Forgot password?'), findsNothing);
+    });
+
+    testWidgets('with no email typed it asks for one instead of failing', (
+      WidgetTester tester,
+    ) async {
+      // Nothing has gone wrong — the form is just not finished. An inert
+      // button that says nothing looks like a bug.
+      final FakeAuthGateway auth = await pumpSignIn(tester);
+
+      await tester.tap(find.text('Forgot password?'));
+      await tester.pump();
+
+      expect(
+        find.textContaining('Type your email above first'),
+        findsOneWidget,
+      );
+      expect(auth.resetsRequested, isEmpty);
+      expect(find.byIcon(Icons.error_outline), findsNothing);
+    });
+
+    testWidgets('the address is sent trimmed, the way signing in sends it', (
+      WidgetTester tester,
+    ) async {
+      final FakeAuthGateway auth = await pumpSignIn(tester);
+
+      await fillIn(tester, '  cook@example.com  ', '');
+      await tester.tap(find.text('Forgot password?'));
+      await tester.pump();
+
+      expect(auth.resetsRequested, <String>['cook@example.com']);
+    });
+
+    testWidgets('the reply never says whether that address has an account', (
+      WidgetTester tester,
+    ) async {
+      // Otherwise this screen becomes a way to find out who is registered.
+      // The gateway cannot tell us either, and that is deliberate.
+      await pumpSignIn(tester);
+
+      await fillIn(tester, 'stranger@example.com', '');
+      await tester.tap(find.text('Forgot password?'));
+      await tester.pump();
+
+      expect(find.textContaining('If there is an account'), findsOneWidget);
+    });
+
+    testWidgets('a refusal is shown as an error, not as a reassurance', (
+      WidgetTester tester,
+    ) async {
+      // Rate limiting is the one that actually happens, and telling someone
+      // to go and check an inbox that will stay empty is worse than useless.
+      final FakeAuthGateway auth = await pumpSignIn(tester);
+      auth.nextFailure = const AuthFailure(
+        'That has been asked for a few times just now. Wait a minute and try '
+        'again.',
+      );
+
+      await fillIn(tester, 'cook@example.com', '');
+      await tester.tap(find.text('Forgot password?'));
+      await tester.pump();
+
+      expect(find.textContaining('Wait a minute'), findsOneWidget);
+      expect(find.textContaining('If there is an account'), findsNothing);
+    });
+
+    testWidgets('signing in is barred while the request is in flight', (
+      WidgetTester tester,
+    ) async {
+      final FakeAuthGateway auth = await pumpSignIn(tester);
+      auth.gate = Completer<void>();
+      await fillIn(tester, 'cook@example.com', '');
+
+      await tester.tap(find.text('Forgot password?'));
+      await tester.pump();
+
+      expect(
+        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull,
+      );
+
+      auth.gate!.complete();
+      await tester.pump();
+    });
+  });
 }

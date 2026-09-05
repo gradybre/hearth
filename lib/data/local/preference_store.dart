@@ -11,6 +11,9 @@ class PreferenceStore {
   /// Whether cook-along last showed every step at once.
   static const String cookShowAllSteps = 'cook.show_all_steps';
 
+  /// Light, dark, or whatever the device is doing — see `ThemeChoice`.
+  static const String themeChoice = 'app.theme_choice';
+
   final HearthDatabase _db;
 
   Future<String?> read(String key) async {

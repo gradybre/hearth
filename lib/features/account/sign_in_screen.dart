@@ -66,6 +66,47 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     }
   }
 
+  /// Asks for a link to set a new password (spec §8.3).
+  ///
+  /// The reply is deliberately the same whether or not there is an account
+  /// for that address: the gateway cannot tell us, and a screen that could
+  /// would be a way to find out which addresses are registered.
+  Future<void> _resetPassword() async {
+    if (_busy) return;
+
+    final String email = _email.text.trim();
+    if (email.isEmpty) {
+      // Not an error — nothing has gone wrong yet, the form is just not
+      // finished. Saying so where the messages already appear beats a
+      // silently inert button.
+      setState(() {
+        _error = null;
+        _notice = 'Type your email above first, then ask again.';
+      });
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      await ref.read(authGatewayProvider).sendPasswordReset(email);
+      if (mounted) {
+        setState(
+          () => _notice =
+              'If there is an account for $email, a link to set a new '
+              'password is on its way. Check your email.',
+        );
+      }
+    } on AuthFailure catch (failure) {
+      if (mounted) setState(() => _error = failure.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
@@ -123,6 +164,17 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                       ),
                     ),
                   ],
+                  // Offered on the way in rather than behind a menu: the
+                  // moment a person needs this is the moment they have
+                  // already failed to sign in.
+                  if (!_creating)
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: TextButton(
+                        onPressed: _busy ? null : _resetPassword,
+                        child: const Text('Forgot password?'),
+                      ),
+                    ),
                   if (_error != null) ...<Widget>[
                     const SizedBox(height: HearthSpacing.md),
                     _Banner(message: _error!, isError: true),

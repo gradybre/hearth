@@ -78,6 +78,7 @@ import '../domain/recipes/macro_calculator.dart';
 import '../domain/recipes/recipe_query.dart';
 import 'cook_timers.dart';
 import 'sync_controller.dart';
+import 'theme/theme_choice.dart';
 
 /// The app's object graph.
 ///
@@ -659,6 +660,32 @@ class CookStepViewNotifier extends AsyncNotifier<bool> {
     final bool wanted = !(state.value ?? false);
     state = AsyncValue<bool>.data(wanted);
     await _store.writeFlag(PreferenceStore.cookShowAllSteps, value: wanted);
+  }
+}
+
+/// Light, dark, or whatever the device is doing (spec §6.1).
+///
+/// Device-local, like every other preference in this store: a theme is a
+/// statement about the screen in front of you, and pushing it to a partner
+/// would change their app for a reason they could not see.
+final AsyncNotifierProvider<ThemeChoiceNotifier, ThemeChoice>
+themeChoiceProvider = AsyncNotifierProvider<ThemeChoiceNotifier, ThemeChoice>(
+  ThemeChoiceNotifier.new,
+);
+
+class ThemeChoiceNotifier extends AsyncNotifier<ThemeChoice> {
+  PreferenceStore get _store => ref.read(preferenceStoreProvider);
+
+  @override
+  Future<ThemeChoice> build() async =>
+      ThemeChoice.parse(await _store.read(PreferenceStore.themeChoice));
+
+  Future<void> choose(ThemeChoice choice) async {
+    // Repaint first, write second. Recolouring the whole app is the entire
+    // point of the tap, and it has no business waiting on a disk write; the
+    // write cannot fail in a way the user could act on anyway.
+    state = AsyncValue<ThemeChoice>.data(choice);
+    await _store.write(PreferenceStore.themeChoice, choice.stored);
   }
 }
 

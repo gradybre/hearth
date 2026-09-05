@@ -178,6 +178,30 @@ class SupabaseAuthGateway implements AuthGateway {
   @override
   Future<void> signOut() => _client.auth.signOut();
 
+  /// Sends the reset email (spec §8.3 — Supabase Auth owns the credential).
+  ///
+  /// **No `redirectTo` on purpose.** The link therefore lands on whatever the
+  /// project has as its Site URL. Passing a deep link Hearth cannot yet
+  /// answer — nothing listens for `AuthChangeEvent.passwordRecovery`, and no
+  /// scheme is registered outside iOS — would produce a link that looks
+  /// right and goes nowhere, which is worse than one that plainly goes to the
+  /// project's own page. Finishing the loop in-app means: allow-listing a
+  /// redirect in the Supabase dashboard, registering the scheme on macOS and
+  /// Windows, and a screen that calls `updateUser(password:)` on the recovery
+  /// session.
+  ///
+  /// A missing account is not an error here, by design: Supabase answers the
+  /// same way either way so the endpoint cannot be used to discover whether
+  /// an address is registered.
+  @override
+  Future<void> sendPasswordReset(String email) async {
+    try {
+      await _client.auth.resetPasswordForEmail(email.trim());
+    } on AuthException catch (error) {
+      throw AuthFailure(readableResetFailure(error));
+    }
+  }
+
   @override
   Future<HearthAccount> joinHousehold(String shareCode) async {
     try {
@@ -254,6 +278,26 @@ class SupabaseAuthGateway implements AuthGateway {
       return 'Too many attempts just now. Wait a minute and try again.';
     }
     return 'Something went wrong signing you in. Try again.';
+  }
+
+  /// Why the reset email could not even be asked for.
+  ///
+  /// Public where its siblings are private because it is the one that carries
+  /// a decision worth pinning down in a test: an unrecognised address must
+  /// *never* come back as a failure, or the screen would start reporting
+  /// which addresses have accounts.
+  static String readableResetFailure(AuthException error) {
+    final String message = error.message.toLowerCase();
+    if (message.contains('rate limit') ||
+        message.contains('too many') ||
+        message.contains('security purposes')) {
+      return 'That has been asked for a few times just now. Wait a minute '
+          'and try again.';
+    }
+    if (message.contains('invalid') && message.contains('email')) {
+      return 'That does not look like an email address.';
+    }
+    return 'The reset email could not be sent just now. Try again.';
   }
 
   static String _readableJoin(PostgrestException error) {

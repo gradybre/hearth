@@ -74,6 +74,17 @@ abstract interface class AuthGateway {
 
   Future<void> signOut();
 
+  /// Asks the backend to email a link for setting a new password.
+  ///
+  /// Returns normally whether or not an account exists for [email] — the
+  /// backend deliberately does not say, and neither should the caller. A
+  /// screen that reported "no such account" would turn this into a way to
+  /// test whether an address is registered.
+  ///
+  /// Throws [AuthFailure] only when the request itself could not be made:
+  /// rate limiting, a malformed address, no connection.
+  Future<void> sendPasswordReset(String email);
+
   /// Joins the household the code belongs to, and returns the account as it
   /// stands afterwards.
   Future<HearthAccount> joinHousehold(String shareCode);
