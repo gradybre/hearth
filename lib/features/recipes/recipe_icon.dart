@@ -8,6 +8,7 @@ import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../domain/models/recipe.dart';
 import '../../domain/recipes/sketch_icon.dart';
 import 'recipe_icon_controller.dart';
 
@@ -46,7 +47,7 @@ class RecipeIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final SketchIcon? icon = _cached(svg);
+    final SketchIcon? icon = SketchIcon.cached(svg);
     if (icon == null) return const SizedBox.shrink();
 
     return ExcludeSemantics(
@@ -69,27 +70,14 @@ class RecipeIcon extends StatelessWidget {
   ///
   /// For callers deciding on layout before they build — a library row leaves
   /// no gap where an icon was never going to appear.
-  static bool canDraw(String? svg) => _cached(svg) != null;
-
-  /// Parses at most [_cacheLimit] distinct icons, keeping the result.
   ///
-  /// A library row rebuilds on every scroll frame, every favourite toggle and
-  /// every macro recalculation, and re-tokenising a document each time to
-  /// draw the same muffin would be work nobody asked for. Keyed by the markup
-  /// itself, so an icon that changes is a different key and no invalidation
-  /// is needed.
-  static final Map<String, SketchIcon?> _cache = <String, SketchIcon?>{};
-  static const int _cacheLimit = 200;
-
-  static SketchIcon? _cached(String? svg) {
-    if (svg == null || svg.isEmpty) return null;
-    if (_cache.containsKey(svg)) return _cache[svg];
-    // Oldest out first. A household with more than two hundred recipes on
-    // screen at once does not exist, so this is a leak guard rather than an
-    // eviction policy worth tuning.
-    if (_cache.length >= _cacheLimit) _cache.remove(_cache.keys.first);
-    return _cache[svg] = SketchIcon.parse(svg);
-  }
+  /// The parse is memoised in [SketchIcon.cached] rather than here, because
+  /// this is not the only layer that reads the same document: the pull
+  /// validates every row it takes in, and a library row rebuilds on every
+  /// scroll frame besides. One cache down in the domain means finding out
+  /// whether an icon is drawable costs once per distinct icon, not once per
+  /// layer per frame.
+  static bool canDraw(String? svg) => SketchIcon.cached(svg) != null;
 }
 
 /// Paints a validated sketch, and only ever a validated one.
@@ -295,17 +283,43 @@ class RecipeIconField extends ConsumerStatefulWidget {
 class _RecipeIconFieldState extends ConsumerState<RecipeIconField> {
   bool _drawing = false;
 
+  /// Why the last drawing the *user asked for* did not arrive, if it did not.
+  ///
+  /// The background draw after a save is deliberately silent: the recipe is
+  /// already safe and nobody asked for a picture. This is the other case —
+  /// somebody pressed a button and is waiting — and it used to be just as
+  /// silent, so a spent picture budget, a missing network and markup that
+  /// failed validation all looked identical to a button that un-disabled
+  /// itself and did nothing.
+  String? _failure;
+
+  static const String _failureMessage =
+      'Hearth could not draw one just now. Try again in a moment.';
+
   Future<void> _redraw() async {
     final String? recipeId = widget.recipeId;
     if (recipeId == null || _drawing) return;
 
-    setState(() => _drawing = true);
+    setState(() {
+      _drawing = true;
+      _failure = null;
+    });
+    bool drawn = false;
     try {
-      await ref
+      drawn = await ref
           .read(recipeIconControllerProvider)
           .drawFor(recipeId: recipeId, title: _title());
     } finally {
-      if (mounted) setState(() => _drawing = false);
+      if (mounted) {
+        setState(() {
+          _drawing = false;
+          _failure = drawn ? null : _failureMessage;
+        });
+        // An explicit request refreshes what it changed rather than waiting on
+        // the library stream to notice, so the new sketch appears under the
+        // button that asked for it.
+        if (drawn) ref.invalidate(recipeByIdProvider(recipeId));
+      }
     }
   }
 
@@ -313,7 +327,9 @@ class _RecipeIconFieldState extends ConsumerState<RecipeIconField> {
   ///
   /// Read back from the store rather than from the form: an unsaved rename is
   /// not what the recipe is called yet, and drawing from it would leave an
-  /// icon that matches nothing anybody can see.
+  /// icon that matches nothing anybody can see. Empty when the store has not
+  /// answered yet, and the draw then fails and says so rather than returning
+  /// quietly for a reason nobody could guess at.
   String _title() =>
       ref.read(recipeByIdProvider(widget.recipeId!)).value?.title ?? '';
 
@@ -321,6 +337,7 @@ class _RecipeIconFieldState extends ConsumerState<RecipeIconField> {
     final String? recipeId = widget.recipeId;
     if (recipeId == null) return;
     await ref.read(recipeIconControllerProvider).clear(recipeId);
+    if (mounted) setState(() => _failure = null);
     widget.onCleared();
   }
 
@@ -334,9 +351,13 @@ class _RecipeIconFieldState extends ConsumerState<RecipeIconField> {
     }
 
     // The stored icon, not the one the form opened with: a background drawing
-    // that landed while the editor was open should show.
-    final String? svg =
-        ref.watch(recipeByIdProvider(recipeId)).value?.iconSvg ?? widget.svg;
+    // that landed while the editor was open should show. The store wins as
+    // soon as it has answered at all, rather than only when it answers with
+    // an icon — falling back on a null would show the partner's removal as a
+    // sketch that is no longer there. Until it answers, the form's own value
+    // is the best guess going.
+    final AsyncValue<Recipe?> stored = ref.watch(recipeByIdProvider(recipeId));
+    final String? svg = stored.hasValue ? stored.value?.iconSvg : widget.svg;
     final bool hasIcon = RecipeIcon.canDraw(svg);
 
     return Row(
@@ -375,6 +396,25 @@ class _RecipeIconFieldState extends ConsumerState<RecipeIconField> {
                     ),
                 ],
               ),
+              // Icon as well as words, never colour alone (spec §6.3).
+              if (_failure case final String failure) ...<Widget>[
+                const SizedBox(height: HearthSpacing.sm),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Icon(Icons.error_outline, size: 18, color: colors.error),
+                    const SizedBox(width: HearthSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        failure,
+                        style: context.text.metadata.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),

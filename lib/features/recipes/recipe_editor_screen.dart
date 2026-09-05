@@ -549,7 +549,15 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
 
   void _hydrate(Recipe recipe) => _fill(RecipeDraft.fromRecipe(recipe));
 
-  void _fill(RecipeDraft draft) {
+  /// Puts [draft] into the fields.
+  ///
+  /// [asOpened] says whether this *is* the recipe the editor opened on. It is
+  /// false for a revision asked for in the panel below, and that distinction
+  /// is the whole of [_titleWhenOpened]: filling the fields from an answer
+  /// used to reset it, so revising "Pumpkin muffins" into "Vegan pumpkin
+  /// muffins" and saving detected no change at all and left the muffins
+  /// beside a dish they no longer described.
+  void _fill(RecipeDraft draft, {bool asOpened = true}) {
     _title.text = draft.title;
     _servings.text = draft.servings == draft.servings.roundToDouble()
         ? draft.servings.round().toString()
@@ -567,7 +575,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       ..addAll(draft.sections.map(_SectionFields.from));
     _existingId = draft.existingId;
     _iconSvg = draft.iconSvg;
-    _titleWhenOpened = draft.title;
+    if (asOpened) _titleWhenOpened = draft.title;
     _kind = draft.kind;
     _matches = draft.matches;
     _noMatch = draft.noMatch;
@@ -591,6 +599,10 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
         currentIcon: drafted.iconSvg,
         titleWhenOpened: _titleWhenOpened,
         titleNow: drafted.title,
+        // A recipe that has never been saved has never been offered a sketch.
+        // One that has, and has none, is one whose icon was removed, refused
+        // or never arrived — and saving it again must not buy another.
+        isNewRecipe: draft.existingId == null,
       );
 
       // The old sketch goes at the moment the title stops describing it.
@@ -952,8 +964,10 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
               const SizedBox(height: HearthSpacing.xl),
               _ReviseCard(
                 current: () => _draft,
+                // Not "as opened": a title the model changed on request is
+                // still a title change, and the sketch has to follow it.
                 onApply: (RecipeDraft revised) =>
-                    setState(() => _fill(revised)),
+                    setState(() => _fill(revised, asOpened: false)),
               ),
             ],
             const SizedBox(height: HearthSpacing.xxl),

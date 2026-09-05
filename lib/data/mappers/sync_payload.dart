@@ -42,9 +42,13 @@ abstract final class SyncPayload {
       // Validated on the way in, never trusted on the way out: this row was
       // written by another device, and the markup is model output wherever it
       // came from. Anything that fails the gate becomes no icon at all.
-      iconSvg: SketchIcon.isValid(json['icon_svg'] as String?)
-          ? json['icon_svg'] as String?
-          : null,
+      //
+      // Read like every other field here — defensively, off an `Object?`,
+      // because a cast that throws on the one field this change itself calls
+      // untrusted would lose the whole pull rather than one picture. And read
+      // once: the answer is kept, so the widget that draws it in a moment
+      // does not tokenise the same document all over again.
+      iconSvg: SketchIcon.validated(json['icon_svg']),
       notes: json['notes'] as String?,
       createdBy: json['created_by'] as String?,
       isDeleted: json['is_deleted'] == true,

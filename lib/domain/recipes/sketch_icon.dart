@@ -38,6 +38,20 @@ class SketchTransform {
   bool get isIdentity =>
       a == 1 && b == 0 && c == 0 && d == 1 && e == 0 && f == 0;
 
+  /// Whether every entry is a number a canvas can use.
+  ///
+  /// Asked after composition rather than before, because that is where it
+  /// stops being true: `scale(1e300) scale(1e300)` is two perfectly finite
+  /// numbers whose product is not one, and `rotate(1e308)` is a finite angle
+  /// whose cosine is NaN.
+  bool get isFinite =>
+      a.isFinite &&
+      b.isFinite &&
+      c.isFinite &&
+      d.isFinite &&
+      e.isFinite &&
+      f.isFinite;
+
   /// This transform followed by [inner] — the composition a nested `<g>`
   /// means, outer first.
   SketchTransform then(SketchTransform inner) => SketchTransform(
@@ -298,6 +312,25 @@ class SketchIcon {
   /// How deeply `<g>` may nest before this stops believing the document.
   static const int maxDepth = 8;
 
+  /// How many functions one `transform` list may hold.
+  ///
+  /// A drawing uses one or two. The cap is here because the value is
+  /// attacker-sized — a `transform` attribute may be nearly the whole 4 KB —
+  /// and a bound on the work is worth more than the last exotic list.
+  static const int maxTransformCalls = 32;
+
+  /// The largest coordinate a sketch may name, in its own units.
+  ///
+  /// A viewBox is a couple of dozen units across, so this is four orders of
+  /// magnitude past anything a drawing needs. It is here to make *finite*
+  /// hold after arithmetic rather than only before it: every number below is
+  /// checked as it is read, but `1e308` reads as a perfectly finite double
+  /// and `1e308 + 1e308` does not, and `rx="1e308"` is a finite radius with
+  /// an infinite diameter. A NaN or an infinity that reaches the canvas is
+  /// then Skia's decision to make rather than this file's, and a validated
+  /// icon has to mean geometry that draws.
+  static const double maxCoordinate = 1e6;
+
   /// Line weights outside this are not sketches: a hairline vanishes and a
   /// fat one paints a block.
   static const double minStrokeWidth = 0.1;
@@ -330,8 +363,36 @@ class SketchIcon {
     }
   }
 
+  /// [parse], keeping the answer for whoever asks next.
+  ///
+  /// One document is read twice on its way to the screen — the pull validates
+  /// every row it takes in, and the widget parses again to draw it — and a
+  /// library row rebuilds on every scroll frame besides. Keyed by the markup
+  /// itself, so an icon that changes is a different key and nothing needs
+  /// invalidating.
+  static SketchIcon? cached(String? markup) {
+    if (markup == null || markup.isEmpty) return null;
+    if (_cache.containsKey(markup)) return _cache[markup];
+    // Oldest out first. A household with more than two hundred distinct icons
+    // in flight at once does not exist, so this is a leak guard rather than an
+    // eviction policy worth tuning.
+    if (_cache.length >= _cacheLimit) _cache.remove(_cache.keys.first);
+    return _cache[markup] = parse(markup);
+  }
+
+  static final Map<String, SketchIcon?> _cache = <String, SketchIcon?>{};
+  static const int _cacheLimit = 200;
+
   /// Whether [markup] would survive [parse]. The gate before storing.
-  static bool isValid(String? markup) => parse(markup) != null;
+  static bool isValid(String? markup) => cached(markup) != null;
+
+  /// The markup of [value] if it is safe to draw, and null for anything else.
+  ///
+  /// Takes an `Object?` because the field it reads arrives inside a map of
+  /// them, written by a device this one has no reason to trust. A cast that
+  /// threw on the way past would lose the whole pull rather than one picture.
+  static String? validated(Object? value) =>
+      value is String ? cached(value)?.markup : null;
 
   /// Shapes worth painting before anything is tokenised.
   ///
@@ -621,20 +682,29 @@ class _Parser {
     final String? strokeWidth = element.attribute('stroke-width');
     final String? transform = element.attribute('transform');
 
+    final SketchTransform composed = transform == null
+        ? parent.transform
+        : parent.transform.then(_transform(transform));
+    // After composition, not before: this is the point where two finite
+    // numbers can have become an infinite one.
+    if (!composed.isFinite) throw const _Rejected();
+
     return _Inherited(
       // Any paint at all counts as filled; the actual colour is discarded.
       filled: fill == null
           ? parent.filled
           : fill.trim().toLowerCase() != 'none',
+      // `num.clamp` orders NaN above everything, so a stroke width of "NaN"
+      // comes back as the maximum rather than as NaN. Nothing extra is needed
+      // here, and a check that looked necessary would invite removing the
+      // clamp instead.
       strokeWidth: strokeWidth == null
           ? parent.strokeWidth
           : (double.tryParse(strokeWidth.trim()) ?? parent.strokeWidth).clamp(
               SketchIcon.minStrokeWidth,
               SketchIcon.maxStrokeWidth,
             ),
-      transform: transform == null
-          ? parent.transform
-          : parent.transform.then(_transform(transform)),
+      transform: composed,
     );
   }
 
@@ -642,32 +712,71 @@ class _Parser {
     final String? raw = element.attribute(name);
     if (raw == null) return 0;
     final double? value = double.tryParse(raw.trim());
-    if (value == null || !value.isFinite) throw const _Rejected();
-    return value;
+    if (value == null) throw const _Rejected();
+    return _coordinate(value);
   }
 
-  static final RegExp _transformCall = RegExp(r'([a-zA-Z]+)\s*\(([^()]*)\)');
+  /// One number the geometry is built from, bounded as well as finite.
+  ///
+  /// The bound is what keeps the arithmetic downstream honest: a diameter, a
+  /// relative step, a composed translation. See [SketchIcon.maxCoordinate].
+  static double _coordinate(double value) {
+    if (!value.isFinite || value.abs() > SketchIcon.maxCoordinate) {
+      throw const _Rejected();
+    }
+    return value;
+  }
 
   /// `translate(2 3) rotate(45)` as one affine.
   ///
   /// Only the four functions a drawing actually needs. `skewX`/`skewY` are
   /// absent because nothing sane draws a muffin with them, and every function
   /// supported is one more thing that has to be right.
+  ///
+  /// Scanned by hand, left to right, once. This was an unanchored
+  /// `([a-zA-Z]+)\s*\(…\)` swept with `allMatches`, which retries its greedy
+  /// run from every start position: on a `transform` of 3,900 letters and no
+  /// bracket at all — comfortably inside the 4 KB cap — that took 283 ms.
+  /// [SketchIcon.isValid] runs on every recipe row of every pull, on the UI
+  /// isolate, so a hundred such rows froze the app for half a minute. A
+  /// single left-to-right pass cannot be made to do that.
   static SketchTransform _transform(String raw) {
     SketchTransform result = SketchTransform.identity;
-    int consumed = 0;
+    int i = 0;
+    int calls = 0;
 
-    for (final RegExpMatch match in _transformCall.allMatches(raw)) {
-      // Anything between the calls that is not whitespace or a comma means
-      // this is not a transform list we understand.
-      final String between = raw.substring(consumed, match.start);
-      if (between.trim().replaceAll(',', '').isNotEmpty) {
+    while (true) {
+      while (i < raw.length && _isListSeparator(raw.codeUnitAt(i))) {
+        i++;
+      }
+      if (i >= raw.length) return result;
+
+      final int nameStart = i;
+      while (i < raw.length && _isLetter(raw.codeUnitAt(i))) {
+        i++;
+      }
+      if (i == nameStart) throw const _Rejected();
+      final String name = raw.substring(nameStart, i);
+
+      while (i < raw.length && _isWhitespace(raw.codeUnitAt(i))) {
+        i++;
+      }
+      if (i >= raw.length || raw.codeUnitAt(i) != _openParen) {
         throw const _Rejected();
       }
-      consumed = match.end;
+      i++;
 
-      final List<double> a = _numbers(match.group(2) ?? '');
-      result = result.then(switch (match.group(1)) {
+      final int argumentsStart = i;
+      while (i < raw.length && raw.codeUnitAt(i) != _closeParen) {
+        if (raw.codeUnitAt(i) == _openParen) throw const _Rejected();
+        i++;
+      }
+      if (i >= raw.length) throw const _Rejected();
+      final List<double> a = _numbers(raw.substring(argumentsStart, i));
+      i++;
+
+      if (++calls > SketchIcon.maxTransformCalls) throw const _Rejected();
+      result = result.then(switch (name) {
         'translate' when a.length == 1 => SketchTransform(1, 0, 0, 1, a[0], 0),
         'translate' when a.length == 2 => SketchTransform(
           1,
@@ -690,10 +799,10 @@ class _Parser {
         ),
         _ => throw const _Rejected(),
       });
+      // Checked every step rather than only at the end, so a list that goes
+      // infinite in the middle and finite again cannot slip through.
+      if (!result.isFinite) throw const _Rejected();
     }
-
-    if (raw.substring(consumed).trim().isNotEmpty) throw const _Rejected();
-    return result;
   }
 
   static SketchTransform _rotate(List<double> a) {
@@ -721,11 +830,32 @@ class _Parser {
     }
   }
 
+  /// Reads `</name>`, the same way the opening tag was read.
+  ///
+  /// Tokenised rather than compared against the literal `'</$name>'`, because
+  /// an element's name is lowercased when it is opened: matching the literal
+  /// accepted `<Path …/>` while refusing `<PATH …></PATH>`, and refused the
+  /// space XML allows before the bracket. It failed closed, so it was never a
+  /// hole — but an ordinary answer in capitals yielded no icon at all, and an
+  /// asymmetry like that is what a later edit gets backwards.
   void _expectClose(String name) {
     _skipWhitespace();
-    final String expected = '</$name>';
-    if (!source.startsWith(expected, _i)) throw const _Rejected();
-    _i += expected.length;
+    if (!source.startsWith('</', _i)) throw const _Rejected();
+    _i += 2;
+
+    final int nameStart = _i;
+    while (_i < source.length && _isNameChar(source.codeUnitAt(_i))) {
+      _i++;
+    }
+    if (source.substring(nameStart, _i).toLowerCase() != name) {
+      throw const _Rejected();
+    }
+
+    _skipWhitespace();
+    if (_i >= source.length || source.codeUnitAt(_i) != _gt) {
+      throw const _Rejected();
+    }
+    _i++;
   }
 
   _Element _nextElement() {
@@ -807,13 +937,21 @@ class _Parser {
   static const int _equals = 0x3d;
   static const int _doubleQuote = 0x22;
   static const int _singleQuote = 0x27;
+  static const int _openParen = 0x28;
+  static const int _closeParen = 0x29;
+  static const int _comma = 0x2c;
 
   static bool _isWhitespace(int unit) =>
       unit == 0x20 || unit == 0x09 || unit == 0x0a || unit == 0x0d;
 
+  static bool _isListSeparator(int unit) =>
+      _isWhitespace(unit) || unit == _comma;
+
+  static bool _isLetter(int unit) =>
+      (unit >= 0x61 && unit <= 0x7a) || (unit >= 0x41 && unit <= 0x5a);
+
   static bool _isNameChar(int unit) =>
-      (unit >= 0x61 && unit <= 0x7a) || // a-z
-      (unit >= 0x41 && unit <= 0x5a) || // A-Z
+      _isLetter(unit) ||
       (unit >= 0x30 && unit <= 0x39) || // 0-9
       unit == 0x2d; // '-'
 }
@@ -832,14 +970,16 @@ class _Element {
 /// Every number in a whitespace/comma separated list.
 ///
 /// Refuses the whole list on anything that is not a number, so a `points`
-/// attribute carrying a word does not quietly become half a polygon.
+/// attribute carrying a word does not quietly become half a polygon — and
+/// anything past [SketchIcon.maxCoordinate], which is what keeps the
+/// arithmetic these feed finite.
 List<double> _numbers(String raw) {
   final List<double> out = <double>[];
   for (final String piece in raw.split(RegExp(r'[\s,]+'))) {
     if (piece.isEmpty) continue;
     final double? value = double.tryParse(piece);
-    if (value == null || !value.isFinite) throw const _Rejected();
-    out.add(value);
+    if (value == null) throw const _Rejected();
+    out.add(_Parser._coordinate(value));
   }
   return out;
 }
@@ -907,36 +1047,36 @@ class _PathData {
 
     switch (command.toUpperCase()) {
       case 'M':
-        final double x = _number() + ox;
-        final double y = _number() + oy;
+        final double x = _placed(_number() + ox);
+        final double y = _placed(_number() + oy);
         _x = _startX = x;
         _y = _startY = y;
         _clearReflections();
         return <SketchCommand>[SketchMoveTo(x, y)];
       case 'L':
-        final double x = _number() + ox;
-        final double y = _number() + oy;
+        final double x = _placed(_number() + ox);
+        final double y = _placed(_number() + oy);
         _x = x;
         _y = y;
         _clearReflections();
         return <SketchCommand>[SketchLineTo(x, y)];
       case 'H':
-        final double x = _number() + ox;
+        final double x = _placed(_number() + ox);
         _x = x;
         _clearReflections();
         return <SketchCommand>[SketchLineTo(x, _y)];
       case 'V':
-        final double y = _number() + oy;
+        final double y = _placed(_number() + oy);
         _y = y;
         _clearReflections();
         return <SketchCommand>[SketchLineTo(_x, y)];
       case 'C':
-        final double x1 = _number() + ox;
-        final double y1 = _number() + oy;
-        final double x2 = _number() + ox;
-        final double y2 = _number() + oy;
-        final double x = _number() + ox;
-        final double y = _number() + oy;
+        final double x1 = _placed(_number() + ox);
+        final double y1 = _placed(_number() + oy);
+        final double x2 = _placed(_number() + ox);
+        final double y2 = _placed(_number() + oy);
+        final double x = _placed(_number() + ox);
+        final double y = _placed(_number() + oy);
         _x = x;
         _y = y;
         _clearReflections();
@@ -944,12 +1084,12 @@ class _PathData {
         _lastCubicY = y2;
         return <SketchCommand>[SketchCubicTo(x1, y1, x2, y2, x, y)];
       case 'S':
-        final double x1 = 2 * _x - (_lastCubicX ?? _x);
-        final double y1 = 2 * _y - (_lastCubicY ?? _y);
-        final double x2 = _number() + ox;
-        final double y2 = _number() + oy;
-        final double x = _number() + ox;
-        final double y = _number() + oy;
+        final double x1 = _placed(2 * _x - (_lastCubicX ?? _x));
+        final double y1 = _placed(2 * _y - (_lastCubicY ?? _y));
+        final double x2 = _placed(_number() + ox);
+        final double y2 = _placed(_number() + oy);
+        final double x = _placed(_number() + ox);
+        final double y = _placed(_number() + oy);
         _x = x;
         _y = y;
         _clearReflections();
@@ -957,10 +1097,10 @@ class _PathData {
         _lastCubicY = y2;
         return <SketchCommand>[SketchCubicTo(x1, y1, x2, y2, x, y)];
       case 'Q':
-        final double x1 = _number() + ox;
-        final double y1 = _number() + oy;
-        final double x = _number() + ox;
-        final double y = _number() + oy;
+        final double x1 = _placed(_number() + ox);
+        final double y1 = _placed(_number() + oy);
+        final double x = _placed(_number() + ox);
+        final double y = _placed(_number() + oy);
         _x = x;
         _y = y;
         _clearReflections();
@@ -968,10 +1108,10 @@ class _PathData {
         _lastQuadY = y1;
         return <SketchCommand>[SketchQuadraticTo(x1, y1, x, y)];
       case 'T':
-        final double x1 = 2 * _x - (_lastQuadX ?? _x);
-        final double y1 = 2 * _y - (_lastQuadY ?? _y);
-        final double x = _number() + ox;
-        final double y = _number() + oy;
+        final double x1 = _placed(2 * _x - (_lastQuadX ?? _x));
+        final double y1 = _placed(2 * _y - (_lastQuadY ?? _y));
+        final double x = _placed(_number() + ox);
+        final double y = _placed(_number() + oy);
         _x = x;
         _y = y;
         _clearReflections();
@@ -984,8 +1124,8 @@ class _PathData {
         final double rotation = _number();
         final bool largeArc = _flag();
         final bool clockwise = _flag();
-        final double x = _number() + ox;
-        final double y = _number() + oy;
+        final double x = _placed(_number() + ox);
+        final double y = _placed(_number() + oy);
         _clearReflections();
         // A zero radius is a straight line, which is what SVG says it draws
         // and what Flutter's arc would choke on.
@@ -1016,6 +1156,14 @@ class _PathData {
         throw const _Rejected();
     }
   }
+
+  /// A coordinate as the pen actually reaches it.
+  ///
+  /// Every number below is checked as it is read, which is not the same
+  /// thing: `M1e308 1e308 l1e308 1e308` is two perfectly finite pairs and an
+  /// infinite point, and it is the sum the renderer is handed. So the sum is
+  /// what is checked, here at the boundary rather than in the painter.
+  static double _placed(double value) => _Parser._coordinate(value);
 
   void _clearReflections() {
     _lastCubicX = null;
@@ -1082,8 +1230,8 @@ class _PathData {
 
     if (!seenDigit) throw const _Rejected();
     final double? value = double.tryParse(_d.substring(start, _i));
-    if (value == null || !value.isFinite) throw const _Rejected();
-    return value;
+    if (value == null) throw const _Rejected();
+    return _Parser._coordinate(value);
   }
 
   static bool _isDigit(String c) =>

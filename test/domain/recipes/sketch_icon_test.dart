@@ -379,4 +379,205 @@ void main() {
       );
     });
   });
+
+  group('refusing cheaply', () {
+    /// A transform value of nothing but letters, filling the 4 KB cap.
+    ///
+    /// It is refused either way. What matters is the cost of refusing it: an
+    /// unanchored `([a-zA-Z]+)\s*\(…\)` swept with `allMatches` retries the
+    /// greedy run from every start position, which is quadratic — 3,900
+    /// letters measured at 283 ms on the machine this was written on, against
+    /// 7 ms for 500.
+    String lettersInATransform(int letters) =>
+        '<svg viewBox="0 0 24 24"><g transform="${'a' * letters}">'
+        '<path d="M1 1L2 2"/></g></svg>';
+
+    test('a transform value of attacker size is refused in bounded time', () {
+      // This is not a micro-optimisation. `SketchIcon.isValid` runs on every
+      // recipe row of every pull, on the UI isolate, with no cache, and the
+      // same parse runs inside `build()` for anything outside the widget's
+      // cache — so a hundred such rows froze the app for about half a minute.
+      final String hostile = lettersInATransform(3900);
+      expect(hostile.length, lessThanOrEqualTo(SketchIcon.maxMarkupLength));
+
+      const int rows = 50;
+      final Stopwatch watch = Stopwatch()..start();
+      for (int i = 0; i < rows; i++) {
+        expect(SketchIcon.parse(hostile), isNull);
+      }
+      watch.stop();
+
+      // Fifty rows took about fourteen seconds while the scan was quadratic
+      // and take single-digit milliseconds now. One second sits far above the
+      // noise of a loaded CI machine and far below anything quadratic.
+      expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
+    });
+
+    test('the cost of refusing grows with the input, not with its square', () {
+      // The bound above catches a regression that is slow everywhere. This
+      // catches one that is merely quadratic, on a machine fast enough to
+      // hide it: four times the input may cost a few times more, never
+      // sixteen.
+      int microsecondsFor(int letters) {
+        final String document = lettersInATransform(letters);
+        final Stopwatch watch = Stopwatch()..start();
+        // Enough repetitions that each measurement is tens of milliseconds,
+        // where a loaded machine's noise cannot swing the ratio.
+        for (int i = 0; i < 500; i++) {
+          SketchIcon.parse(document);
+        }
+        return watch.elapsedMicroseconds;
+      }
+
+      // Warm the parser up so the first measurement is not paying for JIT.
+      microsecondsFor(200);
+      final int small = microsecondsFor(500);
+      final int large = microsecondsFor(2000);
+
+      expect(large, lessThan(small * 8));
+    });
+  });
+
+  group('numbers that are only finite one at a time', () {
+    // Every value below parses as a finite double on its own. Composing them
+    // does not, and a NaN or an infinity reaching Skia is Skia's decision to
+    // make rather than this file's — the likely outcome is a blank icon, but
+    // "validated" has to mean the geometry is drawable, not that each number
+    // was individually well formed.
+    test('a rotation whose cosine is not a number is refused', () {
+      expect(
+        SketchIcon.parse(
+          '<svg viewBox="0 0 10 10">'
+          '<circle cx="5" cy="5" r="2" transform="rotate(1e308)"/></svg>',
+        ),
+        isNull,
+      );
+    });
+
+    test('two scales that multiply to infinity are refused', () {
+      expect(
+        SketchIcon.parse(
+          '<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="2" '
+          'transform="scale(1e300) scale(1e300)"/></svg>',
+        ),
+        isNull,
+      );
+    });
+
+    test('two matrices that multiply to infinity are refused', () {
+      expect(
+        SketchIcon.parse(
+          '<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="2" '
+          'transform="matrix(1e300 0 0 1e300 0 0) '
+          'matrix(1e300 0 0 1e300 0 0)"/></svg>',
+        ),
+        isNull,
+      );
+    });
+
+    test('a rotation about a centre off in the far distance is refused', () {
+      expect(
+        SketchIcon.parse(
+          '<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="2" '
+          'transform="rotate(45 1e308 1e308)"/></svg>',
+        ),
+        isNull,
+      );
+    });
+
+    test('a relative path step that overflows to infinity is refused', () {
+      expect(
+        SketchIcon.parse(
+          '<svg viewBox="0 0 10 10">'
+          '<path d="M1e308 1e308l1e308 1e308"/></svg>',
+        ),
+        isNull,
+      );
+    });
+
+    test('a radius whose diameter is infinite is refused', () {
+      expect(
+        SketchIcon.parse(
+          '<svg viewBox="0 0 10 10">'
+          '<ellipse cx="5" cy="5" rx="1e308" ry="2"/></svg>',
+        ),
+        isNull,
+      );
+    });
+
+    test('an ordinary drawing sits nowhere near the coordinate cap', () {
+      // The cap is what makes "finite after composition" hold rather than be
+      // checked in six places and missed in a seventh. It has to be far
+      // enough away that no real sketch can trip on it.
+      expect(SketchIcon.maxCoordinate, greaterThanOrEqualTo(1e5));
+      expect(SketchIcon.parse(bowl), isNotNull);
+    });
+  });
+
+  group('closing tags', () {
+    // Element names are lowercased when they are opened, so the closing tag
+    // has to be read the same way rather than matched as a literal string.
+    // It failed closed, so it was never a hole — but an ordinary answer in
+    // capitals yielded no icon at all, and the asymmetry is what a later edit
+    // gets backwards.
+    test('an element opened and closed in capitals is drawn', () {
+      expect(
+        SketchIcon.parse(
+          '<svg viewBox="0 0 10 10"><PATH d="M1 1L2 2"></PATH></svg>',
+        ),
+        isNotNull,
+      );
+    });
+
+    test('the space XML allows before the bracket is drawn', () {
+      expect(
+        SketchIcon.parse(
+          '<svg viewBox="0 0 10 10"><path d="M1 1L2 2"></path ></svg>',
+        ),
+        isNotNull,
+      );
+    });
+
+    test('a closing tag naming another element is still refused', () {
+      expect(
+        SketchIcon.parse(
+          '<svg viewBox="0 0 10 10"><path d="M1 1L2 2"></circle></svg>',
+        ),
+        isNull,
+      );
+    });
+
+    test('a closing tag with an attribute on it is refused', () {
+      expect(
+        SketchIcon.parse(
+          '<svg viewBox="0 0 10 10"><path d="M1 1L2 2"></path fill="red">'
+          '</svg>',
+        ),
+        isNull,
+      );
+    });
+  });
+
+  group('reading an untrusted field', () {
+    test('anything that is not a string is simply no icon', () {
+      // This is the field the whole change calls untrusted, and it arrives in
+      // a map of `Object?`. A cast that throws here takes down the entire
+      // pull, not just the picture.
+      expect(SketchIcon.validated(42), isNull);
+      expect(SketchIcon.validated(null), isNull);
+      expect(SketchIcon.validated(<String>['<svg/>']), isNull);
+    });
+
+    test('markup that survives the gate comes back as markup', () {
+      expect(SketchIcon.validated(bowl), bowl);
+      expect(SketchIcon.validated('  $bowl  '), bowl);
+    });
+
+    test('markup that does not survive the gate is no icon', () {
+      expect(
+        SketchIcon.validated('<svg viewBox="0 0 10 10"><script/></svg>'),
+        isNull,
+      );
+    });
+  });
 }

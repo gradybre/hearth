@@ -882,6 +882,20 @@ declare
     '<svg viewBox="0 0 24 24"><path d="M3 11h18c0 5-4 9-9 9s-9-4-9-9z"/></svg>';
   v_stored text;
 begin
+  -- Structural, and first. `add column if not exists … check (…)` skips the
+  -- whole clause when the column is already there — the check with it — and
+  -- reports success, so the cap can be absent while everything below still
+  -- passes. Asserted by name, because the behavioural test at the end of this
+  -- block passes for the wrong reason the moment the constraint goes missing
+  -- for any other reason too.
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.recipes'::regclass
+      and conname = 'recipes_icon_svg_length'
+  ) then
+    raise exception 'the icon length constraint is missing';
+  end if;
+
   insert into auth.users (
     id, instance_id, aud, role, email, encrypted_password,
     email_confirmed_at, created_at, updated_at

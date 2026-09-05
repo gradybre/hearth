@@ -18,7 +18,8 @@ import '../../domain/text/text_normaliser.dart';
 /// household's data unseen; a drawing is none of those. What the rule is
 /// really asking for is that the user stays in charge, so they are: an icon
 /// can be redrawn or thrown away, and throwing it away keeps it away until
-/// the title changes. Anything with a number in it still goes through review.
+/// the title changes — see [needsDrawing], where that promise is actually
+/// kept. Anything with a number in it still goes through review.
 ///
 /// **Why it runs here and not in the editor.** Saving must never wait on a
 /// picture. The editor fires this and pops; the icon appears when it arrives,
@@ -39,12 +40,22 @@ class RecipeIconController {
 
   bool get isAvailable => _source != null;
 
-  /// Whether a saved recipe should be redrawn.
+  /// Whether saving [titleNow] should spend a call on a drawing.
   ///
-  /// Only two reasons, and both are about the drawing no longer describing
-  /// the dish: it has no icon, or the title has materially changed. Not an
-  /// ingredient edit, not a keystroke in the notes — those cost money to
+  /// Two reasons, and both are about a dish that has no drawing of *itself*:
+  /// the recipe is new, or the title has materially changed. Not an
+  /// ingredient edit, not a keystroke in the notes — those would pay to
   /// redraw a picture that would come back the same.
+  ///
+  /// **Not "it has no icon".** That was the rule, and it made the editor's
+  /// removal control a lie: removing an icon and pressing Save fired a fresh
+  /// paid call and landed a new sketch, so the one tap the rule-4 exception
+  /// rests on did not actually undo anything. The same mechanism re-billed on
+  /// every save of a recipe whose icon was missing because the answer failed
+  /// validation or the month's picture budget was spent. An existing recipe
+  /// with no icon is now left alone, and the way to get one is to ask — which
+  /// is the "Draw one now" button the editor already offers, one tap away
+  /// from where the removal happened.
   ///
   /// "Materially" is [normaliseKey]'s definition, the one the rest of the app
   /// already uses for "the same string": case, punctuation and spacing do not
@@ -53,29 +64,35 @@ class RecipeIconController {
     required String? currentIcon,
     required String titleWhenOpened,
     required String titleNow,
+    required bool isNewRecipe,
   }) =>
-      currentIcon == null ||
+      (isNewRecipe && currentIcon == null) ||
       normaliseKey(titleWhenOpened) != normaliseKey(titleNow);
 
-  /// Draws an icon for [recipeId] and stores it, or quietly does nothing.
+  /// Draws an icon for [recipeId] and stores it. True when one landed.
   ///
-  /// Never throws and never reports. A decorative picture that failed to
-  /// arrive is not worth a snackbar in front of somebody who has just saved a
-  /// recipe, and the recipe is already safely saved by the time this runs.
-  Future<void> drawFor({
+  /// Never throws. The answer is for the one caller who is waiting on it —
+  /// the editor's own "Draw another", where somebody pressed a button and
+  /// deserves to be told when nothing came of it. The background draw after a
+  /// save ignores it, and should: the recipe is already safely saved by then,
+  /// and a decorative picture that failed to arrive is not worth interrupting
+  /// anybody over.
+  Future<bool> drawFor({
     required String recipeId,
     required String title,
   }) async {
     final RecipeIconSource? source = _source;
-    if (source == null || title.trim().isEmpty) return;
+    if (source == null || title.trim().isEmpty) return false;
 
     try {
       final String? svg = await source.draw(title: title);
-      if (svg == null) return;
+      if (svg == null) return false;
       await _recipes.setIconSvg(recipeId, svg);
+      return true;
     } on Object {
-      // Deliberately silent. See the class comment: nothing about this is
-      // worth interrupting anybody over.
+      // Swallowed, not reported: whether this is worth saying is the caller's
+      // decision, and the two callers answer it differently.
+      return false;
     }
   }
 
