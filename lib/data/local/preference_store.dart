@@ -14,6 +14,11 @@ class PreferenceStore {
   /// Light, dark, or whatever the device is doing — see `ThemeChoice`.
   static const String themeChoice = 'app.theme_choice';
 
+  /// Which screen the app opens on — see `LaunchTarget`. Device-local for the
+  /// same reason as the theme: where your app opens is not a household
+  /// decision.
+  static const String launchTarget = 'app.launch_target';
+
   final HearthDatabase _db;
 
   Future<String?> read(String key) async {

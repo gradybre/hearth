@@ -3,6 +3,7 @@ import 'dart:ui' show CheckedState, SemanticsFlags, Tristate;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/app/shell/launch_target.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
@@ -48,6 +49,40 @@ List<String> unactivatable(SemanticsNode root) {
 }
 
 void main() {
+  testWidgets('every announced control on the home screen can be activated', (
+    WidgetTester tester,
+  ) async {
+    // Its section cards use exactly the pattern above — a Semantics button
+    // wrapped around an InkWell with descendants excluded — and a home screen
+    // whose cards announce themselves and then do nothing would be the first
+    // thing a screen-reader user met (spec §6.3).
+    final SemanticsHandle handle = tester.ensureSemantics();
+
+    await pumpHearthApp(tester, launchTarget: LaunchTarget.home);
+    await pumpFrames(tester);
+
+    expect(
+      unactivatable(tester.getSemantics(find.byType(MaterialApp))),
+      isEmpty,
+    );
+    handle.dispose();
+  });
+
+  testWidgets('and so can the way back out of a section', (
+    WidgetTester tester,
+  ) async {
+    final SemanticsHandle handle = tester.ensureSemantics();
+
+    await pumpHearthApp(tester);
+    await pumpFrames(tester);
+
+    expect(
+      unactivatable(tester.getSemantics(find.byType(MaterialApp))),
+      isEmpty,
+    );
+    handle.dispose();
+  });
+
   testWidgets(
     'every announced control on the recipe library can be activated',
     (WidgetTester tester) async {

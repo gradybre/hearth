@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/app/shell/app_shell.dart';
 import 'package:hearth/app/shell/destinations.dart';
+import 'package:hearth/app/shell/sections.dart';
 import 'package:hearth/app/theme/hearth_theme.dart';
 
 import '../../support/app_harness.dart';
@@ -110,8 +111,10 @@ void main() {
           child: MaterialApp(
             theme: HearthTheme.light(),
             home: AppShell(
+              section: builtSections.first,
               currentIndex: 0,
               onDestinationSelected: (_) {},
+              onLeaveSection: () {},
               child: const Center(child: Text('content')),
             ),
           ),

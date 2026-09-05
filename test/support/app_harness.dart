@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
+import 'package:hearth/app/shell/launch_target.dart';
+import 'package:hearth/app/shell/sections.dart';
 import 'package:hearth/data/adapters/label_reader.dart';
 import 'package:hearth/data/adapters/menu_reader.dart';
 import 'package:hearth/data/adapters/nutrition_lookup.dart';
@@ -83,6 +85,15 @@ Future<HearthDatabase> pumpHearthApp(
   PhotoPicker? photoPicker,
   SharedContentSource? sharedContent,
   FoodProfile? foodProfile,
+
+  /// Where the app opens (spec §6.2).
+  ///
+  /// Nutrition by default, which is *not* the app's own default — the app
+  /// opens on the home screen. Almost every test here is about a screen inside
+  /// Nutrition, and starting them on the home screen would put a tap on a card
+  /// in front of each one, which is setup rather than subject. The tests that
+  /// are about the home screen and the launch preference say so explicitly.
+  LaunchTarget? launchTarget,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -137,6 +148,11 @@ Future<HearthDatabase> pumpHearthApp(
       // `Override` type name, only the methods that produce one.
       overrides: [
         databaseProvider.overrideWithValue(db),
+        // Seeded the way bootstrap seeds it on a device, because the router is
+        // built with a starting route and reads this before the first frame.
+        bootLaunchTargetProvider.overrideWithValue(
+          launchTarget ?? LaunchTarget.section(builtSections.first),
+        ),
         // Widget tests have no camera and no platform channels to ask one for.
         // Forcing this off keeps the scan screen on its typed-barcode path,
         // which is the whole flow apart from the detector itself.

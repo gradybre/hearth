@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 
-/// A top-level destination in the app shell.
+import '../../features/foods/food_library_screen.dart';
+import '../../features/plan/plan_screen.dart';
+import '../../features/recipes/recipe_library_screen.dart';
+import '../../features/shopping/shopping_screen.dart';
+
+/// A tab within a section.
 ///
-/// v1 shows only the Food pillar's four sections (spec §6.2), but the shell is
-/// pillar-agnostic: adding Watchlist or Date Ideas later (spec §11) means
-/// adding entries here, not restructuring navigation.
+/// Carries its own screen, so a section is a self-contained description of
+/// itself: the shell builds whatever the current section says its tabs are
+/// rather than knowing the Food pillar's four by name (spec §6.2).
 @immutable
 class AppDestination {
   const AppDestination({
@@ -13,6 +18,7 @@ class AppDestination {
     required this.icon,
     required this.selectedIcon,
     required this.semanticLabel,
+    required this.builder,
   });
 
   final String path;
@@ -23,9 +29,15 @@ class AppDestination {
   /// Spoken label. Says what the destination *is* and what activating it does,
   /// rather than repeating the visible word (spec §6.3).
   final String semanticLabel;
+
+  /// The screen behind the tab. A builder rather than a widget because these
+  /// are `const` declarations and a screen is not, and because the shell keeps
+  /// every tab alive in an [IndexedStack] — the element persists, so building
+  /// the configuration afresh costs nothing.
+  final Widget Function() builder;
 }
 
-/// The Food pillar's sections, in navigation order (spec §6.2).
+/// The Nutrition section's tabs, in navigation order (spec §6.2).
 const List<AppDestination> foodDestinations = <AppDestination>[
   AppDestination(
     path: '/recipes',
@@ -33,6 +45,7 @@ const List<AppDestination> foodDestinations = <AppDestination>[
     icon: Icons.menu_book_outlined,
     selectedIcon: Icons.menu_book,
     semanticLabel: 'Recipes. Your household recipe library.',
+    builder: RecipeLibraryScreen.new,
   ),
   AppDestination(
     path: '/plan',
@@ -40,6 +53,7 @@ const List<AppDestination> foodDestinations = <AppDestination>[
     icon: Icons.calendar_today_outlined,
     selectedIcon: Icons.calendar_today,
     semanticLabel: 'Plan. This week\'s meals and your daily logging.',
+    builder: PlanScreen.new,
   ),
   AppDestination(
     path: '/shopping',
@@ -47,6 +61,7 @@ const List<AppDestination> foodDestinations = <AppDestination>[
     icon: Icons.shopping_basket_outlined,
     selectedIcon: Icons.shopping_basket,
     semanticLabel: 'Shopping. The list built from this week\'s plan.',
+    builder: ShoppingScreen.new,
   ),
   AppDestination(
     path: '/foods',
@@ -54,5 +69,6 @@ const List<AppDestination> foodDestinations = <AppDestination>[
     icon: Icons.egg_outlined,
     selectedIcon: Icons.egg,
     semanticLabel: 'Foods. Your personal and household food library.',
+    builder: FoodLibraryScreen.new,
   ),
 ];
