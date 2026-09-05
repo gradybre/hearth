@@ -177,10 +177,12 @@ class _SelectedDay extends StatelessWidget {
               // The same three, on the day the week has selected. A trend is
               // where these actually mean something, and the week is the only
               // screen that shows one (spec §5.6).
-              if (eaten.knowsAnyMinor) ...<Widget>[
-                const SizedBox(height: HearthSpacing.lg),
-                MinorNutrientBars(progress: day),
-              ],
+              //
+              // Shown whether or not anything has stated a value. The bars say
+              // so themselves — hiding them here made the feature invisible on
+              // exactly the days it most needed explaining.
+              const SizedBox(height: HearthSpacing.lg),
+              MinorNutrientBars(progress: day),
             ],
           ],
           const SizedBox(height: HearthSpacing.lg),

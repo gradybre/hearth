@@ -31,6 +31,14 @@ abstract final class PlanMapper {
         'protein_g': snapshot.macros.proteinG,
         'carb_g': snapshot.macros.carbG,
         'fat_g': snapshot.macros.fatG,
+        // The minor three, written as null when unknown rather than left out
+        // (spec §5.6). A snapshot is the whole of an entry's history — once
+        // logged, an entry answers from this and never asks the food again —
+        // so anything missing here is not merely undisplayed, it is gone, and
+        // rule 3 forbids going back to put it in.
+        'fiber_g': snapshot.macros.fiberG,
+        'sodium_mg': snapshot.macros.sodiumMg,
+        'cholesterol_mg': snapshot.macros.cholesterolMg,
         'servings': snapshot.servings,
         'captured_at': snapshot.capturedAt.toIso8601String(),
         'label': snapshot.label,
@@ -51,6 +59,13 @@ abstract final class PlanMapper {
         proteinG: _double(decoded['protein_g']),
         carbG: _double(decoded['carb_g']),
         fatG: _double(decoded['fat_g']),
+        // No `_double`, which answers 0 for a missing key. An older snapshot
+        // written before this carried them says nothing about fibre, and
+        // nothing is not none — a zero here would put a claim into history
+        // that nobody ever made.
+        fiberG: _nullableDouble(decoded['fiber_g']),
+        sodiumMg: _nullableDouble(decoded['sodium_mg']),
+        cholesterolMg: _nullableDouble(decoded['cholesterol_mg']),
       ),
       servings: _double(decoded['servings']),
       capturedAt:
@@ -157,6 +172,13 @@ abstract final class PlanMapper {
   };
 
   static double _double(Object? value) => value is num ? value.toDouble() : 0;
+
+  /// Null for anything that is not a number, including a key that is not
+  /// there. The four above fall back to zero because a snapshot without
+  /// calories is a broken snapshot; the minor three do not, because a
+  /// snapshot without fibre is an ordinary one (spec §5.6).
+  static double? _nullableDouble(Object? value) =>
+      value is num ? value.toDouble() : null;
 
   static String _dateOnly(DateTime date) =>
       '${date.year.toString().padLeft(4, '0')}-'

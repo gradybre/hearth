@@ -246,8 +246,8 @@ class _RemainingCard extends ConsumerWidget {
       );
     }
 
-    final DayProgress progress = DayProgress.from(
-      consumed: eaten,
+    final DayProgress progress = DayProgress.fromParts(
+      parts: EntryResolver.eatenParts(entries),
       targets: targets!,
     );
 

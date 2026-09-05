@@ -123,11 +123,18 @@ abstract final class EntryResolver {
   ///
   /// Planned-but-unconfirmed entries deliberately do not count: the number
   /// that matters is what you ate, not what you intended to (spec §5.6).
-  static Macros eaten(Iterable<ResolvedEntry> entries) => Macros.sum(
-    entries
-        .where((ResolvedEntry e) => e.entry.isLogged)
-        .map((ResolvedEntry e) => e.contribution),
-  );
+  static Macros eaten(Iterable<ResolvedEntry> entries) =>
+      Macros.sum(eatenParts(entries));
+
+  /// The same contributions, unsummed.
+  ///
+  /// A total says nothing about its own coverage: "12 g of fibre" looks
+  /// identical whether it came from everything eaten or from one food out of
+  /// six, and only one of those is worth reading (spec §5.6).
+  static List<Macros> eatenParts(Iterable<ResolvedEntry> entries) => <Macros>[
+    for (final ResolvedEntry entry in entries)
+      if (entry.entry.isLogged) entry.contribution,
+  ];
 
   /// What the rest of the plan would add if every planned entry were eaten.
   static Macros stillPlanned(Iterable<ResolvedEntry> entries) => Macros.sum(

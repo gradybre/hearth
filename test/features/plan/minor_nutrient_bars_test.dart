@@ -72,8 +72,13 @@ void main() {
 
     expect(find.text('Fibre'), findsOneWidget);
     expect(find.text('14 of 28 g'), findsOneWidget);
-    // Sodium was never known, so it is absent rather than zero.
-    expect(find.text('Sodium'), findsNothing);
+    // Sodium is there too, and says nobody has stated one — a dash rather
+    // than a zero, because "0 of 2300 mg" would be a claim the day never
+    // made. Hiding it was the first design and it made the whole feature
+    // invisible: an absent row and an unbuilt feature look the same.
+    expect(find.text('Sodium'), findsOneWidget);
+    expect(find.text('— of 2300 mg'), findsOneWidget);
+    expect(find.text('0 of 2300 mg'), findsNothing);
   });
 
   testWidgets('fibre reaching its target reads as done, not as over', (

@@ -22,7 +22,7 @@ void main() {
   group('which target it measures against', () {
     test('the Daily Value, when nobody has set one', () {
       final MinorProgress fibre = dayOf(const Macros(fiberG: 14))
-          .minor(MinorNutrient.fiber)!;
+          .minor(MinorNutrient.fiber);
 
       expect(fibre.target, 28);
       expect(fibre.fraction, closeTo(0.5, 1e-9));
@@ -40,22 +40,56 @@ void main() {
         ),
       );
 
-      expect(day.minor(MinorNutrient.fiber)!.target, 40);
+      expect(day.minor(MinorNutrient.fiber).target, 40);
     });
   });
 
   group('a nutrient nobody knows about', () {
-    test('has no progress at all, rather than progress of zero', () {
+    test('has no number, rather than a number of zero', () {
       // A bar reading "0 of 28 g" would say the day had no fibre. The truth
       // is that nothing logged has ever been asked, and those are different
       // claims (spec §5.6).
-      expect(dayOf(const Macros(kcal: 500)).minor(MinorNutrient.fiber), isNull);
+      final MinorProgress fibre = dayOf(const Macros(kcal: 500))
+          .minor(MinorNutrient.fiber);
+
+      expect(fibre.consumed, isNull);
+      expect(fibre.isKnown, isFalse);
       expect(dayOf(const Macros(kcal: 500)).knownMinor, isEmpty);
+    });
+
+    test('but it is still one of the three shown', () {
+      // Hiding it was the first design, and it made the feature invisible:
+      // most foods in an established library predate these columns, so
+      // "nothing has said" is the ordinary answer — and an absent row and an
+      // unbuilt feature look the same from the sofa.
+      expect(dayOf(const Macros(kcal: 500)).allMinor, hasLength(3));
+    });
+
+    test('and a day built from its parts counts what did not say', () {
+      // A total says nothing about its own coverage: 4 g of fibre reads the
+      // same whether it came from everything eaten or from one food of three.
+      final DayProgress day = DayProgress.fromParts(
+        parts: const <Macros>[
+          Macros(kcal: 100, fiberG: 4),
+          Macros(kcal: 200),
+          Macros(kcal: 300),
+        ],
+        targets: const MacroTargets(
+          kcal: 2000,
+          proteinG: 120,
+          carbG: 200,
+          fatG: 60,
+        ),
+      );
+
+      expect(day.minor(MinorNutrient.fiber).consumed, 4);
+      expect(day.minor(MinorNutrient.fiber).unknownCount, 2);
+      expect(day.minor(MinorNutrient.sodium).unknownCount, 3);
     });
 
     test('while a stated zero is a real number and does show', () {
       final MinorProgress sodium = dayOf(const Macros(sodiumMg: 0))
-          .minor(MinorNutrient.sodium)!;
+          .minor(MinorNutrient.sodium);
 
       expect(sodium.consumed, 0);
       expect(sodium.state, MacroProgressState.under);
@@ -73,14 +107,14 @@ void main() {
   group('fibre is a floor', () {
     test('most of the way there is neutral, not a warning', () {
       expect(
-        dayOf(const Macros(fiberG: 14)).minor(MinorNutrient.fiber)!.tone,
+        dayOf(const Macros(fiberG: 14)).minor(MinorNutrient.fiber).tone,
         MacroTone.neutral,
       );
     });
 
     test('and reaching it is good, not over', () {
       final MinorProgress fibre = dayOf(const Macros(fiberG: 30))
-          .minor(MinorNutrient.fiber)!;
+          .minor(MinorNutrient.fiber);
 
       expect(fibre.state, MacroProgressState.over);
       // The arithmetic says over; the judgement says well done. Same split the
@@ -96,23 +130,23 @@ void main() {
       // false of sodium, which is a number you are trying to avoid. Being at
       // 2,200 of 2,300 mg is not doing well; it is nearly over.
       expect(
-        dayOf(const Macros(sodiumMg: 2200)).minor(MinorNutrient.sodium)!.tone,
+        dayOf(const Macros(sodiumMg: 2200)).minor(MinorNutrient.sodium).tone,
         MacroTone.neutral,
       );
     });
 
     test('under budget reads neutral', () {
       expect(
-        dayOf(const Macros(sodiumMg: 900)).minor(MinorNutrient.sodium)!.tone,
+        dayOf(const Macros(sodiumMg: 900)).minor(MinorNutrient.sodium).tone,
         MacroTone.neutral,
       );
     });
 
     test('and past it reads over, unlike fibre at the same fraction', () {
       final MinorProgress sodium = dayOf(const Macros(sodiumMg: 2600))
-          .minor(MinorNutrient.sodium)!;
+          .minor(MinorNutrient.sodium);
       final MinorProgress cholesterol = dayOf(const Macros(cholesterolMg: 340))
-          .minor(MinorNutrient.cholesterol)!;
+          .minor(MinorNutrient.cholesterol);
 
       expect(sodium.tone, MacroTone.over);
       expect(cholesterol.tone, MacroTone.over);
@@ -120,7 +154,7 @@ void main() {
 
     test('what is left of a budget is what is left to spend', () {
       final MinorProgress sodium = dayOf(const Macros(sodiumMg: 1800))
-          .minor(MinorNutrient.sodium)!;
+          .minor(MinorNutrient.sodium);
 
       expect(sodium.remaining, 500);
       expect(sodium.barFill, closeTo(1800 / 2300, 1e-9));
@@ -129,7 +163,7 @@ void main() {
 
   test('a bar never overfills, however far past the target', () {
     expect(
-      dayOf(const Macros(sodiumMg: 9000)).minor(MinorNutrient.sodium)!.barFill,
+      dayOf(const Macros(sodiumMg: 9000)).minor(MinorNutrient.sodium).barFill,
       1,
     );
   });
