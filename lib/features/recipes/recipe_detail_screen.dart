@@ -17,6 +17,7 @@ import 'collections_sheet.dart';
 import 'cook_along_screen.dart';
 import 'macro_stats_row.dart';
 import 'recipe_draft.dart';
+import 'recipe_icon.dart';
 import 'recipe_library_screen.dart';
 import 'recipe_photo.dart';
 import 'scale_control.dart';
@@ -215,7 +216,23 @@ class _RecipeBodyState extends State<_RecipeBody> {
             width: double.infinity,
             height: 220,
           ),
-          Text(original.title, style: text.recipeTitle),
+          // Beside the title rather than above it. Here the sketch is a mark
+          // on the page, not a hero image — the photo slot above already is
+          // one — so unlike in the library the two do not compete and both
+          // can show.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              if (RecipeIcon.canDraw(original.iconSvg)) ...<Widget>[
+                Padding(
+                  padding: const EdgeInsets.only(top: HearthSpacing.xs),
+                  child: RecipeIcon(svg: original.iconSvg, size: 36),
+                ),
+                const SizedBox(width: HearthSpacing.md),
+              ],
+              Expanded(child: Text(original.title, style: text.recipeTitle)),
+            ],
+          ),
           const SizedBox(height: HearthSpacing.sm),
           Text(
             _summary(original),

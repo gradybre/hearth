@@ -63,6 +63,22 @@ abstract final class IngredientParser {
     r'^\s*(\d+\s*[-–]\s*\d+|\d+\s+\d+\s*/\s*\d+|\d+\s*/\s*\d+|\d+(?:\.\d+)?\s*[½⅓⅔¼¾⅕⅙⅚⅛⅜⅝⅞]|\d+(?:\.\d+)?|[½⅓⅔¼¾⅕⅙⅚⅛⅜⅝⅞])\s*',
   );
 
+  /// A line that takes an amount *out* of the recipe: the "−1 oz" of
+  /// "−1 oz Lettuce", written by the eat-out builder for a component you
+  /// asked them to leave off (spec §5.2).
+  ///
+  /// **Only the real minus, U+2212, and only in front of a number.** A hyphen
+  /// cannot be the declaration: every pasted ingredient list in the world is
+  /// bulleted with one, and `_tidy` strips a leading hyphen for exactly that
+  /// reason — so reading "- 2 eggs" as a deduction would silently invert
+  /// somebody's recipe. This follows the rule the modifier foods already
+  /// follow: the minus sign is the declaration, and it is the character the
+  /// display layer prints, so a line copied off the screen reads back the way
+  /// it read out.
+  static final RegExp _removalSign = RegExp('^−(?=\\s*[0-9$_fractionGlyphs])');
+
+  static const String _fractionGlyphs = '½⅓⅔¼¾⅕⅙⅚⅛⅜⅝⅞';
+
   /// A pack size following a count: the "x 400g" of "2 x 400g cans".
   ///
   /// Written this way across most of Europe, and read as a bare count it
@@ -123,6 +139,13 @@ abstract final class IngredientParser {
       }
     }
     working = _tidy(working);
+
+    // Taken out rather than put in. Read off the front before anything else
+    // looks at the line, and put back on the amount at the very end, so every
+    // shape below — a pack size, a range, a bare count — subtracts the same
+    // way it adds.
+    final bool takesAway = _removalSign.hasMatch(working);
+    if (takesAway) working = _tidy(working.replaceFirst(_removalSign, ''));
 
     // A trailing clause after a comma is the prep note: "garlic, minced".
     String? prepNote;
@@ -223,7 +246,7 @@ abstract final class IngredientParser {
       } else {
         // A bare number with no unit is a count: "2 eggs".
         quantity = Quantity.of(
-          effectiveAmount * multiplier,
+          effectiveAmount * multiplier * (takesAway ? -1 : 1),
           unit ?? Units.item,
         );
         working = rest.isEmpty ? working : rest;

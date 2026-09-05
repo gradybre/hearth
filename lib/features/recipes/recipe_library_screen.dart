@@ -17,6 +17,7 @@ import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/recipes/recipe_query.dart';
 import 'macro_stats_row.dart';
 import 'recipe_filter_bar.dart';
+import 'recipe_icon.dart';
 import 'recipe_photo.dart';
 
 /// The household's recipe library (spec §5.2).
@@ -331,6 +332,14 @@ class RecipeCard extends ConsumerWidget {
                     height: 64,
                     borderRadius: BorderRadius.circular(HearthRadius.md),
                   ),
+                  const SizedBox(width: HearthSpacing.md),
+                ]
+                // A photograph of the actual dish beats a sketch of the idea
+                // of it, so the icon takes the slot only when there is no
+                // photo — never both, which would be two pictures of one
+                // recipe competing in a 64pt square.
+                else if (RecipeIcon.canDraw(recipe.iconSvg)) ...<Widget>[
+                  RecipeIcon(svg: recipe.iconSvg, size: 40),
                   const SizedBox(width: HearthSpacing.md),
                 ],
                 Expanded(

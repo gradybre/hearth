@@ -84,7 +84,10 @@ abstract final class QuantityFormat {
     // Pluralisation has to agree with what [number] actually shows, not with
     // the unrounded amount. 240 ml is 1.0144 cup — greater than one, but it
     // *displays* as "1", and "1 cups" is what happens when the two disagree.
-    final String label = _label(unit, _displayedAmount(amount));
+    //
+    // The magnitude decides it, not the value: one cup taken back out of a
+    // meal is "−1 cup", the same one cup it was on the way in.
+    final String label = _label(unit, _displayedAmount(amount).abs());
     return label.isEmpty ? number : '$number $label';
   }
 
@@ -120,9 +123,19 @@ abstract final class QuantityFormat {
   /// nowhere else, so a screen cannot invent its own.
   static String count(double amount) => _fractional(amount);
 
+  /// The character a number below zero is printed with.
+  ///
+  /// A quantity can be negative since a component can be taken out of a meal
+  /// (spec §5.2), and on the line "−1 oz Lettuce" the sign is the entire
+  /// difference between having lettuce and not. So it is the real minus
+  /// U+2212, which a screen reader says out loud as "minus" — a hyphen is a
+  /// dash, and never colour or punctuation alone for meaning (§6.3).
+  static const String _minus = '−';
+
   /// Weight: decimals, no fractions. Whole numbers above 10, one place below.
   static String _decimal(double amount) {
-    if (amount.abs() >= 10) return amount.round().toString();
+    if (amount < 0) return '$_minus${_decimal(-amount)}';
+    if (amount >= 10) return amount.round().toString();
     final String oneDp = amount.toStringAsFixed(1);
     return oneDp.endsWith('.0') ? oneDp.substring(0, oneDp.length - 2) : oneDp;
   }
@@ -136,7 +149,7 @@ abstract final class QuantityFormat {
     final double remainder = value - whole;
 
     final String? glyph = _closestFraction(remainder);
-    final String sign = negative ? '-' : '';
+    final String sign = negative ? _minus : '';
 
     if (glyph == null) {
       // No cooking fraction is close enough — show a short decimal rather than

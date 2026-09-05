@@ -47,6 +47,20 @@ void main() {
       expect(items.map((ShoppingExportItem i) => i.name), <String>['beef']);
     });
 
+    test('nor a component somebody asked them to leave off', () {
+      // A meal built as "burger, no lettuce" carries a −1 lb line. Flip its
+      // "Ate out" switch off and the recipe stops being skipped, so the
+      // deduction reaches the list — and the cart quantity clamps to at
+      // least one, which ordered one lettuce for the person who asked for
+      // none. Nothing to pick up is nothing to export.
+      final List<ShoppingExportItem> items = exportableLines(<ShoppingLine>[
+        line('lettuce', planned: -1),
+        line('beef'),
+      ]);
+
+      expect(items.map((ShoppingExportItem i) => i.name), <String>['beef']);
+    });
+
     test('nor anything you have enough of', () {
       // The same thing to somebody standing in a shop: nothing to pick up.
       final List<ShoppingExportItem> items = exportableLines(<ShoppingLine>[

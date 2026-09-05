@@ -182,6 +182,32 @@ void main() {
     expect(q.canonicalAmount, 124.9);
   });
 
+  group('an amount below zero (spec §5.2)', () {
+    test('prints a real minus, in every kind of unit', () {
+      // A component taken out of a restaurant meal is a negative quantity, and
+      // the sign is the only thing on the line that says so — so it has to be
+      // the character a screen reader reads as "minus", not a hyphen it may
+      // read as a dash or skip entirely (§6.3).
+      expect(
+        QuantityFormat.formatAsAuthored(Quantity.of(-4, Units.ounce)),
+        '−4 oz',
+      );
+      expect(
+        QuantityFormat.formatAsAuthored(Quantity.of(-1.5, Units.cup)),
+        '−1½ cups',
+      );
+      expect(QuantityFormat.count(-1), '−1');
+    });
+
+    test('and the magnitude is unharmed by carrying a sign', () {
+      // Half of a cup below zero is "−1/2 cup", not "−1 1/2" of one.
+      expect(
+        QuantityFormat.formatAsAuthored(Quantity.of(-0.5, Units.cup)),
+        '−½ cup',
+      );
+    });
+  });
+
   group('bare counts', () {
     test('reads a half as a fraction, not a decimal', () {
       // "0.5x" is spreadsheet language; a cook reads a half.

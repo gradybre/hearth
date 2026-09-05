@@ -3,7 +3,10 @@ import 'dart:ui' show CheckedState, SemanticsFlags, Tristate;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/domain/models/food.dart';
+import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
+import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/fixtures.dart';
@@ -124,6 +127,92 @@ void main() {
     );
     handle.dispose();
   });
+
+  testWidgets(
+    'every announced control in the eat-out builder can be activated',
+    (WidgetTester tester) async {
+      // The trap above is exactly what this screen walked into: a
+      // `Semantics(selected:, excludeSemantics: true)` wrapped around the row's
+      // `InkWell`, announcing every menu row as a selectable thing and then
+      // dropping the tap that selects it. It was found by reading rather than
+      // by this file, which is the gap — a screen this guard does not visit is
+      // a screen the regression can come back to unnoticed.
+      final SemanticsHandle handle = tester.ensureSemantics();
+
+      await pumpHearthApp(
+        tester,
+        foods: <Food>[
+          aFood(
+            'Single Steakburger',
+            brand: "Freddy's",
+            source: FoodSource.restaurant,
+            menuGroup: 'Steakburgers',
+            menuOrder: 0,
+            servingOptions: <ServingOption>[
+              aServing(
+                amount: 1,
+                unit: Units.item,
+                macros: const Macros(kcal: 380, proteinG: 24),
+              ),
+            ],
+          ),
+          aFood(
+            'Lettuce',
+            brand: "Freddy's",
+            source: FoodSource.restaurant,
+            menuGroup: 'Toppings',
+            menuOrder: 1,
+            servingOptions: <ServingOption>[
+              aServing(
+                amount: 1,
+                unit: Units.ounce,
+                macros: const Macros(kcal: 3, carbG: 1),
+              ),
+            ],
+          ),
+          aFood(
+            'Make it a Lettuce Wrap',
+            brand: "Freddy's",
+            source: FoodSource.restaurant,
+            menuGroup: 'Modifications',
+            menuOrder: 2,
+            isModifier: true,
+            servingOptions: <ServingOption>[
+              aServing(
+                amount: 1,
+                unit: Units.item,
+                macros: const Macros(kcal: -180, carbG: -25, fiberG: 1),
+              ),
+            ],
+          ),
+        ],
+      );
+      await tester.tap(find.text('Recipes').last);
+      await pumpFrames(tester);
+      await tester.tap(find.byTooltip('Build a meal you ate out'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text("Freddy's"));
+      await pumpFrames(tester, frames: 12);
+
+      // Both states of a row, because "selected" is announced in both and the
+      // stepper and the take-out button only exist in one of them.
+      expect(
+        unactivatable(tester.getSemantics(find.byType(MaterialApp))),
+        isEmpty,
+      );
+
+      await tester.tap(find.text('Single Steakburger'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.byTooltip('Take Lettuce out'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(
+        unactivatable(tester.getSemantics(find.byType(MaterialApp))),
+        isEmpty,
+      );
+      handle.dispose();
+    },
+  );
 
   testWidgets('every announced control in the log sheet can be activated', (
     WidgetTester tester,

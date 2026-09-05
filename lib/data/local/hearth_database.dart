@@ -49,7 +49,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -223,6 +223,12 @@ class HearthDatabase extends _$HearthDatabase {
           foodServingOptions,
           foodServingOptions.isModifier,
         );
+      }
+      // v24 caches a recipe's sketch icon (spec §5.2). Additive and nullable:
+      // no icon is the ordinary state, and every recipe saved before today is
+      // in it until something draws one.
+      if (from < 24) {
+        await _addColumnIfMissing(m, recipes, recipes.iconSvg);
       }
     },
     beforeOpen: (OpeningDetails details) async {

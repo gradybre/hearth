@@ -47,6 +47,15 @@ class Recipes extends Table {
   TextColumn get kind => text().withDefault(const Constant('cooked'))();
   TextColumn get source => text().withDefault(const Constant('manual'))();
   TextColumn get photoUrl => text().nullable()();
+
+  /// A little hand-drawn sketch of the dish, as SVG markup (spec §5.2).
+  ///
+  /// Cached like the rest of the recipe so the library draws itself with no
+  /// network. Never rendered without going through `SketchIcon.parse` — a
+  /// row here can have arrived from another device, and it is model output
+  /// either way.
+  TextColumn get iconSvg => text().nullable()();
+
   TextColumn get notes => text().nullable()();
   TextColumn get createdBy => text().nullable()();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();

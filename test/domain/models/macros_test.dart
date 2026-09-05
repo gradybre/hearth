@@ -139,4 +139,34 @@ void main() {
       expect(m.minor(MinorNutrient.cholesterol), 15);
     });
   });
+
+  group('less than nothing (spec §5.2)', () {
+    // One predicate, because two places ask this question — the eat-out
+    // builder before it assembles a meal, and the macro calculator before it
+    // lets one be logged — and two copies of it would drift.
+    test('a meal that adds up is not below nothing', () {
+      expect(const Macros(kcal: 380, carbG: 30).isBelowNothing, isFalse);
+      expect(Macros.zero.isBelowNothing, isFalse);
+    });
+
+    test('a total under zero is, on any column', () {
+      expect(const Macros(kcal: -377).isBelowNothing, isTrue);
+      expect(const Macros(kcal: 10, carbG: -1).isBelowNothing, isTrue);
+      expect(const Macros(proteinG: -1).isBelowNothing, isTrue);
+      expect(const Macros(fatG: -1).isBelowNothing, isTrue);
+    });
+
+    test('and on a minor nutrient, which nobody watches', () {
+      // A deduction can leave the calories standing while the fibre goes
+      // under. Checking kcal alone would log a negative macro in silence.
+      expect(const Macros(kcal: 10, fiberG: -1).isBelowNothing, isTrue);
+      expect(const Macros(kcal: 10, sodiumMg: -1).isBelowNothing, isTrue);
+      expect(const Macros(kcal: 10, cholesterolMg: -1).isBelowNothing, isTrue);
+    });
+
+    test('unknown is not negative', () {
+      // Null means nobody said, and a gap is not a number below zero.
+      expect(const Macros(kcal: 10).isBelowNothing, isFalse);
+    });
+  });
 }
