@@ -54,11 +54,7 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
       // Unpicking the last real thing takes its modifiers with it. Left
       // behind, they would be a meal of minus 180 calories, and the rule
       // above would hold only until somebody changed their mind.
-      if (!food.isModifier && !_hasSomethingToApplyTo(menu)) {
-        for (final Food other in menu) {
-          if (other.isModifier) _picks.remove(other.id);
-        }
-      }
+      if (!food.isModifier) _sweepStrandedModifiers(menu);
       return;
     }
     if (food.isModifier && !_hasSomethingToApplyTo(menu)) return;
@@ -66,13 +62,25 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
     _picks[food.id] = 1;
   });
 
-  void _setCount(Food food, double count) => setState(() {
-    if (count <= 0) {
-      _picks.remove(food.id);
-    } else {
+  void _setCount(Food food, double count, List<Food> menu) => setState(() {
+    if (count > 0) {
       _picks[food.id] = count;
+      return;
     }
+    // The second place a real pick can leave `_picks`, and the sweep has to
+    // live in both or the invariant holds only on the path somebody happened
+    // to test.
+    _picks.remove(food.id);
+    _sweepStrandedModifiers(menu);
   });
+
+  /// Drops any modifier left with nothing to come off.
+  void _sweepStrandedModifiers(List<Food> menu) {
+    if (_hasSomethingToApplyTo(menu)) return;
+    for (final Food food in menu) {
+      if (food.isModifier) _picks.remove(food.id);
+    }
+  }
 
   List<MenuPick> _picked(List<Food> menu) => <MenuPick>[
     for (final Food food in menu)
@@ -83,6 +91,11 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
   void _build(List<Food> menu) {
     final List<MenuPick> picks = _picked(menu);
     if (picks.isEmpty) return;
+    // The menu is watched and the picks are not, so a partner deleting the
+    // burger while this sheet is open can leave the wrap standing alone —
+    // and a greyed row cannot be tapped to unpick it. Refusing here is the
+    // last place before a −180 kcal meal becomes a recipe.
+    if (picks.every((MenuPick pick) => pick.food.isModifier)) return;
     context.pushReplacement(
       '/recipe/new',
       extra: RecipeDraft.fromMenu(restaurant: _restaurant!, picks: picks),
@@ -146,7 +159,8 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
                 picks: _picks,
                 hasSomethingToApplyTo: _hasSomethingToApplyTo(menu),
                 onToggle: (Food food) => _toggle(food, menu),
-                onCount: _setCount,
+                onCount: (Food food, double count) =>
+                    _setCount(food, count, menu),
                 gutter: gutter,
               ),
       ),
@@ -373,7 +387,11 @@ class _MenuRow extends StatelessWidget {
         color: isPicked ? colors.surfaceElevated : colors.surface,
         borderRadius: BorderRadius.circular(HearthRadius.md),
         child: InkWell(
-          onTap: canPick ? onToggle : null,
+          // Unpicking is always allowed. A modifier can end up picked with
+          // nothing left to apply to — the menu is watched and the picks are
+          // not, so a partner can delete the burger out from under it — and a
+          // row that cannot be tapped would leave no way out of that.
+          onTap: canPick || isPicked ? onToggle : null,
           borderRadius: BorderRadius.circular(HearthRadius.md),
           child: Container(
             decoration: BoxDecoration(

@@ -446,6 +446,7 @@ class FoodDraft {
       source: source,
       isDefault: isDefault,
       isZeroCalorie: isZeroCalorie,
+      isModifier: isModifier,
       servingOptions: <ServingOption>[
         for (final ServingDraft serving in usableServings)
           ServingOption(

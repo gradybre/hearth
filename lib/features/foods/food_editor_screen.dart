@@ -351,6 +351,10 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
                   // A shop tag means nothing on a menu item, and leaving one
                   // behind would group a burrito bowl under Costco.
                   storeTag: on ? '' : null,
+                  // And a deduction is a menu row. Left set, it would be a
+                  // switch nobody can see — the one below is gated on this —
+                  // on a food nothing in the app can reach.
+                  isModifier: on && _draft.isModifier,
                 );
               }),
               title: Text('From a restaurant', style: context.text.body),

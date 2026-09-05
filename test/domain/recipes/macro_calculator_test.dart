@@ -667,6 +667,50 @@ void noMatchNeededTests() {
       expect(macros.incompleteReason, contains('less than nothing'));
     });
 
+    test('and it is not only the calories that can go under', () {
+      // A deduction can leave the calories at zero while the carbohydrate
+      // total is below it — a wrap against a zero-calorie condiment, say.
+      // Checking kcal alone would log a negative macro with nothing said.
+      final Food condiment = aFood(
+        'Mustard',
+        id: 'f-mustard',
+        source: FoodSource.restaurant,
+        servingOptions: <ServingOption>[
+          aServing(
+            amount: 1,
+            unit: Units.item,
+            macros: const Macros(kcal: 180, carbG: 0),
+          ),
+        ],
+      );
+      final Recipe recipe = aRecipe(
+        servings: 1,
+        ingredients: <RecipeIngredient>[
+          anIngredient(
+            'Mustard',
+            amount: 1,
+            unit: Units.item,
+            foodId: 'f-mustard',
+          ),
+          anIngredient(
+            'Make it a Lettuce Wrap',
+            amount: 1,
+            unit: Units.item,
+            foodId: 'f-wrap',
+          ),
+        ],
+      );
+
+      final RecipeMacros macros = MacroCalculator.forRecipe(
+        recipe,
+        foods: <String, Food>{'f-wrap': wrap(), 'f-mustard': condiment},
+      );
+
+      expect(macros.total.kcal, 0);
+      expect(macros.total.carbG, -25);
+      expect(macros.incompleteReason, contains('less than nothing'));
+    });
+
     test('and an ordinary recipe still says nothing at all', () {
       final Food chicken = aFoodPer100g('chicken breast', kcal: 165);
       final Recipe recipe = aRecipe(

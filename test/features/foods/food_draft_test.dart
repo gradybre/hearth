@@ -643,4 +643,51 @@ void packetServingTests() {
       expect(reopened.toFood().packSize, Quantity.of(1, Units.pound));
     });
   });
+
+  group('a deduction survives the draft (spec §5.2)', () {
+    FoodDraft aDeduction() => const FoodDraft(
+      name: 'Make it a Lettuce Wrap',
+      brand: "Freddy's",
+      source: FoodSource.restaurant,
+      isModifier: true,
+      servings: <ServingDraft>[
+        ServingDraft(amount: '1', unitId: 'item', kcal: '-180', carbs: '-25'),
+      ],
+    );
+
+    test('toFood carries the flag', () {
+      // Dropped here, the switch is silently discarded: the row lands locally
+      // as a restaurant food with negative macros and *no* flag, which means
+      // nothing filters it out of the picker or the log sheet — and the write
+      // then fails against the hosted check, in the queue, where nobody sees
+      // it.
+      expect(aDeduction().toFood().isModifier, isTrue);
+    });
+
+    test('and its negatives are not an error while it is flagged', () {
+      expect(aDeduction().macrosError, isNull);
+      expect(aDeduction().isValid, isTrue);
+    });
+
+    test('and a modifier stops being one when it stops being a restaurant', () {
+      // The switch that offers it is gated on the restaurant one, so a flag
+      // left set would be invisible and unclearable — on a food nothing in
+      // the app can reach, since a menu needs `source == restaurant` and a
+      // modifier is kept out of every picker.
+      final FoodDraft home = aDeduction().copyWith(
+        source: FoodSource.manual,
+        isModifier: false,
+      );
+
+      expect(home.isModifier, isFalse);
+      expect(home.macrosError, isNotNull);
+    });
+
+    test('but they are the moment it is not', () {
+      final FoodDraft plain = aDeduction().copyWith(isModifier: false);
+
+      expect(plain.macrosError, isNotNull);
+      expect(plain.isValid, isFalse);
+    });
+  });
 }
