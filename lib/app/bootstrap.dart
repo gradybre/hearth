@@ -3,15 +3,58 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/env.dart';
 import '../data/auth/secure_session_storage.dart';
+import '../data/local/hearth_database.dart';
+import '../data/local/preference_store.dart';
+import 'theme/theme_choice.dart';
+
+/// What the app has in hand before its first frame.
+class Boot {
+  const Boot({
+    required this.connected,
+    required this.database,
+    required this.theme,
+  });
+
+  /// Whether Supabase was configured and started.
+  final bool connected;
+
+  /// Opened here rather than left to the provider, because [theme] is read
+  /// out of it before anything is painted and a second connection to the same
+  /// file would be one open too many.
+  final HearthDatabase database;
+
+  /// The stored light/dark choice (spec §6.1).
+  final ThemeChoice theme;
+}
 
 /// Brings up anything that must exist before the first frame.
 ///
 /// Supabase is started only when the build was given a configuration. An
 /// unconfigured build is a real, supported way to run Hearth — offline, on one
 /// device — and it should not die on a missing URL at launch.
-Future<bool> bootstrap() async {
+Future<Boot> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (!Env.isConfigured) return false;
+
+  // Read here, before the first frame, and not from the provider that owns it:
+  // that read is a Drift open plus a query, and until it returned the app
+  // painted ThemeMode.system — so a dark-mode user watched it flash cream on
+  // every cold start.
+  final HearthDatabase database = HearthDatabase();
+  ThemeChoice theme = ThemeChoice.system;
+  try {
+    theme = ThemeChoice.parse(
+      await PreferenceStore(database).read(PreferenceStore.themeChoice),
+    );
+  } on Object {
+    // A local cache that cannot be read is a real problem, but it is not this
+    // function's to report: failing here would replace the app with a blank
+    // screen over a preference. Follow the device and let the failure surface
+    // where the data is actually needed.
+  }
+
+  if (!Env.isConfigured) {
+    return Boot(connected: false, database: database, theme: theme);
+  }
 
   // Rejects a secret key before it can reach a running app, not after.
   Env.assertUsable();
@@ -27,5 +70,5 @@ Future<bool> bootstrap() async {
       localStorage: SecureSessionStorage(),
     ),
   );
-  return true;
+  return Boot(connected: true, database: database, theme: theme);
 }

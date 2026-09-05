@@ -178,6 +178,43 @@ class SupabaseAuthGateway implements AuthGateway {
   @override
   Future<void> signOut() => _client.auth.signOut();
 
+  /// Sends the reset email (spec §8.3 — Supabase Auth owns the credential).
+  ///
+  /// **No `redirectTo` on purpose.** The link therefore lands on whatever the
+  /// project has as its Site URL, in a browser. Passing a deep link Hearth
+  /// cannot yet answer — nothing listens for
+  /// `AuthChangeEvent.passwordRecovery`, and no scheme is registered outside
+  /// iOS — would produce a link that looks right and goes nowhere, which is
+  /// worse than one that plainly goes to the project's own page. Both screens
+  /// say as much rather than promising an in-app step that does not exist.
+  /// Finishing the loop in-app means: allow-listing a redirect in the
+  /// Supabase dashboard, registering the scheme on macOS and Windows, and a
+  /// screen that calls `updateUser(password:)` on the recovery session.
+  ///
+  /// A missing account is not an error here, by design: Supabase answers an
+  /// unknown address with an early 200, so nothing this returns says whether
+  /// an address is registered. See [readableResetFailure] for what that costs
+  /// on the signed-out path, and for the one channel it does not close.
+  @override
+  Future<void> sendPasswordReset(
+    String email, {
+    bool ownAddress = false,
+  }) async {
+    try {
+      await _client.auth.resetPasswordForEmail(email.trim());
+    } on AuthException catch (error) {
+      final String? readable = readableResetFailure(
+        error,
+        ownAddress: ownAddress,
+      );
+      // Null means saying anything at all would answer whether that address
+      // has an account. The caller then reports what it reports for a request
+      // that went through — which is all the endpoint is willing to say
+      // either way.
+      if (readable != null) throw AuthFailure(readable);
+    }
+  }
+
   @override
   Future<HearthAccount> joinHousehold(String shareCode) async {
     try {
@@ -254,6 +291,58 @@ class SupabaseAuthGateway implements AuthGateway {
       return 'Too many attempts just now. Wait a minute and try again.';
     }
     return 'Something went wrong signing you in. Try again.';
+  }
+
+  /// Why the reset email could not even be asked for — or null when saying
+  /// would answer a question this flow refuses to answer.
+  ///
+  /// Public where its siblings are private because it is the one that carries
+  /// a decision worth pinning down in a test.
+  ///
+  /// [ownAddress] is true only where the address is already known to belong to
+  /// the person asking: the Settings row, which sends to the account they are
+  /// signed in as. There, naming the throttle tells them nothing they did not
+  /// already know, and "wait a minute" is the difference between waiting and
+  /// hammering a button that is being throttled.
+  ///
+  /// On the sign-in screen the address is whatever was typed, and the rule
+  /// inverts. GoTrue answers an address with no account with an early 200 — no
+  /// mail, no error — so *every* refusal that comes back from the endpoint can
+  /// only have happened for an address that has one. Repeating any of them
+  /// there, the per-user throttle most of all ("you can only request this
+  /// after 51 seconds"), turns "Forgot password?" into a way to test whether a
+  /// stranger is registered: type their address, tap twice inside a minute,
+  /// read the reply. Two failures happen before any account is looked up and
+  /// read the same for every address, so those are still said: a malformed
+  /// address, and never reaching the server at all.
+  ///
+  /// This closes the message channel, not the timing one: the existing-account
+  /// path does its SMTP work inside the request, so it answers measurably
+  /// slower than the early 200 for an address with no account. That is
+  /// GoTrue's shape and cannot be fixed from here.
+  static String? readableResetFailure(
+    AuthException error, {
+    required bool ownAddress,
+  }) {
+    final String message = error.message.toLowerCase();
+    final bool malformed =
+        message.contains('invalid') && message.contains('email');
+    final bool throttled =
+        message.contains('rate limit') ||
+        message.contains('too many') ||
+        message.contains('security purposes');
+    // Never reached the endpoint, so nothing about the address was learned —
+    // and swallowing it would leave someone waiting on an email that was
+    // never asked for.
+    final bool neverArrived = error is AuthRetryableFetchException;
+
+    if (malformed) return 'That does not look like an email address.';
+    if (throttled && ownAddress) {
+      return 'That has been asked for a few times just now. Wait a minute '
+          'and try again.';
+    }
+    if (!ownAddress && !neverArrived) return null;
+    return 'The reset email could not be sent just now. Try again.';
   }
 
   static String _readableJoin(PostgrestException error) {

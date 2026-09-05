@@ -109,6 +109,25 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('every announced control on the settings screen can be '
+      'activated', (WidgetTester tester) async {
+    // The densest use of the pattern in the app: every settings row and every
+    // theme option announces itself as a button — and the theme options as a
+    // selected one — with their descendants excluded. Six wrappers, none of
+    // them guarded until now.
+    final SemanticsHandle handle = tester.ensureSemantics();
+
+    await pumpHearthApp(tester, size: const Size(500, 2400));
+    await tester.tap(find.byTooltip('Household'));
+    await pumpFrames(tester);
+
+    expect(
+      unactivatable(tester.getSemantics(find.byType(MaterialApp))),
+      isEmpty,
+    );
+    handle.dispose();
+  });
+
   testWidgets(
     'every announced control in the eat-out builder can be activated',
     (WidgetTester tester) async {

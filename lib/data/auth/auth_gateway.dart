@@ -74,6 +74,24 @@ abstract interface class AuthGateway {
 
   Future<void> signOut();
 
+  /// Asks the backend to email a link for setting a new password.
+  ///
+  /// Returns normally whether or not an account exists for [email] — the
+  /// backend deliberately does not say, and neither should the caller. A
+  /// screen that reported "no such account" would turn this into a way to
+  /// test whether an address is registered.
+  ///
+  /// [ownAddress] says the address is the signed-in account's own, which only
+  /// Settings can claim. Left false — the sign-in screen, where anyone could
+  /// have typed anything — a refusal that could only happen for an address
+  /// that *has* an account is swallowed rather than reported, because the
+  /// refusal itself would be the answer. Which refusals those are is the
+  /// gateway's business; see `SupabaseAuthGateway.readableResetFailure`.
+  ///
+  /// Throws [AuthFailure] only when the request itself could not be made in a
+  /// way that is true of any address: a malformed one, or no connection.
+  Future<void> sendPasswordReset(String email, {bool ownAddress = false});
+
   /// Joins the household the code belongs to, and returns the account as it
   /// stands afterwards.
   Future<HearthAccount> joinHousehold(String shareCode);

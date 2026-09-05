@@ -48,6 +48,14 @@ class LocalAuthGateway implements AuthGateway {
   Future<void> signOut() async {}
 
   @override
+  Future<void> sendPasswordReset(
+    String email, {
+    bool ownAddress = false,
+  }) async => throw const AuthFailure(
+    'There is no password on this device to reset. Sign in first.',
+  );
+
+  @override
   Future<HearthAccount> joinHousehold(String shareCode) async =>
       throw const AuthFailure(
         'Joining a household needs a connection. Sign in first.',

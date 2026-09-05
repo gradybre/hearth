@@ -31,6 +31,16 @@ class FakeAuthGateway implements AuthGateway {
   /// Holds a call open so a test can look at the screen mid-flight.
   Completer<void>? gate;
   final List<String> joined = <String>[];
+
+  /// Every address a reset was asked for, in order. The real gateway cannot
+  /// report whether the address exists, so what a test can check is that the
+  /// right address was asked about at all.
+  final List<String> resetsRequested = <String>[];
+
+  /// Whether each of those was asked for as the caller's own address. Only
+  /// Settings may claim it; claiming it on the sign-in screen would let a
+  /// refusal say whether a typed address has an account.
+  final List<bool> resetsClaimedAsOwn = <bool>[];
   int signOuts = 0;
 
   @override
@@ -69,6 +79,17 @@ class FakeAuthGateway implements AuthGateway {
     signOuts++;
     _account = null;
     _controller.add(null);
+  }
+
+  @override
+  Future<void> sendPasswordReset(
+    String email, {
+    bool ownAddress = false,
+  }) async {
+    await gate?.future;
+    _throwIfQueued();
+    resetsRequested.add(email);
+    resetsClaimedAsOwn.add(ownAddress);
   }
 
   @override

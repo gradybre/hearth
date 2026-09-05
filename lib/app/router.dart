@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../data/adapters/label_reader.dart';
 import '../data/adapters/shared_content.dart';
 import '../features/account/food_profile_screen.dart';
-import '../features/account/household_screen.dart';
+import '../features/account/settings_screen.dart';
 import '../features/foods/barcode_scan_screen.dart';
 import '../features/foods/food_draft.dart';
 import '../features/foods/food_editor_screen.dart';
@@ -46,10 +46,13 @@ GoRouter buildRouter() => GoRouter(
   routes: <RouteBase>[
     // Listed before the section route: these have two or more segments, so
     // they can never be mistaken for a section.
+    // Still `/household`: the screen grew from the household page into the
+    // settings page, and renaming the path is a separate change that has to
+    // move the library's link with it.
     GoRoute(
       path: '/household',
       builder: (BuildContext context, GoRouterState state) =>
-          const HouseholdScreen(),
+          const SettingsScreen(),
     ),
     GoRoute(
       path: '/profile',

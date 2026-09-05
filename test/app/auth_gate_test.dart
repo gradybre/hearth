@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/data/auth/auth_gateway.dart';
+import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/features/account/sign_in_screen.dart';
 import 'package:hearth/main.dart';
 
@@ -21,9 +23,26 @@ void main() {
     final StreamController<HearthAccount?> accounts =
         StreamController<HearthAccount?>();
 
+    // The app root reads the device's theme choice before it paints anything,
+    // and that read goes through the database. Without this it would be the
+    // on-disk library the developer's own app uses.
+    final HearthDatabase db = HearthDatabase.forTesting(
+      NativeDatabase.memory(),
+    );
+    addTearDown(db.close);
+
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          databaseProvider.overrideWithValue(db),
+          // The app root watches sync, and the real controller registers a
+          // lifecycle observer, a debounce timer and a live Drift stream —
+          // none of which fake async can drive, and any one of which left
+          // running makes teardown hang rather than fail.
+          syncControllerProvider.overrideWith(FakeSyncController.new),
+          pendingWriteCountProvider.overrideWith(
+            (Ref ref) => Stream<int>.value(0),
+          ),
           supabaseReadyProvider.overrideWithValue(true),
           authGatewayProvider.overrideWithValue(FakeAuthGateway()),
           accountProvider.overrideWith((Ref ref) => accounts.stream),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -80,6 +81,7 @@ import '../domain/recipes/macro_calculator.dart';
 import '../domain/recipes/recipe_query.dart';
 import 'cook_timers.dart';
 import 'sync_controller.dart';
+import 'theme/theme_choice.dart';
 
 /// The app's object graph.
 ///
@@ -661,6 +663,63 @@ class CookStepViewNotifier extends AsyncNotifier<bool> {
     final bool wanted = !(state.value ?? false);
     state = AsyncValue<bool>.data(wanted);
     await _store.writeFlag(PreferenceStore.cookShowAllSteps, value: wanted);
+  }
+}
+
+/// Light, dark, or whatever the device is doing (spec §6.1).
+///
+/// Device-local, like every other preference in this store: a theme is a
+/// statement about the screen in front of you, and pushing it to a partner
+/// would change their app for a reason they could not see.
+final AsyncNotifierProvider<ThemeChoiceNotifier, ThemeChoice>
+themeChoiceProvider = AsyncNotifierProvider<ThemeChoiceNotifier, ThemeChoice>(
+  ThemeChoiceNotifier.new,
+);
+
+/// The theme already read off the device before the first frame, by
+/// `bootstrap`.
+///
+/// Null in anything that did not come through `main` — widget tests, mostly —
+/// where the notifier reads it itself and the first frame or two follow the
+/// device instead.
+final Provider<ThemeChoice?> launchThemeChoiceProvider = Provider<ThemeChoice?>(
+  (Ref ref) => null,
+);
+
+class ThemeChoiceNotifier extends AsyncNotifier<ThemeChoice> {
+  PreferenceStore get _store => ref.read(preferenceStoreProvider);
+
+  @override
+  FutureOr<ThemeChoice> build() {
+    // Synchronously when the app came through main(), because the answer was
+    // read before anything was painted. Reading it here instead costs a Drift
+    // open and a query, and until those returned the app painted
+    // ThemeMode.system — a light flash on every cold start for anyone who had
+    // asked for dark.
+    final ThemeChoice? atLaunch = ref.read(launchThemeChoiceProvider);
+    if (atLaunch != null) return atLaunch;
+    return _store.read(PreferenceStore.themeChoice).then(ThemeChoice.parse);
+  }
+
+  /// Changes the theme, and rethrows if the change could not be stored.
+  ///
+  /// The caller is expected to await it and say so. An optimistic write that
+  /// failed and was never taken back is the worst of both: the app stays dark
+  /// until the next launch and is quietly light after it, with nothing ever
+  /// said about why.
+  Future<void> choose(ThemeChoice choice) async {
+    // Repaint first, write second. Recolouring the whole app is the entire
+    // point of the tap, and it has no business waiting on a disk write.
+    final ThemeChoice previous = state.value ?? ThemeChoice.system;
+    state = AsyncValue<ThemeChoice>.data(choice);
+    try {
+      await _store.write(PreferenceStore.themeChoice, choice.stored);
+    } on Object {
+      // Back to what is actually on the device, so what is on screen and what
+      // the next launch will do are the same thing again.
+      state = AsyncValue<ThemeChoice>.data(previous);
+      rethrow;
+    }
   }
 }
 

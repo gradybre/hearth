@@ -6,15 +6,24 @@ import 'app/bootstrap.dart';
 import 'app/providers.dart';
 import 'app/router.dart';
 import 'app/theme/hearth_theme.dart';
+import 'app/theme/theme_choice.dart';
 import 'data/adapters/shared_content.dart';
 import 'data/auth/auth_gateway.dart';
 import 'features/account/sign_in_screen.dart';
 
 Future<void> main() async {
-  final bool connected = await bootstrap();
+  final Boot boot = await bootstrap();
   runApp(
     ProviderScope(
-      overrides: [supabaseReadyProvider.overrideWithValue(connected)],
+      overrides: [
+        supabaseReadyProvider.overrideWithValue(boot.connected),
+        // The database bootstrap already opened to read the theme out of, so
+        // the app goes on using that one rather than opening a second.
+        databaseProvider.overrideWithValue(boot.database),
+        // And the answer it found, so the first frame is painted in the theme
+        // that was asked for instead of the device's (spec §6.1).
+        launchThemeChoiceProvider.overrideWithValue(boot.theme),
+      ],
       child: const HearthApp(),
     ),
   );
@@ -46,10 +55,18 @@ class _HearthAppState extends ConsumerState<HearthApp> {
       if (next.value case final SharedContent shared) _open(shared);
     });
 
+    // The user's own light/dark choice (spec §6.1). Already in hand: bootstrap
+    // read it off the device before the first frame, so there is nothing to
+    // wait for and nothing to flash. Still loading can only mean a build that
+    // did not come through main(), where following the device is the only
+    // honest thing to show.
+    final ThemeMode themeMode =
+        (ref.watch(themeChoiceProvider).value ?? ThemeChoice.system).mode;
+
     // An unconfigured build goes straight in. Hearth is offline-first and
     // usable alone (spec §5.1), so "no backend" means "no sync yet", not a
     // locked door.
-    if (!ref.watch(supabaseReadyProvider)) return _routed();
+    if (!ref.watch(supabaseReadyProvider)) return _routed(themeMode);
 
     // Watched, not merely created: the controller registers its triggers in
     // build, so nothing would ever drain the queue if no one listened.
@@ -62,11 +79,15 @@ class _HearthAppState extends ConsumerState<HearthApp> {
     // back: that destroys its State, taking the typed email and the error
     // message with it — so a failed sign-in would silently wipe the form
     // instead of saying what went wrong.
-    if (account.isLoading && !account.hasValue) return _plain(const _Waiting());
+    if (account.isLoading && !account.hasValue) {
+      return _plain(const _Waiting(), themeMode);
+    }
 
     // An error here is a session that could not be resolved, so the way
     // forward is to sign in again rather than to sit on a spinner.
-    return account.value == null ? _plain(const SignInScreen()) : _routed();
+    return account.value == null
+        ? _plain(const SignInScreen(), themeMode)
+        : _routed(themeMode);
   }
 
   /// Takes a share to the import screen, which reviews before it saves.
@@ -84,24 +105,24 @@ class _HearthAppState extends ConsumerState<HearthApp> {
     _router.push('/recipe/import', extra: shared);
   }
 
-  Widget _routed() => MaterialApp.router(
+  Widget _routed(ThemeMode themeMode) => MaterialApp.router(
     title: 'Hearth',
     debugShowCheckedModeBanner: false,
     theme: HearthTheme.light(),
     darkTheme: HearthTheme.dark(),
-    // Light ships first, but dark is defined from day one and follows the OS
-    // rather than waiting on an in-app setting (spec §6.1).
-    themeMode: ThemeMode.system,
+    // Light ships first, dark is defined from day one, and which one you get
+    // is now the user's own choice — defaulting to the device (spec §6.1).
+    themeMode: themeMode,
     routerConfig: _router,
   );
 
   /// The same theme, for the screens that sit outside the router.
-  Widget _plain(Widget home) => MaterialApp(
+  Widget _plain(Widget home, ThemeMode themeMode) => MaterialApp(
     title: 'Hearth',
     debugShowCheckedModeBanner: false,
     theme: HearthTheme.light(),
     darkTheme: HearthTheme.dark(),
-    themeMode: ThemeMode.system,
+    themeMode: themeMode,
     home: home,
   );
 }
