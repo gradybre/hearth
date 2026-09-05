@@ -12,10 +12,18 @@ import 'data/auth/auth_gateway.dart';
 import 'features/account/sign_in_screen.dart';
 
 Future<void> main() async {
-  final bool connected = await bootstrap();
+  final Boot boot = await bootstrap();
   runApp(
     ProviderScope(
-      overrides: [supabaseReadyProvider.overrideWithValue(connected)],
+      overrides: [
+        supabaseReadyProvider.overrideWithValue(boot.connected),
+        // The database bootstrap already opened to read the theme out of, so
+        // the app goes on using that one rather than opening a second.
+        databaseProvider.overrideWithValue(boot.database),
+        // And the answer it found, so the first frame is painted in the theme
+        // that was asked for instead of the device's (spec §6.1).
+        launchThemeChoiceProvider.overrideWithValue(boot.theme),
+      ],
       child: const HearthApp(),
     ),
   );
@@ -47,10 +55,11 @@ class _HearthAppState extends ConsumerState<HearthApp> {
       if (next.value case final SharedContent shared) _open(shared);
     });
 
-    // The user's own light/dark choice, read from the device (spec §6.1).
-    // Still loading means we do not yet know, and following the device is the
-    // only honest thing to show in the meantime — it is also the default, so
-    // most launches never see a change at all.
+    // The user's own light/dark choice (spec §6.1). Already in hand: bootstrap
+    // read it off the device before the first frame, so there is nothing to
+    // wait for and nothing to flash. Still loading can only mean a build that
+    // did not come through main(), where following the device is the only
+    // honest thing to show.
     final ThemeMode themeMode =
         (ref.watch(themeChoiceProvider).value ?? ThemeChoice.system).mode;
 

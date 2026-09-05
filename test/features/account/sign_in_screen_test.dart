@@ -205,6 +205,22 @@ void main() {
       expect(auth.resetsRequested, <String>['cook@example.com']);
     });
 
+    testWidgets('and never as an address anyone here is known to own', (
+      WidgetTester tester,
+    ) async {
+      // Nobody is signed in on this screen, so the address is whatever was
+      // typed. Claiming it as the asker's own would let the gateway repeat a
+      // refusal that only happens for an address with an account — and two
+      // taps inside a minute would then say whether a stranger is registered.
+      final FakeAuthGateway auth = await pumpSignIn(tester);
+
+      await fillIn(tester, 'stranger@example.com', '');
+      await tester.tap(find.text('Forgot password?'));
+      await tester.pump();
+
+      expect(auth.resetsClaimedAsOwn, <bool>[false]);
+    });
+
     testWidgets('the reply never says whether that address has an account', (
       WidgetTester tester,
     ) async {
@@ -217,6 +233,41 @@ void main() {
       await tester.pump();
 
       expect(find.textContaining('If there is an account'), findsOneWidget);
+    });
+
+    testWidgets('and says where the link lands, since it is not in Hearth', (
+      WidgetTester tester,
+    ) async {
+      // Nothing here listens for a recovery session and no redirect is asked
+      // for, so the link opens whatever web page the project points at.
+      // Telling someone in the app to open the link and set a new password
+      // describes a second half of this flow that does not exist yet.
+      await pumpSignIn(tester);
+
+      await fillIn(tester, 'cook@example.com', '');
+      await tester.tap(find.text('Forgot password?'));
+      await tester.pump();
+
+      expect(find.textContaining('in your browser'), findsOneWidget);
+    });
+
+    testWidgets('the notice is announced, not only printed', (
+      WidgetTester tester,
+    ) async {
+      // A live region with no label of its own announces nothing: the words
+      // sit on a child node while the node flagged live has nothing to say.
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpSignIn(tester);
+
+      await tester.tap(find.text('Forgot password?'));
+      await tester.pump();
+
+      const String asked = 'Type your email above first, then ask again.';
+      expect(
+        tester.getSemantics(find.text(asked)),
+        isSemantics(isLiveRegion: true, label: asked),
+      );
+      handle.dispose();
     });
 
     testWidgets('a refusal is shown as an error, not as a reassurance', (

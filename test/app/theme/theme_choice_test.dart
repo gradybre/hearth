@@ -1,11 +1,17 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/app/theme/theme_choice.dart';
+import 'package:hearth/data/auth/auth_gateway.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/data/local/preference_store.dart';
+import 'package:hearth/main.dart';
+
+import '../../support/fake_auth.dart';
 
 void main() {
   group('what a stored choice means', () {
@@ -95,6 +101,33 @@ void main() {
       );
     });
 
+    test('a write that fails takes the choice back with it', () async {
+      // Optimism is right — recolouring the app has no business waiting on
+      // sqlite — but an optimistic write that fails and is never taken back
+      // leaves the app dark until the next launch and light again after it,
+      // with nothing ever said about why.
+      final ProviderContainer container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          preferenceStoreProvider.overrideWithValue(UnwritablePreferences(db)),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(themeChoiceProvider.future);
+
+      await expectLater(
+        container.read(themeChoiceProvider.notifier).choose(ThemeChoice.dark),
+        throwsStateError,
+        reason: 'the failure went nowhere the screen could see it',
+      );
+
+      expect(
+        container.read(themeChoiceProvider).value,
+        ThemeChoice.system,
+        reason: 'the choice was never taken back',
+      );
+    });
+
     test('the new choice is on screen before the write finishes', () async {
       // Recolouring the app is the whole point of the tap; it has no business
       // waiting on sqlite.
@@ -109,4 +142,73 @@ void main() {
       await writing;
     });
   });
+
+  group('the theme the app opens on', () {
+    test('a choice read before the first frame is there without waiting', () {
+      // The provider reads sqlite, which takes a frame or two. Until it
+      // answered, the app painted ThemeMode.system — so every cold start on a
+      // dark-mode-off device flashed cream at someone who had asked for dark.
+      final HearthDatabase db = HearthDatabase.forTesting(
+        NativeDatabase.memory(),
+      );
+      addTearDown(db.close);
+      final ProviderContainer container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          launchThemeChoiceProvider.overrideWithValue(ThemeChoice.dark),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      expect(container.read(themeChoiceProvider).value, ThemeChoice.dark);
+    });
+
+    testWidgets('so the first frame is already dark', (
+      WidgetTester tester,
+    ) async {
+      final HearthDatabase db = HearthDatabase.forTesting(
+        NativeDatabase.memory(),
+      );
+      addTearDown(db.close);
+      final StreamController<HearthAccount?> accounts =
+          StreamController<HearthAccount?>();
+      addTearDown(accounts.close);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            launchThemeChoiceProvider.overrideWithValue(ThemeChoice.dark),
+            // The app root watches sync, and the real controller leaves a
+            // lifecycle observer, a debounce timer and a Drift stream running
+            // that fake async cannot drive.
+            syncControllerProvider.overrideWith(FakeSyncController.new),
+            pendingWriteCountProvider.overrideWith(
+              (Ref ref) => Stream<int>.value(0),
+            ),
+            supabaseReadyProvider.overrideWithValue(true),
+            authGatewayProvider.overrideWithValue(FakeAuthGateway()),
+            accountProvider.overrideWith((Ref ref) => accounts.stream),
+          ],
+          child: const HearthApp(),
+        ),
+      );
+      accounts.add(null);
+      await tester.pump();
+
+      expect(
+        tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+        ThemeMode.dark,
+      );
+    });
+  });
+}
+
+/// A device whose preference table refuses to be written to.
+class UnwritablePreferences extends PreferenceStore {
+  UnwritablePreferences(super.db);
+
+  @override
+  Future<void> write(String key, String value) async =>
+      throw StateError('the disk said no');
 }

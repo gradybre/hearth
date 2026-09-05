@@ -48,7 +48,10 @@ class LocalAuthGateway implements AuthGateway {
   Future<void> signOut() async {}
 
   @override
-  Future<void> sendPasswordReset(String email) async => throw const AuthFailure(
+  Future<void> sendPasswordReset(
+    String email, {
+    bool ownAddress = false,
+  }) async => throw const AuthFailure(
     'There is no password on this device to reset. Sign in first.',
   );
 

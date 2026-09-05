@@ -31,6 +31,7 @@ Future<SettingsHarness> pumpSettings(
   WidgetTester tester, {
   HearthDatabase? database,
   FileShare? fileShare,
+  PreferenceStore? preferences,
   HearthAccount? account = FakeAuthGateway.anAccount,
 }) async {
   // Tall enough for the whole screen: it is a ListView, so anything below the
@@ -64,6 +65,8 @@ Future<SettingsHarness> pumpSettings(
         // Named seams rather than a generic override list: flutter_riverpod 3
         // does not export the `Override` type, only the methods that make one.
         databaseProvider.overrideWithValue(db),
+        if (preferences case final PreferenceStore store)
+          preferenceStoreProvider.overrideWithValue(store),
         if (fileShare case final FileShare share)
           fileShareProvider.overrideWithValue(share),
       ],
@@ -154,6 +157,22 @@ void main() {
       );
       handle.dispose();
     });
+
+    testWidgets('and the copy button beside it can still be reached', (
+      WidgetTester tester,
+    ) async {
+      // The label above is spoken by a wrapper that excludes its descendants,
+      // and the copy button is one of them: a screen-reader user heard the
+      // code and then had no way to put it on the clipboard (spec §6.3).
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpSettings(tester);
+
+      expect(
+        tester.getSemantics(find.byTooltip('Copy code')),
+        isSemantics(isButton: true, hasTapAction: true),
+      );
+      handle.dispose();
+    });
   });
 
   group('joining', () {
@@ -198,6 +217,31 @@ void main() {
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
         'BADCODE1',
       );
+    });
+
+    testWidgets('and it is announced, not only printed', (
+      WidgetTester tester,
+    ) async {
+      // A live region with no label of its own announces nothing: the words
+      // sit on a child node, and the node flagged live has nothing to say.
+      // The person who cannot see the message is the person who most needs
+      // to be told the code was refused (spec §6.3).
+      const String refusal =
+          'No household matches that code. Check it and '
+          'try again.';
+      final SemanticsHandle handle = tester.ensureSemantics();
+      final SettingsHarness harness = await pumpSettings(tester);
+      harness.auth.nextFailure = const AuthFailure(refusal);
+
+      await tester.enterText(find.byType(TextField), 'BADCODE1');
+      await tester.tap(find.widgetWithText(FilledButton, 'Join'));
+      await tester.pump();
+
+      expect(
+        tester.getSemantics(find.text(refusal)),
+        isSemantics(isLiveRegion: true, label: refusal),
+      );
+      handle.dispose();
     });
   });
 
@@ -346,6 +390,36 @@ void main() {
       );
       handle.dispose();
     });
+
+    testWidgets('a choice that could not be saved goes back and says so', (
+      WidgetTester tester,
+    ) async {
+      // The tick used to move and stay moved even when the write failed, so
+      // the app was dark until the next launch and then quietly light again
+      // with nothing ever said about it.
+      final SemanticsHandle handle = tester.ensureSemantics();
+      final HearthDatabase db = HearthDatabase.forTesting(
+        NativeDatabase.memory(),
+      );
+      addTearDown(db.close);
+      await pumpSettings(
+        tester,
+        database: db,
+        preferences: UnwritablePreferences(db),
+      );
+      await pumpFrames(tester);
+
+      await tester.tap(find.text(ThemeChoice.dark.label));
+      await pumpFrames(tester);
+
+      expect(find.textContaining('could not be saved'), findsOneWidget);
+      expect(
+        tester.getSemantics(find.text(ThemeChoice.system.label)),
+        isSemantics(isSelected: true),
+        reason: 'dark stayed ticked though nothing was written',
+      );
+      handle.dispose();
+    });
   });
 
   group('resetting the password (spec §8.3)', () {
@@ -390,6 +464,10 @@ void main() {
       await pumpFrames(tester);
 
       expect(harness.auth.resetsRequested, <String>['cook@example.com']);
+      // And says so, which is what lets a refusal here explain itself: it
+      // cannot tell this person anything about their own account that they do
+      // not already know.
+      expect(harness.auth.resetsClaimedAsOwn, <bool>[true]);
     });
 
     testWidgets('and says the next step is in an inbox, not here', (
@@ -402,6 +480,30 @@ void main() {
       await pumpFrames(tester);
 
       expect(find.textContaining('On its way'), findsOneWidget);
+    });
+
+    testWidgets('and says where the link lands, since it is not in Hearth', (
+      WidgetTester tester,
+    ) async {
+      // Nothing here listens for a recovery session and no redirect is asked
+      // for, so the link opens whatever web page the project points at. Copy
+      // that says "open the link to set a new password" describes a second
+      // half of this flow that does not exist yet.
+      await pumpSettings(tester);
+
+      await tapReset(tester);
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.textContaining('browser'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Send link'));
+      await pumpFrames(tester);
+
+      expect(find.textContaining('in your browser'), findsOneWidget);
     });
 
     testWidgets('a refusal is said out loud rather than swallowed', (
@@ -510,4 +612,13 @@ class FakeFileShare implements FileShare {
     if (failWith case final Object error) throw error;
     shared = file;
   }
+}
+
+/// A device whose preference table refuses to be written to.
+class UnwritablePreferences extends PreferenceStore {
+  UnwritablePreferences(super.db);
+
+  @override
+  Future<void> write(String key, String value) async =>
+      throw StateError('the disk said no');
 }

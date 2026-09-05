@@ -573,11 +573,30 @@ class SettingsMessage extends StatelessWidget {
 /// fitting the moment dynamic type is turned up, and honouring type is not
 /// optional (spec §6.3). A list of options with a check against the chosen
 /// one grows downwards instead, which it can always afford to do.
-class _Appearance extends ConsumerWidget {
+class _Appearance extends ConsumerStatefulWidget {
   const _Appearance();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Appearance> createState() => _AppearanceState();
+}
+
+class _AppearanceState extends ConsumerState<_Appearance> {
+  /// Set when a choice could not be written and was taken back. The tick moves
+  /// back on its own; without a word here the tap would simply look as though
+  /// it had not happened.
+  bool _unsaved = false;
+
+  Future<void> _choose(ThemeChoice choice) async {
+    setState(() => _unsaved = false);
+    try {
+      await ref.read(themeChoiceProvider.notifier).choose(choice);
+    } on Object {
+      if (mounted) setState(() => _unsaved = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     // Until the stored choice is read, the device is what is actually on
     // screen — so that is what the list should show as chosen.
     final ThemeChoice current =
@@ -590,7 +609,17 @@ class _Appearance extends ConsumerWidget {
           _ThemeOption(
             choice: choice,
             selected: choice == current,
-            onTap: () => ref.read(themeChoiceProvider.notifier).choose(choice),
+            onTap: () => _choose(choice),
+          ),
+        if (_unsaved)
+          const Padding(
+            padding: EdgeInsets.all(HearthSpacing.md),
+            child: SettingsMessage(
+              text:
+                  'That could not be saved on this device, so Hearth has '
+                  'gone back to the last choice that was.',
+              isError: true,
+            ),
           ),
       ],
     );
@@ -674,7 +703,10 @@ class _ThemeOption extends StatelessWidget {
 ///
 /// Hearth never handles the password itself — Supabase mints and mails the
 /// link, and §8.3 rules out doing any of that here. What this row owns is the
-/// asking, and saying clearly that the next step is in an inbox.
+/// asking, and saying where it ends: no `redirectTo` is passed and nothing
+/// listens for a recovery session, so the link opens the project's own web
+/// page in a browser. The copy says so rather than promising a step in the
+/// app that does not exist (spec §8.3).
 class _PasswordReset extends ConsumerStatefulWidget {
   const _PasswordReset({required this.email});
 
@@ -702,7 +734,9 @@ class _PasswordResetState extends ConsumerState<_PasswordReset> {
             title: const Text('Send a reset link?'),
             content: Text(
               'We will email ${widget.email} a link for setting a new '
-              'password. You stay signed in here either way.',
+              'password. The link opens a web page in your browser — Hearth '
+              'cannot set the password itself yet. You stay signed in here '
+              'either way.',
             ),
             actions: <Widget>[
               TextButton(
@@ -725,12 +759,18 @@ class _PasswordResetState extends ConsumerState<_PasswordReset> {
       _notice = null;
     });
     try {
-      await ref.read(authGatewayProvider).sendPasswordReset(widget.email);
+      // Named as the signed-in account's own address, which is the one place
+      // in the app that can honestly claim it: a refusal here can say why,
+      // because it cannot tell this person anything about themselves they do
+      // not already know.
+      await ref
+          .read(authGatewayProvider)
+          .sendPasswordReset(widget.email, ownAddress: true);
       if (mounted) {
         setState(
           () => _notice =
-              'On its way to ${widget.email}. Open the link to set a new '
-              'password.',
+              'On its way to ${widget.email}. The link opens a web page in '
+              'your browser — Hearth cannot set the new password itself yet.',
         );
       }
     } on AuthFailure catch (failure) {
@@ -747,7 +787,9 @@ class _PasswordResetState extends ConsumerState<_PasswordReset> {
       SettingsActionRow(
         icon: Icons.key_outlined,
         title: _busy ? 'Just a moment…' : 'Reset password',
-        subtitle: 'We email you a link. Nothing changes until you use it.',
+        subtitle:
+            'We email you a link. It is used in a browser, not in '
+            'Hearth, and nothing changes until you use it.',
         onTap: _busy ? null : _send,
       ),
       if (_error != null || _notice != null)
@@ -778,23 +820,28 @@ class _ShareCode extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    return Semantics(
-      label: 'Your household code is ${code.split('').join(' ')}',
-      container: true,
-      excludeSemantics: true,
-      child: Padding(
-        padding: const EdgeInsets.all(HearthSpacing.md),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: colors.surfaceSunken,
-            borderRadius: BorderRadius.circular(HearthRadius.md),
-            border: Border.all(color: colors.outline),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(HearthSpacing.lg),
-            child: Row(
-              children: <Widget>[
-                Expanded(
+    return Padding(
+      padding: const EdgeInsets.all(HearthSpacing.md),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surfaceSunken,
+          borderRadius: BorderRadius.circular(HearthRadius.md),
+          border: Border.all(color: colors.outline),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(HearthSpacing.lg),
+          child: Row(
+            children: <Widget>[
+              // Around the code alone, never around the row: excluding
+              // descendants is what makes the code readable letter by letter,
+              // and wrapped any wider it also swallowed the copy button — a
+              // screen reader heard the code and had no way to copy it
+              // (spec §6.3).
+              Expanded(
+                child: Semantics(
+                  label: 'Your household code is ${code.split('').join(' ')}',
+                  container: true,
+                  excludeSemantics: true,
                   child: Text(
                     code,
                     style: context.text.recipeTitle.copyWith(
@@ -804,20 +851,20 @@ class _ShareCode extends StatelessWidget {
                     ),
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.copy_outlined),
-                  tooltip: 'Copy code',
-                  onPressed: () async {
-                    await Clipboard.setData(ClipboardData(text: code));
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Code copied.')),
-                      );
-                    }
-                  },
-                ),
-              ],
-            ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.copy_outlined),
+                tooltip: 'Copy code',
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: code));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Code copied.')),
+                    );
+                  }
+                },
+              ),
+            ],
           ),
         ),
       ),
