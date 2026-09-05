@@ -330,4 +330,47 @@ void main() {
       expect(p.quantity, isNull);
     });
   });
+
+  group('a line that takes something out (spec §5.2)', () {
+    test('a real minus in front of the amount subtracts it', () {
+      // What the eat-out builder writes for "cheeseburger, no lettuce": the
+      // lettuce is an ordinary menu row, picked in the other direction.
+      final ParsedIngredient p = IngredientParser.parse('−0.5 oz Lettuce');
+      expect(p.quantity!.amountIn(Units.ounce), closeTo(-0.5, 1e-12));
+      expect(p.name, 'Lettuce');
+    });
+
+    test('and it works for a count, which has no unit word to lean on', () {
+      final ParsedIngredient p = IngredientParser.parse('−1 ea Cheese Slice');
+      expect(p.quantity!.amountIn(Units.item), closeTo(-1, 1e-12));
+      expect(p.name, 'Cheese Slice');
+    });
+
+    test('a hyphen is a bullet, not a minus', () {
+      // Every pasted ingredient list in the world is bulleted with hyphens,
+      // and reading one as a deduction would silently invert a recipe. The
+      // real minus is the declaration, exactly as it is for a modifier food.
+      final ParsedIngredient bulleted = IngredientParser.parse('- 2 eggs');
+      expect(bulleted.quantity!.amountIn(Units.item), 2);
+
+      final ParsedIngredient glued = IngredientParser.parse('-4 oz Lettuce');
+      expect(glued.quantity!.amountIn(Units.ounce), closeTo(4, 1e-12));
+    });
+
+    test('a minus with no number after it is just text', () {
+      // Nothing to negate, and eating the character would lose it from a name
+      // that may have meant it.
+      final ParsedIngredient p = IngredientParser.parse('− Lettuce');
+      expect(p.quantity, isNull);
+      expect(p.name, '− Lettuce');
+    });
+
+    test('the sign survives a pack size and a prep note', () {
+      final ParsedIngredient p = IngredientParser.parse(
+        '−2 x 30g slices Cheese, unmelted',
+      );
+      expect(p.quantity!.amountIn(Units.gram), closeTo(-60, 1e-9));
+      expect(p.prepNote, 'unmelted');
+    });
+  });
 }

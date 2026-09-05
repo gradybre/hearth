@@ -159,6 +159,41 @@ void main() {
     });
   });
 
+  group('what can be taken out of a meal (spec §5.2)', () {
+    test('an ordinary row the sheet gave a portion', () {
+      expect(
+        RestaurantMenu.canBeTakenOut(
+          menuItem('Lettuce', restaurant: "Freddy's"),
+        ),
+        isTrue,
+      );
+    });
+
+    test('never a modifier, which is a deduction already', () {
+      expect(
+        RestaurantMenu.canBeTakenOut(
+          menuItem('Lettuce Wrap', restaurant: "Freddy's").asModifier(),
+        ),
+        isFalse,
+      );
+    });
+
+    test('and never a row with no portion, which would deduct nothing', () {
+      // [MenuPick.line] has no amount to hang a sign on, so it writes the
+      // bare name: "take out X" becomes an unquantified ingredient that
+      // contributes nothing and is flagged for having no amount. Silent, and
+      // the opposite of what was asked for.
+      final Food noPortion = aFood(
+        'Pickles',
+        brand: "Freddy's",
+        source: FoodSource.restaurant,
+      );
+
+      expect(RestaurantMenu.canBeTakenOut(noPortion), isFalse);
+      expect(MenuPick(food: noPortion, count: -1).line, 'Pickles');
+    });
+  });
+
   group('laid out the way the restaurant lays it out', () {
     // Chipotle's own sheet: tortillas, then rice, then beans, then the
     // proteins, then the salsas. Not one of those is where the alphabet

@@ -53,6 +53,27 @@ class Macros {
   /// food has usable nutrition at all.
   bool get isZero => kcal == 0 && proteinG == 0 && carbG == 0 && fatG == 0;
 
+  /// Whether any column has gone under zero — a total that is not a meal.
+  ///
+  /// Deductions are real (spec §5.2): a modifier the chain publishes, and an
+  /// ordinary component somebody asked them to leave off. Neither may take a
+  /// total below nothing, and two places have to ask that question — the
+  /// eat-out builder before it assembles a meal, and the macro calculator
+  /// before one is logged. One predicate rather than two copies, because two
+  /// copies drift and then the screens disagree about the same meal.
+  ///
+  /// All seven columns, not just the calories: a deduction can leave the
+  /// calories standing while the carbohydrate goes under. Null is "nobody
+  /// said" rather than a number below zero, so an unknown is not a breach.
+  bool get isBelowNothing =>
+      kcal < 0 ||
+      proteinG < 0 ||
+      carbG < 0 ||
+      fatG < 0 ||
+      (fiberG ?? 0) < 0 ||
+      (sodiumMg ?? 0) < 0 ||
+      (cholesterolMg ?? 0) < 0;
+
   /// This macros' value for [nutrient], in that nutrient's own unit.
   double? minor(MinorNutrient nutrient) => switch (nutrient) {
     MinorNutrient.fiber => fiberG,

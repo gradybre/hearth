@@ -626,6 +626,93 @@ void noMatchNeededTests() {
     });
   });
 
+  group('an ordinary component taken out of a meal (spec §5.2)', () {
+    // Not a modifier: the restaurant publishes lettuce as a positive row, and
+    // it is the *pick* that is negative — "cheeseburger, no lettuce", where
+    // the published burger figure counted the lettuce in.
+    Food lettuce() => aFood(
+      'Lettuce',
+      id: 'f-lettuce',
+      source: FoodSource.restaurant,
+      servingOptions: <ServingOption>[
+        aServing(
+          amount: 0.5,
+          unit: Units.ounce,
+          macros: const Macros(kcal: 3, carbG: 1, fiberG: 0.5),
+        ),
+      ],
+    );
+
+    Food burger() => aFood(
+      'Single Steakburger',
+      id: 'f-burger',
+      source: FoodSource.restaurant,
+      servingOptions: <ServingOption>[
+        aServing(
+          amount: 1,
+          unit: Units.item,
+          macros: const Macros(kcal: 380, carbG: 30, fiberG: 2),
+        ),
+      ],
+    );
+
+    test('subtracts, sign and all, straight through the serving ratio', () {
+      final RecipeMacros macros = MacroCalculator.forRecipe(
+        aRecipe(
+          servings: 1,
+          ingredients: <RecipeIngredient>[
+            anIngredient(
+              'Single Steakburger',
+              amount: 1,
+              unit: Units.item,
+              foodId: 'f-burger',
+            ),
+            anIngredient(
+              'Lettuce',
+              amount: -0.5,
+              unit: Units.ounce,
+              foodId: 'f-lettuce',
+            ),
+          ],
+        ),
+        foods: <String, Food>{'f-burger': burger(), 'f-lettuce': lettuce()},
+      );
+
+      expect(macros.total.kcal, closeTo(377, 1e-9));
+      expect(macros.total.carbG, closeTo(29, 1e-9));
+      // The minor three subtract too, and a nutrient nobody knew stays
+      // unknown rather than becoming a negative number (spec §5.6).
+      expect(macros.total.fiberG, closeTo(1.5, 1e-9));
+      // A deduction is data, not a data gap: it counted in full.
+      expect(macros.ingredients.last.status, IngredientMacroStatus.resolved);
+      expect(macros.isIncomplete, isFalse);
+      expect(macros.incompleteReason, isNull);
+    });
+
+    test('and taking out more than was there says so', () {
+      // The builder will not assemble one, but the editor will let you delete
+      // the burger and keep the "no lettuce" — and §5.2's rule is that a meal
+      // cannot come to less than nothing whatever produced the deduction.
+      final RecipeMacros macros = MacroCalculator.forRecipe(
+        aRecipe(
+          servings: 1,
+          ingredients: <RecipeIngredient>[
+            anIngredient(
+              'Lettuce',
+              amount: -0.5,
+              unit: Units.ounce,
+              foodId: 'f-lettuce',
+            ),
+          ],
+        ),
+        foods: <String, Food>{'f-lettuce': lettuce()},
+      );
+
+      expect(macros.total.kcal, closeTo(-3, 1e-9));
+      expect(macros.incompleteReason, contains('less than nothing'));
+    });
+  });
+
   group('a recipe that comes to less than nothing (spec §5.2)', () {
     Food wrap() => aFood(
       'Make it a Lettuce Wrap',

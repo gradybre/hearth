@@ -44,6 +44,26 @@ double? parseAmount(String raw) {
   final String text = raw.trim();
   if (text.isEmpty) return null;
 
+  // A sign, then the amount underneath it. An amount can be below zero since
+  // a menu component can be taken *out* of a meal (spec §5.2), and the
+  // fraction readers below are all anchored patterns that a sign would defeat:
+  // "-1/2" fell through every one of them to `double.tryParse` and came back
+  // as nothing at all. Both minus characters are read — the keyboard's hyphen
+  // and the real minus that `QuantityFormat` prints — because this is the one
+  // place that reads amounts back off a screen.
+  //
+  // **One sign, not a run of them.** Reading the rest recursively let a second
+  // sign cancel the first, so "--1" came back +1 — the opposite of either
+  // reading of it, and reachable from a pasted menu cell written "- -180",
+  // whose published deduction then read as an addition of the same size. Two
+  // signs is a typo, and a typo is what this parser returns null for.
+  if (text.startsWith('-') || text.startsWith('−')) {
+    final String rest = text.substring(1).trimLeft();
+    if (rest.startsWith('-') || rest.startsWith('−')) return null;
+    final double? magnitude = parseAmount(rest);
+    return magnitude == null ? null : -magnitude;
+  }
+
   // Whole number followed by a vulgar fraction: "1½".
   final RegExpMatch? mixedVulgar = RegExp(
     '^(\\d+(?:\\.\\d+)?)\\s*([${vulgarFractions.keys.join()}])\$',
@@ -90,6 +110,13 @@ double? parseAmount(String raw) {
 /// correct than the characters a keyboard can produce. Read-only surfaces use
 /// `QuantityFormat`, which prefers the glyphs.
 String writeAmount(double value) {
+  // The sign first, the magnitude underneath it. The mixed-number arithmetic
+  // below splits a value into a whole part and a remainder, and Dart's `%`
+  // keeps the remainder positive — so −1.5 came apart into a whole of −2 and
+  // a half, and was written "-2 1/2". Not a rounding slip: the wrong number,
+  // and one nothing reads back.
+  if (value < 0) return '-${writeAmount(-value)}';
+
   if (value == value.roundToDouble()) return value.round().toString();
 
   const Map<String, double> fractions = <String, double>{

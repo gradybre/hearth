@@ -8,6 +8,7 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../domain/foods/restaurant_menu.dart';
 import '../../domain/models/food.dart';
+import '../../domain/models/macros.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import 'recipe_draft.dart';
 
@@ -42,19 +43,30 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
     _picks.clear();
   });
 
-  /// Whether anything real is picked — a modifier does not count.
+  /// Whether anything real is picked for a deduction to come off.
   ///
-  /// A deduction has to have something to come off. On its own it is not a
-  /// meal, it is 180 calories taken out of a day that never had them.
-  bool _hasSomethingToApplyTo(List<Food> menu) =>
-      menu.any((Food food) => !food.isModifier && _picks.containsKey(food.id));
+  /// Real means an ordinary menu row picked in the ordinary direction: not a
+  /// modifier, and not another deduction. A deduction has to have something
+  /// to come off — on its own it is not a meal, it is 180 calories taken out
+  /// of a day that never had them.
+  ///
+  /// [excluding] asks the question as it will stand *after* a pick changes
+  /// direction. Taking the burger out of a meal whose only other line is "no
+  /// lettuce" leaves nothing behind but deductions, and the guard has to see
+  /// that before it happens rather than sweeping up afterwards.
+  bool _hasSomethingToApplyTo(List<Food> menu, {Food? excluding}) => menu.any(
+    (Food food) =>
+        !food.isModifier &&
+        food.id != excluding?.id &&
+        (_picks[food.id] ?? 0) > 0,
+  );
 
   void _toggle(Food food, List<Food> menu) => setState(() {
     if (_picks.remove(food.id) != null) {
-      // Unpicking the last real thing takes its modifiers with it. Left
+      // Unpicking the last real thing takes the deductions with it. Left
       // behind, they would be a meal of minus 180 calories, and the rule
       // above would hold only until somebody changed their mind.
-      if (!food.isModifier) _sweepStrandedModifiers(menu);
+      if (!food.isModifier) _sweepStrandedDeductions(menu);
       return;
     }
     if (food.isModifier && !_hasSomethingToApplyTo(menu)) return;
@@ -62,8 +74,43 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
     _picks[food.id] = 1;
   });
 
+  /// Picks [food] the other way round: taken out rather than put in.
+  ///
+  /// The case is a published figure that already counts something you asked
+  /// them to leave off — a cheeseburger with no lettuce. Deliberately not the
+  /// modifier mechanism (spec §5.2): this is an ordinary positive row, and
+  /// only the direction of the pick is new.
+  ///
+  /// A modifier is never removable. It is already a deduction, so taking one
+  /// out would be an addition the chain never published. Neither is a row the
+  /// sheet gave no portion: with no amount for the sign to sit on, the line
+  /// comes out as a bare name that deducts nothing and is flagged for having
+  /// no quantity — a deduction that silently does not deduct.
+  void _remove(Food food, List<Food> menu) {
+    if (!RestaurantMenu.canBeTakenOut(food)) return;
+    if (!_hasSomethingToApplyTo(menu, excluding: food)) {
+      // Said out loud, not left to a tooltip. The button stays enabled so the
+      // tap cannot fall through to the row behind and *add* the component
+      // (see the note on it), which leaves this as the only place the refusal
+      // can be explained to somebody using a finger rather than a mouse or a
+      // screen reader (§6.3).
+      _say('Pick something for ${food.name} to come out of first.');
+      return;
+    }
+    setState(() => _picks[food.id] = -1);
+  }
+
+  /// One sentence, where the tap happened, in words rather than a colour.
+  void _say(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      );
+  }
+
   void _setCount(Food food, double count, List<Food> menu) => setState(() {
-    if (count > 0) {
+    if (count != 0) {
       _picks[food.id] = count;
       return;
     }
@@ -71,14 +118,17 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
     // live in both or the invariant holds only on the path somebody happened
     // to test.
     _picks.remove(food.id);
-    _sweepStrandedModifiers(menu);
+    _sweepStrandedDeductions(menu);
   });
 
-  /// Drops any modifier left with nothing to come off.
-  void _sweepStrandedModifiers(List<Food> menu) {
+  /// Drops anything left with nothing to come off — a modifier, or a
+  /// component somebody took out of a meal that is no longer there.
+  void _sweepStrandedDeductions(List<Food> menu) {
     if (_hasSomethingToApplyTo(menu)) return;
     for (final Food food in menu) {
-      if (food.isModifier) _picks.remove(food.id);
+      if (food.isModifier || (_picks[food.id] ?? 0) < 0) {
+        _picks.remove(food.id);
+      }
     }
   }
 
@@ -88,6 +138,16 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
         MenuPick(food: food, count: count),
   ];
 
+  /// What the picks come to, for the guard below.
+  ///
+  /// A food with no serving contributes nothing and is not a gap here: it is
+  /// an unquantified line, which the editor flags in its own right.
+  Macros _total(List<MenuPick> picks) => Macros.sum(<Macros>[
+    for (final MenuPick pick in picks)
+      if (pick.food.defaultServing case final ServingOption serving)
+        MacroCalculator.forServings(serving, pick.count),
+  ]);
+
   void _build(List<Food> menu) {
     final List<MenuPick> picks = _picked(menu);
     if (picks.isEmpty) return;
@@ -95,7 +155,20 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
     // burger while this sheet is open can leave the wrap standing alone —
     // and a greyed row cannot be tapped to unpick it. Refusing here is the
     // last place before a −180 kcal meal becomes a recipe.
-    if (picks.every((MenuPick pick) => pick.food.isModifier)) return;
+    if (!_hasSomethingToApplyTo(menu)) return;
+    // And "something real is picked" is not the same question as "this adds
+    // up". Three calories of lettuce satisfied the rule above while a burger
+    // came out underneath it, and the builder assembled a meal of −377 kcal —
+    // which §5.2 says cannot happen, and which the macro calculator, the
+    // spec and the tests all said the builder would not do. Same predicate
+    // the calculator uses, so the two cannot disagree about one meal.
+    if (_total(picks).isBelowNothing) {
+      _say(
+        'That comes to less than nothing. Take out less, or add what it is '
+        'coming out of.',
+      );
+      return;
+    }
     context.pushReplacement(
       '/recipe/new',
       extra: RecipeDraft.fromMenu(restaurant: _restaurant!, picks: picks),
@@ -158,7 +231,10 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
                 sections: RestaurantMenu.sectionsFor(chosen, library),
                 picks: _picks,
                 hasSomethingToApplyTo: _hasSomethingToApplyTo(menu),
+                canRemove: (Food food) =>
+                    _hasSomethingToApplyTo(menu, excluding: food),
                 onToggle: (Food food) => _toggle(food, menu),
+                onRemove: (Food food) => _remove(food, menu),
                 onCount: (Food food, double count) =>
                     _setCount(food, count, menu),
                 gutter: gutter,
@@ -270,8 +346,10 @@ class _Menu extends StatelessWidget {
     required this.sections,
     required this.picks,
     required this.onToggle,
+    required this.onRemove,
     required this.onCount,
     required this.hasSomethingToApplyTo,
+    required this.canRemove,
     required this.gutter,
   });
 
@@ -281,7 +359,12 @@ class _Menu extends StatelessWidget {
   /// Whether anything a modifier could come off is picked yet.
   final bool hasSomethingToApplyTo;
 
+  /// Whether this row in particular can be taken out — which is the same
+  /// question, asked without counting the row itself.
+  final bool Function(Food food) canRemove;
+
   final ValueChanged<Food> onToggle;
+  final ValueChanged<Food> onRemove;
   final void Function(Food food, double count) onCount;
   final double gutter;
 
@@ -320,7 +403,9 @@ class _Menu extends StatelessWidget {
               food: food,
               count: picks[food.id],
               canPick: !food.isModifier || hasSomethingToApplyTo,
+              canRemove: canRemove(food),
               onToggle: () => onToggle(food),
+              onRemove: () => onRemove(food),
               onCount: (double count) => onCount(food, count),
             ),
             const SizedBox(height: HearthSpacing.sm),
@@ -337,13 +422,16 @@ class _MenuRow extends StatelessWidget {
     required this.food,
     required this.count,
     required this.canPick,
+    required this.canRemove,
     required this.onToggle,
+    required this.onRemove,
     required this.onCount,
   });
 
   final Food food;
 
-  /// Null when this one is not picked.
+  /// Null when this one is not picked. Negative when it is being taken out of
+  /// the meal rather than put in (spec §5.2).
   final double? count;
 
   /// False for a modifier with nothing yet to apply to. Shown greyed with the
@@ -351,7 +439,12 @@ class _MenuRow extends StatelessWidget {
   /// pick is harder to understand than one that says why it is waiting.
   final bool canPick;
 
+  /// Whether this component can be taken out — which needs something else
+  /// real to take it out of, for the same reason a modifier does.
+  final bool canRemove;
+
   final VoidCallback onToggle;
+  final VoidCallback onRemove;
   final ValueChanged<double> onCount;
 
   @override
@@ -359,6 +452,7 @@ class _MenuRow extends StatelessWidget {
     final HearthColors colors = context.colors;
     final double? picked = count;
     final bool isPicked = picked != null;
+    final bool isRemoved = (picked ?? 0) < 0;
     final MenuPick pick = MenuPick(food: food, count: picked ?? 1);
     final ServingOption? serving = food.defaultServing;
     // What you are actually having, not the serving *and* what you are having
@@ -376,91 +470,154 @@ class _MenuRow extends StatelessWidget {
     final String portion = serving == null
         ? ''
         : '${isPicked ? pick.portionLabel : serving.label} · $calories';
+    // The same sentence for both kinds of deduction, because they read the
+    // same way to somebody eating: one is the chain's own row, the other is
+    // an ordinary row picked backwards.
+    final String? deduction = food.isModifier
+        ? (canPick ? 'Takes away' : 'Takes away — pick something first')
+        : isRemoved
+        ? 'Taking it out'
+        : null;
 
-    return Semantics(
-      // One thing to a screen reader: a checkbox, a name and a portion read
-      // separately is three announcements for one row (§6.3).
-      label: '${food.name}${portion.isEmpty ? '' : ', $portion'}',
-      selected: isPicked,
-      excludeSemantics: true,
-      child: Material(
-        color: isPicked ? colors.surfaceElevated : colors.surface,
+    return Material(
+      color: isPicked ? colors.surfaceElevated : colors.surface,
+      borderRadius: BorderRadius.circular(HearthRadius.md),
+      child: InkWell(
+        // Unpicking is always allowed. A modifier can end up picked with
+        // nothing left to apply to — the menu is watched and the picks are
+        // not, so a partner can delete the burger out from under it — and a
+        // row that cannot be tapped would leave no way out of that.
+        onTap: canPick || isPicked ? onToggle : null,
         borderRadius: BorderRadius.circular(HearthRadius.md),
-        child: InkWell(
-          // Unpicking is always allowed. A modifier can end up picked with
-          // nothing left to apply to — the menu is watched and the picks are
-          // not, so a partner can delete the burger out from under it — and a
-          // row that cannot be tapped would leave no way out of that.
-          onTap: canPick || isPicked ? onToggle : null,
-          borderRadius: BorderRadius.circular(HearthRadius.md),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(HearthRadius.md),
-              border: Border.all(
-                color: isPicked ? colors.accent : colors.outline,
-              ),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(HearthRadius.md),
+            border: Border.all(
+              color: isPicked ? colors.accent : colors.outline,
             ),
-            padding: const EdgeInsets.all(HearthSpacing.md),
-            child: Row(
-              children: <Widget>[
-                // Icon as well as colour, never colour alone (§6.3).
-                Icon(
-                  isPicked
-                      ? Icons.check_circle
-                      : food.isModifier
-                      ? Icons.remove_circle_outline
-                      : Icons.circle_outlined,
-                  size: 20,
-                  color: isPicked ? colors.accent : colors.textMuted,
-                ),
-                const SizedBox(width: HearthSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          ),
+          padding: const EdgeInsets.all(HearthSpacing.md),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: Semantics(
+                  // One thing to a screen reader: a checkbox, a name and a
+                  // portion read separately is three announcements for one
+                  // row (§6.3). Only what the row *says*, though — the
+                  // controls beside it keep their own labels, or a screen
+                  // reader would be told the row is tappable and never told
+                  // there is a way to take the component out of it.
+                  label:
+                      '${food.name}'
+                      '${deduction == null ? '' : ', $deduction'}'
+                      '${portion.isEmpty ? '' : ', $portion'}',
+                  // Only where the row can actually be picked. A modifier
+                  // waiting for something to apply to has no tap, and a node
+                  // that announces itself as selected-or-not and then cannot
+                  // be activated tells a screen-reader user they made the
+                  // mistake (§6.3). Unselectable, it is a line of text
+                  // saying what it is waiting for, which is the truth.
+                  selected: canPick || isPicked ? isPicked : null,
+                  excludeSemantics: true,
+                  child: Row(
                     children: <Widget>[
-                      Text(
-                        food.name,
-                        style: context.text.ingredient.copyWith(
-                          color: canPick ? null : colors.textMuted,
+                      // Icon as well as colour, never colour alone (§6.3).
+                      Icon(
+                        isRemoved
+                            ? Icons.do_not_disturb_on_outlined
+                            : isPicked
+                            ? Icons.check_circle
+                            : food.isModifier
+                            ? Icons.remove_circle_outline
+                            : Icons.circle_outlined,
+                        size: 20,
+                        color: isPicked ? colors.accent : colors.textMuted,
+                      ),
+                      const SizedBox(width: HearthSpacing.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              food.name,
+                              style: context.text.ingredient.copyWith(
+                                color: canPick ? null : colors.textMuted,
+                              ),
+                            ),
+                            if (portion.isNotEmpty) ...<Widget>[
+                              const SizedBox(height: HearthSpacing.xxs),
+                              Text(
+                                portion,
+                                style: context.text.metadata.copyWith(
+                                  color: colors.textMuted,
+                                ),
+                              ),
+                            ],
+                            // In words, so a deduction reads as one without
+                            // the colour or the icon (§6.3) — and for a
+                            // modifier, why it is waiting, rather than a row
+                            // that silently does nothing when tapped.
+                            if (deduction case final String said) ...<Widget>[
+                              const SizedBox(height: HearthSpacing.xxs),
+                              Text(
+                                said,
+                                style: context.text.metadata.copyWith(
+                                  color: colors.textMuted,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
-                      if (portion.isNotEmpty) ...<Widget>[
-                        const SizedBox(height: HearthSpacing.xxs),
-                        Text(
-                          portion,
-                          style: context.text.metadata.copyWith(
-                            color: colors.textMuted,
-                          ),
-                        ),
-                      ],
-                      // Why it is waiting, rather than a row that silently
-                      // does nothing when tapped.
-                      if (food.isModifier) ...<Widget>[
-                        const SizedBox(height: HearthSpacing.xxs),
-                        Text(
-                          canPick
-                              ? 'Takes away'
-                              : 'Takes away — pick something first',
-                          style: context.text.metadata.copyWith(
-                            color: colors.textMuted,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
-                // Only where there is something to count. An unpicked row
-                // showing a stepper invites setting a number on a thing you
-                // have not said you had.
-                // And never for a modifier, which is one or none: the
-                // deduction is for taking the bun off, and there is only one
-                // bun.
-                if (isPicked && !food.isModifier) ...<Widget>[
-                  const SizedBox(width: HearthSpacing.sm),
-                  _Stepper(count: picked, onChanged: onCount),
-                ],
+              ),
+              // "No lettuce": the published burger already counted it, so the
+              // ordinary row comes out of the meal instead of going in. Never
+              // on a modifier, which is a deduction already, and never on
+              // something already picked — unpick it first, which is the one
+              // tap that says what it does.
+              // And never on a row the sheet gave no portion — see
+              // [RestaurantMenu.canBeTakenOut], which is where both rules
+              // live so this screen and the domain cannot disagree.
+              if (RestaurantMenu.canBeTakenOut(food) && !isPicked) ...<Widget>[
+                const SizedBox(width: HearthSpacing.sm),
+                IconButton(
+                  // Enabled even when it will refuse, and that is deliberate:
+                  // a disabled IconButton does not take the tap, so it falls
+                  // through to the row behind and *adds* the component —
+                  // exactly the opposite of the control that was pressed.
+                  // `_remove` is where the rule lives, and it holds whatever
+                  // the menu did while this screen was open.
+                  onPressed: onRemove,
+                  visualDensity: VisualDensity.compact,
+                  color: canRemove ? null : colors.textMuted,
+                  // Named, not "take it out": read on its own by a screen
+                  // reader it would be a control with no subject. It says
+                  // what it is waiting for rather than disappearing until its
+                  // turn, the way the modifier rows do.
+                  tooltip: canRemove
+                      ? 'Take ${food.name} out'
+                      : 'Take ${food.name} out — pick something first',
+                  icon: const Icon(Icons.do_not_disturb_on_outlined, size: 20),
+                ),
               ],
-            ),
+              // Only where there is something to count. An unpicked row
+              // showing a stepper invites setting a number on a thing you
+              // have not said you had.
+              // And never for a modifier, which is one or none: the
+              // deduction is for taking the bun off, and there is only one
+              // bun.
+              if (isPicked && !food.isModifier) ...<Widget>[
+                const SizedBox(width: HearthSpacing.sm),
+                _Stepper(
+                  count: picked,
+                  removing: isRemoved,
+                  onChanged: onCount,
+                ),
+              ],
+            ],
           ),
         ),
       ),
@@ -472,10 +629,21 @@ class _MenuRow extends StatelessWidget {
 ///
 /// Quarters would be false precision against a scoop, and anything above a
 /// few is not a portion but a second meal.
+///
+/// A portion being taken out of the meal is counted the same way, on its
+/// magnitude: two slices of cheese off a double is −2, and the buttons say
+/// "more" and "less" of what is being taken out rather than walking a number
+/// up through zero and out the other side.
 class _Stepper extends StatelessWidget {
-  const _Stepper({required this.count, required this.onChanged});
+  const _Stepper({
+    required this.count,
+    required this.onChanged,
+    this.removing = false,
+  });
 
+  /// Signed: negative when this component is being taken out.
   final double count;
+  final bool removing;
   final ValueChanged<double> onChanged;
 
   static const double _step = 0.5;
@@ -484,34 +652,57 @@ class _Stepper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    final String label = count == count.roundToDouble()
-        ? '${count.round()}×'
-        : '$count×';
+    final double portions = count.abs();
+    final String number = portions == portions.roundToDouble()
+        ? '${portions.round()}'
+        : '$portions';
+    // The real minus again, in the text, so "−1×" cannot be mistaken for "1×"
+    // by anybody reading or hearing it (§6.3).
+    final String label = removing ? '−$number×' : '$number×';
+    void set(double next) => onChanged(removing ? -next : next);
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        IconButton(
-          onPressed: count <= _step ? null : () => onChanged(count - _step),
-          visualDensity: VisualDensity.compact,
-          tooltip: 'One less',
-          icon: const Icon(Icons.remove_circle_outline, size: 20),
-        ),
-        SizedBox(
-          width: 34,
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: context.text.ingredient.copyWith(color: colors.textPrimary),
+    // A disabled `IconButton` does not take the tap. It falls through to
+    // whatever is behind it — here the row's own `InkWell`, which unpicks the
+    // item — so "One less" at half a portion deleted the burger from the
+    // meal, and "One more" at four did the same. The same mechanism the
+    // take-out button beside this one already works around, and the reason it
+    // is enabled even when it will refuse.
+    //
+    // Swallowed rather than worked around, because a stepper at its limit
+    // *should* be disabled: Material greys it and a screen reader says so,
+    // which is a truer answer than a button that looks live and declines.
+    // This stops the tap at the stepper instead, including in the gaps
+    // between the buttons.
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {},
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          IconButton(
+            onPressed: portions <= _step ? null : () => set(portions - _step),
+            visualDensity: VisualDensity.compact,
+            tooltip: removing ? 'Take out less' : 'One less',
+            icon: const Icon(Icons.remove_circle_outline, size: 20),
           ),
-        ),
-        IconButton(
-          onPressed: count >= _max ? null : () => onChanged(count + _step),
-          visualDensity: VisualDensity.compact,
-          tooltip: 'One more',
-          icon: const Icon(Icons.add_circle_outline, size: 20),
-        ),
-      ],
+          SizedBox(
+            width: 34,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: context.text.ingredient.copyWith(
+                color: colors.textPrimary,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: portions >= _max ? null : () => set(portions + _step),
+            visualDensity: VisualDensity.compact,
+            tooltip: removing ? 'Take out more' : 'One more',
+            icon: const Icon(Icons.add_circle_outline, size: 20),
+          ),
+        ],
+      ),
     );
   }
 }

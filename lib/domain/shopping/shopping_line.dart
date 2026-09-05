@@ -114,14 +114,23 @@ class ShoppingLine {
   ///
   /// Floored at zero: having more than you need does not mean buying a
   /// negative amount of it, it means buying none.
+  ///
+  /// The floor applies to the *need* as well as to the subtraction, which it
+  /// used to skip whenever the cupboard had said nothing. A meal built as
+  /// "burger, no lettuce" carries a −1 oz line (spec §5.2); flip its "Ate
+  /// out" switch off in the editor and the recipe stops being skipped, so the
+  /// consolidator sums that negative into a line of its own. Handed on
+  /// unfloored it reached the store hand-off, where `CartQuantity` clamps to
+  /// at least one — and the export ordered one of the very thing being
+  /// subtracted.
   Quantity? get toBuy {
     final Quantity? need =
         wanted ?? (planned.length == 1 ? planned.first : null);
     if (need == null) return null;
-    if (onHand == null) return need;
-    if (onHand!.kind != need.kind) return need;
 
-    final double left = need.canonicalAmount - onHand!.canonicalAmount;
+    final double left = onHand == null || onHand!.kind != need.kind
+        ? need.canonicalAmount
+        : need.canonicalAmount - onHand!.canonicalAmount;
     return Quantity.canonical(
       canonicalAmount: left <= 0 ? 0 : left,
       kind: need.kind,
