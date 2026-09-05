@@ -9,9 +9,16 @@ own source. There is no column to slip, which is the entire failure mode the
 other two seeds were built around. The rows below are lifted from that markup
 by class name; nothing was transcribed by eye or by model.
 
-Two checks were run over the extraction and both are worth stating, since
-neither is visible in the output: every row's macros reconcile with its own
-calorie count by Atwater, all 216 of them; and exactly one value is absent
+Two checks were run over the extraction, since neither is visible in the
+output. Every row's macros were compared with its own printed calorie count by
+Atwater (4/4/9), and none deviates by more than 30% or 60 kcal, whichever is
+larger. That bound is loose on purpose and proves only what it can: it catches
+a row of numbers attached to the wrong item, which is the failure this check
+exists for. It is not a claim that the arithmetic is tight — fourteen rows are
+more than 10% out, and "Single Steakburger (No Cheese)" is 380 against an
+Atwater 324. Those are Freddy's own numbers, faithfully copied.
+
+Second, exactly one value is absent
 from the page — the cholesterol for a regular order of fries, which is
 therefore null here rather than zero (spec §5.6).
 
@@ -21,9 +28,15 @@ publishes it as a deduction — minus 180 calories, minus 25 g of carbohydrate
 negative food and the schema refuses one, which is right: a food that gives
 calories back is not a food. Anyone eating a lettuce-wrapped burger logs the
 burger and is about 180 calories high. Modelling a modifier is a spec
-question, not something to smuggle into a seed. `emit` below drops any row
-with a negative value and names it, so if Freddy's publishes another the run
-says so rather than passing it to a constraint.
+question, not something to smuggle into a seed. The loop below drops any row with a
+negative value and names it, so if Freddy's publishes another the run says so
+rather than handing it to a constraint.
+
+Five rows carry `is_zero_calorie`: the three seasoning portions and both
+mustards, which Freddy's publishes as zero across all four macros with only
+sodium. Without the flag `needsAttention` would call them half-filled imports,
+and `foods_update_household` requires a household, so nobody could ever clear
+it from the app (spec §5.5).
 
 Freddy's publishes no serving sizes, so every row is "1 serving", the same
 answer Cava's table got for the same reason. For a steakburger or a concrete
@@ -314,9 +327,17 @@ for section, items in FREDDYS:
         food_id = det("menu/food/" + key)
         serving_id = det("menu/serving/" + key)
 
+        # A condiment a restaurant publishes as four zeros is not a
+        # half-filled import, and `needsAttention` would call it one forever:
+        # `foods_update_household` requires a household, so a client can never
+        # clear the flag on a global food. A seed is the only place it can be
+        # said (spec §5.5).
+        zero = not any((kcal, protein, carb, fat))
+
         food_rows.append(
-            "    ('%s'::uuid, '%s', 'Freddy''s', '%s', %d)"
-            % (food_id, sql(name), sql(section), order)
+            "    ('%s'::uuid, '%s', 'Freddy''s', '%s', %d, %s)"
+            % (food_id, sql(name), sql(section), order,
+               "true" if zero else "false")
         )
         serving_rows.append(
             "    ('%s'::uuid, '%s'::uuid, '1 serving', 1.0, 'count', 'item',\n"
@@ -342,9 +363,15 @@ HEADER = """\
 -- Cava seeds were built around. The rows were lifted by class name; nothing
 -- was transcribed by eye or by model.
 --
--- Every row's macros reconcile with its own calorie count by Atwater, all 216
--- of them. Exactly one value is missing from the page: the cholesterol for a
--- regular order of fries, which is null here rather than zero (spec 5.6).
+-- Every row's macros were compared with its own printed calorie count by
+-- Atwater (4/4/9); none deviates by more than 30%% or 60 kcal, whichever is
+-- larger. That bound is loose on purpose and catches what it is for: a row of
+-- numbers attached to the wrong item. It is not a claim that the arithmetic is
+-- tight -- fourteen rows are more than 10%% out, which is what Freddy's
+-- published.
+--
+-- Exactly one value is missing from the page: the cholesterol for a regular
+-- order of fries, which is null here rather than zero (spec 5.6).
 --
 -- Two rows are absent: both copies of "Make any Sandwich a Lettuce Wrap",
 -- which Freddy's publishes as a deduction -- minus 180 calories, minus 25 g of
@@ -352,6 +379,12 @@ HEADER = """\
 -- Hearth has no negative food and `food_serving_options` refuses one, which is
 -- right: a food that gives calories back is not a food. A lettuce-wrapped
 -- burger is logged as the burger, and reads about 180 calories high.
+--
+-- Five rows carry `is_zero_calorie`: the three seasoning portions and both
+-- mustards, which Freddy's publishes as zero across all four macros with only
+-- sodium. Without the flag `needsAttention` would call them half-filled
+-- imports, and `foods_update_household` requires a household, so nobody could
+-- ever clear it from the app (spec 5.5).
 --
 -- Freddy's publishes no serving sizes, so every row is "1 serving" -- the same
 -- answer Cava's table got, for the same reason.
@@ -369,21 +402,22 @@ HEADER = """\
 
 insert into public.foods (
   id, household_id, name, brand, menu_group, menu_order,
-  source, is_deleted, updated_at
+  source, is_zero_calorie, is_deleted, updated_at
 )
 select v.id, null, v.name, v.brand, v.menu_group, v.menu_order,
-       'restaurant', false, now()
+       'restaurant', v.is_zero_calorie, false, now()
 from (values
 %s
-) as v (id, name, brand, menu_group, menu_order)
+) as v (id, name, brand, menu_group, menu_order, is_zero_calorie)
 on conflict (id) do update set
-  name       = excluded.name,
-  brand      = excluded.brand,
-  menu_group = excluded.menu_group,
-  menu_order = excluded.menu_order,
-  source     = excluded.source,
-  is_deleted = false,
-  updated_at = now();
+  name            = excluded.name,
+  brand           = excluded.brand,
+  menu_group      = excluded.menu_group,
+  menu_order      = excluded.menu_order,
+  source          = excluded.source,
+  is_zero_calorie = excluded.is_zero_calorie,
+  is_deleted      = false,
+  updated_at      = now();
 
 insert into public.food_serving_options (
   id, food_id, label, amount_canonical, amount_kind, amount_unit,

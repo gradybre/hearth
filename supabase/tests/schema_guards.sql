@@ -558,6 +558,43 @@ begin
 end;
 $$;
 
+-- ── A seeded food is never "needs attention" (spec §5.5) ───────────────────
+--
+-- `needsAttention` means a food cannot actually be logged as it stands, and
+-- the library offers a filter for exactly that. A restaurant's own condiments
+-- break it: Freddy's mustard and steakburger seasoning are published as zero
+-- across all four macros with only sodium, which is the shape of a half-filled
+-- import and is here the restaurant's real answer.
+--
+-- `is_zero_calorie` is the column that tells those apart, and a seed is the
+-- only place it can be set for a global food — `foods_update_household`
+-- requires a household, so a client can never clear the flag from the app. Get
+-- it wrong in a migration and five condiments sit in "needs attention"
+-- forever with no way out.
+do $$
+begin
+  if exists (
+    select 1
+    from public.foods f
+    where f.source = 'restaurant'
+      and f.household_id is null
+      and not f.is_zero_calorie
+      and exists (select 1 from public.food_serving_options o
+                  where o.food_id = f.id)
+      and not exists (
+        select 1 from public.food_serving_options o
+        where o.food_id = f.id
+          and (coalesce(o.kcal, 0) > 0 or coalesce(o.protein_g, 0) > 0
+               or coalesce(o.carb_g, 0) > 0 or coalesce(o.fat_g, 0) > 0)
+      )
+  ) then
+    raise exception 'a seeded food is stuck needing attention';
+  end if;
+
+  raise notice 'seeded zero-calorie guards passed';
+end;
+$$;
+
 -- ── A menu keeps its own shape (spec §5.2) ──────────────────────────────────
 --
 -- The builder lays a menu out by `menu_group` and `menu_order`, and both have
