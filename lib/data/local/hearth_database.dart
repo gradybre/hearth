@@ -49,7 +49,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 23;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -212,6 +212,17 @@ class HearthDatabase extends _$HearthDatabase {
         await _addColumnIfMissing(m, macroTargets, macroTargets.fiberG);
         await _addColumnIfMissing(m, macroTargets, macroTargets.sodiumMg);
         await _addColumnIfMissing(m, macroTargets, macroTargets.cholesterolMg);
+      }
+      // v23 lets a food be a modifier — a menu row a chain publishes as a
+      // deduction (spec §5.2). Additive, and false for everything already
+      // saved, which is what every one of them is.
+      if (from < 23) {
+        await _addColumnIfMissing(m, foods, foods.isModifier);
+        await _addColumnIfMissing(
+          m,
+          foodServingOptions,
+          foodServingOptions.isModifier,
+        );
       }
     },
     beforeOpen: (OpeningDetails details) async {

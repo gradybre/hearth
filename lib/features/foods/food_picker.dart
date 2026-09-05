@@ -6,6 +6,7 @@ import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../domain/foods/eatable_foods.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/text/text_normaliser.dart';
@@ -297,7 +298,9 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
                           const Center(child: CircularProgressIndicator()),
                       error: (Object e, StackTrace s) =>
                           Center(child: Text('Could not read foods.\n$e')),
-                      data: (List<Food> foods) {
+                      data: (List<Food> all) {
+                        // A modifier is a deduction, never a thing to pick.
+                        final List<Food> foods = eatableFoods(all);
                         final List<Food> visible = _rank(foods);
                         if (visible.isEmpty) {
                           return ListView(

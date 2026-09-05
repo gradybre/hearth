@@ -166,6 +166,7 @@ class FoodDraft {
     this.source = FoodSource.manual,
     this.isDefault = false,
     this.isZeroCalorie = false,
+    this.isModifier = false,
   });
 
   factory FoodDraft.blank() => const FoodDraft(
@@ -189,6 +190,7 @@ class FoodDraft {
     source: food.source,
     isDefault: food.isDefault,
     isZeroCalorie: food.isZeroCalorie,
+    isModifier: food.isModifier,
     servings: <ServingDraft>[
       for (final ServingOption option in food.servingOptions)
         ServingDraft(
@@ -235,6 +237,7 @@ class FoodDraft {
       source: food.source,
       isDefault: mapped.isDefault,
       isZeroCalorie: mapped.isZeroCalorie,
+      isModifier: mapped.isModifier,
       servings: <ServingDraft>[
         for (final ServingDraft serving in mapped.servings)
           ServingDraft(
@@ -344,6 +347,7 @@ class FoodDraft {
       source: source,
       isDefault: isDefault,
       isZeroCalorie: isZeroCalorie,
+      isModifier: isModifier,
       servings: <ServingDraft>[...kept, ...added],
     );
   }
@@ -374,6 +378,10 @@ class FoodDraft {
 
   /// Confirmed to carry no macros, rather than missing them (spec §5.5).
   final bool isZeroCalorie;
+
+  /// A menu row published as a deduction (spec §5.2), which is what permits
+  /// the negative macros the editor would otherwise refuse.
+  final bool isModifier;
 
   bool get isEditing => existingId != null;
 
@@ -435,6 +443,7 @@ class FoodDraft {
     List<ServingDraft>? servings,
     bool? isDefault,
     bool? isZeroCalorie,
+    bool? isModifier,
 
     /// Only the restaurant switch sets this. Everything else keeps the
     /// provenance the food arrived with — a food saved from Open Food Facts
@@ -454,6 +463,7 @@ class FoodDraft {
     source: source ?? this.source,
     isDefault: isDefault ?? this.isDefault,
     isZeroCalorie: isZeroCalorie ?? this.isZeroCalorie,
+    isModifier: isModifier ?? this.isModifier,
   );
 
   /// A zero macro reopens as an empty field, not a literal "0".

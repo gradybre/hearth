@@ -47,6 +47,7 @@ abstract final class FoodMapper {
     macrosOverridden: food.macrosOverridden,
     isDefault: food.isDefault,
     isZeroCalorie: food.isZeroCalorie,
+    isModifier: food.isModifier,
     isDeleted: food.isDeleted,
     updatedAt: food.updatedAt,
     servingOptions: <ServingOption>[
@@ -98,6 +99,7 @@ abstract final class FoodMapper {
         macrosOverridden: Value<bool>(food.macrosOverridden),
         isDefault: Value<bool>(food.isDefault),
         isZeroCalorie: Value<bool>(food.isZeroCalorie),
+        isModifier: Value<bool>(food.isModifier),
         isDeleted: Value<bool>(food.isDeleted),
         updatedAt: updatedAt,
       );
@@ -125,6 +127,11 @@ abstract final class FoodMapper {
             cholesterolMg: Value<double?>(
               food.servingOptions[i].macros.cholesterolMg,
             ),
+            // From the food, never from the serving. The column exists to
+            // carry the food's answer to where a hosted check constraint can
+            // see it, and a serving that disagreed would be refused by the
+            // composite foreign key anyway.
+            isModifier: Value<bool>(food.isModifier),
             sortOrder: Value<int>(i),
           ),
       ];
@@ -152,6 +159,7 @@ abstract final class FoodMapper {
     'macros_overridden': food.macrosOverridden,
     'is_default': food.isDefault,
     'is_zero_calorie': food.isZeroCalorie,
+    'is_modifier': food.isModifier,
     'is_deleted': food.isDeleted,
     'updated_at': updatedAt.toIso8601String(),
     'serving_options': <Map<String, Object?>>[

@@ -3493,6 +3493,21 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _isModifierMeta = const VerificationMeta(
+    'isModifier',
+  );
+  @override
+  late final GeneratedColumn<bool> isModifier = GeneratedColumn<bool>(
+    'is_modifier',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_modifier" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _isDeletedMeta = const VerificationMeta(
     'isDeleted',
   );
@@ -3538,6 +3553,7 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
     macrosOverridden,
     isDefault,
     isZeroCalorie,
+    isModifier,
     isDeleted,
     updatedAt,
   ];
@@ -3674,6 +3690,12 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
         ),
       );
     }
+    if (data.containsKey('is_modifier')) {
+      context.handle(
+        _isModifierMeta,
+        isModifier.isAcceptableOrUnknown(data['is_modifier']!, _isModifierMeta),
+      );
+    }
     if (data.containsKey('is_deleted')) {
       context.handle(
         _isDeletedMeta,
@@ -3765,6 +3787,10 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
         DriftSqlType.bool,
         data['${effectivePrefix}is_zero_calorie'],
       )!,
+      isModifier: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_modifier'],
+      )!,
       isDeleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
@@ -3812,6 +3838,10 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
 
   /// Confirmed to carry no macros — black coffee, sparkling water (§5.5).
   final bool isZeroCalorie;
+
+  /// A menu row published as a deduction rather than as something you order
+  /// (spec §5.2). Its servings may hold negative macros; nothing else may.
+  final bool isModifier;
   final bool isDeleted;
   final DateTime updatedAt;
   const FoodRow({
@@ -3832,6 +3862,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     required this.macrosOverridden,
     required this.isDefault,
     required this.isZeroCalorie,
+    required this.isModifier,
     required this.isDeleted,
     required this.updatedAt,
   });
@@ -3877,6 +3908,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     map['macros_overridden'] = Variable<bool>(macrosOverridden);
     map['is_default'] = Variable<bool>(isDefault);
     map['is_zero_calorie'] = Variable<bool>(isZeroCalorie);
+    map['is_modifier'] = Variable<bool>(isModifier);
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -3923,6 +3955,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       macrosOverridden: Value(macrosOverridden),
       isDefault: Value(isDefault),
       isZeroCalorie: Value(isZeroCalorie),
+      isModifier: Value(isModifier),
       isDeleted: Value(isDeleted),
       updatedAt: Value(updatedAt),
     );
@@ -3953,6 +3986,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       macrosOverridden: serializer.fromJson<bool>(json['macrosOverridden']),
       isDefault: serializer.fromJson<bool>(json['isDefault']),
       isZeroCalorie: serializer.fromJson<bool>(json['isZeroCalorie']),
+      isModifier: serializer.fromJson<bool>(json['isModifier']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -3978,6 +4012,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       'macrosOverridden': serializer.toJson<bool>(macrosOverridden),
       'isDefault': serializer.toJson<bool>(isDefault),
       'isZeroCalorie': serializer.toJson<bool>(isZeroCalorie),
+      'isModifier': serializer.toJson<bool>(isModifier),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -4001,6 +4036,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     bool? macrosOverridden,
     bool? isDefault,
     bool? isZeroCalorie,
+    bool? isModifier,
     bool? isDeleted,
     DateTime? updatedAt,
   }) => FoodRow(
@@ -4027,6 +4063,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     macrosOverridden: macrosOverridden ?? this.macrosOverridden,
     isDefault: isDefault ?? this.isDefault,
     isZeroCalorie: isZeroCalorie ?? this.isZeroCalorie,
+    isModifier: isModifier ?? this.isModifier,
     isDeleted: isDeleted ?? this.isDeleted,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -4061,6 +4098,9 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       isZeroCalorie: data.isZeroCalorie.present
           ? data.isZeroCalorie.value
           : this.isZeroCalorie,
+      isModifier: data.isModifier.present
+          ? data.isModifier.value
+          : this.isModifier,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -4086,6 +4126,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
           ..write('macrosOverridden: $macrosOverridden, ')
           ..write('isDefault: $isDefault, ')
           ..write('isZeroCalorie: $isZeroCalorie, ')
+          ..write('isModifier: $isModifier, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -4111,6 +4152,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     macrosOverridden,
     isDefault,
     isZeroCalorie,
+    isModifier,
     isDeleted,
     updatedAt,
   );
@@ -4135,6 +4177,7 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
           other.macrosOverridden == this.macrosOverridden &&
           other.isDefault == this.isDefault &&
           other.isZeroCalorie == this.isZeroCalorie &&
+          other.isModifier == this.isModifier &&
           other.isDeleted == this.isDeleted &&
           other.updatedAt == this.updatedAt);
 }
@@ -4157,6 +4200,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
   final Value<bool> macrosOverridden;
   final Value<bool> isDefault;
   final Value<bool> isZeroCalorie;
+  final Value<bool> isModifier;
   final Value<bool> isDeleted;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -4178,6 +4222,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     this.macrosOverridden = const Value.absent(),
     this.isDefault = const Value.absent(),
     this.isZeroCalorie = const Value.absent(),
+    this.isModifier = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -4200,6 +4245,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     this.macrosOverridden = const Value.absent(),
     this.isDefault = const Value.absent(),
     this.isZeroCalorie = const Value.absent(),
+    this.isModifier = const Value.absent(),
     this.isDeleted = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -4224,6 +4270,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     Expression<bool>? macrosOverridden,
     Expression<bool>? isDefault,
     Expression<bool>? isZeroCalorie,
+    Expression<bool>? isModifier,
     Expression<bool>? isDeleted,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -4247,6 +4294,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
       if (macrosOverridden != null) 'macros_overridden': macrosOverridden,
       if (isDefault != null) 'is_default': isDefault,
       if (isZeroCalorie != null) 'is_zero_calorie': isZeroCalorie,
+      if (isModifier != null) 'is_modifier': isModifier,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -4271,6 +4319,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     Value<bool>? macrosOverridden,
     Value<bool>? isDefault,
     Value<bool>? isZeroCalorie,
+    Value<bool>? isModifier,
     Value<bool>? isDeleted,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -4293,6 +4342,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
       macrosOverridden: macrosOverridden ?? this.macrosOverridden,
       isDefault: isDefault ?? this.isDefault,
       isZeroCalorie: isZeroCalorie ?? this.isZeroCalorie,
+      isModifier: isModifier ?? this.isModifier,
       isDeleted: isDeleted ?? this.isDeleted,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -4353,6 +4403,9 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     if (isZeroCalorie.present) {
       map['is_zero_calorie'] = Variable<bool>(isZeroCalorie.value);
     }
+    if (isModifier.present) {
+      map['is_modifier'] = Variable<bool>(isModifier.value);
+    }
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
@@ -4385,6 +4438,7 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
           ..write('macrosOverridden: $macrosOverridden, ')
           ..write('isDefault: $isDefault, ')
           ..write('isZeroCalorie: $isZeroCalorie, ')
+          ..write('isModifier: $isModifier, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -4547,6 +4601,21 @@ class $FoodServingOptionsTable extends FoodServingOptions
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _isModifierMeta = const VerificationMeta(
+    'isModifier',
+  );
+  @override
+  late final GeneratedColumn<bool> isModifier = GeneratedColumn<bool>(
+    'is_modifier',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_modifier" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -4563,6 +4632,7 @@ class $FoodServingOptionsTable extends FoodServingOptions
     sodiumMg,
     cholesterolMg,
     sortOrder,
+    isModifier,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4673,6 +4743,12 @@ class $FoodServingOptionsTable extends FoodServingOptions
         sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
       );
     }
+    if (data.containsKey('is_modifier')) {
+      context.handle(
+        _isModifierMeta,
+        isModifier.isAcceptableOrUnknown(data['is_modifier']!, _isModifierMeta),
+      );
+    }
     return context;
   }
 
@@ -4738,6 +4814,10 @@ class $FoodServingOptionsTable extends FoodServingOptions
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
       )!,
+      isModifier: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_modifier'],
+      )!,
     );
   }
 
@@ -4767,6 +4847,16 @@ class FoodServingOptionRow extends DataClass
   final double? sodiumMg;
   final double? cholesterolMg;
   final int sortOrder;
+
+  /// Carried from the food this belongs to and never authored on its own.
+  ///
+  /// It exists so the hosted `check (kcal >= 0 or is_modifier)` can see the
+  /// food's answer, since a check constraint cannot read another table. There
+  /// is deliberately **no** matching check here: a Drift `TableMigration`
+  /// rebuild applies a new CHECK to every row it copies, so a device already
+  /// holding a negative would fail to open its own database. The sign is
+  /// enforced in Dart instead, where the user can be told why.
+  final bool isModifier;
   const FoodServingOptionRow({
     required this.id,
     required this.foodId,
@@ -4782,6 +4872,7 @@ class FoodServingOptionRow extends DataClass
     this.sodiumMg,
     this.cholesterolMg,
     required this.sortOrder,
+    required this.isModifier,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4808,6 +4899,7 @@ class FoodServingOptionRow extends DataClass
       map['cholesterol_mg'] = Variable<double>(cholesterolMg);
     }
     map['sort_order'] = Variable<int>(sortOrder);
+    map['is_modifier'] = Variable<bool>(isModifier);
     return map;
   }
 
@@ -4835,6 +4927,7 @@ class FoodServingOptionRow extends DataClass
           ? const Value.absent()
           : Value(cholesterolMg),
       sortOrder: Value(sortOrder),
+      isModifier: Value(isModifier),
     );
   }
 
@@ -4858,6 +4951,7 @@ class FoodServingOptionRow extends DataClass
       sodiumMg: serializer.fromJson<double?>(json['sodiumMg']),
       cholesterolMg: serializer.fromJson<double?>(json['cholesterolMg']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      isModifier: serializer.fromJson<bool>(json['isModifier']),
     );
   }
   @override
@@ -4878,6 +4972,7 @@ class FoodServingOptionRow extends DataClass
       'sodiumMg': serializer.toJson<double?>(sodiumMg),
       'cholesterolMg': serializer.toJson<double?>(cholesterolMg),
       'sortOrder': serializer.toJson<int>(sortOrder),
+      'isModifier': serializer.toJson<bool>(isModifier),
     };
   }
 
@@ -4896,6 +4991,7 @@ class FoodServingOptionRow extends DataClass
     Value<double?> sodiumMg = const Value.absent(),
     Value<double?> cholesterolMg = const Value.absent(),
     int? sortOrder,
+    bool? isModifier,
   }) => FoodServingOptionRow(
     id: id ?? this.id,
     foodId: foodId ?? this.foodId,
@@ -4913,6 +5009,7 @@ class FoodServingOptionRow extends DataClass
         ? cholesterolMg.value
         : this.cholesterolMg,
     sortOrder: sortOrder ?? this.sortOrder,
+    isModifier: isModifier ?? this.isModifier,
   );
   FoodServingOptionRow copyWithCompanion(FoodServingOptionsCompanion data) {
     return FoodServingOptionRow(
@@ -4938,6 +5035,9 @@ class FoodServingOptionRow extends DataClass
           ? data.cholesterolMg.value
           : this.cholesterolMg,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      isModifier: data.isModifier.present
+          ? data.isModifier.value
+          : this.isModifier,
     );
   }
 
@@ -4957,7 +5057,8 @@ class FoodServingOptionRow extends DataClass
           ..write('fiberG: $fiberG, ')
           ..write('sodiumMg: $sodiumMg, ')
           ..write('cholesterolMg: $cholesterolMg, ')
-          ..write('sortOrder: $sortOrder')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('isModifier: $isModifier')
           ..write(')'))
         .toString();
   }
@@ -4978,6 +5079,7 @@ class FoodServingOptionRow extends DataClass
     sodiumMg,
     cholesterolMg,
     sortOrder,
+    isModifier,
   );
   @override
   bool operator ==(Object other) =>
@@ -4996,7 +5098,8 @@ class FoodServingOptionRow extends DataClass
           other.fiberG == this.fiberG &&
           other.sodiumMg == this.sodiumMg &&
           other.cholesterolMg == this.cholesterolMg &&
-          other.sortOrder == this.sortOrder);
+          other.sortOrder == this.sortOrder &&
+          other.isModifier == this.isModifier);
 }
 
 class FoodServingOptionsCompanion
@@ -5015,6 +5118,7 @@ class FoodServingOptionsCompanion
   final Value<double?> sodiumMg;
   final Value<double?> cholesterolMg;
   final Value<int> sortOrder;
+  final Value<bool> isModifier;
   final Value<int> rowid;
   const FoodServingOptionsCompanion({
     this.id = const Value.absent(),
@@ -5031,6 +5135,7 @@ class FoodServingOptionsCompanion
     this.sodiumMg = const Value.absent(),
     this.cholesterolMg = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.isModifier = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   FoodServingOptionsCompanion.insert({
@@ -5048,6 +5153,7 @@ class FoodServingOptionsCompanion
     this.sodiumMg = const Value.absent(),
     this.cholesterolMg = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.isModifier = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        foodId = Value(foodId),
@@ -5069,6 +5175,7 @@ class FoodServingOptionsCompanion
     Expression<double>? sodiumMg,
     Expression<double>? cholesterolMg,
     Expression<int>? sortOrder,
+    Expression<bool>? isModifier,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5086,6 +5193,7 @@ class FoodServingOptionsCompanion
       if (sodiumMg != null) 'sodium_mg': sodiumMg,
       if (cholesterolMg != null) 'cholesterol_mg': cholesterolMg,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (isModifier != null) 'is_modifier': isModifier,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5105,6 +5213,7 @@ class FoodServingOptionsCompanion
     Value<double?>? sodiumMg,
     Value<double?>? cholesterolMg,
     Value<int>? sortOrder,
+    Value<bool>? isModifier,
     Value<int>? rowid,
   }) {
     return FoodServingOptionsCompanion(
@@ -5122,6 +5231,7 @@ class FoodServingOptionsCompanion
       sodiumMg: sodiumMg ?? this.sodiumMg,
       cholesterolMg: cholesterolMg ?? this.cholesterolMg,
       sortOrder: sortOrder ?? this.sortOrder,
+      isModifier: isModifier ?? this.isModifier,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5171,6 +5281,9 @@ class FoodServingOptionsCompanion
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
+    if (isModifier.present) {
+      map['is_modifier'] = Variable<bool>(isModifier.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5194,6 +5307,7 @@ class FoodServingOptionsCompanion
           ..write('sodiumMg: $sodiumMg, ')
           ..write('cholesterolMg: $cholesterolMg, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('isModifier: $isModifier, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -15269,6 +15383,7 @@ typedef $$FoodsTableCreateCompanionBuilder = FoodsCompanion Function({
   Value<bool> macrosOverridden,
   Value<bool> isDefault,
   Value<bool> isZeroCalorie,
+  Value<bool> isModifier,
   Value<bool> isDeleted,
   required DateTime updatedAt,
   Value<int> rowid,
@@ -15291,6 +15406,7 @@ typedef $$FoodsTableUpdateCompanionBuilder = FoodsCompanion Function({
   Value<bool> macrosOverridden,
   Value<bool> isDefault,
   Value<bool> isZeroCalorie,
+  Value<bool> isModifier,
   Value<bool> isDeleted,
   Value<DateTime> updatedAt,
   Value<int> rowid,
@@ -15437,6 +15553,11 @@ class $$FoodsTableFilterComposer
 
   ColumnFilters<bool> get isZeroCalorie => $composableBuilder(
     column: $table.isZeroCalorie,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isModifier => $composableBuilder(
+    column: $table.isModifier,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -15595,6 +15716,11 @@ class $$FoodsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isModifier => $composableBuilder(
+    column: $table.isModifier,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
@@ -15675,6 +15801,11 @@ class $$FoodsTableAnnotationComposer
 
   GeneratedColumn<bool> get isZeroCalorie => $composableBuilder(
     column: $table.isZeroCalorie,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isModifier => $composableBuilder(
+    column: $table.isModifier,
     builder: (column) => column,
   );
 
@@ -15785,6 +15916,7 @@ class $$FoodsTableTableManager
                 Value<bool> macrosOverridden = const Value.absent(),
                 Value<bool> isDefault = const Value.absent(),
                 Value<bool> isZeroCalorie = const Value.absent(),
+                Value<bool> isModifier = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -15806,6 +15938,7 @@ class $$FoodsTableTableManager
                 macrosOverridden: macrosOverridden,
                 isDefault: isDefault,
                 isZeroCalorie: isZeroCalorie,
+                isModifier: isModifier,
                 isDeleted: isDeleted,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -15829,6 +15962,7 @@ class $$FoodsTableTableManager
                 Value<bool> macrosOverridden = const Value.absent(),
                 Value<bool> isDefault = const Value.absent(),
                 Value<bool> isZeroCalorie = const Value.absent(),
+                Value<bool> isModifier = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -15850,6 +15984,7 @@ class $$FoodsTableTableManager
                 macrosOverridden: macrosOverridden,
                 isDefault: isDefault,
                 isZeroCalorie: isZeroCalorie,
+                isModifier: isModifier,
                 isDeleted: isDeleted,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -15957,6 +16092,7 @@ typedef $$FoodServingOptionsTableCreateCompanionBuilder =
       Value<double?> sodiumMg,
       Value<double?> cholesterolMg,
       Value<int> sortOrder,
+      Value<bool> isModifier,
       Value<int> rowid,
     });
 typedef $$FoodServingOptionsTableUpdateCompanionBuilder =
@@ -15975,6 +16111,7 @@ typedef $$FoodServingOptionsTableUpdateCompanionBuilder =
       Value<double?> sodiumMg,
       Value<double?> cholesterolMg,
       Value<int> sortOrder,
+      Value<bool> isModifier,
       Value<int> rowid,
     });
 
@@ -16083,6 +16220,11 @@ class $$FoodServingOptionsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<bool> get isModifier => $composableBuilder(
+    column: $table.isModifier,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$FoodsTableFilterComposer get foodId {
     final $$FoodsTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -16181,6 +16323,11 @@ class $$FoodServingOptionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isModifier => $composableBuilder(
+    column: $table.isModifier,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$FoodsTableOrderingComposer get foodId {
     final $$FoodsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -16261,6 +16408,11 @@ class $$FoodServingOptionsTableAnnotationComposer
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
 
+  GeneratedColumn<bool> get isModifier => $composableBuilder(
+    column: $table.isModifier,
+    builder: (column) => column,
+  );
+
   $$FoodsTableAnnotationComposer get foodId {
     final $$FoodsTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -16332,6 +16484,7 @@ class $$FoodServingOptionsTableTableManager
                 Value<double?> sodiumMg = const Value.absent(),
                 Value<double?> cholesterolMg = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<bool> isModifier = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FoodServingOptionsCompanion(
                 id: id,
@@ -16348,6 +16501,7 @@ class $$FoodServingOptionsTableTableManager
                 sodiumMg: sodiumMg,
                 cholesterolMg: cholesterolMg,
                 sortOrder: sortOrder,
+                isModifier: isModifier,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -16366,6 +16520,7 @@ class $$FoodServingOptionsTableTableManager
                 Value<double?> sodiumMg = const Value.absent(),
                 Value<double?> cholesterolMg = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<bool> isModifier = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FoodServingOptionsCompanion.insert(
                 id: id,
@@ -16382,6 +16537,7 @@ class $$FoodServingOptionsTableTableManager
                 sodiumMg: sodiumMg,
                 cholesterolMg: cholesterolMg,
                 sortOrder: sortOrder,
+                isModifier: isModifier,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

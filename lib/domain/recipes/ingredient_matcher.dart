@@ -197,7 +197,12 @@ abstract final class IngredientMatcher {
   ///    what lets a menu match be applied rather than merely offered.
   ///
   /// Choosing one by hand is untouched in both directions — the picker is
-  /// unfiltered. This decides what is picked *for* you.
+  /// unfiltered on this axis. This decides what is picked *for* you.
+  ///
+  /// A **modifier** is the one exclusion that holds for both kinds. It is a
+  /// deduction, so matching one into a recipe would silently subtract from a
+  /// meal nobody asked it to — and a restaurant's modifier would otherwise be
+  /// a candidate for exactly the eaten-out recipes this is for.
   static List<Food> matchable(
     List<Food> library, {
     RecipeKind kind = RecipeKind.cooked,
@@ -206,6 +211,7 @@ abstract final class IngredientMatcher {
     return <Food>[
       for (final Food food in library)
         if (!food.isDeleted &&
+            !food.isModifier &&
             (food.source == FoodSource.restaurant) == wantRestaurant)
           food,
     ];

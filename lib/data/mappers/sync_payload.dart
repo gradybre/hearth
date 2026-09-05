@@ -107,6 +107,7 @@ abstract final class SyncPayload {
     macrosOverridden: json['macros_overridden'] == true,
     isDefault: json['is_default'] == true,
     isZeroCalorie: json['is_zero_calorie'] == true,
+    isModifier: json['is_modifier'] == true,
     isDeleted: json['is_deleted'] == true,
     updatedAt: updatedAt(json),
     servingOptions: <ServingOption>[
