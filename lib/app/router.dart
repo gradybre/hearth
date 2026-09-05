@@ -8,10 +8,9 @@ import '../features/account/settings_screen.dart';
 import '../features/foods/barcode_scan_screen.dart';
 import '../features/foods/food_draft.dart';
 import '../features/foods/food_editor_screen.dart';
-import '../features/foods/food_library_screen.dart';
 import '../features/foods/menu_import_screen.dart';
 import '../features/foods/seasonings_screen.dart';
-import '../features/plan/plan_screen.dart';
+import '../features/home/home_screen.dart';
 import '../features/recipes/default_sweep_screen.dart';
 import '../features/recipes/eat_out_screen.dart';
 import '../features/recipes/recipe_chat_screen.dart';
@@ -20,10 +19,9 @@ import '../features/recipes/recipe_draft.dart';
 import '../features/recipes/recipe_editor_screen.dart';
 import '../features/recipes/recipe_import_controller.dart';
 import '../features/recipes/recipe_import_screen.dart';
-import '../features/recipes/recipe_library_screen.dart';
-import '../features/shopping/shopping_screen.dart';
 import 'shell/app_shell.dart';
 import 'shell/destinations.dart';
+import 'shell/sections.dart';
 
 /// The app's route table.
 ///
@@ -41,9 +39,28 @@ import 'shell/destinations.dart';
 /// Detail screens push onto the root navigator as full-screen routes rather
 /// than into a per-section stack — which also keeps the shell out of the way
 /// while reading a recipe with messy hands.
-GoRouter buildRouter() => GoRouter(
-  initialLocation: foodDestinations.first.path,
+///
+/// **The home screen sits above the shell as a sibling, not as a parent.** A
+/// section is a route swap, not a nested navigator, for the same accessibility
+/// reason as above and for a second one: every path the app already uses —
+/// `/recipes`, `/plan`, `/recipe/:id`, `/food/:id` — keeps resolving exactly as
+/// it did, so a `context.push` from anywhere, and any link that was ever
+/// handed out, still lands where it always did. Nesting the sections under
+/// `/nutrition/...` would have renamed all of them for no gain the user can
+/// see.
+///
+/// [initialLocation] is where the app opens, which the user chooses in Settings
+/// (spec §6.2). It is passed in rather than read here because the answer is on
+/// the device and has to be in hand before the router exists — a route decided
+/// a frame late is a visible flash of the wrong screen.
+GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
+  initialLocation: initialLocation,
   routes: <RouteBase>[
+    GoRoute(
+      path: '/',
+      builder: (BuildContext context, GoRouterState state) =>
+          const HomeScreen(),
+    ),
     // Listed before the section route: these have two or more segments, so
     // they can never be mistaken for a section.
     // Still `/household`: the screen grew from the household page into the
@@ -156,11 +173,11 @@ GoRouter buildRouter() => GoRouter(
     GoRoute(
       path: '/:section',
       redirect: (BuildContext context, GoRouterState state) {
-        final String? section = state.pathParameters['section'];
-        final bool known = foodDestinations.any(
-          (AppDestination d) => d.path == '/$section',
-        );
-        return known ? null : foodDestinations.first.path;
+        // Unknown single-segment paths go home now rather than to the recipe
+        // library: home is the top of the app, and landing there says where
+        // you are instead of quietly putting you somewhere.
+        final String? tab = state.pathParameters['section'];
+        return sectionForPath('/$tab') == null ? '/' : null;
       },
       // One stable page key for every section: this is what keeps the shell
       // element — and therefore each section's scroll position — alive across
@@ -175,33 +192,34 @@ GoRouter buildRouter() => GoRouter(
   ],
 );
 
-int _indexForPath(String path) {
-  final int index = foodDestinations.indexWhere(
-    (AppDestination d) => d.path == path,
-  );
-  return index < 0 ? 0 : index;
-}
-
-/// Reads the current section from the router so the shell can rebuild without
-/// the page identity changing.
+/// Reads the current section and tab from the router so the shell can rebuild
+/// without the page identity changing.
+///
+/// Knows nothing about Recipes or Plan by name: it asks which section owns the
+/// current path and builds whatever that section says its tabs are. Adding
+/// Fitness is a matter of adding it to the registry (spec §6.2).
 class _ShellHost extends StatelessWidget {
   const _ShellHost();
 
   @override
   Widget build(BuildContext context) {
     final String location = GoRouterState.of(context).uri.path;
-    final int index = _indexForPath(location);
+    // Never null in practice — the route above redirects anything unmatched
+    // home — but a section that has been taken out should land somewhere real
+    // rather than throw.
+    final AppSection section = sectionForPath(location) ?? builtSections.first;
+    final List<AppDestination> tabs = section.destinations;
+    final int index = tabs.indexWhere((AppDestination d) => d.path == location);
 
     return AppShell(
-      currentIndex: index,
-      onDestinationSelected: (int i) => context.go(foodDestinations[i].path),
+      section: section,
+      currentIndex: index < 0 ? 0 : index,
+      onDestinationSelected: (int i) => context.go(tabs[i].path),
+      onLeaveSection: () => context.go('/'),
       child: IndexedStack(
-        index: index,
-        children: const <Widget>[
-          RecipeLibraryScreen(),
-          PlanScreen(),
-          ShoppingScreen(),
-          FoodLibraryScreen(),
+        index: index < 0 ? 0 : index,
+        children: <Widget>[
+          for (final AppDestination tab in tabs) tab.builder(),
         ],
       ),
     );

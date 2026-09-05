@@ -80,6 +80,7 @@ import '../domain/recipes/ingredient_matcher.dart';
 import '../domain/recipes/macro_calculator.dart';
 import '../domain/recipes/recipe_query.dart';
 import 'cook_timers.dart';
+import 'shell/launch_target.dart';
 import 'sync_controller.dart';
 import 'theme/theme_choice.dart';
 
@@ -718,6 +719,58 @@ class ThemeChoiceNotifier extends AsyncNotifier<ThemeChoice> {
       // Back to what is actually on the device, so what is on screen and what
       // the next launch will do are the same thing again.
       state = AsyncValue<ThemeChoice>.data(previous);
+      rethrow;
+    }
+  }
+}
+
+/// Which screen Hearth opens on (spec §6.2).
+///
+/// Device-local, like the theme and for a sharper reason: one person choosing
+/// to land in Nutrition must not decide where their partner's app opens.
+final AsyncNotifierProvider<LaunchTargetNotifier, LaunchTarget>
+launchTargetProvider =
+    AsyncNotifierProvider<LaunchTargetNotifier, LaunchTarget>(
+      LaunchTargetNotifier.new,
+    );
+
+/// The launch target already read off the device before the first frame, by
+/// `bootstrap`.
+///
+/// Null in anything that did not come through `main` — the router falls back to
+/// the home screen, and widget tests say what they want explicitly.
+final Provider<LaunchTarget?> bootLaunchTargetProvider =
+    Provider<LaunchTarget?>((Ref ref) => null);
+
+class LaunchTargetNotifier extends AsyncNotifier<LaunchTarget> {
+  PreferenceStore get _store => ref.read(preferenceStoreProvider);
+
+  @override
+  FutureOr<LaunchTarget> build() {
+    // Synchronously when the app came through main(). The router is built with
+    // a starting route, so a value that arrives a frame later is not a flash of
+    // the wrong colour — it is a flash of the wrong screen.
+    final LaunchTarget? atLaunch = ref.read(bootLaunchTargetProvider);
+    if (atLaunch != null) return atLaunch;
+    return _store.read(PreferenceStore.launchTarget).then(LaunchTarget.parse);
+  }
+
+  /// Changes where the app opens, and rethrows if the change could not be
+  /// stored.
+  ///
+  /// Nothing on screen moves when this is chosen — the whole of it happens on
+  /// the next launch — so unlike the theme there is no repaint worth being
+  /// optimistic for. The tick still moves first, because a settings row that
+  /// waits on sqlite before acknowledging a tap reads as broken.
+  Future<void> choose(LaunchTarget target) async {
+    final LaunchTarget previous = state.value ?? LaunchTarget.home;
+    state = AsyncValue<LaunchTarget>.data(target);
+    try {
+      await _store.write(PreferenceStore.launchTarget, target.stored);
+    } on Object {
+      // Back to what is actually on the device, so the tick and the next
+      // launch agree again.
+      state = AsyncValue<LaunchTarget>.data(previous);
       rethrow;
     }
   }

@@ -5,6 +5,7 @@ import '../core/env.dart';
 import '../data/auth/secure_session_storage.dart';
 import '../data/local/hearth_database.dart';
 import '../data/local/preference_store.dart';
+import 'shell/launch_target.dart';
 import 'theme/theme_choice.dart';
 
 /// What the app has in hand before its first frame.
@@ -13,6 +14,7 @@ class Boot {
     required this.connected,
     required this.database,
     required this.theme,
+    required this.launchTarget,
   });
 
   /// Whether Supabase was configured and started.
@@ -25,6 +27,12 @@ class Boot {
 
   /// The stored light/dark choice (spec §6.1).
   final ThemeChoice theme;
+
+  /// The screen the app was told to open on (spec §6.2). Read here for a
+  /// louder version of [theme]'s reason: the router is built with a starting
+  /// route, and a route decided after the first frame means watching the home
+  /// screen appear and then be replaced.
+  final LaunchTarget launchTarget;
 }
 
 /// Brings up anything that must exist before the first frame.
@@ -41,19 +49,29 @@ Future<Boot> bootstrap() async {
   // every cold start.
   final HearthDatabase database = HearthDatabase();
   ThemeChoice theme = ThemeChoice.system;
+  LaunchTarget launchTarget = LaunchTarget.home;
   try {
+    final PreferenceStore preferences = PreferenceStore(database);
     theme = ThemeChoice.parse(
-      await PreferenceStore(database).read(PreferenceStore.themeChoice),
+      await preferences.read(PreferenceStore.themeChoice),
+    );
+    launchTarget = LaunchTarget.parse(
+      await preferences.read(PreferenceStore.launchTarget),
     );
   } on Object {
     // A local cache that cannot be read is a real problem, but it is not this
     // function's to report: failing here would replace the app with a blank
-    // screen over a preference. Follow the device and let the failure surface
-    // where the data is actually needed.
+    // screen over a preference. Follow the device, open on the home screen,
+    // and let the failure surface where the data is actually needed.
   }
 
   if (!Env.isConfigured) {
-    return Boot(connected: false, database: database, theme: theme);
+    return Boot(
+      connected: false,
+      database: database,
+      theme: theme,
+      launchTarget: launchTarget,
+    );
   }
 
   // Rejects a secret key before it can reach a running app, not after.
@@ -70,5 +88,10 @@ Future<Boot> bootstrap() async {
       localStorage: SecureSessionStorage(),
     ),
   );
-  return Boot(connected: true, database: database, theme: theme);
+  return Boot(
+    connected: true,
+    database: database,
+    theme: theme,
+    launchTarget: launchTarget,
+  );
 }

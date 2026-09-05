@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
+import 'package:hearth/app/shell/launch_target.dart';
 import 'package:hearth/app/theme/hearth_theme.dart';
 import 'package:hearth/app/theme/theme_choice.dart';
 import 'package:hearth/data/adapters/data_export.dart';
@@ -80,6 +81,18 @@ Future<SettingsHarness> pumpSettings(
   return SettingsHarness(auth: auth, database: db);
 }
 
+/// The tick inside one particular answer's row.
+///
+/// The screen has two lists of mutually exclusive answers now, so counting
+/// checks across the whole screen no longer says anything.
+Finder tickOn(String label) => find.descendant(
+  of: find.ancestor(
+    of: find.text(label),
+    matching: find.byType(SettingsChoiceRow),
+  ),
+  matching: find.byIcon(Icons.check),
+);
+
 void main() {
   group('how the screen is laid out', () {
     testWidgets('it calls itself Settings, because that is what it is', (
@@ -99,6 +112,7 @@ void main() {
       for (final String section in <String>[
         'Account',
         'Appearance',
+        'Opens on',
         'Cook together',
         'Syncing',
         'Your data',
@@ -349,11 +363,14 @@ void main() {
       WidgetTester tester,
     ) async {
       // Which option is chosen has to survive being seen in greyscale
-      // (spec §6.3).
+      // (spec §6.3). Scoped to the row rather than counted across the screen:
+      // Appearance is now two lists of answers — the theme and the launch
+      // screen — and each carries its own tick.
       await pumpSettings(tester);
       await pumpFrames(tester);
 
-      expect(find.byIcon(Icons.check), findsOneWidget);
+      expect(tickOn(ThemeChoice.system.label), findsOneWidget);
+      expect(tickOn(ThemeChoice.dark.label), findsNothing);
     });
 
     testWidgets('picking dark writes it to the device, not to the household', (
@@ -419,6 +436,102 @@ void main() {
         reason: 'dark stayed ticked though nothing was written',
       );
       handle.dispose();
+    });
+  });
+
+  group('choosing where Hearth opens (spec §6.2)', () {
+    testWidgets('the home screen and every built section are offered', (
+      WidgetTester tester,
+    ) async {
+      // Read off the section registry rather than listed here, so a pillar
+      // added later offers itself without this screen being touched.
+      await pumpSettings(tester);
+
+      for (final LaunchTarget target in LaunchTarget.options) {
+        expect(find.text(target.label), findsOneWidget);
+      }
+      expect(
+        find.text('Nutrition'),
+        findsOneWidget,
+        reason: 'the one built section should be offerable as a landing',
+      );
+    });
+
+    testWidgets('a device that has never said lands on the home screen', (
+      WidgetTester tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpSettings(tester);
+      await pumpFrames(tester);
+
+      expect(tickOn(LaunchTarget.home.label), findsOneWidget);
+      expect(
+        tester.getSemantics(find.text(LaunchTarget.home.label)),
+        isSemantics(isSelected: true, isButton: true),
+      );
+      handle.dispose();
+    });
+
+    testWidgets('picking Nutrition writes it to the device, not the '
+        'household', (WidgetTester tester) async {
+      // The whole point of it being device-local: one person opening straight
+      // into Nutrition must not move where their partner's app opens.
+      final SettingsHarness harness = await pumpSettings(tester);
+      await pumpFrames(tester);
+
+      await tester.tap(find.text('Nutrition'));
+      await pumpFrames(tester);
+
+      expect(
+        await PreferenceStore(harness.database)
+            .read(PreferenceStore.launchTarget),
+        'section:nutrition',
+      );
+    });
+
+    testWidgets('and the tick moves to it', (WidgetTester tester) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpSettings(tester);
+      await pumpFrames(tester);
+
+      await tester.tap(find.text('Nutrition'));
+      await pumpFrames(tester);
+
+      expect(tickOn('Nutrition'), findsOneWidget);
+      expect(tickOn(LaunchTarget.home.label), findsNothing);
+      handle.dispose();
+    });
+
+    testWidgets('a choice that could not be saved goes back and says so', (
+      WidgetTester tester,
+    ) async {
+      // Nothing on screen moves when this is chosen — the whole of it happens
+      // on the next launch — so a silently failed write would show as a tick
+      // that lied until the app was next opened and then lied differently.
+      final HearthDatabase db = HearthDatabase.forTesting(
+        NativeDatabase.memory(),
+      );
+      addTearDown(db.close);
+      await pumpSettings(
+        tester,
+        database: db,
+        preferences: UnwritablePreferences(db),
+      );
+      await pumpFrames(tester);
+
+      await tester.tap(find.text('Nutrition'));
+      await pumpFrames(tester);
+
+      expect(find.textContaining('could not be saved'), findsOneWidget);
+      expect(tickOn(LaunchTarget.home.label), findsOneWidget);
+      expect(tickOn('Nutrition'), findsNothing);
+    });
+
+    testWidgets('it says the choice is this device only', (
+      WidgetTester tester,
+    ) async {
+      await pumpSettings(tester);
+      expect(find.textContaining('This device only'), findsOneWidget);
     });
   });
 

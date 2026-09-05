@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
+import '../../app/shell/launch_target.dart';
 import '../../app/sync_controller.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
@@ -565,7 +566,29 @@ class SettingsMessage extends StatelessWidget {
   }
 }
 
-// ── Appearance (spec §6.1) ───────────────────────────────────────────────────
+// ── Appearance (spec §6.1, §6.2) ─────────────────────────────────────────────
+
+/// How Hearth looks, and where it opens.
+///
+/// Two groups rather than one list: they are both answers to "how is this
+/// device set up", but a theme and a landing screen are not alternatives to
+/// each other, and seven tickable rows in a single card would read as one
+/// question with seven wrong answers.
+class _Appearance extends StatelessWidget {
+  const _Appearance();
+
+  @override
+  Widget build(BuildContext context) => const Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: <Widget>[
+      _ThemeChoiceSection(),
+      // Closer than the gap between top-level sections: these two belong
+      // together, and the spacing is what says so.
+      SizedBox(height: HearthSpacing.lg),
+      _LaunchTargetSection(),
+    ],
+  );
+}
 
 /// Light, dark, or whatever the device is doing.
 ///
@@ -573,14 +596,14 @@ class SettingsMessage extends StatelessWidget {
 /// fitting the moment dynamic type is turned up, and honouring type is not
 /// optional (spec §6.3). A list of options with a check against the chosen
 /// one grows downwards instead, which it can always afford to do.
-class _Appearance extends ConsumerStatefulWidget {
-  const _Appearance();
+class _ThemeChoiceSection extends ConsumerStatefulWidget {
+  const _ThemeChoiceSection();
 
   @override
-  ConsumerState<_Appearance> createState() => _AppearanceState();
+  ConsumerState<_ThemeChoiceSection> createState() => _ThemeChoiceState();
 }
 
-class _AppearanceState extends ConsumerState<_Appearance> {
+class _ThemeChoiceState extends ConsumerState<_ThemeChoiceSection> {
   /// Set when a choice could not be written and was taken back. The tick moves
   /// back on its own; without a word here the tap would simply look as though
   /// it had not happened.
@@ -606,34 +629,101 @@ class _AppearanceState extends ConsumerState<_Appearance> {
       title: 'Appearance',
       children: <Widget>[
         for (final ThemeChoice choice in ThemeChoice.values)
-          _ThemeOption(
-            choice: choice,
+          SettingsChoiceRow(
+            label: choice.label,
+            blurb: choice.blurb,
+            icon: choice.icon,
             selected: choice == current,
             onTap: () => _choose(choice),
           ),
-        if (_unsaved)
-          const Padding(
-            padding: EdgeInsets.all(HearthSpacing.md),
-            child: SettingsMessage(
-              text:
-                  'That could not be saved on this device, so Hearth has '
-                  'gone back to the last choice that was.',
-              isError: true,
-            ),
-          ),
+        if (_unsaved) const _CouldNotSave(),
       ],
     );
   }
 }
 
-class _ThemeOption extends StatelessWidget {
-  const _ThemeOption({
-    required this.choice,
+/// Which screen Hearth opens on (spec §6.2).
+///
+/// The options are the home screen plus every built section, read off the
+/// section registry — so a pillar added later offers itself here without this
+/// screen being touched.
+class _LaunchTargetSection extends ConsumerStatefulWidget {
+  const _LaunchTargetSection();
+
+  @override
+  ConsumerState<_LaunchTargetSection> createState() => _LaunchTargetState();
+}
+
+class _LaunchTargetState extends ConsumerState<_LaunchTargetSection> {
+  bool _unsaved = false;
+
+  Future<void> _choose(LaunchTarget target) async {
+    setState(() => _unsaved = false);
+    try {
+      await ref.read(launchTargetProvider.notifier).choose(target);
+    } on Object {
+      if (mounted) setState(() => _unsaved = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Home until the device says otherwise, which is also what an unread
+    // preference means.
+    final LaunchTarget current =
+        ref.watch(launchTargetProvider).value ?? LaunchTarget.home;
+
+    return SettingsSection(
+      title: 'Opens on',
+      blurb:
+          'Where Hearth starts when you open it. This device only — it does '
+          'not move anyone else\'s app.',
+      children: <Widget>[
+        for (final LaunchTarget target in LaunchTarget.options)
+          SettingsChoiceRow(
+            label: target.label,
+            blurb: target.blurb,
+            icon: target.icon,
+            selected: target == current,
+            onTap: () => _choose(target),
+          ),
+        if (_unsaved) const _CouldNotSave(),
+      ],
+    );
+  }
+}
+
+/// What a device that refused the write gets told.
+class _CouldNotSave extends StatelessWidget {
+  const _CouldNotSave();
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.all(HearthSpacing.md),
+    child: SettingsMessage(
+      text:
+          'That could not be saved on this device, so Hearth has gone back '
+          'to the last choice that was.',
+      isError: true,
+    ),
+  );
+}
+
+/// One answer in a list of mutually exclusive ones, ticked when it is the one
+/// in force.
+class SettingsChoiceRow extends StatelessWidget {
+  const SettingsChoiceRow({
+    required this.label,
+    required this.blurb,
+    required this.icon,
     required this.selected,
     required this.onTap,
+    super.key,
   });
 
-  final ThemeChoice choice;
+  final String label;
+  final String blurb;
+  final IconData icon;
   final bool selected;
   final VoidCallback onTap;
 
@@ -645,7 +735,7 @@ class _ThemeOption extends StatelessWidget {
       inMutuallyExclusiveGroup: true,
       selected: selected,
       button: true,
-      label: '${choice.label}. ${choice.blurb}',
+      label: '$label. $blurb',
       onTap: onTap,
       container: true,
       excludeSemantics: true,
@@ -661,7 +751,7 @@ class _ThemeOption extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Icon(
-                    choice.icon,
+                    icon,
                     size: 20,
                     color: selected ? colors.accent : colors.textSecondary,
                   ),
@@ -670,10 +760,10 @@ class _ThemeOption extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text(choice.label, style: context.text.body),
+                        Text(label, style: context.text.body),
                         const SizedBox(height: HearthSpacing.xxs),
                         Text(
-                          choice.blurb,
+                          blurb,
                           style: context.text.metadata.copyWith(
                             color: colors.textMuted,
                           ),

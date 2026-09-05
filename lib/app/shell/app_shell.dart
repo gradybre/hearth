@@ -5,43 +5,79 @@ import '../theme/hearth_colors.dart';
 import '../theme/hearth_spacing.dart';
 import '../theme/hearth_theme.dart';
 import 'destinations.dart';
+import 'sections.dart';
 
-/// The pillar-level app shell (spec §6.2).
+/// The shell one section lives in (spec §6.2).
 ///
 /// Desktop gets a sidebar, phone gets bottom tabs — "phone is capture and log,
 /// desktop is plan and manage". The switch is on available width, not on
 /// platform, so a narrow macOS window behaves like a phone rather than
 /// squeezing a sidebar into nothing.
+///
+/// The shell shows one section's tabs, not the app's — it is handed a
+/// [section] and reads its destinations. Which is why it also owns the way
+/// back out: the four screens inside know nothing about there being a home
+/// screen, and the way home has to be in the same place whichever one you are
+/// looking at. It sits at the top of the sidebar on a wide window and in a
+/// slim bar above the content on a narrow one, both of them saying "Home" in
+/// words rather than trusting an icon to carry it (spec §6.3).
 class AppShell extends StatelessWidget {
   const AppShell({
+    required this.section,
     required this.child,
     required this.currentIndex,
     required this.onDestinationSelected,
+    required this.onLeaveSection,
     super.key,
   });
 
   /// Width at or above which the sidebar replaces bottom tabs.
   static const double sidebarBreakpoint = 840;
 
+  /// Which room this is. Supplies the tabs and the name in the chrome.
+  final AppSection section;
+
   final Widget child;
   final int currentIndex;
   final ValueChanged<int> onDestinationSelected;
 
+  /// Back to the home screen.
+  final VoidCallback onLeaveSection;
+
   @override
   Widget build(BuildContext context) {
     final bool wide = MediaQuery.sizeOf(context).width >= sidebarBreakpoint;
-    return Scaffold(
-      backgroundColor: context.colors.background,
-      body: wide ? _wideLayout(context) : child,
-      // The timer bar sits above the tabs rather than inside a screen: a
-      // running timer belongs to the app, not to the recipe you happen to be
-      // looking at (spec §5.2). It renders nothing when nothing is on.
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          const CookTimerBar(),
-          if (!wide) _bottomTabs(context),
-        ],
+    return PopScope(
+      // Entering a section replaces the route rather than pushing onto it (see
+      // the router), so there is no home screen underneath to pop back to —
+      // and without this, a system back from Recipes would close the app. In a
+      // launcher-shaped app that is the wrong answer: back goes up a level,
+      // and up a level is home. From home itself, back leaves, which is where
+      // this scope no longer exists.
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (!didPop) onLeaveSection();
+      },
+      child: Scaffold(
+        backgroundColor: context.colors.background,
+        body: wide
+            ? _wideLayout(context)
+            : Column(
+                children: <Widget>[
+                  _SectionBar(section: section, onLeave: onLeaveSection),
+                  Expanded(child: child),
+                ],
+              ),
+        // The timer bar sits above the tabs rather than inside a screen: a
+        // running timer belongs to the app, not to the recipe you happen to be
+        // looking at (spec §5.2). It renders nothing when nothing is on.
+        bottomNavigationBar: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const CookTimerBar(),
+            if (!wide) _bottomTabs(context),
+          ],
+        ),
       ),
     );
   }
@@ -51,8 +87,10 @@ class AppShell extends StatelessWidget {
     return Row(
       children: <Widget>[
         _Sidebar(
+          section: section,
           currentIndex: currentIndex,
           onDestinationSelected: onDestinationSelected,
+          onLeave: onLeaveSection,
         ),
         VerticalDivider(width: 1, thickness: 1, color: colors.outline),
         Expanded(child: child),
@@ -77,7 +115,7 @@ class AppShell extends StatelessWidget {
         indicatorColor: colors.surfaceSunken,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         destinations: <NavigationDestination>[
-          for (final AppDestination d in foodDestinations)
+          for (final AppDestination d in section.destinations)
             NavigationDestination(
               icon: Icon(d.icon, color: colors.textSecondary),
               selectedIcon: Icon(d.selectedIcon, color: colors.accent),
@@ -98,18 +136,23 @@ class AppShell extends StatelessWidget {
 /// (spec §6.3), not something to hand to a widget that might drop them.
 class _Sidebar extends StatelessWidget {
   const _Sidebar({
+    required this.section,
     required this.currentIndex,
     required this.onDestinationSelected,
+    required this.onLeave,
   });
 
   static const double width = 208;
 
+  final AppSection section;
   final int currentIndex;
   final ValueChanged<int> onDestinationSelected;
+  final VoidCallback onLeave;
 
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
+    final List<AppDestination> tabs = section.destinations;
     return Container(
       width: width,
       color: colors.surface,
@@ -122,15 +165,161 @@ class _Sidebar extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            for (int i = 0; i < foodDestinations.length; i++)
+            // The way out, above everything it is a way out of.
+            _HomeItem(section: section, onTap: onLeave),
+            const SizedBox(height: HearthSpacing.sm),
+            // Which room you are in, so the tabs below are read as this
+            // section's rather than as the whole app's.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                HearthSpacing.md,
+                0,
+                HearthSpacing.md,
+                HearthSpacing.sm,
+              ),
+              child: Semantics(
+                header: true,
+                container: true,
+                child: Text(
+                  section.label,
+                  style: context.text.sectionHeader,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            for (int i = 0; i < tabs.length; i++)
               Padding(
                 padding: const EdgeInsets.only(bottom: HearthSpacing.xs),
                 child: _SidebarItem(
-                  destination: foodDestinations[i],
+                  destination: tabs[i],
                   selected: i == currentIndex,
                   onTap: () => onDestinationSelected(i),
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "‹ Home", at the top of the sidebar.
+class _HomeItem extends StatelessWidget {
+  const _HomeItem({required this.section, required this.onTap});
+
+  final AppSection section;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    return Semantics(
+      button: true,
+      // Says where it goes and what it leaves, because "Home" alone is
+      // ambiguous in an app whose sections are rooms (spec §6.3).
+      label: 'Home. Leave ${section.label} and go back to all of Hearth.',
+      onTap: onTap,
+      excludeSemantics: true,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(HearthRadius.md),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(HearthRadius.md),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: HearthTouch.minTarget),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: HearthSpacing.md,
+                vertical: HearthSpacing.sm,
+              ),
+              child: Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.chevron_left,
+                    size: 20,
+                    color: colors.textSecondary,
+                  ),
+                  const SizedBox(width: HearthSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      'Home',
+                      style: context.text.label.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The narrow-window equivalent: a slim bar above the section, carrying the way
+/// home on the left and the room's name on the right.
+///
+/// It costs a row of vertical space on a phone, which is the price of the way
+/// out being in one predictable place rather than repeated inside four screens
+/// that would each have to remember to draw it.
+class _SectionBar extends StatelessWidget {
+  const _SectionBar({required this.section, required this.onLeave});
+
+  final AppSection section;
+  final VoidCallback onLeave;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border(bottom: BorderSide(color: colors.outline)),
+      ),
+      child: SafeArea(
+        bottom: false,
+        // Fixed shares rather than natural widths, so that turning dynamic
+        // type all the way up ellipsises both halves instead of overflowing
+        // the row (spec §6.3).
+        child: Row(
+          children: <Widget>[
+            Flexible(
+              flex: 3,
+              child: _HomeItem(section: section, onTap: onLeave),
+            ),
+            Flexible(
+              flex: 2,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  0,
+                  HearthSpacing.sm,
+                  HearthSpacing.lg,
+                  HearthSpacing.sm,
+                ),
+                // Hard against the right edge, balancing the way home on the
+                // left rather than floating in the middle of its share.
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: <Widget>[
+                    Icon(section.icon, size: 16, color: colors.textMuted),
+                    const SizedBox(width: HearthSpacing.xs),
+                    Flexible(
+                      child: Text(
+                        section.label,
+                        style: context.text.metadata.copyWith(
+                          color: colors.textMuted,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),

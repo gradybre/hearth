@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'app/bootstrap.dart';
 import 'app/providers.dart';
 import 'app/router.dart';
+import 'app/shell/launch_target.dart';
 import 'app/theme/hearth_theme.dart';
 import 'app/theme/theme_choice.dart';
 import 'data/adapters/shared_content.dart';
@@ -23,6 +24,11 @@ Future<void> main() async {
         // And the answer it found, so the first frame is painted in the theme
         // that was asked for instead of the device's (spec §6.1).
         launchThemeChoiceProvider.overrideWithValue(boot.theme),
+        // Same again for where the app opens (spec §6.2). The router is built
+        // with a starting route, so this one has to be in hand even earlier —
+        // a value that arrived late would show the home screen and then
+        // replace it, which is a flash nobody could mistake for anything else.
+        bootLaunchTargetProvider.overrideWithValue(boot.launchTarget),
       ],
       child: const HearthApp(),
     ),
@@ -40,7 +46,15 @@ class _HearthAppState extends ConsumerState<HearthApp> {
   /// Built once and kept. Rebuilding the router on a sign-in would throw away
   /// every pushed route; on a sign-out it would leave the old ones
   /// addressable.
-  late final GoRouter _router = buildRouter();
+  ///
+  /// The starting route is read once, here, rather than watched: changing where
+  /// Hearth opens is a statement about the *next* launch, and moving the user
+  /// off the screen they are looking at because they touched a settings row
+  /// would be a surprise, not a preference.
+  late final GoRouter _router = buildRouter(
+    initialLocation:
+        (ref.read(bootLaunchTargetProvider) ?? LaunchTarget.home).path,
+  );
 
   @override
   Widget build(BuildContext context) {

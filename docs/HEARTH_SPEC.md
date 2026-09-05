@@ -127,6 +127,25 @@ Core entities (Postgres tables, RLS-scoped):
 
 ## 5. Feature Specifications
 
+### 5.0 Sections (the shape of the app)
+
+Hearth is one app made of **sections** — Nutrition today, and fitness, health and the house
+later. A section is a *concept the app holds*, not a screen someone hardcoded: an id, a name,
+a sentence saying what it is for, an icon, and its own set of tabs. Everything in §5.1–§5.8
+belongs to the Nutrition section.
+
+- **The registry is the definition.** One list declares every section the app knows about.
+  The home screen, the shell's tabs, the sidebar and the "opens on" setting are all read off
+  it, so adding a pillar is adding an entry plus its screens — not a navigation rewrite. This
+  is what §11's "structure now, build later" means in practice.
+- **Built is derived, never declared.** A section is available exactly when it has
+  destinations. There is no `available` flag to fall out of step with reality — a named
+  section with no screens cannot be entered, cannot be deep-linked, and cannot be chosen as
+  the app's landing screen.
+- **A section does not own the app's paths.** Sections are not nested route trees; each tab
+  keeps its own top-level path (`/recipes`, `/plan`, …) and detail screens stay at the root
+  (`/recipe/:id`, `/food/:id`). Adding the concept renamed nothing.
+
 ### 5.1 Accounts & Household Sharing
 - Email/password login; account creation.
 - **Solo by default:** a single user is a household of one; forming a two-person household is optional and can happen anytime. No requirement to link before using the app.
@@ -277,8 +296,35 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
 - *Reference direction:* warm brown/cream recipe-app aesthetics (cream grounds, cocoa text, terracotta accent, serif titles).
 
 ### 6.2 Navigation & screens
-- **App shell** with pillar-level navigation (tabs or sidebar; desktop uses sidebar, phone uses bottom tabs). v1 shows only the Food pillar; shell is built to accept more.
-- **Food pillar sections:**
+- **Home screen** at the root: the way into the house. It lists the sections of §5.0 as cards
+  — name, icon, and the sentence saying what is inside — over a masthead carrying the app's
+  name and the way to Settings, which belong to the app rather than to any one section.
+  - **Only built sections get a card.** The ones that are named but empty appear as a single
+    muted sentence at the foot of the list, generated from the registry. A grid holding one
+    live tile reads as a screen that failed to load; a grid padded out with dead tiles teaches
+    people that tapping does nothing, and they carry that lesson into the tiles that work. The
+    sentence is not a control, so it cannot disappoint — and when the last section is built it
+    stops rendering.
+  - **No live data on the home screen.** A card showing today's remaining calories would wire
+    the home screen to Nutrition's providers, which is the exact coupling §5.0 exists to
+    avoid. If a section is to say something here, it says it through the registry.
+  - A single centred column, capped in width, rather than a grid: it reads as deliberate at
+    one section and still reads as deliberate at four, on a phone and on a Mac.
+- **App shell** with section-level navigation (tabs or sidebar; desktop uses sidebar, phone
+  uses bottom tabs). It shows **one section's** tabs, read off that section, and it owns the
+  way back out — the four screens inside know nothing about there being a home screen.
+  - **The way home is in one predictable place:** at the top of the sidebar on a wide window,
+    and in a slim bar above the content on a narrow one. It says "Home" in words, and out loud
+    it says what it leaves ("Leave Nutrition and go back to all of Hearth").
+  - **The system back gesture goes home**, not out of the app: entering a section replaces the
+    route rather than pushing onto it, so there is nothing underneath to pop.
+- **Opens on (device-local).** Settings offers the home screen or any built section as the
+  screen Hearth starts on, beside the theme choice and stored the same way — in the local
+  preference table, never synced, and read during bootstrap **before the first frame**, since
+  the router is built with a starting route and a late answer is a visible flash of the wrong
+  screen. One person landing straight in Nutrition must not move where their partner's app
+  opens. An unrecognised or since-removed value falls back to the home screen.
+- **Nutrition section tabs:**
   1. **Recipes** — library (favorites-only filter, collections, search/filter), create/edit, AI import, AI generation (chat), cook-along mode.
   2. **Plan** — weekly summary (macro totals per day) → day detail (slots) → planned/logged toggle; remaining-for-day at-a-glance.
   3. **Shopping** — generated list, edit, export.
@@ -455,7 +501,18 @@ A layered strategy. **Automated tests** (authored by Claude Code alongside each 
 
 ## 11. Future Pillars (structure now, build later)
 
-Captured as future modules so the shell and data layer accommodate them:
+Captured as future modules so the shell and data layer accommodate them. A pillar becomes real
+by being added to the **section registry** (§5.0) with its destinations and screens; until then
+it is named on the home screen and nothing more.
+
+Named in the registry already, because they are the ones asked for next:
+
+- **Fitness** — training, sessions, what the week actually looked like.
+- **Health** — the numbers worth watching, appointments worth remembering.
+- **The house** — the thermostat, and whatever else the house needs asking.
+
+Captured here but deliberately **not** in the registry yet — a home screen that names seven
+unbuilt rooms is a wall of promises rather than a quiet line:
 
 - **Date ideas** — track/plan dates.
 - **Watchlist** — movies/shows to watch together.
