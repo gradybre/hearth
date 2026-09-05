@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'hearth_colors.dart';
 import 'hearth_spacing.dart';
@@ -20,6 +21,17 @@ abstract final class HearthTheme {
       isDark: isDark,
     ).apply(bodyColor: c.textPrimary, displayColor: c.textPrimary);
 
+    // Material 3 draws a great deal from roles this scheme never named, and
+    // every unnamed one silently falls back: each `surfaceContainer*` to
+    // `surface`, and `surfaceTint` to `primary`. So dialogs, menus, sheets and
+    // the nav bar all collapsed onto the single card colour, and anything
+    // Material considered elevated got a wash of terracotta it was never asked
+    // for. Both were invisible while `surface` was near-white; on a cream
+    // ground they are not. The whole ramp is named here.
+    //
+    // The ramp runs brightest-to-dimmest in light and the other way in dark,
+    // which is Material's own convention and the reason this is written out
+    // per brightness rather than shared.
     final ColorScheme scheme = ColorScheme(
       brightness: brightness,
       primary: c.accent,
@@ -30,7 +42,25 @@ abstract final class HearthTheme {
       onError: c.onError,
       surface: c.surface,
       onSurface: c.textPrimary,
-      surfaceContainerHighest: c.surfaceSunken,
+      onSurfaceVariant: c.textSecondary,
+      surfaceBright: c.surfaceElevated,
+      surfaceDim: c.surfaceSunken,
+      surfaceContainerLowest: isDark ? c.surfaceSunken : c.surfaceElevated,
+      surfaceContainerLow: isDark ? c.background : c.surface,
+      surfaceContainer: c.surface,
+      surfaceContainerHigh: isDark ? c.surfaceElevated : c.background,
+      surfaceContainerHighest: isDark ? c.surfaceElevated : c.surfaceSunken,
+      // Elevation in Hearth is carried by a border and a soft shadow, never by
+      // dyeing a surface with the accent — that is a 60/30/10 leak.
+      surfaceTint: Colors.transparent,
+      // Shadows and modal scrims on a cream ground should be brown, not
+      // neutral black — and in dark they have to stay the darkest thing in the
+      // palette rather than following `textPrimary` up into the cream.
+      shadow: isDark ? c.surfaceSunken : c.textPrimary,
+      scrim: isDark ? c.surfaceSunken : c.textPrimary,
+      inverseSurface: c.textPrimary,
+      onInverseSurface: c.background,
+      inversePrimary: c.onAccent,
       outline: c.outlineStrong,
       outlineVariant: c.outline,
     );
@@ -43,6 +73,73 @@ abstract final class HearthTheme {
       canvasColor: c.background,
       textTheme: textTheme,
       dividerTheme: DividerThemeData(color: c.outline, thickness: 1, space: 1),
+      // The chrome below had no theme at all and was running on Material's
+      // defaults. Screens that set an app bar colour by hand were fine;
+      // dialogs, sheets, menus and the nav bar were not, and every one of them
+      // resolved to the same near-white. Naming them here is also the only
+      // lever that reaches the app shell without editing it.
+      appBarTheme: AppBarTheme(
+        backgroundColor: c.surface,
+        foregroundColor: c.textPrimary,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: Colors.transparent,
+        elevation: 0,
+        // Material's default lifts an app bar's colour as content scrolls
+        // under it. With no tint left to lift it just goes flat, so the seam
+        // is drawn rather than shaded.
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        // Stated rather than inferred: the status bar sits directly on this
+        // colour, and a theme change should not be able to leave it guessing.
+        systemOverlayStyle: isDark
+            ? SystemUiOverlayStyle.light
+            : SystemUiOverlayStyle.dark,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: c.surfaceElevated,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(HearthRadius.lg),
+        ),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: c.surfaceElevated,
+        modalBackgroundColor: c.surfaceElevated,
+        surfaceTintColor: Colors.transparent,
+        dragHandleColor: c.outlineStrong,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(HearthRadius.lg),
+          ),
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: c.surfaceElevated,
+        surfaceTintColor: Colors.transparent,
+      ),
+      menuTheme: MenuThemeData(
+        style: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll<Color>(c.surfaceElevated),
+          surfaceTintColor: const WidgetStatePropertyAll<Color>(
+            Colors.transparent,
+          ),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: c.surface,
+        indicatorColor: c.surfaceSunken,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+      ),
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: c.surface,
+        indicatorColor: c.surfaceSunken,
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: c.accent,
+        linearTrackColor: c.progressTrack,
+        circularTrackColor: c.progressTrack,
+      ),
       cardTheme: CardThemeData(
         color: c.surface,
         elevation: 0,

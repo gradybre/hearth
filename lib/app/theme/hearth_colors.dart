@@ -44,24 +44,49 @@ class HearthColors extends ThemeExtension<HearthColors> {
   });
 
   /// Light: warm paper cream, cocoa text, terracotta accent.
+  ///
+  /// The first version of this palette was cream only on paper. Its ground was
+  /// `#FBF7F0` — 1.07:1 against pure white, which is to say indistinguishable
+  /// from it — cards were `#FFFDF8` at 1.02:1, and `surfaceElevated` was
+  /// literally `#FFFFFF`. A screen of cards on a ground was therefore three
+  /// shades of white separated by 1.05:1, and it read exactly as the clinical
+  /// white §6.1 defines Hearth against.
+  ///
+  /// The surfaces below are cream you can actually see: the ground is 1.28:1
+  /// against white, no channel reaches 255 anywhere in the light theme, and
+  /// the red-to-blue spread that carries the warmth is 28 on the ground rather
+  /// than 11. Cards sit 1.12:1 above the ground instead of 1.05:1, so a card
+  /// still reads as a card once the ground stops being white.
+  ///
+  /// [surfaceElevated] is the one to watch: it is the palest thing here, it
+  /// paints the small floating buttons on the library screens, and the first
+  /// attempt at this fix left it at 1.06:1 from white — still white to the
+  /// eye, on the very screen the complaint was about. The whole ramp had to
+  /// drop a step to leave it somewhere to be.
+  ///
+  /// Warming a ground costs contrast against dark text, so three tokens moved
+  /// with it: [outlineStrong] darkened to hold 3:1 as a focus ring on the
+  /// (now deeper) field fill, and [accent] and [textMuted] darkened to clear
+  /// full AA on every one of the four surfaces rather than only on the pale
+  /// three. No hue was added and none was dropped.
   factory HearthColors.light() => const HearthColors(
-    background: Color(0xFFFBF7F0),
-    surface: Color(0xFFFFFDF8),
-    surfaceElevated: Color(0xFFFFFFFF),
-    surfaceSunken: Color(0xFFF2EADD),
-    outline: Color(0xFFDED2C0),
-    outlineStrong: Color(0xFF96836A),
+    background: Color(0xFFECE2D0),
+    surface: Color(0xFFF6EFE1),
+    surfaceElevated: Color(0xFFFBF5EA),
+    surfaceSunken: Color(0xFFE1D4BA),
+    outline: Color(0xFFD3C3A6),
+    outlineStrong: Color(0xFF83715A),
     textPrimary: Color(0xFF2A211A),
     textSecondary: Color(0xFF574538),
-    textMuted: Color(0xFF6E5B4B),
-    accent: Color(0xFFA8480F),
-    accentPressed: Color(0xFF8A3A0B),
-    onAccent: Color(0xFFFFFDF8),
+    textMuted: Color(0xFF6B5849),
+    accent: Color(0xFF9A410C),
+    accentPressed: Color(0xFF7C3305),
+    onAccent: Color(0xFFFBF5EA),
     goodAccent: Color(0xFF3F5F2E),
     overAccent: Color(0xFFA81F2B),
-    progressTrack: Color(0xFFE8DCC9),
+    progressTrack: Color(0xFFDDCEB2),
     error: Color(0xFF8A2A17),
-    onError: Color(0xFFFFFDF8),
+    onError: Color(0xFFFBF5EA),
   );
 
   /// Dark: near-black ground, brightened cream text, lifted accent.

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/theme/hearth_colors.dart';
 import 'package:hearth/app/theme/hearth_theme.dart';
@@ -34,6 +35,73 @@ void main() {
       final ThemeData dark = HearthTheme.dark();
       expect(dark.brightness, Brightness.dark);
       expect(dark.scaffoldBackgroundColor, HearthColors.dark().background);
+    });
+
+    test('no Material surface role falls back to the card colour', () {
+      // Unnamed `surfaceContainer*` roles all resolve to `surface`, which is
+      // how dialogs, sheets, menus and the nav bar ended up sharing one
+      // near-white. Naming them is the fix; this is the guard.
+      for (final ThemeData theme in <ThemeData>[
+        HearthTheme.light(),
+        HearthTheme.dark(),
+      ]) {
+        final HearthColors c = theme.extension<HearthColors>()!;
+        final ColorScheme s = theme.colorScheme;
+        expect(
+          <Color>{
+            s.surfaceContainerLowest,
+            s.surfaceContainerLow,
+            s.surfaceContainer,
+            s.surfaceContainerHigh,
+            s.surfaceContainerHighest,
+          }.length,
+          greaterThan(2),
+          reason: 'the container ramp has collapsed onto one colour',
+        );
+        expect(s.surfaceDim, c.surfaceSunken);
+        expect(s.surfaceBright, c.surfaceElevated);
+      }
+    });
+
+    test('elevation is never dyed with the accent', () {
+      // `surfaceTint` falls back to `primary`, which puts a terracotta wash on
+      // every elevated Material and on any app bar with content scrolled under
+      // it — a 60/30/10 leak nobody asked for.
+      for (final ThemeData theme in <ThemeData>[
+        HearthTheme.light(),
+        HearthTheme.dark(),
+      ]) {
+        expect(theme.colorScheme.surfaceTint, Colors.transparent);
+        expect(theme.appBarTheme.surfaceTintColor, Colors.transparent);
+        expect(theme.appBarTheme.scrolledUnderElevation, 0);
+      }
+    });
+
+    test('the chrome that has no colour of its own gets Hearth tokens', () {
+      for (final ThemeData theme in <ThemeData>[
+        HearthTheme.light(),
+        HearthTheme.dark(),
+      ]) {
+        final HearthColors c = theme.extension<HearthColors>()!;
+        expect(theme.appBarTheme.backgroundColor, c.surface);
+        expect(theme.dialogTheme.backgroundColor, c.surfaceElevated);
+        expect(theme.bottomSheetTheme.modalBackgroundColor, c.surfaceElevated);
+        expect(theme.popupMenuTheme.color, c.surfaceElevated);
+        expect(theme.navigationBarTheme.backgroundColor, c.surface);
+        expect(theme.navigationBarTheme.indicatorColor, c.surfaceSunken);
+        expect(theme.navigationRailTheme.backgroundColor, c.surface);
+      }
+    });
+
+    test('the status bar is told which way round it is', () {
+      expect(
+        HearthTheme.light().appBarTheme.systemOverlayStyle,
+        SystemUiOverlayStyle.dark,
+      );
+      expect(
+        HearthTheme.dark().appBarTheme.systemOverlayStyle,
+        SystemUiOverlayStyle.light,
+      );
     });
 
     test(
