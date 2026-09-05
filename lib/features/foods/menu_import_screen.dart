@@ -171,6 +171,10 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
             name: line.name,
             brand: restaurant,
             source: FoodSource.restaurant,
+            // The minus sign is the declaration (spec §5.2). A row the sheet
+            // prints as a deduction is saved as one, which is also what lets
+            // the negatives through the hosted checks at all.
+            isModifier: line.isModifier,
             menuGroup: line.section,
             menuOrder: line.order,
             servingOptions: <ServingOption>[
@@ -440,14 +444,20 @@ class _LineRow extends StatelessWidget {
   }
 
   /// What this line will be saved as, in the words the food will wear.
+  /// A real minus sign rather than a hyphen, and the word as well as the
+  /// sign: a deduction has to read as one to a screen reader too (§6.3).
+  static String _signed(double value, String suffix) =>
+      value < 0 ? '−${value.abs().round()}$suffix' : '${value.round()}$suffix';
+
   String _summary() {
     final String portion = QuantityFormat.format(line.portion!);
     final List<String> parts = <String>[
-      '${line.macros.kcal.round()} kcal',
-      '${line.macros.proteinG.round()}g protein',
-      '${line.macros.carbG.round()}g carbs',
-      '${line.macros.fatG.round()}g fat',
+      _signed(line.macros.kcal, ' kcal'),
+      _signed(line.macros.proteinG, 'g protein'),
+      _signed(line.macros.carbG, 'g carbs'),
+      _signed(line.macros.fatG, 'g fat'),
     ];
-    return '$portion · ${parts.join(' · ')}';
+    final String head = line.isModifier ? 'Takes away · ' : '';
+    return '$head$portion · ${parts.join(' · ')}';
   }
 }

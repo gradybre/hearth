@@ -143,6 +143,10 @@ class Foods extends Table {
   /// Confirmed to carry no macros — black coffee, sparkling water (§5.5).
   BoolColumn get isZeroCalorie =>
       boolean().withDefault(const Constant(false))();
+
+  /// A menu row published as a deduction rather than as something you order
+  /// (spec §5.2). Its servings may hold negative macros; nothing else may.
+  BoolColumn get isModifier => boolean().withDefault(const Constant(false))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get updatedAt => dateTime()();
 
@@ -171,6 +175,16 @@ class FoodServingOptions extends Table {
   RealColumn get sodiumMg => real().nullable()();
   RealColumn get cholesterolMg => real().nullable()();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  /// Carried from the food this belongs to and never authored on its own.
+  ///
+  /// It exists so the hosted `check (kcal >= 0 or is_modifier)` can see the
+  /// food's answer, since a check constraint cannot read another table. There
+  /// is deliberately **no** matching check here: a Drift `TableMigration`
+  /// rebuild applies a new CHECK to every row it copies, so a device already
+  /// holding a negative would fail to open its own database. The sign is
+  /// enforced in Dart instead, where the user can be told why.
+  BoolColumn get isModifier => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};

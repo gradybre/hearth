@@ -91,6 +91,30 @@ Future<void> searchFor(WidgetTester tester, String query) async {
 void main() {
   portionTests();
 
+  testWidgets('a modifier is not something the meal picker offers', (
+    WidgetTester tester,
+  ) async {
+    // Freddy's lettuce wrap is −180 kcal. Logged on its own it would make a
+    // day read 180 calories lighter than the day that happened, and once
+    // that is frozen into a snapshot nothing corrects it (rule 3). It is
+    // chosen in the eat-out builder, against something real, or nowhere.
+    await openMealPicker(
+      tester,
+      foods: <Food>[
+        aFood('Single Steakburger', id: 'food-burger'),
+        aFood(
+          'Make any Sandwich a Lettuce Wrap',
+          id: 'food-wrap',
+          source: FoodSource.restaurant,
+        ).asModifier(),
+      ],
+    );
+
+    await searchFor(tester, 'a');
+
+    expect(find.textContaining('Single Steakburger'), findsOneWidget);
+    expect(find.textContaining('Lettuce Wrap'), findsNothing);
+  });
   testWidgets('the meal picker reaches beyond the library', (
     WidgetTester tester,
   ) async {

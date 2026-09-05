@@ -102,6 +102,7 @@ class Food {
     this.macrosOverridden = false,
     this.isDefault = false,
     this.isZeroCalorie = false,
+    this.isModifier = false,
     this.isDeleted = false,
     this.updatedAt,
   });
@@ -179,6 +180,22 @@ class Food {
   /// give the same answer for a food somebody saved without noticing the
   /// numbers were missing, which is the exact case the warning is for.
   final bool isZeroCalorie;
+
+  /// A menu row a restaurant publishes as a **deduction** rather than as
+  /// something you order (spec §5.2).
+  ///
+  /// Freddy's prints "Make any Sandwich a Lettuce Wrap" as −180 kcal, −25 g
+  /// carbohydrate — and **+1 g of fibre**, because the bun is what was
+  /// carrying the deficit. The mixed signs are why this is a flag on a food
+  /// with genuinely signed macros rather than a positive amount that gets
+  /// negated somewhere: negating everything would state that a lettuce wrap
+  /// costs you a gram of fibre, which is the opposite of true.
+  ///
+  /// A modifier is what you log *against*, never what you log. It is kept out
+  /// of ingredient matching, out of the food picker and out of the log sheet;
+  /// the only place it can be chosen is the eat-out builder, once something
+  /// real has been chosen for it to apply to.
+  final bool isModifier;
 
   /// Foods are soft-deleted so historical logs keep resolving (spec §4).
   final bool isDeleted;

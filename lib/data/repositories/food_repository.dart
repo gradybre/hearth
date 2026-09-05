@@ -122,6 +122,7 @@ class FoodRepository {
     macrosOverridden: food.macrosOverridden,
     isDefault: food.isDefault,
     isZeroCalorie: food.isZeroCalorie,
+    isModifier: food.isModifier,
     isDeleted: food.isDeleted,
     updatedAt: food.updatedAt,
   );

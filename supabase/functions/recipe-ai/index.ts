@@ -500,6 +500,14 @@ Fibre, sodium and cholesterol are different: omit one the table does not print
 rather than writing 0 — a column that is not there is unknown, and zero is a
 claim. "< 1" in those three is also unknown; omit it.
 
+Some rows are modifications rather than things you order — "make any sandwich
+a lettuce wrap", "no cheese" — and a sheet prints those as deductions, with
+minus signs. Transcribe them exactly as printed, minus signs and all. Do not
+skip them and do not turn them positive: the app records a deduction as a
+deduction, and a sign dropped here becomes 180 calories added to a meal
+instead of taken off it. A row can be mixed — fibre up while everything else
+goes down — so copy each column's own sign.
+
 Skip drinks and kids' menus.
 
 If a digit is unclear, a row is cut off, or two rows have run together,

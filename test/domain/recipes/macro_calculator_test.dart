@@ -625,4 +625,113 @@ void noMatchNeededTests() {
       );
     });
   });
+
+  group('a recipe that comes to less than nothing (spec §5.2)', () {
+    Food wrap() => aFood(
+      'Make it a Lettuce Wrap',
+      id: 'f-wrap',
+      source: FoodSource.restaurant,
+      servingOptions: <ServingOption>[
+        aServing(
+          amount: 1,
+          unit: Units.item,
+          macros: const Macros(kcal: -180, carbG: -25, fiberG: 1),
+        ),
+      ],
+    ).asModifier();
+
+    Recipe onlyTheDeduction() => aRecipe(
+      servings: 1,
+      ingredients: <RecipeIngredient>[
+        anIngredient(
+          'Make it a Lettuce Wrap',
+          amount: 1,
+          unit: Units.item,
+          foodId: 'f-wrap',
+        ),
+      ],
+    );
+
+    test('says so, rather than quietly reducing the day', () {
+      // The builder refuses to assemble one, but the recipe editor will let
+      // you delete the burger afterwards and keep the wrap. Nothing is
+      // missing here, so the ordinary "not counted" phrasing has nothing to
+      // report — and a silent −180 would be frozen into whatever day it was
+      // logged to (rule 3).
+      final RecipeMacros macros = MacroCalculator.forRecipe(
+        onlyTheDeduction(),
+        foods: <String, Food>{'f-wrap': wrap()},
+      );
+
+      expect(macros.total.kcal, -180);
+      expect(macros.incompleteReason, contains('less than nothing'));
+    });
+
+    test('and it is not only the calories that can go under', () {
+      // A deduction can leave the calories at zero while the carbohydrate
+      // total is below it — a wrap against a zero-calorie condiment, say.
+      // Checking kcal alone would log a negative macro with nothing said.
+      final Food condiment = aFood(
+        'Mustard',
+        id: 'f-mustard',
+        source: FoodSource.restaurant,
+        servingOptions: <ServingOption>[
+          aServing(
+            amount: 1,
+            unit: Units.item,
+            macros: const Macros(kcal: 180, carbG: 0),
+          ),
+        ],
+      );
+      final Recipe recipe = aRecipe(
+        servings: 1,
+        ingredients: <RecipeIngredient>[
+          anIngredient(
+            'Mustard',
+            amount: 1,
+            unit: Units.item,
+            foodId: 'f-mustard',
+          ),
+          anIngredient(
+            'Make it a Lettuce Wrap',
+            amount: 1,
+            unit: Units.item,
+            foodId: 'f-wrap',
+          ),
+        ],
+      );
+
+      final RecipeMacros macros = MacroCalculator.forRecipe(
+        recipe,
+        foods: <String, Food>{'f-wrap': wrap(), 'f-mustard': condiment},
+      );
+
+      expect(macros.total.kcal, 0);
+      expect(macros.total.carbG, -25);
+      expect(macros.incompleteReason, contains('less than nothing'));
+    });
+
+    test('and an ordinary recipe still says nothing at all', () {
+      final Food chicken = aFoodPer100g('chicken breast', kcal: 165);
+      final Recipe recipe = aRecipe(
+        servings: 1,
+        ingredients: <RecipeIngredient>[
+          anIngredient(
+            'chicken breast',
+            amount: 100,
+            unit: Units.gram,
+            foodId: chicken.id,
+          ),
+        ],
+      );
+
+      expect(
+        MacroCalculator.forRecipe(
+          recipe,
+          foods: <String, Food>{chicken.id: chicken},
+        ).incompleteReason,
+        isNull,
+      );
+    });
+  });
 }

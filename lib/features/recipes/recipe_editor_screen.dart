@@ -300,6 +300,10 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       // seasoning badge, so it is not offered one. The Seasonings screen is
       // where that list is managed.
       offerSeasoning: !ingredient.isOptional,
+      // Only here. The eat-out builder attaches a deduction by name, so
+      // renaming or re-splitting that line breaks the attachment — and
+      // without this the line could never be matched again (spec §5.2).
+      offerModifiers: _kind == RecipeKind.eatenOut,
     );
     await _applyMatch(ingredient, chosen);
   }

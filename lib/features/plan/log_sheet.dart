@@ -7,6 +7,7 @@ import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../domain/foods/eatable_foods.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
@@ -376,7 +377,12 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
               needle.isEmpty || r.title.toLowerCase().contains(needle),
         )
         .toList(growable: false);
-    final List<Food> matchingFoods = foods.values
+    // `eatableFoods` rather than `foods.values`: a modifier is a deduction,
+    // and logging one on its own would make a day read lighter than the day
+    // that happened. The unfiltered map stays in use above for *resolving* an
+    // entry's macros, where a modifier is a legitimate ingredient of an
+    // eaten-out recipe.
+    final List<Food> matchingFoods = eatableFoods(foods.values)
         .where(
           (Food f) => needle.isEmpty || f.name.toLowerCase().contains(needle),
         )

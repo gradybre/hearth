@@ -156,6 +156,7 @@ Food aFood(
   DateTime? updatedAt,
   bool isDefault = false,
   bool isZeroCalorie = false,
+  bool isModifier = false,
 }) => Food(
   id: id ?? _id('food'),
   name: name,
@@ -169,6 +170,7 @@ Food aFood(
   updatedAt: updatedAt,
   isDefault: isDefault,
   isZeroCalorie: isZeroCalorie,
+  isModifier: isModifier,
 );
 
 /// A food defined per 100 g, the usual shape of an Open Food Facts record.
@@ -205,6 +207,9 @@ extension FoodTestCopies on Food {
   Food asDefault() => _copy(isDefault: true);
   Food asZeroCalorie() => _copy(isZeroCalorie: true);
 
+  /// A menu row published as a deduction (spec §5.2).
+  Food asModifier() => _copy(isModifier: true);
+
   Food _copy({
     Object? householdId = _unset,
     String? brand,
@@ -213,6 +218,7 @@ extension FoodTestCopies on Food {
     bool? isDeleted,
     bool? isDefault,
     bool? isZeroCalorie,
+    bool? isModifier,
   }) => Food(
     id: id,
     name: name,
@@ -228,6 +234,7 @@ extension FoodTestCopies on Food {
     macrosOverridden: macrosOverridden,
     isDefault: isDefault ?? this.isDefault,
     isZeroCalorie: isZeroCalorie ?? this.isZeroCalorie,
+    isModifier: isModifier ?? this.isModifier,
     isDeleted: isDeleted ?? this.isDeleted,
     updatedAt: updatedAt,
   );

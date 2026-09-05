@@ -6,6 +6,7 @@ import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../domain/foods/eatable_foods.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/text/text_normaliser.dart';
@@ -24,6 +25,7 @@ Future<String?> showFoodPicker(
   String? currentFoodId,
   List<Food> defaults = const <Food>[],
   bool offerSeasoning = true,
+  bool offerModifiers = false,
 }) => showModalBottomSheet<String>(
   context: context,
   isScrollControlled: true,
@@ -33,6 +35,7 @@ Future<String?> showFoodPicker(
     currentFoodId: currentFoodId,
     defaults: defaults,
     offerSeasoning: offerSeasoning,
+    offerModifiers: offerModifiers,
   ),
 );
 
@@ -47,6 +50,7 @@ class _FoodPickerSheet extends ConsumerStatefulWidget {
     required this.ingredientName,
     this.currentFoodId,
     this.defaults = const <Food>[],
+    this.offerModifiers = false,
     this.offerSeasoning = true,
   });
 
@@ -69,6 +73,15 @@ class _FoodPickerSheet extends ConsumerStatefulWidget {
   /// the top of the list rather than a guess — and everything else on this
   /// sheet is still here for adding a different one as usual (spec §5.3).
   final List<Food> defaults;
+
+  /// Whether a deduction may be chosen (spec §5.2).
+  ///
+  /// False everywhere but an eaten-out recipe, and true there for one reason:
+  /// the eat-out builder attaches a modifier by name, and renaming or
+  /// re-splitting that ingredient line breaks the attachment. Without this the
+  /// line could never be matched again, and the recipe would quietly read 180
+  /// calories high with only "1 with no food matched" to show for it.
+  final bool offerModifiers;
 
   @override
   ConsumerState<_FoodPickerSheet> createState() => _FoodPickerSheetState();
@@ -297,7 +310,15 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
                           const Center(child: CircularProgressIndicator()),
                       error: (Object e, StackTrace s) =>
                           Center(child: Text('Could not read foods.\n$e')),
-                      data: (List<Food> foods) {
+                      data: (List<Food> all) {
+                        // A modifier is a deduction, never a thing to pick —
+                        // except on the recipe whose builder attached one.
+                        final List<Food> foods = widget.offerModifiers
+                            ? <Food>[
+                                for (final Food food in all)
+                                  if (!food.isDeleted) food,
+                              ]
+                            : eatableFoods(all);
                         final List<Food> visible = _rank(foods);
                         if (visible.isEmpty) {
                           return ListView(

@@ -392,4 +392,42 @@ void main() {
       expect(roundTrip(const <MenuRow>[]), isEmpty);
     });
   });
+
+  group('a row printed as a deduction (spec §5.2)', () {
+    test('the minus sign is the declaration', () {
+      // No new syntax and nothing to remember: the transcription stays a
+      // faithful copy of what the chain printed.
+      final MenuImportLine line = one(
+        'Make any Sandwich a Lettuce Wrap, 1, -180, -3, -25, -6, 1, -270',
+      );
+
+      expect(line.isUsable, isTrue);
+      expect(line.isModifier, isTrue);
+      expect(line.macros.kcal, -180);
+    });
+
+    test('and the fibre keeps its own sign', () {
+      // The whole reason this is signed storage rather than a "negate
+      // everything" flag: taking the bun off adds a gram of fibre.
+      expect(
+        one('Lettuce Wrap, 1, -180, -3, -25, -6, 1, -270').macros.fiberG,
+        1,
+      );
+    });
+
+    test('an ordinary row is not one', () {
+      expect(one('Chicken, 4 oz, 180, 32, 0, 7').isModifier, isFalse);
+    });
+
+    test('a lone minus is still an unknown, not a deduction', () {
+      // `-` is how this format has always written a gap in the minor three,
+      // and the two conventions have to share the character without
+      // colliding.
+      final MenuImportLine line = one('Chicken, 4 oz, 180, 32, 0, 7, -, 310');
+
+      expect(line.isModifier, isFalse);
+      expect(line.macros.fiberG, isNull);
+      expect(line.macros.sodiumMg, 310);
+    });
+  });
 }

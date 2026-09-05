@@ -263,4 +263,110 @@ void main() {
     // Picked at a half: what you are having, and what it costs.
     expect(find.text('2 oz · 65 kcal'), findsOneWidget);
   });
+
+  group('modifiers (spec §5.2)', () {
+    Food wrap() => item(
+      'Make it a Lettuce Wrap',
+      restaurant: "Freddy's",
+      section: 'Modifications',
+      order: 2,
+      amount: 1,
+      unit: Units.item,
+      macros: const Macros(
+        kcal: -180,
+        proteinG: -3,
+        carbG: -25,
+        fatG: -6,
+        fiberG: 1,
+      ),
+    ).asModifier();
+
+    List<Food> freddys() => <Food>[
+      item(
+        'Single Steakburger',
+        restaurant: "Freddy's",
+        section: 'Steakburgers',
+        order: 0,
+        amount: 1,
+        unit: Units.item,
+        macros: const Macros(kcal: 380, proteinG: 24, carbG: 30, fatG: 12),
+      ),
+      wrap(),
+    ];
+
+    Future<void> openFreddys(WidgetTester tester) async {
+      await openBuilder(tester);
+      await tester.tap(find.text("Freddy's"));
+      await pumpFrames(tester, frames: 12);
+    }
+
+    testWidgets('a deduction reads as one, and not by colour', (
+      WidgetTester tester,
+    ) async {
+      await pumpHearthApp(tester, foods: freddys());
+      await openFreddys(tester);
+
+      // The minus is in the text, so it survives a screen reader and a
+      // monochrome display both (§6.3).
+      expect(find.textContaining('−180 kcal'), findsOneWidget);
+      // And it says why it is waiting rather than silently ignoring a tap.
+      expect(find.text('Takes away — pick something first'), findsOneWidget);
+    });
+
+    testWidgets('cannot be picked before there is anything to take it from', (
+      WidgetTester tester,
+    ) async {
+      // On its own it is not a meal, it is 180 calories removed from a day
+      // that never had them.
+      await pumpHearthApp(tester, foods: freddys());
+      await openFreddys(tester);
+
+      await tester.tap(find.text('Make it a Lettuce Wrap'));
+      await pumpFrames(tester, frames: 12);
+
+      // Nothing picked, so nothing to build.
+      expect(find.textContaining('Build ('), findsNothing);
+    });
+
+    testWidgets('and once something is picked, it comes along', (
+      WidgetTester tester,
+    ) async {
+      await pumpHearthApp(tester, foods: freddys());
+      await openFreddys(tester);
+
+      await tester.tap(find.text('Single Steakburger'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Make it a Lettuce Wrap'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('Build (2)'), findsOneWidget);
+      await tester.tap(find.text('Build (2)'));
+      await pumpFrames(tester, frames: 20);
+
+      // Both lines are in the draft and both are matched — the deduction is
+      // an ingredient like any other once it has something to apply to.
+      expect(find.text('New recipe'), findsOneWidget);
+      expect(find.text('tap to match a food'), findsNothing);
+      expect(find.textContaining('Lettuce Wrap'), findsWidgets);
+    });
+
+    testWidgets('it goes when the last real thing goes', (
+      WidgetTester tester,
+    ) async {
+      // Otherwise unpicking the burger leaves a meal of minus 180 calories,
+      // and the rule that a modifier needs something to apply to would hold
+      // only until you changed your mind.
+      await pumpHearthApp(tester, foods: freddys());
+      await openFreddys(tester);
+
+      await tester.tap(find.text('Single Steakburger'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Make it a Lettuce Wrap'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Single Steakburger'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.textContaining('Build ('), findsNothing);
+    });
+  });
 }
