@@ -579,6 +579,10 @@ begin
     where f.source = 'restaurant'
       and f.household_id is null
       and not f.is_zero_calorie
+      -- A modifier's servings are negative rather than positive, so this
+      -- would trip on every one of them — and a global food's flag cannot be
+      -- cleared from the app, which is the whole reason this guard exists.
+      and not f.is_modifier
       and exists (select 1 from public.food_serving_options o
                   where o.food_id = f.id)
       and not exists (
@@ -592,6 +596,192 @@ begin
   end if;
 
   raise notice 'seeded zero-calorie guards passed';
+end;
+$$;
+
+-- ── A deduction is signed, and only a modifier may be (spec §5.2) ───────────
+--
+-- Freddy's publishes "Make any Sandwich a Lettuce Wrap" as -180 kcal with
+-- +1 g of fibre. The mixed signs are the point: a "negate everything"
+-- implementation would store the fibre as -1 and nothing but a test that
+-- looks at the fibre specifically would notice.
+--
+-- The flag is denormalised onto `food_serving_options` so the checks can see
+-- it, and a composite foreign key keeps the copy honest. What is asserted
+-- here is that neither half can be loosened without something failing loudly.
+do $$
+declare
+  v_plain    uuid := gen_random_uuid();
+  v_modifier uuid := gen_random_uuid();
+  v_serving  uuid := gen_random_uuid();
+  v_value    numeric;
+  v_names    text[] := array['kcal', 'protein_g', 'carb_g', 'fat_g',
+                             'fiber_g', 'sodium_mg', 'cholesterol_mg'];
+  v_name     text;
+begin
+  -- 7. Structural, and first: everything below tests behaviour, and a
+  -- behaviour test passes for the wrong reason if a constraint quietly went
+  -- missing in a `db diff`.
+  foreach v_name in array v_names loop
+    if not exists (
+      select 1 from pg_constraint
+      where conrelid = 'public.food_serving_options'::regclass
+        and conname = 'food_serving_options_' || v_name || '_signed'
+    ) then
+      raise exception 'the signed check for % is missing', v_name;
+    end if;
+  end loop;
+
+  if not exists (
+    select 1 from pg_class where relname = 'foods_id_is_modifier_key'
+  ) then
+    raise exception 'the index the modifier foreign key rests on is missing';
+  end if;
+
+  -- 1. An ordinary food still cannot go negative. This is the constraint that
+  -- was there before, and the one this change could most easily have
+  -- loosened for everybody.
+  perform public.upsert_food(jsonb_build_object(
+    'id', v_plain, 'name', 'Guard burger', 'source', 'manual',
+    'serving_options', jsonb_build_array(jsonb_build_object(
+      'id', gen_random_uuid(), 'label', '1 serving',
+      'amount_canonical', 1, 'amount_kind', 'count', 'amount_unit', 'item',
+      'kcal', 380, 'protein_g', 24, 'sort_order', 0))
+  ));
+
+  foreach v_name in array v_names loop
+    begin
+      execute format(
+        'update public.food_serving_options set %I = -1 where food_id = $1',
+        v_name) using v_plain;
+      raise exception 'a plain food accepted a negative %', v_name;
+    exception
+      when check_violation then null;
+    end;
+  end loop;
+
+  -- 2. A modifier may, and the fibre keeps its own sign.
+  perform public.upsert_food(jsonb_build_object(
+    'id', v_modifier, 'name', 'Guard lettuce wrap', 'source', 'restaurant',
+    'brand', 'Guard Diner', 'menu_group', 'Modifications', 'menu_order', 0,
+    'is_modifier', true,
+    'serving_options', jsonb_build_array(jsonb_build_object(
+      'id', v_serving, 'label', '1 serving',
+      'amount_canonical', 1, 'amount_kind', 'count', 'amount_unit', 'item',
+      'kcal', -180, 'protein_g', -3, 'carb_g', -25, 'fat_g', -6,
+      'fiber_g', 1, 'sodium_mg', -270, 'cholesterol_mg', 0, 'sort_order', 0))
+  ));
+
+  select kcal into v_value from public.food_serving_options where id = v_serving;
+  if v_value is distinct from -180 then
+    raise exception 'a modifier lost its deduction: %', v_value;
+  end if;
+
+  select fiber_g into v_value from public.food_serving_options where id = v_serving;
+  if v_value is distinct from 1 then
+    raise exception 'a modifier had its fibre flipped to %', v_value;
+  end if;
+
+  -- 3. A serving cannot claim a flag its food does not have, either way.
+  begin
+    update public.food_serving_options set is_modifier = false
+    where id = v_serving;
+    raise exception 'a serving disowned its food''s flag';
+  exception
+    when foreign_key_violation then null;
+    when check_violation then null;
+  end;
+
+  begin
+    insert into public.food_serving_options (
+      id, food_id, label, amount_canonical, amount_kind, amount_unit,
+      kcal, is_modifier, sort_order
+    ) values (
+      gen_random_uuid(), v_plain, '1 serving', 1, 'count', 'item',
+      -5, true, 1
+    );
+    raise exception 'a plain food grew a modifier serving';
+  exception
+    when foreign_key_violation then null;
+  end;
+
+  -- 4. And a flagged food cannot be un-flagged while a negative remains. This
+  -- is the one that makes "the flag and its servings agree" unrepresentable
+  -- rather than merely tested.
+  begin
+    update public.foods set is_modifier = false where id = v_modifier;
+    raise exception 'a modifier was un-flagged with its deduction intact';
+  exception
+    when check_violation then null;
+  end;
+
+  -- 5. But `upsert_food` can turn one back into an ordinary food, because it
+  -- clears the servings before it touches the flag. Get the order wrong and
+  -- the cascade above fires on rows that are about to be deleted anyway, and
+  -- a user who un-ticked the switch could never save that food again.
+  perform public.upsert_food(jsonb_build_object(
+    'id', v_modifier, 'name', 'Guard lettuce wrap', 'source', 'restaurant',
+    'brand', 'Guard Diner', 'menu_group', 'Modifications', 'menu_order', 0,
+    'is_modifier', false,
+    'serving_options', jsonb_build_array(jsonb_build_object(
+      'id', gen_random_uuid(), 'label', '1 serving',
+      'amount_canonical', 1, 'amount_kind', 'count', 'amount_unit', 'item',
+      'kcal', 20, 'sort_order', 0))
+  ));
+
+  if exists (select 1 from public.foods
+             where id = v_modifier and is_modifier) then
+    raise exception 'upsert_food would not let a modifier become a food';
+  end if;
+
+  -- 6. The pull half carries the flag and the signs.
+  perform public.upsert_food(jsonb_build_object(
+    'id', v_modifier, 'name', 'Guard lettuce wrap', 'source', 'restaurant',
+    'brand', 'Guard Diner', 'menu_group', 'Modifications', 'menu_order', 0,
+    'is_modifier', true,
+    'serving_options', jsonb_build_array(jsonb_build_object(
+      'id', gen_random_uuid(), 'label', '1 serving',
+      'amount_canonical', 1, 'amount_kind', 'count', 'amount_unit', 'item',
+      'kcal', -180, 'fiber_g', 1, 'sort_order', 0))
+  ));
+
+  if not exists (
+    select 1 from public.changed_foods(null) c
+    where (c ->> 'id')::uuid = v_modifier
+      and (c ->> 'is_modifier')::boolean
+      and (c -> 'serving_options' -> 0 ->> 'kcal')::numeric = -180
+      and (c -> 'serving_options' -> 0 ->> 'fiber_g')::numeric = 1
+  ) then
+    raise exception 'changed_foods did not carry the modifier faithfully';
+  end if;
+
+  -- A modifier and a default are contradictory: a default is matched into
+  -- cooked recipes by name, which is the one place a deduction must not go.
+  begin
+    update public.foods set is_default = true where id = v_modifier;
+    raise exception 'a modifier was also made a default';
+  exception
+    when check_violation then null;
+  end;
+
+  delete from public.foods where id in (v_plain, v_modifier);
+
+  -- 8. And every seeded modifier is a real one: a flag with nothing negative
+  -- under it is a switch somebody set by mistake.
+  if exists (
+    select 1 from public.foods f
+    where f.is_modifier
+      and not exists (
+        select 1 from public.food_serving_options o
+        where o.food_id = f.id
+          and (o.kcal < 0 or o.protein_g < 0 or o.carb_g < 0 or o.fat_g < 0
+               or o.fiber_g < 0 or o.sodium_mg < 0 or o.cholesterol_mg < 0)
+      )
+  ) then
+    raise exception 'a modifier deducts nothing';
+  end if;
+
+  raise notice 'modifier guards passed';
 end;
 $$;
 
