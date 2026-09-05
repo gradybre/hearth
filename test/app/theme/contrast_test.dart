@@ -119,14 +119,123 @@ void main() {
       });
 
       test('borders are perceivable against their surfaces', () {
-        expect(
-          Contrast.ratio(c.outlineStrong, c.surface),
-          greaterThanOrEqualTo(3.0),
-          reason: 'outlineStrong must be usable as a focus indicator',
-        );
+        // A focus ring is drawn on whatever the focused control is filled
+        // with, and text fields are filled with surfaceSunken — so checking
+        // only against `surface` left the one ground it actually lands on
+        // untested. Warming the light palette pushed that pair to 2.89:1
+        // before this widened.
+        for (final MapEntry<String, Color> ground in grounds.entries) {
+          final double ratio = Contrast.ratio(c.outlineStrong, ground.value);
+          expect(
+            ratio,
+            greaterThanOrEqualTo(3.0),
+            reason:
+                'outlineStrong on ${ground.key} is '
+                '${ratio.toStringAsFixed(2)}:1 and must be usable as a focus '
+                'indicator',
+          );
+        }
+      });
+
+      test('the accent is legible as button and link text', () {
+        // The accent is not only a fill: it is the foreground of every
+        // TextButton (see HearthTheme), which is body-sized. The 3:1
+        // component floor above is not enough for that job.
+        for (final MapEntry<String, Color> ground in grounds.entries) {
+          final double ratio = Contrast.ratio(c.accent, ground.value);
+          expect(
+            ratio,
+            greaterThanOrEqualTo(4.5),
+            reason:
+                'accent as text on ${ground.key} is '
+                '${ratio.toStringAsFixed(2)}:1',
+          );
+        }
       });
     });
   }
+
+  /// The regression guard for "light mode does not have a cream background —
+  /// it is a bright white".
+  ///
+  /// Every contrast test above passed while the light theme's ground was
+  /// 1.07:1 from pure white and its cards were 1.02:1 from it, because
+  /// contrast against dark text says nothing about whether a surface is the
+  /// warm paper §6.1 asks for. These assertions are the missing half.
+  group('light surfaces are paper cream, not white', () {
+    final HearthColors c = HearthColors.light();
+    final Map<String, Color> surfaces = <String, Color>{
+      'background': c.background,
+      'surface': c.surface,
+      'surfaceElevated': c.surfaceElevated,
+      'surfaceSunken': c.surfaceSunken,
+    };
+
+    test('no light surface is white or near-white', () {
+      const Color white = Color(0xFFFFFFFF);
+      for (final MapEntry<String, Color> s in surfaces.entries) {
+        expect(
+          s.value.r,
+          lessThan(1.0),
+          reason: '${s.key} has a maxed red channel — that is white, not cream',
+        );
+        expect(
+          Contrast.ratio(s.value, white),
+          greaterThanOrEqualTo(1.08),
+          reason:
+              '${s.key} is ${Contrast.ratio(s.value, white).toStringAsFixed(3)}'
+              ':1 from pure white and will read as white on a phone',
+        );
+      }
+    });
+
+    test('every light surface is warm, not neutral', () {
+      // Cream is a red-over-blue tilt. Without a floor here a palette can
+      // drift to grey while every contrast test stays green.
+      for (final MapEntry<String, Color> s in surfaces.entries) {
+        final double spread = (s.value.r - s.value.b) * 255;
+        expect(
+          spread,
+          greaterThanOrEqualTo(12),
+          reason:
+              '${s.key} has a red-to-blue spread of '
+              '${spread.toStringAsFixed(0)}/255 — too neutral to read as paper',
+        );
+      }
+    });
+
+    test('a card still reads as a card on the warmed ground', () {
+      // Fill alone carries most of this; the border carries the rest. If the
+      // ground warms and the card does not move with it, the list flattens
+      // into one sheet.
+      expect(
+        Contrast.ratio(c.surface, c.background),
+        greaterThanOrEqualTo(1.08),
+        reason:
+            'surface on background is '
+            '${Contrast.ratio(c.surface, c.background).toStringAsFixed(3)}:1',
+      );
+      expect(
+        Contrast.ratio(c.surfaceSunken, c.background),
+        greaterThanOrEqualTo(1.08),
+        reason: 'a sunken field must read as recessed from the ground',
+      );
+    });
+  });
+
+  group('dark surfaces stay separable', () {
+    final HearthColors c = HearthColors.dark();
+
+    test('the dark ground is still near-black, not a warmed brown', () {
+      // Spec §6.1's kitchen-first rule beats its palette preference here, and
+      // the light fix must not quietly drag dark towards cosy mud.
+      expect(
+        Contrast.ratio(c.background, const Color(0xFF000000)),
+        lessThan(2),
+      );
+      expect(Contrast.ratio(c.textPrimary, c.background), greaterThan(12));
+    });
+  });
 
   group('Contrast helper', () {
     test('black on white is the maximum ratio', () {
