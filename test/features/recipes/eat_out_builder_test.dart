@@ -264,6 +264,180 @@ void main() {
     expect(find.text('2 oz · 65 kcal'), findsOneWidget);
   });
 
+  group('taking an ordinary component out (spec §5.2)', () {
+    // Not a modifier: the chain publishes lettuce as a positive row you can
+    // order. Taking it out is the *pick* being negative, for a burger whose
+    // published figure counted the lettuce in.
+    List<Food> freddys() => <Food>[
+      item(
+        'Single Steakburger',
+        restaurant: "Freddy's",
+        section: 'Steakburgers',
+        order: 0,
+        amount: 1,
+        unit: Units.item,
+        macros: const Macros(kcal: 380, proteinG: 24, carbG: 30, fatG: 12),
+      ),
+      item(
+        'Lettuce',
+        restaurant: "Freddy's",
+        section: 'Toppings',
+        order: 1,
+        amount: 1,
+        unit: Units.ounce,
+        macros: const Macros(kcal: 3, carbG: 1),
+      ),
+    ];
+
+    Future<void> openFreddys(WidgetTester tester) async {
+      await openBuilder(tester);
+      await tester.tap(find.text("Freddy's"));
+      await pumpFrames(tester, frames: 12);
+    }
+
+    testWidgets('is offered on every ordinary row, and waits its turn', (
+      WidgetTester tester,
+    ) async {
+      // Greyed with the reason rather than hidden, the way a modifier row is:
+      // a control that appears and disappears as you pick is harder to
+      // understand than one that says what it is waiting for.
+      await pumpHearthApp(tester, foods: freddys());
+      await openFreddys(tester);
+
+      expect(
+        find.byTooltip('Take Lettuce out — pick something first'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Single Steakburger'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.byTooltip('Take Lettuce out'), findsOneWidget);
+    });
+
+    testWidgets('a taken-out row says so in words, not by colour', (
+      WidgetTester tester,
+    ) async {
+      await pumpHearthApp(tester, foods: freddys());
+      await openFreddys(tester);
+      await tester.tap(find.text('Single Steakburger'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.byTooltip('Take Lettuce out'));
+      await pumpFrames(tester, frames: 12);
+
+      // The words and a real minus sign, both of which survive a screen
+      // reader and a monochrome display (§6.3).
+      expect(find.text('Taking it out'), findsOneWidget);
+      expect(find.text('−1 oz · −3 kcal'), findsOneWidget);
+      expect(find.text('Build (2)'), findsOneWidget);
+    });
+
+    testWidgets('and it goes when the last real thing goes', (
+      WidgetTester tester,
+    ) async {
+      // The same rule the modifiers follow, for the same reason: left behind,
+      // "no lettuce" is a meal of minus three calories.
+      await pumpHearthApp(tester, foods: freddys());
+      await openFreddys(tester);
+      await tester.tap(find.text('Single Steakburger'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.byTooltip('Take Lettuce out'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Single Steakburger'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.textContaining('Build ('), findsNothing);
+      expect(find.text('Taking it out'), findsNothing);
+    });
+
+    testWidgets('it builds a recipe with the deduction already matched', (
+      WidgetTester tester,
+    ) async {
+      final HearthDatabase db = await pumpHearthApp(tester, foods: freddys());
+      await openFreddys(tester);
+      await tester.tap(find.text('Single Steakburger'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.byTooltip('Take Lettuce out'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Build (2)'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(find.text('New recipe'), findsOneWidget);
+      expect(find.text('tap to match a food'), findsNothing);
+      // The line itself carries the sign into the editor.
+      expect(find.textContaining('−1 oz Lettuce'), findsWidgets);
+      expect(await db.select(db.recipes).get(), isEmpty);
+    });
+
+    testWidgets('two slices off a double is a count, taken the other way', (
+      WidgetTester tester,
+    ) async {
+      await pumpHearthApp(tester, foods: freddys());
+      await openFreddys(tester);
+      await tester.tap(find.text('Single Steakburger'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.byTooltip('Take Lettuce out'));
+      await pumpFrames(tester, frames: 12);
+
+      // The stepper counts what is being taken out, on its magnitude — it does
+      // not walk a number down through zero and out the other side.
+      expect(find.text('−1×'), findsOneWidget);
+      await tester.tap(find.byTooltip('Take out more'));
+      await pumpFrames(tester, frames: 12);
+      expect(find.text('−1.5×'), findsOneWidget);
+    });
+
+    testWidgets('and it is still a deduction once it has been saved', (
+      WidgetTester tester,
+    ) async {
+      // Through the parser, the mapper and SQLite, which is three places a
+      // sign can be lost between the menu and the day it is logged to.
+      final HearthDatabase db = await pumpHearthApp(tester, foods: freddys());
+      await openFreddys(tester);
+      await tester.tap(find.text('Single Steakburger'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.byTooltip('Take Lettuce out'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Build (2)'));
+      await pumpFrames(tester, frames: 20);
+
+      await tester.enterText(find.byType(TextField).first, 'Burger, no salad');
+      await pumpFrames(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await pumpFrames(tester, frames: 20);
+
+      final List<RecipeIngredientRow> rows = await db
+          .select(db.recipeIngredients)
+          .get();
+      final RecipeIngredientRow lettuce = rows.firstWhere(
+        (RecipeIngredientRow row) => row.name == 'Lettuce',
+      );
+      expect(lettuce.quantityCanonical, lessThan(0));
+      expect(lettuce.foodId, isNotNull);
+      // And the line the user can still read and edit says it in words.
+      expect(lettuce.rawText, startsWith('−'));
+    });
+
+    testWidgets('a meal of nothing but deductions cannot be built', (
+      WidgetTester tester,
+    ) async {
+      // Whatever the user does, there is no path to a recipe that only takes
+      // away — the same guard the modifiers have, sharing the same rule.
+      await pumpHearthApp(tester, foods: freddys());
+      await openFreddys(tester);
+
+      await tester.tap(
+        find.byTooltip(
+          'Take Lettuce out — pick something '
+          'first',
+        ),
+      );
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.textContaining('Build ('), findsNothing);
+    });
+  });
+
   group('modifiers (spec §5.2)', () {
     Food wrap() => item(
       'Make it a Lettuce Wrap',

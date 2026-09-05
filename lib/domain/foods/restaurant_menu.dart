@@ -124,12 +124,24 @@ class MenuSection {
 /// [count] multiplies the food's own serving rather than naming an amount:
 /// every portion on a restaurant sheet is the portion they serve, so the only
 /// question anybody has is how many of them. Double meat is 2.
+///
+/// **A negative count takes the component out.** A published cheeseburger
+/// figure counts the lettuce that came on it, so "no lettuce" is that same
+/// ordinary menu row picked in the other direction (spec §5.2). It is
+/// deliberately not the modifier mechanism: a modifier is a row the chain
+/// itself publishes as a deduction, with per-column signs of its own, and this
+/// is a positive row the person eating chose to subtract. The sign lives on
+/// the pick, so nothing about the food changes and the same row serves both
+/// directions.
 @immutable
 class MenuPick {
   const MenuPick({required this.food, this.count = 1});
 
   final Food food;
   final double count;
+
+  /// Whether this pick takes its component out rather than putting it in.
+  bool get isRemoval => count < 0;
 
   MenuPick withCount(double next) => MenuPick(food: food, count: next);
 
@@ -185,9 +197,20 @@ class MenuPick {
   /// moved to the nearest thousandth **only when it is already essentially
   /// there** — which erases conversion residue and leaves anything anybody
   /// actually meant exactly where it was.
+  ///
+  /// The sign is written separately from the magnitude, and as the real minus
+  /// U+2212: that is what the ingredient parser reads back as a deduction,
+  /// where a hyphen would be read as a bullet and quietly dropped — turning
+  /// "no lettuce" into extra lettuce. Separately, because [writeAmount] splits
+  /// a mixed number into a whole part and a remainder, and a sign has no
+  /// business in that arithmetic.
   static String _number(double value) {
-    final double snapped = (value * 1000).roundToDouble() / 1000;
-    return writeAmount((value - snapped).abs() < 1e-6 ? snapped : value);
+    final double magnitude = value.abs();
+    final double snapped = (magnitude * 1000).roundToDouble() / 1000;
+    final String written = writeAmount(
+      (magnitude - snapped).abs() < 1e-6 ? snapped : magnitude,
+    );
+    return value < 0 ? '−$written' : written;
   }
 
   @override

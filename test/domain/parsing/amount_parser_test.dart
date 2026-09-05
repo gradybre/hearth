@@ -84,4 +84,22 @@ void main() {
       }
     });
   });
+
+  group('a negative amount', () {
+    test('is written the way it would be typed back', () {
+      // A quantity can be below zero now that a menu component can be taken
+      // out of a meal (spec §5.2). Writing 1.5 of one as "-2 1/2" — a whole
+      // number rounded the wrong way and a fraction added to it — is not a
+      // rounding slip but the wrong number, and nothing reads it back.
+      expect(writeAmount(-4), '-4');
+      expect(writeAmount(-1.5), '-1 1/2');
+      expect(writeAmount(-0.5), '-1/2');
+    });
+
+    test('and reads back to exactly what was written', () {
+      for (final double value in <double>[-4, -1.5, -0.5, -0.25]) {
+        expect(parseAmount(writeAmount(value)), value);
+      }
+    });
+  });
 }

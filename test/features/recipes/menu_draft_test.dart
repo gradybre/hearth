@@ -97,6 +97,65 @@ void main() {
     expect(wrap.quantity!.amountIn(Units.item), closeTo(1, 1e-9));
   });
 
+  group('a component picked in the other direction (spec §5.2)', () {
+    final Food lettuce = item(
+      'Lettuce',
+      0.5,
+      Units.ounce,
+      const Macros(kcal: 3, carbG: 1),
+    );
+
+    test('writes a line that reads back as a deduction', () {
+      final MenuPick removed = MenuPick(food: lettuce, count: -1);
+
+      expect(removed.isRemoval, isTrue);
+      // A real minus, which is what the parser reads and what a screen reader
+      // says out loud — not a hyphen, which is how a bulleted list starts.
+      expect(removed.line, startsWith('−'));
+
+      final ParsedIngredient parsed = IngredientParser.parse(removed.line);
+      expect(parsed.quantity!.amountIn(Units.ounce), closeTo(-0.5, 1e-9));
+      expect(parsed.name, 'Lettuce');
+    });
+
+    test('and the food behind it still resolves', () {
+      final RecipeDraft draft = built(<MenuPick>[
+        MenuPick(food: tortilla),
+        MenuPick(food: lettuce, count: -1),
+      ]);
+
+      for (final ParsedIngredient parsed in draft.parsedIngredients) {
+        expect(
+          draft.foodIdFor(parsed.name),
+          isNotNull,
+          reason: 'no food behind "${parsed.name}"',
+        );
+      }
+    });
+
+    test('and the sign survives being saved and opened again', () {
+      // Three parses deep: the builder writes the line, `toRecipe` parses it,
+      // and reopening parses the stored raw text a second time. A sign lost at
+      // any of them turns "no lettuce" into extra lettuce, silently.
+      final Recipe saved = built(<MenuPick>[
+        MenuPick(food: chicken),
+        MenuPick(food: lettuce, count: -2),
+      ]).toRecipe();
+
+      final RecipeIngredient stored = saved.allIngredients.firstWhere(
+        (RecipeIngredient i) => i.name == 'Lettuce',
+      );
+      expect(stored.quantity!.amountIn(Units.ounce), closeTo(-1, 1e-9));
+
+      final RecipeDraft reopened = RecipeDraft.fromRecipe(saved);
+      final ParsedIngredient reparsed = reopened.parsedIngredients.firstWhere(
+        (ParsedIngredient i) => i.name == 'Lettuce',
+      );
+      expect(reparsed.quantity!.amountIn(Units.ounce), closeTo(-1, 1e-9));
+      expect(reopened.foodIdFor('Lettuce'), lettuce.id);
+    });
+  });
+
   test('an empty pick list is an empty recipe, not a broken one', () {
     final RecipeDraft draft = built(const <MenuPick>[]);
 
