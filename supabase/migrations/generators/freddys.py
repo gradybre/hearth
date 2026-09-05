@@ -22,15 +22,20 @@ Second, exactly one value is absent
 from the page — the cholesterol for a regular order of fries, which is
 therefore null here rather than zero (spec §5.6).
 
-Two rows are dropped, both "Make any Sandwich a Lettuce Wrap". Freddy's
-publishes it as a deduction — minus 180 calories, minus 25 g of carbohydrate
-— because it is a modification rather than something you order. Hearth has no
-negative food and the schema refuses one, which is right: a food that gives
-calories back is not a food. Anyone eating a lettuce-wrapped burger logs the
-burger and is about 180 calories high. Modelling a modifier is a spec
-question, not something to smuggle into a seed. The loop below drops any row with a
-negative value and names it, so if Freddy's publishes another the run says so
-rather than handing it to a constraint.
+The two "Make any Sandwich a Lettuce Wrap" rows are now seeded, as **one**
+row in a trailing "Modifications" section. Freddy's publishes it as a
+deduction — minus 180 calories, minus 25 g of carbohydrate, and a gram of
+fibre *added*, because the bun is what was carrying the deficit — and
+`foods.is_modifier` is what lets those negatives exist at all.
+
+One row rather than two, and not at its printed position. The page prints it
+twice with identical numbers, under Chicken & Hot Dogs and again under
+Steakburgers; two foods sharing a (brand, name) would be a first for any
+seeded menu and would break `RecipeDraft.fromMenu`, whose matches map is keyed
+on the normalised name — the two picks would collapse and one would silently
+lose its food. A trailing section also leaves all 216 existing `menu_order`
+values untouched, where slotting it in at its printed position would renumber
+209 rows for no gain.
 
 Five rows carry `is_zero_calorie`: the three seasoning portions and both
 mustards, which Freddy's publishes as zero across all four macros with only
@@ -292,6 +297,10 @@ FREDDYS = [
 
 NAMESPACE = uuid.UUID("2f1a7c30-9b41-4d5e-8a62-c0de00000000")
 
+# Where the deductions go. Its own section at the end of the menu rather than
+# at each printed position: see the note at the top of this file.
+MODIFIERS_SECTION = "Modifications"
+
 
 def det(key):
     return str(uuid.uuid5(NAMESPACE, key))
@@ -312,15 +321,23 @@ def number(value):
 
 food_rows = []
 serving_rows = []
-dropped = []
+modifiers = []
 order = 0
-for section, items in FREDDYS:
+for section, items in FREDDYS + [(MODIFIERS_SECTION, [])]:
+    # The deductions found above, once, at the end of the menu.
+    if section == MODIFIERS_SECTION:
+        items = modifiers
     for name, kcal, protein, carb, fat, fibre, sodium, chol in items:
-        # A deduction, not a food. Named rather than silently skipped: the
-        # next person to re-run this against a changed page should be told.
-        if any(v is not None and v < 0
-               for v in (kcal, protein, carb, fat, fibre, sodium, chol)):
-            dropped.append("%s / %s" % (section, name))
+        # Deductions are collected and emitted once at the end, in their own
+        # section. See the note at the top of this file for why one row
+        # rather than the two the page prints.
+        if section != MODIFIERS_SECTION and any(
+            v is not None and v < 0
+            for v in (kcal, protein, carb, fat, fibre, sodium, chol)
+        ):
+            row = (name, kcal, protein, carb, fat, fibre, sodium, chol)
+            if row not in modifiers:
+                modifiers.append(row)
             continue
 
         key = "freddys/%s/%s" % (section, name)
@@ -335,9 +352,10 @@ for section, items in FREDDYS:
         zero = not any((kcal, protein, carb, fat))
 
         food_rows.append(
-            "    ('%s'::uuid, '%s', 'Freddy''s', '%s', %d, %s)"
+            "    ('%s'::uuid, '%s', 'Freddy''s', '%s', %d, %s, %s)"
             % (food_id, sql(name), sql(section), order,
-               "true" if zero else "false")
+               "true" if zero else "false",
+               "true" if section == MODIFIERS_SECTION else "false")
         )
         serving_rows.append(
             "    ('%s'::uuid, '%s'::uuid, '1 serving', 1.0, 'count', 'item',\n"
@@ -373,12 +391,17 @@ HEADER = """\
 -- Exactly one value is missing from the page: the cholesterol for a regular
 -- order of fries, which is null here rather than zero (spec 5.6).
 --
--- Two rows are absent: both copies of "Make any Sandwich a Lettuce Wrap",
--- which Freddy's publishes as a deduction -- minus 180 calories, minus 25 g of
--- carbohydrate -- because it is a modification rather than something ordered.
--- Hearth has no negative food and `food_serving_options` refuses one, which is
--- right: a food that gives calories back is not a food. A lettuce-wrapped
--- burger is logged as the burger, and reads about 180 calories high.
+-- "Make any Sandwich a Lettuce Wrap" is here now, as a modifier: minus 180
+-- calories, minus 25 g of carbohydrate, and a gram of fibre *added*, because
+-- the bun is what was carrying the deficit. `foods.is_modifier` is what lets
+-- those negatives exist at all.
+--
+-- One row rather than the two the page prints, in a trailing "Modifications"
+-- section rather than at either printed position. Two foods sharing a
+-- (brand, name) would be a first for any seeded menu and would collapse in
+-- `RecipeDraft.fromMenu`, whose matches map is keyed on the normalised name.
+-- A trailing section also leaves all 216 existing `menu_order` values alone,
+-- where slotting it in where it is printed would renumber 209 rows.
 --
 -- Five rows carry `is_zero_calorie`: the three seasoning portions and both
 -- mustards, which Freddy's publishes as zero across all four macros with only
@@ -402,13 +425,13 @@ HEADER = """\
 
 insert into public.foods (
   id, household_id, name, brand, menu_group, menu_order,
-  source, is_zero_calorie, is_deleted, updated_at
+  source, is_zero_calorie, is_modifier, is_deleted, updated_at
 )
 select v.id, null, v.name, v.brand, v.menu_group, v.menu_order,
-       'restaurant', v.is_zero_calorie, false, now()
+       'restaurant', v.is_zero_calorie, v.is_modifier, false, now()
 from (values
 %s
-) as v (id, name, brand, menu_group, menu_order, is_zero_calorie)
+) as v (id, name, brand, menu_group, menu_order, is_zero_calorie, is_modifier)
 on conflict (id) do update set
   name            = excluded.name,
   brand           = excluded.brand,
@@ -416,21 +439,29 @@ on conflict (id) do update set
   menu_order      = excluded.menu_order,
   source          = excluded.source,
   is_zero_calorie = excluded.is_zero_calorie,
+  is_modifier     = excluded.is_modifier,
   is_deleted      = false,
   updated_at      = now();
 
 insert into public.food_serving_options (
   id, food_id, label, amount_canonical, amount_kind, amount_unit,
   kcal, protein_g, carb_g, fat_g, fiber_g, sodium_mg, cholesterol_mg,
-  sort_order
+  is_modifier, sort_order
 )
-select * from (values
+select
+  v.id, v.food_id, v.label, v.amount_canonical, v.amount_kind, v.amount_unit,
+  v.kcal, v.protein_g, v.carb_g, v.fat_g, v.fiber_g, v.sodium_mg,
+  v.cholesterol_mg, f.is_modifier, v.sort_order
+from (values
 %s
 ) as v (
   id, food_id, label, amount_canonical, amount_kind, amount_unit,
   kcal, protein_g, carb_g, fat_g, fiber_g, sodium_mg, cholesterol_mg,
   sort_order
 )
+-- Taken from the food rather than restated, so the two can never disagree in
+-- the file itself. The composite foreign key would refuse them if they did.
+join public.foods f on f.id = v.food_id
 on conflict (id) do update set
   label            = excluded.label,
   amount_canonical = excluded.amount_canonical,
@@ -443,12 +474,13 @@ on conflict (id) do update set
   fiber_g          = excluded.fiber_g,
   sodium_mg        = excluded.sodium_mg,
   cholesterol_mg   = excluded.cholesterol_mg,
+  is_modifier      = excluded.is_modifier,
   sort_order       = excluded.sort_order;
 """
 
 out = HEADER % (",\n".join(food_rows), ",\n".join(serving_rows))
-path = "supabase/migrations/20260909090000_freddys.sql"
+path = "supabase/migrations/20260910100000_freddys_modifiers.sql"
 io.open(path, "w", encoding="utf-8").write(out)
 print("wrote %s with %d foods" % (path, len(food_rows)))
-for name in dropped:
-    print("  dropped, published as a deduction: %s" % name)
+for row in modifiers:
+    print("  seeded as a deduction: %s" % row[0])

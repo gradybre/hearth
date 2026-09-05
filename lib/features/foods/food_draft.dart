@@ -390,7 +390,33 @@ class FoodDraft {
   String? get servingsError =>
       usableServings.isEmpty ? 'Add at least one serving size.' : null;
 
-  bool get isValid => nameError == null && servingsError == null;
+  /// Why a negative was refused, or null.
+  ///
+  /// The hosted database refuses one outright — `check (kcal >= 0 or
+  /// is_modifier)` — and nothing local does, so without this the save would
+  /// succeed, sit in the queue, and fail silently on the way up. Better to say
+  /// so on the screen where the number was typed (§5.2).
+  String? get macrosError {
+    if (isModifier) return null;
+    final bool anyNegative = usableServings.any(
+      (ServingDraft s) =>
+          s.macros.kcal < 0 ||
+          s.macros.proteinG < 0 ||
+          s.macros.carbG < 0 ||
+          s.macros.fatG < 0 ||
+          (s.macros.fiberG ?? 0) < 0 ||
+          (s.macros.sodiumMg ?? 0) < 0 ||
+          (s.macros.cholesterolMg ?? 0) < 0,
+    );
+    if (!anyNegative) return null;
+    return source == FoodSource.restaurant
+        ? 'Only a deduction can be negative. Turn on "takes away rather '
+              'than adds".'
+        : 'A food cannot have a negative amount.';
+  }
+
+  bool get isValid =>
+      nameError == null && servingsError == null && macrosError == null;
 
   /// Whether this draft has servings and none of them carry a macro.
   ///

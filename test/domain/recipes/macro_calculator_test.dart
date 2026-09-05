@@ -625,4 +625,69 @@ void noMatchNeededTests() {
       );
     });
   });
+
+  group('a recipe that comes to less than nothing (spec §5.2)', () {
+    Food wrap() => aFood(
+      'Make it a Lettuce Wrap',
+      id: 'f-wrap',
+      source: FoodSource.restaurant,
+      servingOptions: <ServingOption>[
+        aServing(
+          amount: 1,
+          unit: Units.item,
+          macros: const Macros(kcal: -180, carbG: -25, fiberG: 1),
+        ),
+      ],
+    ).asModifier();
+
+    Recipe onlyTheDeduction() => aRecipe(
+      servings: 1,
+      ingredients: <RecipeIngredient>[
+        anIngredient(
+          'Make it a Lettuce Wrap',
+          amount: 1,
+          unit: Units.item,
+          foodId: 'f-wrap',
+        ),
+      ],
+    );
+
+    test('says so, rather than quietly reducing the day', () {
+      // The builder refuses to assemble one, but the recipe editor will let
+      // you delete the burger afterwards and keep the wrap. Nothing is
+      // missing here, so the ordinary "not counted" phrasing has nothing to
+      // report — and a silent −180 would be frozen into whatever day it was
+      // logged to (rule 3).
+      final RecipeMacros macros = MacroCalculator.forRecipe(
+        onlyTheDeduction(),
+        foods: <String, Food>{'f-wrap': wrap()},
+      );
+
+      expect(macros.total.kcal, -180);
+      expect(macros.incompleteReason, contains('less than nothing'));
+    });
+
+    test('and an ordinary recipe still says nothing at all', () {
+      final Food chicken = aFoodPer100g('chicken breast', kcal: 165);
+      final Recipe recipe = aRecipe(
+        servings: 1,
+        ingredients: <RecipeIngredient>[
+          anIngredient(
+            'chicken breast',
+            amount: 100,
+            unit: Units.gram,
+            foodId: chicken.id,
+          ),
+        ],
+      );
+
+      expect(
+        MacroCalculator.forRecipe(
+          recipe,
+          foods: <String, Food>{chicken.id: chicken},
+        ).incompleteReason,
+        isNull,
+      );
+    });
+  });
 }

@@ -363,6 +363,31 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
               contentPadding: EdgeInsets.zero,
             ),
             const SizedBox(height: HearthSpacing.lg),
+            // Only on a restaurant food. A deduction is a menu row — "make it
+            // a lettuce wrap" — and there is nothing in a household's own
+            // pantry that takes calories away.
+            if (_isRestaurant) ...<Widget>[
+              SwitchListTile.adaptive(
+                value: _draft.isModifier,
+                onChanged: (bool on) =>
+                    setState(() => _draft = _draft.copyWith(isModifier: on)),
+                title: Text(
+                  'This takes away rather than adds',
+                  style: context.text.body,
+                ),
+                subtitle: Text(
+                  '"Make it a lettuce wrap", −180 calories. Enter the numbers '
+                  'with their minus signs, as the sheet prints them. A '
+                  'deduction is only ever picked in the eat-out builder, '
+                  'against something you actually ordered.',
+                  style: context.text.metadata.copyWith(
+                    color: colors.textMuted,
+                  ),
+                ),
+                contentPadding: EdgeInsets.zero,
+              ),
+              const SizedBox(height: HearthSpacing.lg),
+            ],
             // Only when there is something to confirm. A food with real
             // numbers on it has no zeros to vouch for, and offering the
             // question anyway would invite somebody to answer it wrongly.
@@ -443,6 +468,18 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
                 padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
                 child: Text(
                   _draft.servingsError!,
+                  style: context.text.metadata.copyWith(color: colors.error),
+                ),
+              ),
+            // Shown whether or not Save has been pressed. The hosted database
+            // refuses a negative outright and nothing local does, so a save
+            // that looked fine would sit in the queue and fail on the way up
+            // — better to say so beside the number that caused it.
+            if (_draft.macrosError case final String message)
+              Padding(
+                padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
+                child: Text(
+                  message,
                   style: context.text.metadata.copyWith(color: colors.error),
                 ),
               ),

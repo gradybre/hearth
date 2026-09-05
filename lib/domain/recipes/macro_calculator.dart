@@ -161,7 +161,18 @@ class RecipeMacros {
       if (ingredientsWithoutQuantity.isNotEmpty)
         '${_count(ingredientsWithoutQuantity)} with no amount',
     ];
-    if (reasons.isEmpty) return null;
+    if (reasons.isEmpty) {
+      // Nothing is missing, but the answer can still be nonsense: a meal made
+      // of deductions and nothing else. The builder will not let you assemble
+      // one, but the recipe editor will let you delete the burger afterwards
+      // and keep the lettuce wrap, and a total below zero is worth saying out
+      // loud before it is logged into a day (spec §5.2).
+      if (total.kcal < 0) {
+        return 'This comes to less than nothing — a deduction with nothing '
+            'left to take it from.';
+      }
+      return null;
+    }
     return '${reasons.join('; ')} — not counted here.';
   }
 

@@ -42,8 +42,28 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
     _picks.clear();
   });
 
-  void _toggle(Food food) => setState(() {
-    if (_picks.remove(food.id) == null) _picks[food.id] = 1;
+  /// Whether anything real is picked — a modifier does not count.
+  ///
+  /// A deduction has to have something to come off. On its own it is not a
+  /// meal, it is 180 calories taken out of a day that never had them.
+  bool _hasSomethingToApplyTo(List<Food> menu) =>
+      menu.any((Food food) => !food.isModifier && _picks.containsKey(food.id));
+
+  void _toggle(Food food, List<Food> menu) => setState(() {
+    if (_picks.remove(food.id) != null) {
+      // Unpicking the last real thing takes its modifiers with it. Left
+      // behind, they would be a meal of minus 180 calories, and the rule
+      // above would hold only until somebody changed their mind.
+      if (!food.isModifier && !_hasSomethingToApplyTo(menu)) {
+        for (final Food other in menu) {
+          if (other.isModifier) _picks.remove(other.id);
+        }
+      }
+      return;
+    }
+    if (food.isModifier && !_hasSomethingToApplyTo(menu)) return;
+    // A modifier is one or none. You do not lettuce-wrap a burger 3.5 times.
+    _picks[food.id] = 1;
   });
 
   void _setCount(Food food, double count) => setState(() {
@@ -124,7 +144,8 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
             : _Menu(
                 sections: RestaurantMenu.sectionsFor(chosen, library),
                 picks: _picks,
-                onToggle: _toggle,
+                hasSomethingToApplyTo: _hasSomethingToApplyTo(menu),
+                onToggle: (Food food) => _toggle(food, menu),
                 onCount: _setCount,
                 gutter: gutter,
               ),
@@ -236,11 +257,16 @@ class _Menu extends StatelessWidget {
     required this.picks,
     required this.onToggle,
     required this.onCount,
+    required this.hasSomethingToApplyTo,
     required this.gutter,
   });
 
   final List<MenuSection> sections;
   final Map<String, double> picks;
+
+  /// Whether anything a modifier could come off is picked yet.
+  final bool hasSomethingToApplyTo;
+
   final ValueChanged<Food> onToggle;
   final void Function(Food food, double count) onCount;
   final double gutter;
@@ -279,6 +305,7 @@ class _Menu extends StatelessWidget {
             _MenuRow(
               food: food,
               count: picks[food.id],
+              canPick: !food.isModifier || hasSomethingToApplyTo,
               onToggle: () => onToggle(food),
               onCount: (double count) => onCount(food, count),
             ),
@@ -295,6 +322,7 @@ class _MenuRow extends StatelessWidget {
   const _MenuRow({
     required this.food,
     required this.count,
+    required this.canPick,
     required this.onToggle,
     required this.onCount,
   });
@@ -303,6 +331,11 @@ class _MenuRow extends StatelessWidget {
 
   /// Null when this one is not picked.
   final double? count;
+
+  /// False for a modifier with nothing yet to apply to. Shown greyed with the
+  /// reason rather than hidden: a row that disappears and reappears as you
+  /// pick is harder to understand than one that says why it is waiting.
+  final bool canPick;
 
   final VoidCallback onToggle;
   final ValueChanged<double> onCount;
@@ -317,10 +350,18 @@ class _MenuRow extends StatelessWidget {
     // What you are actually having, not the serving *and* what you are having
     // beside it. A picked half-scoop read "2.0000000088184904 oz · 4 oz · 65
     // kcal", which is two portions and a float for one line of one item.
+    final double kcal = serving == null
+        ? 0
+        : MacroCalculator.forServings(serving, picked ?? 1).kcal;
+    // A minus sign in the text, not a colour: a deduction has to read as one
+    // to a screen reader and on a monochrome display (§6.3). `−` is the real
+    // minus, which is what a number this size deserves next to a portion.
+    final String calories = kcal < 0
+        ? '−${kcal.abs().round()} kcal'
+        : '${kcal.round()} kcal';
     final String portion = serving == null
         ? ''
-        : '${isPicked ? pick.portionLabel : serving.label} · '
-              '${MacroCalculator.forServings(serving, picked ?? 1).kcal.round()} kcal';
+        : '${isPicked ? pick.portionLabel : serving.label} · $calories';
 
     return Semantics(
       // One thing to a screen reader: a checkbox, a name and a portion read
@@ -332,7 +373,7 @@ class _MenuRow extends StatelessWidget {
         color: isPicked ? colors.surfaceElevated : colors.surface,
         borderRadius: BorderRadius.circular(HearthRadius.md),
         child: InkWell(
-          onTap: onToggle,
+          onTap: canPick ? onToggle : null,
           borderRadius: BorderRadius.circular(HearthRadius.md),
           child: Container(
             decoration: BoxDecoration(
@@ -346,7 +387,11 @@ class _MenuRow extends StatelessWidget {
               children: <Widget>[
                 // Icon as well as colour, never colour alone (§6.3).
                 Icon(
-                  isPicked ? Icons.check_circle : Icons.circle_outlined,
+                  isPicked
+                      ? Icons.check_circle
+                      : food.isModifier
+                      ? Icons.remove_circle_outline
+                      : Icons.circle_outlined,
                   size: 20,
                   color: isPicked ? colors.accent : colors.textMuted,
                 ),
@@ -355,11 +400,29 @@ class _MenuRow extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Text(food.name, style: context.text.ingredient),
+                      Text(
+                        food.name,
+                        style: context.text.ingredient.copyWith(
+                          color: canPick ? null : colors.textMuted,
+                        ),
+                      ),
                       if (portion.isNotEmpty) ...<Widget>[
                         const SizedBox(height: HearthSpacing.xxs),
                         Text(
                           portion,
+                          style: context.text.metadata.copyWith(
+                            color: colors.textMuted,
+                          ),
+                        ),
+                      ],
+                      // Why it is waiting, rather than a row that silently
+                      // does nothing when tapped.
+                      if (food.isModifier) ...<Widget>[
+                        const SizedBox(height: HearthSpacing.xxs),
+                        Text(
+                          canPick
+                              ? 'Takes away'
+                              : 'Takes away — pick something first',
                           style: context.text.metadata.copyWith(
                             color: colors.textMuted,
                           ),
@@ -371,7 +434,10 @@ class _MenuRow extends StatelessWidget {
                 // Only where there is something to count. An unpicked row
                 // showing a stepper invites setting a number on a thing you
                 // have not said you had.
-                if (isPicked) ...<Widget>[
+                // And never for a modifier, which is one or none: the
+                // deduction is for taking the bun off, and there is only one
+                // bun.
+                if (isPicked && !food.isModifier) ...<Widget>[
                   const SizedBox(width: HearthSpacing.sm),
                   _Stepper(count: picked, onChanged: onCount),
                 ],

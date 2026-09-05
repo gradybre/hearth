@@ -53,6 +53,24 @@ class MenuImportLine {
   final bool isHeading;
 
   bool get isUsable => problem == null && !isHeading;
+
+  /// A row published as a **deduction** (spec §5.2).
+  ///
+  /// The minus sign is the declaration. No new syntax and nothing to
+  /// remember: a chain prints "Make any Sandwich a Lettuce Wrap  -180  -3
+  /// -25  -6" and the transcription stays a faithful copy of it.
+  ///
+  /// Any negative among the seven, not all of them — Freddy's wrap adds a
+  /// gram of fibre while it takes away everything else, because the bun is
+  /// what was carrying the deficit.
+  bool get isModifier =>
+      macros.kcal < 0 ||
+      macros.proteinG < 0 ||
+      macros.carbG < 0 ||
+      macros.fatG < 0 ||
+      (macros.fiberG ?? 0) < 0 ||
+      (macros.sodiumMg ?? 0) < 0 ||
+      (macros.cholesterolMg ?? 0) < 0;
 }
 
 /// One item, before it has been written down as a line.
