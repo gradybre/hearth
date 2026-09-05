@@ -9,6 +9,7 @@ import '../data/adapters/data_export.dart';
 import '../data/adapters/edge_function_label_reader.dart';
 import '../data/adapters/edge_function_menu_reader.dart';
 import '../data/adapters/edge_function_recipe_ai.dart';
+import '../data/adapters/edge_function_recipe_icon.dart';
 import '../data/adapters/edge_function_shopping_assistant.dart';
 import '../data/adapters/image_picker_photos.dart';
 import '../data/adapters/kitchen_devices.dart';
@@ -24,6 +25,7 @@ import '../data/adapters/photo_picker.dart';
 import '../data/adapters/platform_kitchen_devices.dart';
 import '../data/adapters/platform_shared_content.dart';
 import '../data/adapters/recipe_ai.dart';
+import '../data/adapters/recipe_icon.dart';
 import '../data/adapters/share_plus_file_share.dart';
 import '../data/adapters/shared_content.dart';
 import '../data/adapters/shopping_assistant.dart';
@@ -882,6 +884,18 @@ final Provider<LabelReader?> labelReaderProvider = Provider<LabelReader?>(
       ? EdgeFunctionLabelReader(Supabase.instance.client)
       : null,
 );
+
+/// Draws a recipe's little sketch icon (spec §5.2, §6.1).
+///
+/// Null without a backend, like the readers above — and unlike them, nothing
+/// says so. An icon is decoration: a build that cannot draw one simply has
+/// recipes without pictures, which is what every recipe starts as.
+final Provider<RecipeIconSource?> recipeIconProvider =
+    Provider<RecipeIconSource?>(
+      (Ref ref) => ref.watch(supabaseReadyProvider)
+          ? EdgeFunctionRecipeIcon(Supabase.instance.client)
+          : null,
+    );
 
 /// Reads a restaurant's nutrition table off pictures of it (spec §5.2).
 ///

@@ -1,4 +1,5 @@
 import '../../domain/models/recipe.dart';
+import '../../domain/recipes/sketch_icon.dart';
 import '../local/hearth_database.dart';
 import '../local/pending_write_store.dart';
 import '../local/recipe_store.dart';
@@ -92,6 +93,41 @@ class RecipeRepository {
     });
   }
 
+  /// Gives a recipe its sketch icon, or takes it away (spec §5.2).
+  ///
+  /// Its own method rather than part of [save] for the same reason
+  /// [setPhotoUrl] is: the icon arrives after the save has already landed, on
+  /// a background call the editor is not waiting for, and by then the editor
+  /// may well be gone. Routing it through a form would mean a screen holding
+  /// a value it has no opinion about.
+  ///
+  /// The markup is refused unless it passes [SketchIcon.isValid], so nothing
+  /// unvalidated can reach the store even if a caller forgets — a rejected
+  /// answer leaves the recipe with no icon rather than a broken one.
+  ///
+  /// Null clears it: the user did not like the drawing, or the title changed
+  /// and the old sketch no longer describes the dish.
+  Future<void> setIconSvg(String id, String? svg) {
+    if (svg != null && !SketchIcon.isValid(svg)) return Future<void>.value();
+
+    final DateTime now = _now();
+    return _db.transaction(() async {
+      final Recipe? recipe = await _store.byId(id);
+      if (recipe == null) return;
+      final Recipe owned = _withHousehold(
+        recipe.copyWith(iconSvg: svg, clearIconSvg: svg == null),
+      );
+      await _store.upsert(owned, updatedAt: now);
+      await _queue.enqueue(
+        entityTable: entityTable,
+        entityId: id,
+        operation: WriteOperation.upsert,
+        payload: RecipeMapper.toJson(owned, updatedAt: now),
+        queuedAt: now,
+      );
+    });
+  }
+
   /// Hides a recipe and queues the change.
   ///
   /// This is a soft delete pushed as an ordinary update, never a row removal:
@@ -147,6 +183,7 @@ class RecipeRepository {
     kind: recipe.kind,
     source: recipe.source,
     photoUrl: recipe.photoUrl,
+    iconSvg: recipe.iconSvg,
     notes: recipe.notes,
     createdBy: recipe.createdBy,
     isDeleted: recipe.isDeleted,

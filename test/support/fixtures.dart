@@ -73,6 +73,7 @@ Recipe aRecipe({
   Duration? prepTime,
   Duration? cookTime,
   bool isDeleted = false,
+  String? iconSvg,
   DateTime? updatedAt,
 }) {
   final String recipeId = id ?? _id('recipe');
@@ -93,6 +94,7 @@ Recipe aRecipe({
     prepTime: prepTime,
     cookTime: cookTime,
     isDeleted: isDeleted,
+    iconSvg: iconSvg,
     updatedAt: updatedAt,
     sections:
         sections ??

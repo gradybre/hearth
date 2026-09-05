@@ -13,6 +13,7 @@ import 'package:hearth/data/adapters/pdf_pages.dart';
 import 'package:hearth/data/adapters/photo_picker.dart';
 import 'package:hearth/data/adapters/platform_shared_content.dart';
 import 'package:hearth/data/adapters/recipe_ai.dart';
+import 'package:hearth/data/adapters/recipe_icon.dart';
 import 'package:hearth/data/adapters/shared_content.dart';
 import 'package:hearth/data/adapters/shopping_assistant.dart';
 import 'package:hearth/data/auth/local_auth_gateway.dart';
@@ -76,6 +77,7 @@ Future<HearthDatabase> pumpHearthApp(
   RecipeAiSource? recipeAi,
   LabelReader? labelReader,
   MenuReader? menuReader,
+  RecipeIconSource? recipeIcon,
   PdfPages? pdfPages,
   ShoppingAssistant? shoppingAssistant,
   PhotoPicker? photoPicker,
@@ -155,6 +157,11 @@ Future<HearthDatabase> pumpHearthApp(
         // with no backend, and it is what the read buttons check before
         // offering themselves.
         menuReaderProvider.overrideWithValue(menuReader),
+        // Drawing a recipe's icon reaches the same paid API. Null is the
+        // honest state of a build with no backend — and unlike the readers
+        // above, nothing on screen says so: a recipe simply has no picture,
+        // which is what every recipe starts as.
+        recipeIconProvider.overrideWithValue(recipeIcon),
         // And the PDF renderer, which would otherwise open a file dialog no
         // widget test can answer.
         pdfPagesProvider.overrideWithValue(pdfPages ?? const _NoPdf()),

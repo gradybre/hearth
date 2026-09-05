@@ -7,6 +7,10 @@
 // and both come back as the same recipe shape, so one adapter and one review
 // screen serve both.
 //
+// A recipe's sketch icon is a fourth mode, and the one that yields first: it
+// is decorative, so it stops spending at a much lower share of the month's
+// budget than the modes somebody is waiting on (ICON_CEILING_FRACTION).
+//
 // Reading a nutrition label is a third mode here rather than a second function
 // for a plainer reason: it is the same key, the same model, the same image
 // plumbing and the same size caps, and splitting it would mean maintaining two
@@ -50,6 +54,22 @@ const OUTPUT_USD_PER_MTOK = 15;
 /// Above this share of the ceiling, answers carry a warning; at or above 1,
 /// they are refused (spec §3, §8.1).
 const WARN_AT = 0.75;
+
+/// Where a *decorative* call stops, well before the useful ones do.
+///
+/// A recipe icon is the only thing this function produces that nobody needs.
+/// Giving it the same ceiling as import would mean a month of pictures could
+/// be the reason a recipe import is refused at 90% of the budget — the
+/// picture having spent the money the import needed. So it yields first, and
+/// by a wide margin: half the ceiling still buys hundreds of sketches, and it
+/// leaves the other half for the features the app is actually for.
+const ICON_CEILING_FRACTION = 0.5;
+
+/// What a stored icon may weigh, mirroring `SketchIcon.maxMarkupLength` in
+/// the app and the check constraint on `recipes.icon_svg`. Three copies of
+/// one number, because the client is public and the database is the only one
+/// of the three that cannot be talked round.
+const MAX_ICON_LENGTH = 4096;
 
 /// The default when AI_MONTHLY_CEILING_USD is unset.
 ///
@@ -538,6 +558,55 @@ If a digit is blurred, a line is cut off, or a figure could be read two ways,
 transcribe your best reading AND list it in uncertain. A flagged guess is
 useful; a confident wrong number is not.`;
 
+/// A small line drawing of a dish (spec §5.2, §6.1).
+///
+/// One string, because the app is the thing that decides whether the markup
+/// is safe to draw and it does that with its own whitelist. A richer schema
+/// here would look like validation without being any.
+const ICON_TOOL = {
+  name: 'sketch_icon',
+  description: 'Return a small hand-drawn icon of the dish, as SVG markup.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      svg: {
+        type: 'string',
+        description: 'The complete <svg> element and nothing else.',
+      },
+    },
+    required: ['svg'],
+  },
+} as const;
+
+const ICON_PROMPT = `You draw tiny hand-sketched icons of dishes for a warm,
+rustic recipe app.
+
+Given a recipe's title, return ONE SVG element: a simple line drawing of the
+dish as somebody would doodle it in a notebook margin. Pumpkin muffins get
+muffins. Chicken noodle soup gets a bowl with a spoon. Draw the food, not a
+scene and not a plate of abstract shapes.
+
+It is rendered at about 24 by 24 points on a page of recipe titles, so
+simplify hard: five to fifteen strokes, generous curves, nothing that relies
+on detail smaller than a pixel at that size.
+
+Exactly these rules, because the app refuses anything else outright and a
+refused drawing means the recipe simply has none:
+
+- one root <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">;
+- inside it only <g>, <path>, <circle>, <ellipse>, <line>, <polyline>,
+  <polygon> and <rect>, with only geometry, stroke and fill attributes;
+- no colours worth naming — the app paints the whole drawing in one theme
+  colour, so anything you write is discarded. Use fill="none" and let the
+  strokes carry it;
+- no <text>, no <image>, no <use>, no <style>, no href of any kind, no
+  gradients, no filters, no comments, no XML declaration;
+- under ${MAX_ICON_LENGTH} characters in total, which is far more than a
+  sketch this simple needs.
+
+Return the markup alone. No prose around it, no markdown fence.`;
+
 interface Uncertain {
   field: string;
   note: string;
@@ -563,6 +632,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     notes?: string;
     recipe?: string;
     list?: string;
+    title?: string;
     messages?: { role?: string; text?: string }[];
     profile?: Record<string, unknown>;
   };
@@ -575,10 +645,12 @@ Deno.serve(async (request: Request): Promise<Response> => {
   const mode = (body.mode ?? '').trim();
   if (
     mode !== 'extract' && mode !== 'generate' && mode !== 'label' &&
-    mode !== 'shopping' && mode !== 'menu'
+    mode !== 'shopping' && mode !== 'menu' && mode !== 'icon'
   ) {
     return json(
-      { error: 'mode must be extract, generate, label, shopping or menu' },
+      {
+        error: 'mode must be extract, generate, label, shopping, menu or icon',
+      },
       400,
     );
   }
@@ -598,7 +670,21 @@ Deno.serve(async (request: Request): Promise<Response> => {
       }, 429);
     }
 
-    const content = mode === 'shopping'
+    // A picture is the first thing to yield. Checked separately from the
+    // ceiling above rather than folded into it, so the number that stops the
+    // decorative work stands next to the number that stops everything.
+    if (mode === 'icon' && budget.fraction >= ICON_CEILING_FRACTION) {
+      return json({
+        error: 'Recipe icons are paused until next month: they stop at ' +
+          `${Math.round(ICON_CEILING_FRACTION * 100)}% of the AI budget so ` +
+          'they can never be the reason an import is refused.',
+        usage: budget.report,
+      }, 429);
+    }
+
+    const content = mode === 'icon'
+      ? iconContent((body.title ?? '').trim())
+      : mode === 'shopping'
       ? shoppingContent(body.messages ?? [], (body.list ?? '').trim())
       : mode === 'menu'
       ? menuContent(body.images ?? [])
@@ -617,7 +703,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
         (body.recipe ?? '').trim(),
       );
 
-    const system = mode === 'shopping'
+    const system = mode === 'icon'
+      ? ICON_PROMPT
+      : mode === 'shopping'
       ? SHOPPING_PROMPT
       : mode === 'menu'
       ? MENU_PROMPT
@@ -626,7 +714,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
       : mode === 'extract'
       ? EXTRACT_PROMPT
       : GENERATE_PROMPT;
-    const tool = mode === 'shopping'
+    const tool = mode === 'icon'
+      ? ICON_TOOL
+      : mode === 'shopping'
       ? SHOPPING_TOOL
       : mode === 'menu'
       ? MENU_TOOL
@@ -638,16 +728,20 @@ Deno.serve(async (request: Request): Promise<Response> => {
     // six-page guide is 150 rows, and at 4,096 tokens the transcription stops
     // around row 60 — a short list that looks complete. The others answer
     // with one recipe, one label, one basket.
+    // An icon is a few hundred bytes of markup, so a small ceiling is the
+    // cheapest guard against a model that decides to trace a photograph.
     const answer = await ask(
       system,
       content,
       key,
       tool,
-      mode === 'menu' ? 16_000 : 4096,
+      mode === 'menu' ? 16_000 : mode === 'icon' ? 1500 : 4096,
     );
     const usage = await recordUsage(answer.usage);
 
-    const shaped = mode === 'shopping'
+    const shaped = mode === 'icon'
+      ? shapeIcon(answer.input)
+      : mode === 'shopping'
       ? shapeShopping(answer.input)
       : mode === 'menu'
       ? shapeMenu(answer.input, answer.truncated)
@@ -871,6 +965,51 @@ function shoppingContent(
   ];
 }
 
+/// A dish's name, as the one thing the drawing is of.
+///
+/// The title and nothing else, deliberately. The app redraws an icon when the
+/// title changes materially and at no other time, so feeding the model the
+/// ingredients or the notes would make the picture depend on things that
+/// never trigger a redraw — and the icon would quietly stop matching the
+/// recipe it sits beside.
+function iconContent(title: string): unknown[] {
+  if (!title) {
+    throw new Error('bad request: give the recipe a title to draw');
+  }
+
+  return [{ type: 'text', text: `Draw an icon for: ${title.slice(0, 200)}` }];
+}
+
+/// Narrows a drawing to markup the app has a chance of accepting.
+///
+/// A first pass, not the gate. The real one is `SketchIcon` in the app, which
+/// tokenises the document and checks every element and every attribute
+/// against a whitelist; this exists so an answer that was never going to pass
+/// costs no bandwidth and cannot be stored by a client that forgets to look.
+/// Both answer the same way — no icon, rather than a broken one.
+function shapeIcon(input: Record<string, unknown>): Record<string, unknown> {
+  let svg = text(input.svg);
+
+  // Models fence markup out of habit. Unwrapping is worth it because what is
+  // inside the fence is usually fine, and the alternative is paying for the
+  // same call twice.
+  const fence = /^```(?:svg|xml|html)?\s*([\s\S]*?)```$/.exec(svg);
+  if (fence) svg = fence[1].trim();
+
+  const lower = svg.toLowerCase();
+  const usable = svg.length > 0 &&
+    svg.length <= MAX_ICON_LENGTH &&
+    lower.startsWith('<svg') &&
+    lower.endsWith('</svg>') &&
+    !/<(script|foreignobject|image|use|style|text|animate|iframe)\b/.test(
+      lower,
+    ) &&
+    !/(href|xlink|javascript:|data:|url\(|<!|<\?)/.test(lower) &&
+    !/\son[a-z]+\s*=/.test(lower);
+
+  return { svg: usable ? svg : null };
+}
+
 /// Narrows the operations to the ones the app knows how to perform.
 ///
 /// An operation with no name cannot be applied to anything, and one with an
@@ -1009,7 +1148,13 @@ async function ask(
 /// would be a worse outcome than a call that should not have been made.
 /// Anthropic's own billing limit is still underneath this.
 async function checkBudget(): Promise<
-  { exhausted: boolean; spent: number; ceiling: number; report: unknown }
+  {
+    exhausted: boolean;
+    fraction: number;
+    spent: number;
+    ceiling: number;
+    report: unknown;
+  }
 > {
   const ceiling = Number(
     Deno.env.get('AI_MONTHLY_CEILING_USD') ?? DEFAULT_CEILING_USD,
@@ -1019,6 +1164,9 @@ async function checkBudget(): Promise<
 
   return {
     exhausted: fraction >= 1,
+    // Carried out rather than left inside `report`: a caller deciding whether
+    // *this* mode may spend needs the number, not a display object.
+    fraction,
     spent: Number(spent),
     ceiling,
     report: {
