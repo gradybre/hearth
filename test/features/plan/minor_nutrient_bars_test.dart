@@ -51,15 +51,35 @@ void main() {
     return db;
   }
 
-  testWidgets('a day whose foods know nothing shows no bars at all', (
+  testWidgets('a day whose foods know nothing still shows all three', (
     WidgetTester tester,
   ) async {
-    // Three rows of dashes would be worse than an absence, and "0 of 28 g"
-    // would be a claim nobody made.
+    // Hiding them was the first design, and it is why this was reported as
+    // three missing bars rather than three empty ones: an absent row and a
+    // feature that was never built look the same from the sofa.
     await openDay(tester, eaten: const Macros(kcal: 400, proteinG: 20));
 
-    expect(find.textContaining('of 28 g'), findsNothing);
-    expect(find.text('Fibre'), findsNothing);
+    expect(find.text('Fibre'), findsOneWidget);
+    expect(find.text('Sodium'), findsOneWidget);
+    expect(find.text('Cholesterol'), findsOneWidget);
+
+    // A dash, never a zero. "0 of 28 g" would claim the day had no fibre,
+    // when the truth is that nothing eaten was ever asked.
+    expect(find.text('— of 28 g'), findsOneWidget);
+    expect(find.textContaining('0 of 28 g'), findsNothing);
+
+    // And it says which silence this is.
+    expect(find.textContaining('did not say'), findsWidgets);
+  });
+
+  testWidgets('a stated half gram is not rounded away to nothing', (
+    WidgetTester tester,
+  ) async {
+    // 0.4 printed as "0 of 28 g" would be indistinguishable from a stated
+    // zero, which is the one distinction this whole row exists to draw.
+    await openDay(tester, eaten: const Macros(kcal: 400, fiberG: 0.4));
+
+    expect(find.text('0.4 of 28 g'), findsOneWidget);
   });
 
   testWidgets('one that knows fibre shows it against the Daily Value', (
@@ -162,5 +182,29 @@ void main() {
     final List<MacroTargetRow> rows = await db.select(db.macroTargets).get();
     expect(rows.single.fiberG, isNull);
     expect(rows.single.sodiumMg, isNull);
+  });
+
+  group('on the week, which is where a trend lives', () {
+    testWidgets('shows the three there too, and says which silence it is', (
+      WidgetTester tester,
+    ) async {
+      // The week had its guard removed and the day did not, which is how a
+      // fix for this shipped once already without landing on the screen it
+      // was reported from. One test each, so neither can regress alone.
+      await pumpHearthApp(tester, targets: targets);
+      await tester.tap(find.text('Plan').last);
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Week'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('Fibre'), findsOneWidget);
+      expect(find.text('Sodium'), findsOneWidget);
+      expect(find.text('Cholesterol'), findsOneWidget);
+
+      // A dash and the target, never a zero — and it says that the silence
+      // is an empty day rather than foods that were asked and did not know.
+      expect(find.text('— of 2300 mg'), findsOneWidget);
+      expect(find.text('nothing logged yet'), findsWidgets);
+    });
   });
 }

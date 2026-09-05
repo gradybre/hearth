@@ -56,9 +56,12 @@ class WeekScreen extends ConsumerWidget {
       error: (Object e, StackTrace s) =>
           Center(child: Text('The week could not be read.\n$e')),
       data: (Map<DateTime, List<MealPlanEntry>> byDay) {
-        final Map<DateTime, Macros> eaten = <DateTime, Macros>{
+        // The parts rather than the totals, so a day can say how much of
+        // itself its minor-nutrient numbers actually cover. A total reads the
+        // same from six foods as from one of six (spec §5.6).
+        final Map<DateTime, List<Macros>> eatenParts = <DateTime, List<Macros>>{
           for (final DateTime day in days)
-            day: EntryResolver.eaten(
+            day: EntryResolver.eatenParts(
               EntryResolver.resolveAll(
                 byDay[day] ?? const <MealPlanEntry>[],
                 recipes: recipes,
@@ -66,12 +69,18 @@ class WeekScreen extends ConsumerWidget {
               ),
             ),
         };
+        final Map<DateTime, Macros> eaten = <DateTime, Macros>{
+          for (final MapEntry<DateTime, List<Macros>> day in eatenParts.entries)
+            day.key: Macros.sum(day.value),
+        };
 
         final Map<DateTime, int> counts = <DateTime, int>{
           for (final DateTime day in days)
             day: (byDay[day] ?? const <MealPlanEntry>[]).length,
         };
         final Macros selectedEaten = eaten[selected] ?? Macros.zero;
+        final List<Macros> selectedParts =
+            eatenParts[selected] ?? const <Macros>[];
 
         return ListView(
           padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, gutter * 3),
@@ -94,6 +103,7 @@ class WeekScreen extends ConsumerWidget {
             _SelectedDay(
               day: selected,
               eaten: selectedEaten,
+              eatenParts: selectedParts,
               targets: targets,
               entryCount: counts[selected] ?? 0,
               onOpen: () =>
@@ -116,6 +126,7 @@ class _SelectedDay extends StatelessWidget {
   const _SelectedDay({
     required this.day,
     required this.eaten,
+    required this.eatenParts,
     required this.targets,
     required this.entryCount,
     required this.onOpen,
@@ -123,6 +134,10 @@ class _SelectedDay extends StatelessWidget {
 
   final DateTime day;
   final Macros eaten;
+
+  /// The same contributions, unsummed, so the minor-nutrient bars can say how
+  /// much of the day they cover.
+  final List<Macros> eatenParts;
   final MacroTargets? targets;
   final int entryCount;
   final VoidCallback onOpen;
@@ -171,7 +186,7 @@ class _SelectedDay extends StatelessWidget {
             // the same inputs can drift the moment either gains an argument,
             // and rings and bars disagreeing about one day would be a bug
             // nobody could see.
-            if (DayProgress.from(consumed: eaten, targets: targets!)
+            if (DayProgress.fromParts(parts: eatenParts, targets: targets!)
                 case final DayProgress day) ...<Widget>[
               MacroRings(progress: day),
               // The same three, on the day the week has selected. A trend is

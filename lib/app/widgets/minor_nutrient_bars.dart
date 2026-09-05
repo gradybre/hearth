@@ -59,6 +59,16 @@ class _Bar extends StatelessWidget {
   /// Thinner than a macro's. The difference in weight is the point.
   static const double _height = 4;
 
+  /// Keeps a decimal below ten, the same rule the recipe card uses.
+  ///
+  /// Half a gram of stated fibre rounding to "0 g" would report the opposite
+  /// of the truth — and would be indistinguishable from the stated zero this
+  /// whole widget exists to tell apart from silence.
+  static String _number(double value) =>
+      value >= 10 || value == value.roundToDouble()
+      ? value.round().toString()
+      : value.toStringAsFixed(1);
+
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
@@ -91,25 +101,40 @@ class _Bar extends StatelessWidget {
 
     // "— of 28 g" rather than "0 of 28 g". The dash is the honest character
     // for a number nobody has stated, and it keeps the target visible so the
-    // row still tells you what it is for.
+    // row still says what it is for.
     final String amounts = nutrient.isKnown
-        ? '${nutrient.consumed!.round()} of ${nutrient.target.round()} '
+        ? '${_number(nutrient.consumed!)} of ${_number(nutrient.target)} '
               '${kind.unit}'
-        : '— of ${nutrient.target.round()} ${kind.unit}';
+        : '— of ${_number(nutrient.target)} ${kind.unit}';
 
     // Coverage, said plainly. A running total looks the same whether it came
-    // from everything eaten or from one food out of six.
-    final String? coverage = nutrient.unknownCount == 0
-        ? null
-        : nutrient.isKnown
-        ? '${nutrient.unknownCount} did not say'
-        : 'no food today has said';
+    // from everything eaten or from one food out of six, and only one of
+    // those is worth trusting. The denominator is there because "2 did not
+    // say" reads very differently against three foods and against nine.
+    final String? coverage;
+    if (nutrient.countedParts == 0) {
+      coverage = 'nothing logged yet';
+    } else if (!nutrient.isKnown) {
+      coverage = nutrient.countedParts == 1
+          ? 'the one thing logged did not say'
+          : 'none of the ${nutrient.countedParts} things logged said';
+    } else if (nutrient.unknownCount > 0) {
+      coverage =
+          '${nutrient.unknownCount} of ${nutrient.countedParts} did not say';
+    } else {
+      coverage = null;
+    }
 
     return Semantics(
       // One sentence for the row, so a screen reader is not read a label, a
       // number and a bar as three separate things.
+      // A dash is punctuation, and most screen readers pass over it at
+      // default verbosity — "Sodium, of 2300 mg" is both ungrammatical and
+      // silent about the thing that matters. The word carries it instead.
       label:
-          '${kind.label}, $amounts.'
+          '${kind.label}, '
+          '${nutrient.isKnown ? amounts : 'not stated, '
+                    'of ${_number(nutrient.target)} ${kind.unit}'}.'
           '${coverage == null ? '' : ' $coverage.'}'
           '${indicator == null ? '' : ' ${indicator.semanticLabel}'}',
       excludeSemantics: true,

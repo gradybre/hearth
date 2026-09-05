@@ -153,10 +153,11 @@ class MacroProgress {
 /// One minor nutrient's progress for a day (spec §5.6).
 ///
 /// Deliberately its own type rather than a [MacroProgress] with a different
-/// enum on it. The four macros are always known and always shown; these three
-/// are shown only where something logged actually knows them, and a type that
-/// cannot be constructed without a number is what keeps "nobody asked" from
-/// being rendered as "none".
+/// enum on it. The four macros are always known; these three often are not,
+/// and [consumed] is nullable precisely so that "nobody asked" can never be
+/// rendered as "none". All three are shown either way — hiding an unknown one
+/// made the whole feature invisible, because an absent row and a feature that
+/// was never built look the same.
 @immutable
 class MinorProgress {
   const MinorProgress({
@@ -165,6 +166,7 @@ class MinorProgress {
     required this.target,
     required this.state,
     this.unknownCount = 0,
+    this.countedParts = 0,
   });
 
   final MinorNutrient nutrient;
@@ -187,11 +189,22 @@ class MinorProgress {
   /// two foods out of six becomes a number somebody trusts.
   final int unknownCount;
 
+  /// How many things counted towards the day at all.
+  ///
+  /// Zero means nothing has been logged yet, which is a different silence
+  /// from "six foods were asked and none of them knew" — and saying the wrong
+  /// one of those is how a row stops being read.
+  final int countedParts;
+
   bool get isKnown => consumed != null;
 
   /// What is left. For fibre that is what remains to get; for sodium and
   /// cholesterol it is what remains to spend.
-  double get remaining => target - (consumed ?? 0);
+  ///
+  /// **Null when nothing has said**, rather than the whole target. "2,300 mg
+  /// left" on a day nobody asked about sodium is a number this cannot know,
+  /// and returning one would be a `?? 0` wearing a different hat.
+  double? get remaining => consumed == null ? null : target - consumed!;
 
   double get fraction =>
       target > 0 && consumed != null ? consumed! / target : 0;
@@ -244,6 +257,7 @@ class DayProgress {
     required this.carbs,
     required this.fat,
     this.unknownCounts = const <MinorNutrient, int>{},
+    this.countedParts = 0,
   });
 
   /// Builds a day's progress from what's been eaten and the day's targets.
@@ -256,8 +270,10 @@ class DayProgress {
     required MacroTargets targets,
     double tolerance = 0,
     Map<MinorNutrient, int> unknownCounts = const <MinorNutrient, int>{},
+    int countedParts = 0,
   }) => DayProgress(
     unknownCounts: unknownCounts,
+    countedParts: countedParts,
     consumed: consumed,
     targets: targets,
     calories: _progress(
@@ -291,6 +307,7 @@ class DayProgress {
       consumed: Macros.sum(all),
       targets: targets,
       tolerance: tolerance,
+      countedParts: all.length,
       unknownCounts: <MinorNutrient, int>{
         for (final MinorNutrient nutrient in MinorNutrient.values)
           nutrient: all
@@ -308,6 +325,10 @@ class DayProgress {
   /// Empty when the day was built from a total rather than from its parts, in
   /// which case a bar reports what it knows and claims nothing about coverage.
   final Map<MinorNutrient, int> unknownCounts;
+
+  /// How many things counted towards the day, or zero when it was built from
+  /// a total. Distinguishes "nothing logged" from "nothing knew".
+  final int countedParts;
 
   final MacroProgress calories;
   final MacroProgress protein;
@@ -346,6 +367,7 @@ class DayProgress {
       target: target,
       state: state,
       unknownCount: unknownCounts[nutrient] ?? 0,
+      countedParts: countedParts,
     );
   }
 
