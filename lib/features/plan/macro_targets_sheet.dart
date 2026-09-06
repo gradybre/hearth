@@ -16,10 +16,10 @@ Future<void> showMacroTargetsSheet(BuildContext context) =>
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      // Capped, so a sheet that has grown taller than the screen stops at
-      // something the content can scroll inside. Without a ceiling the
-      // shrink-wrapped list simply takes its content's height and is clipped,
-      // which looks identical to not scrolling at all.
+      // Nine tenths rather than all of it, so there is still a scrim to tap
+      // to dismiss. This is not what makes the sheet scroll —
+      // `isScrollControlled` already caps the child at the screen height —
+      // it is only about leaving a way out.
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.9,
       ),
@@ -125,8 +125,9 @@ class _MacroTargetsSheetState extends ConsumerState<_MacroTargetsSheet> {
         ),
         // Scrollable: at three times the text this sheet is 462 points taller
         // than the screen, so Save was off the bottom with no way to reach it
-        // (spec §6.3). `shrinkWrap` keeps it the height of its content on an
-        // ordinary phone, where it is a short sheet rather than a full one.
+        // (spec §6.3). `shrinkWrap` keeps the sheet the height of its content
+        // while that fits, so it stays a short sheet at ordinary text rather
+        // than becoming a full-height one.
         child: SafeArea(
           child: ListView(
             shrinkWrap: true,
@@ -140,11 +141,14 @@ class _MacroTargetsSheetState extends ConsumerState<_MacroTargetsSheet> {
                 style: context.text.metadata.copyWith(color: colors.textMuted),
               ),
               const SizedBox(height: HearthSpacing.lg),
-              _TargetFields(
-                fields: <Widget>[
+              Row(
+                children: <Widget>[
                   _TargetField(controller: _kcal, label: 'kcal'),
+                  const SizedBox(width: HearthSpacing.sm),
                   _TargetField(controller: _protein, label: 'Protein'),
+                  const SizedBox(width: HearthSpacing.sm),
                   _TargetField(controller: _carbs, label: 'Carbs'),
+                  const SizedBox(width: HearthSpacing.sm),
                   _TargetField(controller: _fat, label: 'Fat'),
                 ],
               ),
@@ -157,13 +161,18 @@ class _MacroTargetsSheetState extends ConsumerState<_MacroTargetsSheet> {
                 style: context.text.metadata.copyWith(color: colors.textMuted),
               ),
               const SizedBox(height: HearthSpacing.sm),
-              // Three fields side by side stop fitting well before the
-              // text is at its largest — 36 points over at 3x — and a
-              // field pushed off the edge is one nobody can fill in.
-              _TargetFields(
-                fields: <Widget>[
+              // These stay a Row of Expanded fields, which cannot overflow:
+              // each child is given a tight width and the labels wrap inside
+              // it. A LayoutBuilder that stacked them "when they no longer
+              // fit" was solving a problem this row does not have, and its
+              // threshold stacked all four macro fields on every iPhone at
+              // ordinary text.
+              Row(
+                children: <Widget>[
                   _TargetField(controller: _fibre, label: 'Fibre g'),
+                  const SizedBox(width: HearthSpacing.sm),
                   _TargetField(controller: _sodium, label: 'Sodium mg'),
+                  const SizedBox(width: HearthSpacing.sm),
                   _TargetField(controller: _cholesterol, label: 'Chol. mg'),
                 ],
               ),
@@ -204,75 +213,25 @@ class _TargetField extends StatelessWidget {
   final String label;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: <Widget>[
-      Text(
-        label,
-        style: context.text.metadata.copyWith(
-          color: context.colors.textSecondary,
+  Widget build(BuildContext context) => Expanded(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          label,
+          style: context.text.metadata.copyWith(
+            color: context.colors.textSecondary,
+          ),
         ),
-      ),
-      const SizedBox(height: HearthSpacing.xs),
-      TextField(
-        controller: controller,
-        // A target of 162.5 g of protein is an ordinary number; a plain
-        // number pad on iOS cannot type the point.
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        style: context.text.body,
-      ),
-    ],
+        const SizedBox(height: HearthSpacing.xs),
+        TextField(
+          controller: controller,
+          // A target of 162.5 g of protein is an ordinary number; a plain
+          // number pad on iOS cannot type the point.
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          style: context.text.body,
+        ),
+      ],
+    ),
   );
-}
-
-/// Lays a group of target fields out side by side, or one per line when they
-/// no longer fit.
-///
-/// A Row of `Expanded` fields shares the width evenly, which sounds like it
-/// cannot overflow — but a field's label has a width of its own below which
-/// it will not go, and at three times the text three of them together are 36
-/// points wider than the sheet. The share each field gets has to be big
-/// enough to be a field, and when it cannot be, they belong on their own
-/// lines.
-class _TargetFields extends StatelessWidget {
-  const _TargetFields({required this.fields});
-
-  final List<Widget> fields;
-
-  /// The narrowest a field is worth being, at ordinary text.
-  static const double _minFieldWidth = 96;
-
-  @override
-  Widget build(BuildContext context) {
-    final double scale = MediaQuery.textScalerOf(context).scale(16) / 16;
-    final double needed =
-        _minFieldWidth * scale * fields.length +
-        HearthSpacing.sm * (fields.length - 1);
-
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        if (constraints.maxWidth >= needed) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              for (int i = 0; i < fields.length; i++) ...<Widget>[
-                if (i > 0) const SizedBox(width: HearthSpacing.sm),
-                Expanded(child: fields[i]),
-              ],
-            ],
-          );
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            for (int i = 0; i < fields.length; i++) ...<Widget>[
-              if (i > 0) const SizedBox(height: HearthSpacing.sm),
-              fields[i],
-            ],
-          ],
-        );
-      },
-    );
-  }
 }

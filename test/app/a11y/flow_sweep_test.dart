@@ -19,6 +19,11 @@ import '../../support/fixtures.dart';
 /// off the bottom of the screen, so it could be neither edited nor removed.
 /// A sweep that stops at the four tabs is a sweep of four screens.
 void main() {
+  // A tap that lands on nothing is a warning on the console and a green test,
+  // which is how three of these flows first shipped never reaching the screen
+  // they were named after. Here it is a failure.
+  setUpAll(() => WidgetController.hitTestWarningShouldBeFatal = true);
+
   Recipe chilli() => aRecipe(
     id: 'r-chilli',
     title: 'Slow chilli with all the trimmings',
@@ -71,20 +76,17 @@ void main() {
   /// `scrollUntilVisible` stops as soon as the finder matches anything, which
   /// an off-screen widget does — so it is followed by `ensureVisible`, which
   /// is the one that moves it into view.
-  Future<void> reach(WidgetTester tester, Finder finder) async {
-    final Finder one = finder.first;
-
-    // Dragged rather than scrolled to, and against the last scroll view on
-    // screen — which is the sheet's when one is open, and the page's when not.
-    // `scrollUntilVisible` picks its own scrollable and there are several once
-    // anything is layered.
-    // The unfiltered finder: asking `.first` whether it is empty throws,
-    // because taking the first of nothing is the error, not the answer.
+  /// Brings [finder] onto the screen, scrolling if it has not been built yet.
+  ///
+  /// Returns the finder narrowed to the one it brought — the *last* match,
+  /// not the first. With a sheet open, the row behind the modal matches too
+  /// and comes first, so acting on `.first` acts on the page underneath and
+  /// the flow never goes anywhere.
+  Future<Finder> bring(WidgetTester tester, Finder finder) async {
     if (finder.evaluate().isEmpty) {
       await tester.dragUntilVisible(
-        // The unfiltered finder again: dragUntilVisible asks it whether it is
-        // empty on every step, and `.first` of nothing throws rather than
-        // answering.
+        // The unfiltered finder: dragUntilVisible asks it whether it is empty
+        // on every step, and `.first` of nothing throws rather than answering.
         finder,
         // The last *vertical* scroll view. Every text field contains a
         // horizontal one of its own for its editable, so "the last
@@ -103,11 +105,40 @@ void main() {
       await pumpFrames(tester, frames: 4);
     }
 
+    final Finder one = finder.last;
+
     // Present is not the same as on screen: an off-screen widget still
     // matches a finder, which is the trap this whole file exists to point at.
     await tester.ensureVisible(one);
     await pumpFrames(tester, frames: 4);
-    await tester.tap(one);
+    return one;
+  }
+
+  /// Scrolls until [finder] matches at least [atLeast] widgets.
+  ///
+  /// `dragUntilVisible` stops at the first match, which is no use when the
+  /// thing wanted is the *second* one — "Today" is the page's title as well
+  /// as the card's heading, and only the card opens the targets sheet. With
+  /// one match it looked found, tapping the title did nothing, and the flow
+  /// reported success from a screen it had never left.
+  Future<void> bringNth(WidgetTester tester, Finder finder, int atLeast) async {
+    final Finder scroller = find
+        .byWidgetPredicate(
+          (Widget widget) =>
+              widget is Scrollable &&
+              (widget.axisDirection == AxisDirection.down ||
+                  widget.axisDirection == AxisDirection.up),
+        )
+        .last;
+
+    for (int i = 0; i < 40 && finder.evaluate().length < atLeast; i++) {
+      await tester.drag(scroller, const Offset(0, -120));
+      await pumpFrames(tester, frames: 2);
+    }
+  }
+
+  Future<void> reach(WidgetTester tester, Finder finder) async {
+    await tester.tap(await bring(tester, finder));
     await pumpFrames(tester, frames: 12);
   }
 
@@ -138,8 +169,22 @@ void main() {
         await pumpFrames(tester, frames: 12);
         expectSurvived(tester, 'the day at $at');
 
-        await reach(tester, find.text('Today').last);
+        await bringNth(tester, find.text('Today'), 2);
+        await reach(tester, find.text('Today'));
+        expect(
+          find.text('Weekly targets'),
+          findsOneWidget,
+          reason: 'the targets sheet never opened at $at',
+        );
         expectSurvived(tester, 'the targets sheet at $at');
+
+        // Read to the end of it. A ListView builds lazily, so the buttons at
+        // the bottom are not laid out at all until something scrolls to them
+        // — and a row that overflows off the right-hand edge cannot overflow
+        // if it was never built. Putting the original Row back passed every
+        // case in this file until this step existed.
+        await bring(tester, find.text('Save targets'));
+        expectSurvived(tester, 'the end of the targets sheet at $at');
       });
 
       testWidgets('a meal\'s own options survive $at', (
@@ -149,9 +194,21 @@ void main() {
         await tester.tap(find.text('Plan').last);
         await pumpFrames(tester, frames: 12);
 
-        // Where Remove lives, and where both actions were off the bottom of
-        // a small phone until this sweep went looking.
-        await reach(tester, find.text('Slow chilli with all the trimmings'));
+        // Behind a long press, not a tap. Tapping the row toggles it logged
+        // and leaves the day screen exactly where it was, so a flow that only
+        // tapped never opened the sheet it was named after.
+        final Finder meal = await bring(
+          tester,
+          find.text('Slow chilli with all the trimmings'),
+        );
+        await tester.longPress(meal);
+        await pumpFrames(tester, frames: 12);
+
+        expect(
+          find.text('Edit portion'),
+          findsOneWidget,
+          reason: 'the options sheet never opened at $at',
+        );
         expectSurvived(tester, 'the entry options at $at');
       });
 
@@ -166,7 +223,28 @@ void main() {
         await reach(tester, find.byTooltip('Add to breakfast'));
         expectSurvived(tester, 'the picker at $at');
 
-        await reach(tester, find.text('Slow chilli with all the trimmings'));
+        // Scoped to the log sheet. The same recipe title is on the day screen
+        // behind the modal and is not reliably ordered after it, so an
+        // unscoped finder tapped the row underneath — which opened its swipe
+        // action while the flow reported having chosen something.
+        await reach(
+          tester,
+          find.descendant(
+            of: find.byType(DraggableScrollableSheet),
+            matching: find.text('Slow chilli with all the trimmings'),
+          ),
+        );
+
+        // That the picker is gone, rather than that some particular part of
+        // the confirm view is present: the confirm view is a lazy list, so at
+        // the largest text its lower half is not built and asserting on
+        // something down there fails for a reason that has nothing to do
+        // with whether the flow arrived.
+        expect(
+          find.text('Add to this meal'),
+          findsNothing,
+          reason: 'the confirm view never opened at $at',
+        );
         expectSurvived(tester, 'the confirm view at $at');
       });
 

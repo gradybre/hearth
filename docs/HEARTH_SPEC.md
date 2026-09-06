@@ -370,15 +370,7 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
 - **And swept by walking flows, not by visiting tabs.** Every one of those
   faults was a step or two past a tab: a sheet opened, an item chosen, a row
   long-pressed. A sweep that stops at the four tabs is a sweep of four
-  screens. The first run of the flow sweep found three more in one screen.
-- **A row of fields that share the width can still overflow.** Sharing evenly
-  sounds like it cannot, but each field's label has a width below which it
-  will not go, so three of them together are wider than the sheet at large
-  text however the space is divided. When the share each would get is too
-  small to be a field, they belong on their own lines.
-- **A sheet that scrolls needs a height it can scroll inside.** A
-  shrink-wrapped list in a sheet with no ceiling takes its content's height
-  and is clipped, which looks exactly like not scrolling at all.
+  screens. The first run of the flow sweep found two more in one screen.
 - **Fixed chrome above a scrolling list is a trap on a short screen.** At
   large text the chrome alone can be taller than the viewport, which leaves
   the list a negative height. Chrome and content belong in one scroll view.
