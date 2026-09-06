@@ -3,6 +3,7 @@ import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/nutrient_coverage.dart';
 import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/app_harness.dart';
@@ -39,6 +40,7 @@ MealPlanEntry planned({bool logged = false}) {
     liveMacros: const Macros(kcal: 100, proteinG: 17),
     at: DateTime.utc(2026, 8, 31, 9),
     label: 'Greek yogurt',
+    coverage: const NutrientCoverage.notRecorded(),
   );
 }
 
@@ -225,6 +227,7 @@ void main() {
           liveMacros: const Macros(kcal: 100, proteinG: 8),
           at: DateTime.utc(2026, 8, 31, 19),
           label: 'Guard stew',
+          coverage: const NutrientCoverage.notRecorded(),
         ),
       ],
     );

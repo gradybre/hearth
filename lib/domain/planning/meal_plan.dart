@@ -24,6 +24,7 @@ class MacroSnapshot {
     required this.capturedAt,
     required this.label,
     this.coverage = const NutrientCoverage.notRecorded(),
+    this.unreadFields = const <String, Object?>{},
   });
 
   /// Macros for the portion actually eaten — already multiplied by [servings].
@@ -51,6 +52,20 @@ class MacroSnapshot {
   /// before this existed says so, rather than claiming a completeness nothing
   /// ever checked.
   final NutrientCoverage coverage;
+
+  /// Keys this version does not understand, carried so it cannot destroy them.
+  ///
+  /// A snapshot is frozen history, and a *newer* client may have written
+  /// fields this one has never heard of. Sync and export pass the stored JSON
+  /// across verbatim, but a local edit — changing a portion, dragging a meal
+  /// to another slot — reads the row into this object and writes it back out.
+  /// Without somewhere to put them, that round trip would silently delete
+  /// another version's record of what was eaten, permanently and for both
+  /// people (§4).
+  ///
+  /// Deliberately opaque: this version does not interpret them, it only
+  /// promises not to lose them.
+  final Map<String, Object?> unreadFields;
 
   @override
   bool operator ==(Object other) =>
@@ -114,7 +129,7 @@ class MealPlanEntry {
     required DateTime at,
     required String label,
     double? portion,
-    NutrientCoverage? coverage,
+    required NutrientCoverage coverage,
   }) {
     final double logged = portion ?? servings;
     return MealPlanEntry(
@@ -132,9 +147,17 @@ class MealPlanEntry {
         servings: logged,
         capturedAt: at,
         label: label,
-        // Scaling a portion cannot change what was known about it: half a
-        // recipe whose fibre was partial is still partial.
-        coverage: coverage ?? NutrientCoverage.ofOne(liveMacros),
+        // Required, not defaulted. Defaulting to `ofOne(liveMacros)` looked
+        // harmless and was the whole bug wearing a hat: a recipe's summed
+        // total is non-null whenever *any* ingredient stated the nutrient, so
+        // `ofOne` answered "complete" for precisely the partial recipe this
+        // exists to qualify — and froze that claim into history, which is
+        // worse than the absent key it replaced. Making it required means a
+        // caller that has not thought about coverage cannot compile.
+        //
+        // Scaling a portion cannot change what was known: half a recipe whose
+        // fibre was partial is still partial.
+        coverage: coverage,
       ),
     );
   }

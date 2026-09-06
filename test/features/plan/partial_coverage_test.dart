@@ -1,11 +1,15 @@
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/data/local/hearth_database.dart';
+import 'package:hearth/data/local/pending_write_store.dart';
+import 'package:hearth/data/local/plan_store.dart';
+import 'package:hearth/data/repositories/plan_repository.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/nutrient_coverage.dart';
-import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 import 'package:hearth/features/plan/entry_resolver.dart';
 
@@ -204,5 +208,165 @@ void main() {
       resolved.liveCoverage.of(MinorNutrient.fiber),
       MinorCoverage.complete,
     );
+  });
+
+  group('through the door the app actually uses', () {
+    // The tests above hand `log` a coverage. Nothing in `lib/` did, and that
+    // is how this shipped inert: `log`'s optional parameter fell back to
+    // reading coverage off the summed total, which answers "complete" for
+    // exactly the partial recipe this exists to qualify — and froze that
+    // claim, which is worse than the absent key it replaced.
+    late HearthDatabase db;
+    late PlanRepository repository;
+
+    setUp(() {
+      db = HearthDatabase.forTesting(NativeDatabase.memory());
+      repository = PlanRepository(
+        database: db,
+        store: PlanStore(db),
+        queue: PendingWriteStore(db),
+        userId: 'user-1',
+        clock: () => DateTime.utc(2026, 9, 5, 8),
+        idFactory: () => 'entry-1',
+      );
+    });
+
+    tearDown(() => db.close());
+
+    test('a recipe logged through the repository freezes partial', () async {
+      final ResolvedEntry live = EntryResolver.resolveAll(
+        <MealPlanEntry>[entryFor(logged: false)],
+        recipes: <String, Recipe>{'recipe-porridge': porridge()},
+        foods: foods,
+      ).single;
+
+      final MealPlanEntry logged = await repository.add(
+        date: DateTime(2026, 9, 5),
+        slot: MealSlot.breakfast,
+        refType: PlanRefType.recipe,
+        refId: 'recipe-porridge',
+        servings: 1,
+        loggedMacros: live.perServing,
+        loggedCoverage: live.liveCoverage,
+        label: 'Porridge',
+      );
+
+      expect(
+        logged.macroSnapshot!.coverage.of(MinorNutrient.fiber),
+        MinorCoverage.partial,
+      );
+    });
+
+    test('and a plain food logged the same way freezes complete', () async {
+      // The fallback is right *here* — one food's non-null value really does
+      // mean the food stated it. It is only a recipe's total that lies.
+      final MealPlanEntry logged = await repository.add(
+        date: DateTime(2026, 9, 5),
+        slot: MealSlot.breakfast,
+        refType: PlanRefType.food,
+        refId: 'food-oats',
+        servings: 1,
+        loggedMacros: const Macros(kcal: 380, fiberG: 5),
+        label: 'Oats',
+      );
+
+      expect(
+        logged.macroSnapshot!.coverage.of(MinorNutrient.fiber),
+        MinorCoverage.complete,
+      );
+      expect(
+        logged.macroSnapshot!.coverage.of(MinorNutrient.sodium),
+        MinorCoverage.unknown,
+      );
+    });
+  });
+
+  group('an ingredient nobody could cost', () {
+    test('makes the total a floor, not a complete answer', () async {
+      // A gap contributes nothing to the sum *because* it is a hole. On the
+      // recipe page `incompleteReason` says so beside the number; frozen into
+      // a snapshot that sentence does not travel, so the coverage has to.
+      final Recipe unmatched = aRecipe(
+        id: 'recipe-porridge',
+        title: 'Porridge',
+        servings: 1,
+        ingredients: <RecipeIngredient>[
+          anIngredient(
+            'Oats',
+            amount: 100,
+            unit: Units.gram,
+            foodId: 'food-oats',
+          ),
+          // Named, quantified, and matched to nothing.
+          anIngredient('A spoon of something', amount: 1, unit: Units.item),
+        ],
+      );
+
+      final ResolvedEntry resolved = EntryResolver.resolveAll(
+        <MealPlanEntry>[entryFor(logged: false)],
+        recipes: <String, Recipe>{'recipe-porridge': unmatched},
+        foods: foods,
+      ).single;
+
+      expect(
+        resolved.liveCoverage.of(MinorNutrient.fiber),
+        MinorCoverage.partial,
+      );
+    });
+
+    test('but salt to taste is not a hole', () async {
+      // The two deliberate exclusions really are excused — they were never
+      // going to contribute, so their silence is not missing information.
+      final Recipe seasoned = aRecipe(
+        id: 'recipe-porridge',
+        title: 'Porridge',
+        servings: 1,
+        ingredients: <RecipeIngredient>[
+          anIngredient(
+            'Oats',
+            amount: 100,
+            unit: Units.gram,
+            foodId: 'food-oats',
+          ),
+          anIngredient('A pinch of salt', needsNoMatch: true),
+        ],
+      );
+
+      final ResolvedEntry resolved = EntryResolver.resolveAll(
+        <MealPlanEntry>[entryFor(logged: false)],
+        recipes: <String, Recipe>{'recipe-porridge': seasoned},
+        foods: foods,
+      ).single;
+
+      expect(
+        resolved.liveCoverage.of(MinorNutrient.fiber),
+        MinorCoverage.complete,
+      );
+    });
+
+    test('and a recipe of nothing but gaps is unknown, not unrecorded', () {
+      // `notRecorded` absorbs a sum, so answering it here would silence the
+      // coverage note for every other meal that day. "Asked and nothing knew"
+      // is the honest answer and combines like one.
+      final Recipe hopeless = aRecipe(
+        id: 'recipe-porridge',
+        title: 'Porridge',
+        servings: 1,
+        ingredients: <RecipeIngredient>[
+          anIngredient('Something', amount: 1, unit: Units.item),
+        ],
+      );
+
+      final ResolvedEntry resolved = EntryResolver.resolveAll(
+        <MealPlanEntry>[entryFor(logged: false)],
+        recipes: <String, Recipe>{'recipe-porridge': hopeless},
+        foods: foods,
+      ).single;
+
+      expect(
+        resolved.liveCoverage.of(MinorNutrient.fiber),
+        MinorCoverage.unknown,
+      );
+    });
   });
 }

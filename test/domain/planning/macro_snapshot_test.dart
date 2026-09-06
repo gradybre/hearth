@@ -2,6 +2,7 @@ import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/nutrient_coverage.dart';
 import 'package:hearth/domain/recipes/macro_calculator.dart';
 import 'package:hearth/domain/recipes/recipe_scaler.dart';
 import 'package:hearth/domain/units/unit.dart';
@@ -27,6 +28,7 @@ void main() {
         liveMacros: const Macros(kcal: 400, proteinG: 30),
         at: tuesday,
         label: 'Chicken and rice',
+        coverage: const NutrientCoverage.notRecorded(),
       );
 
       expect(logged.isLogged, isTrue);
@@ -42,6 +44,7 @@ void main() {
         liveMacros: const Macros(kcal: 400),
         at: tuesday,
         label: 'Chicken and rice',
+        coverage: const NutrientCoverage.notRecorded(),
       );
       // Even handed wildly different live macros, history does not move.
       expect(
@@ -79,6 +82,7 @@ void main() {
         ).perServing,
         at: tuesday,
         label: original.title,
+        coverage: MacroCalculator.forRecipe(original, foods: foods).coverage,
       );
       final double loggedKcal = logged.macroSnapshot!.macros.kcal;
 
@@ -101,6 +105,7 @@ void main() {
         liveMacros: const Macros(kcal: 250, proteinG: 20),
         at: tuesday,
         label: 'Greek yogurt',
+        coverage: const NutrientCoverage.notRecorded(),
       );
       // Soft delete removes it from search, never from history.
       expect(logged.contribution().kcal, 250);
@@ -112,6 +117,7 @@ void main() {
         liveMacros: const Macros(kcal: 400),
         at: tuesday,
         label: 'Chicken and rice',
+        coverage: const NutrientCoverage.notRecorded(),
       );
       final MealPlanEntry moved = logged.copyWith(slot: MealSlot.lunch);
 
@@ -124,12 +130,14 @@ void main() {
         liveMacros: const Macros(kcal: 400),
         at: tuesday,
         label: 'Chicken and rice',
+        coverage: const NutrientCoverage.notRecorded(),
       );
       final MealPlanEntry corrected = first.log(
         liveMacros: const Macros(kcal: 400),
         at: tuesday.add(const Duration(minutes: 5)),
         label: 'Chicken and rice',
         portion: 0.5,
+        coverage: const NutrientCoverage.notRecorded(),
       );
 
       expect(corrected.macroSnapshot!.macros.kcal, 200);

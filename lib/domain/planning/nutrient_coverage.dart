@@ -54,6 +54,24 @@ class NutrientCoverage {
               : MinorCoverage.unknown,
       });
 
+  /// Every nutrient unknown: asked, and nothing knew.
+  ///
+  /// Distinct from [NutrientCoverage.notRecorded], which absorbs a sum. This
+  /// is an answer, so it combines like one.
+  const NutrientCoverage.allUnknown()
+    : _byNutrient = const <MinorNutrient, MinorCoverage>{
+        MinorNutrient.fiber: MinorCoverage.unknown,
+        MinorNutrient.sodium: MinorCoverage.unknown,
+        MinorNutrient.cholesterol: MinorCoverage.unknown,
+      };
+
+  /// A stand-in contributor that knows nothing, used to make a sum partial.
+  ///
+  /// What a data gap adds: an ingredient nobody could cost is a hole in every
+  /// nutrient at once, so summing this beside the ingredients that did resolve
+  /// turns a complete total into the floor it really is.
+  const NutrientCoverage.someUnknown() : this.allUnknown();
+
   final Map<MinorNutrient, MinorCoverage> _byNutrient;
 
   MinorCoverage of(MinorNutrient nutrient) =>

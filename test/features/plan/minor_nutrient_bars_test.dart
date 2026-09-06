@@ -4,6 +4,7 @@ import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/nutrient_coverage.dart';
 import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/app_harness.dart';
@@ -26,14 +27,20 @@ void main() {
     ],
   );
 
-  MealPlanEntry logged(String foodId, Macros macros) => MealPlanEntry(
-    id: 'e-$foodId',
-    dayId: 'day-1',
-    slot: MealSlot.lunch,
-    refType: PlanRefType.food,
-    refId: foodId,
-    servings: 1,
-  ).log(liveMacros: macros, at: DateTime.utc(2026, 8, 31, 12), label: foodId);
+  MealPlanEntry logged(String foodId, Macros macros) =>
+      MealPlanEntry(
+        id: 'e-$foodId',
+        dayId: 'day-1',
+        slot: MealSlot.lunch,
+        refType: PlanRefType.food,
+        refId: foodId,
+        servings: 1,
+      ).log(
+        liveMacros: macros,
+        at: DateTime.utc(2026, 8, 31, 12),
+        label: foodId,
+        coverage: NutrientCoverage.ofOne(macros),
+      );
 
   Future<HearthDatabase> openDay(
     WidgetTester tester, {

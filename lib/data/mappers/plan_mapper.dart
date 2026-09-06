@@ -26,8 +26,28 @@ abstract final class PlanMapper {
   static PlanRefType refTypeFromSql(String value) =>
       value == 'recipe' ? PlanRefType.recipe : PlanRefType.food;
 
+  /// Keys this version writes. Anything else found on the way in is carried
+  /// in `unreadFields` and written back untouched, so a local edit cannot
+  /// delete a newer client's record of a frozen meal.
+  static const Set<String> _snapshotKeys = <String>{
+    'kcal',
+    'protein_g',
+    'carb_g',
+    'fat_g',
+    'fiber_g',
+    'sodium_mg',
+    'cholesterol_mg',
+    'coverage',
+    'servings',
+    'captured_at',
+    'label',
+  };
+
   static Map<String, Object?> snapshotToJson(MacroSnapshot snapshot) =>
       <String, Object?>{
+        // First, so a key this version does understand always wins over a
+        // stale copy of itself.
+        ...snapshot.unreadFields,
         'kcal': snapshot.macros.kcal,
         'protein_g': snapshot.macros.proteinG,
         'carb_g': snapshot.macros.carbG,
@@ -77,6 +97,10 @@ abstract final class PlanMapper {
       // understands all read as "not recorded" — never as complete. A
       // snapshot frozen before coverage existed cannot earn it retroactively.
       coverage: NutrientCoverage.fromJson(decoded['coverage']),
+      unreadFields: <String, Object?>{
+        for (final MapEntry<String, Object?> field in decoded.entries)
+          if (!_snapshotKeys.contains(field.key)) field.key: field.value,
+      },
       servings: _double(decoded['servings']),
       capturedAt:
           DateTime.tryParse(decoded['captured_at']?.toString() ?? '') ??

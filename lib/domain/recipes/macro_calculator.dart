@@ -141,10 +141,30 @@ class RecipeMacros {
   /// in words for the recipe page; this says it in a form a frozen snapshot
   /// can carry, because once a meal is eaten the ingredients are no longer
   /// reachable and the qualification cannot be recomputed (spec §4).
-  NutrientCoverage get coverage => NutrientCoverage.sum(<NutrientCoverage>[
-    for (final IngredientMacros i in ingredients)
-      if (i.isResolved) NutrientCoverage.ofOne(i.macros),
-  ]);
+  NutrientCoverage get coverage {
+    // A data gap contributes nothing to the total *because* it is a hole —
+    // an unmatched food, a line with no amount, a unit nothing can convert.
+    // On the recipe page that is safe, because `incompleteReason` sits beside
+    // the number saying so; frozen into a snapshot it is not, because the
+    // reason does not travel. So a gap makes every nutrient partial rather
+    // than being quietly excused.
+    final bool anyGap = ingredients.any((IngredientMacros i) => i.isDataGap);
+
+    final List<NutrientCoverage> counted = <NutrientCoverage>[
+      for (final IngredientMacros i in ingredients)
+        // The two deliberate exclusions really are excused: salt to taste and
+        // a line marked as needing no food were never going to contribute, so
+        // their silence is not a hole in what the rest add up to.
+        if (i.isResolved) NutrientCoverage.ofOne(i.macros),
+      if (anyGap) const NutrientCoverage.someUnknown(),
+    ];
+
+    // Everything asked, nothing known — not "nobody wrote it down". An
+    // all-seasoning or wholly unmatched recipe is a real answer about a real
+    // meal, and `notRecorded` would absorb every other meal in the day.
+    if (counted.isEmpty) return const NutrientCoverage.allUnknown();
+    return NutrientCoverage.sum(counted);
+  }
 
   /// One phrase saying a [nutrient] total is only part of the story, or null
   /// when every counted ingredient knew it.

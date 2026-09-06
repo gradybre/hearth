@@ -125,6 +125,7 @@ abstract final class EntryResolver {
         }
         return ResolvedEntry(
           entry: entry,
+          liveCoverage: NutrientCoverage.ofOne(serving.macros),
           label: food.name,
           // A food entry is counted in multiples of its first serving option.
           // The plan row stores only a food id and a count (spec §4), so the

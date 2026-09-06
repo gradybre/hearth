@@ -14,6 +14,7 @@ import '../../domain/models/recipe.dart';
 import '../../domain/planning/day_format.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
+import '../../domain/planning/nutrient_coverage.dart';
 import '../../domain/planning/week.dart';
 import '../../domain/planning/week_template.dart';
 import 'entry_resolver.dart';
@@ -59,16 +60,30 @@ class WeekScreen extends ConsumerWidget {
         // The parts rather than the totals, so a day can say how much of
         // itself its minor-nutrient numbers actually cover. A total reads the
         // same from six foods as from one of six (spec §5.6).
+        final Map<DateTime, List<ResolvedEntry>> resolved =
+            <DateTime, List<ResolvedEntry>>{
+              for (final DateTime day in days)
+                day: EntryResolver.resolveAll(
+                  byDay[day] ?? const <MealPlanEntry>[],
+                  recipes: recipes,
+                  foods: foods,
+                ),
+            };
         final Map<DateTime, List<Macros>> eatenParts = <DateTime, List<Macros>>{
-          for (final DateTime day in days)
-            day: EntryResolver.eatenParts(
-              EntryResolver.resolveAll(
-                byDay[day] ?? const <MealPlanEntry>[],
-                recipes: recipes,
-                foods: foods,
-              ),
-            ),
+          for (final MapEntry<DateTime, List<ResolvedEntry>> day
+              in resolved.entries)
+            day.key: EntryResolver.eatenParts(day.value),
         };
+        // Beside the parts, never inferred from them. `fromParts` falls back
+        // to reading coverage off each total, which is the very inference this
+        // exists to replace — so a caller that forgets fails quietly, and this
+        // screen forgot once already.
+        final Map<DateTime, List<NutrientCoverage>> eatenCoverage =
+            <DateTime, List<NutrientCoverage>>{
+              for (final MapEntry<DateTime, List<ResolvedEntry>> day
+                  in resolved.entries)
+                day.key: EntryResolver.eatenCoverage(day.value),
+            };
         final Map<DateTime, Macros> eaten = <DateTime, Macros>{
           for (final MapEntry<DateTime, List<Macros>> day in eatenParts.entries)
             day.key: Macros.sum(day.value),
@@ -81,6 +96,8 @@ class WeekScreen extends ConsumerWidget {
         final Macros selectedEaten = eaten[selected] ?? Macros.zero;
         final List<Macros> selectedParts =
             eatenParts[selected] ?? const <Macros>[];
+        final List<NutrientCoverage> selectedCoverage =
+            eatenCoverage[selected] ?? const <NutrientCoverage>[];
 
         return ListView(
           padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, gutter * 3),
@@ -104,6 +121,7 @@ class WeekScreen extends ConsumerWidget {
               day: selected,
               eaten: selectedEaten,
               eatenParts: selectedParts,
+              eatenCoverage: selectedCoverage,
               targets: targets,
               entryCount: counts[selected] ?? 0,
               onOpen: () =>
@@ -127,6 +145,7 @@ class _SelectedDay extends StatelessWidget {
     required this.day,
     required this.eaten,
     required this.eatenParts,
+    required this.eatenCoverage,
     required this.targets,
     required this.entryCount,
     required this.onOpen,
@@ -138,6 +157,9 @@ class _SelectedDay extends StatelessWidget {
   /// The same contributions, unsummed, so the minor-nutrient bars can say how
   /// much of the day they cover.
   final List<Macros> eatenParts;
+
+  /// What those contributions actually speak for, in the same order.
+  final List<NutrientCoverage> eatenCoverage;
   final MacroTargets? targets;
   final int entryCount;
   final VoidCallback onOpen;
@@ -186,7 +208,11 @@ class _SelectedDay extends StatelessWidget {
             // the same inputs can drift the moment either gains an argument,
             // and rings and bars disagreeing about one day would be a bug
             // nobody could see.
-            if (DayProgress.fromParts(parts: eatenParts, targets: targets!)
+            if (DayProgress.fromParts(
+                  parts: eatenParts,
+                  coverage: eatenCoverage,
+                  targets: targets!,
+                )
                 case final DayProgress day) ...<Widget>[
               MacroRings(progress: day),
               // The same three, on the day the week has selected. A trend is
