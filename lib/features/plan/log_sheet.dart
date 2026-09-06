@@ -373,23 +373,33 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
           // Wrapped rather than a Row: three labels side by side stop
           // fitting long before the text is at its largest, and a button
           // pushed off the edge is one nobody can press.
-          Wrap(
-            alignment: WrapAlignment.end,
-            spacing: HearthSpacing.sm,
-            runSpacing: HearthSpacing.sm,
+          // Remove stays hard left, with the width of the sheet between it
+          // and the button beside it.
+          //
+          // A Wrap looked tidier and was worse: with no Spacer to hold them
+          // apart it packed Remove eight points from Update at every text
+          // size, while both grew — so the mis-tap risk was worst for exactly
+          // the people who set large text. Remove deletes a logged meal and
+          // its frozen snapshot at once, and this route has no undo: the
+          // restore behind Undo is wired to the swipe, which this never goes
+          // through. The gap matters more than the tidiness did.
+          Row(
             children: <Widget>[
               if (_isExisting)
                 TextButton(
                   onPressed: _busy ? null : _remove,
                   child: const Text('Remove'),
                 ),
-              if (!_isExisting)
+              const Spacer(),
+              if (!_isExisting) ...<Widget>[
                 TextButton(
                   onPressed: _busy
                       ? null
                       : () => _plan(foods: foods, recipes: recipes),
                   child: const Text('Plan only'),
                 ),
+                const SizedBox(width: HearthSpacing.sm),
+              ],
               FilledButton(
                 onPressed: _busy
                     ? null

@@ -4,6 +4,7 @@ import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
+import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
@@ -98,7 +99,18 @@ void main() {
       );
       await pumpFrames(tester, frames: 4);
 
-      expect(find.text('Log it'), findsOneWidget);
+      // Asserted as a position on the screen, not as a widget in the tree.
+      // An overflowing Column still builds and lays out its children — they
+      // are simply painted past the bottom edge — so `findsOneWidget` is true
+      // of a button 200 pixels below the screen, and dragUntilVisible stops
+      // as soon as the finder matches anything at all. Only the geometry
+      // tells the two apart.
+      final Rect button = tester.getRect(find.byType(FilledButton).last);
+      expect(
+        button.bottom,
+        lessThanOrEqualTo(at.size.height),
+        reason: 'the button you came to press is off the bottom of the screen',
+      );
       expect(
         tester.takeException(),
         isNull,
@@ -106,4 +118,81 @@ void main() {
       );
     });
   }
+
+  testWidgets('Remove is nowhere near the button beside it', (
+    WidgetTester tester,
+  ) async {
+    // A Wrap tidied these into one right-aligned run and put Remove eight
+    // points from Update at every text size, while both grew — so the
+    // mis-tap risk was worst for the people who set large text. Remove
+    // deletes a logged meal and its frozen snapshot at once, and this route
+    // has no undo: the restore behind Undo is wired to the swipe, which this
+    // never goes through.
+    await pumpHearthApp(
+      tester,
+      recipes: <Recipe>[chilli()],
+      foods: <Food>[yoghurt()],
+      entries: <MealPlanEntry>[
+        const MealPlanEntry(
+          id: 'e1',
+          dayId: 'day-1',
+          slot: MealSlot.breakfast,
+          refType: PlanRefType.recipe,
+          refId: 'r-chilli',
+          servings: 1,
+        ),
+      ],
+      targets: const MacroTargets(
+        kcal: 2200,
+        proteinG: 170,
+        carbG: 200,
+        fatG: 70,
+      ),
+      // At ordinary text size. The gap this pins was eight points at *every*
+      // scale, so 1x demonstrates it — and the route to this view crosses
+      // another screen that overflows at 3x on its own account, which is a
+      // separate fault and not this test's business.
+      textScale: 1.0,
+    );
+
+    await tester.tap(find.text('Plan').last);
+    await pumpFrames(tester, frames: 12);
+
+    await tester.scrollUntilVisible(
+      find.text('Slow chilli with all the trimmings'),
+      200,
+    );
+    // scrollUntilVisible stops as soon as the finder matches *anything*,
+    // which an off-screen widget does — the same trap this file exists to
+    // point at. ensureVisible is the one that moves it onto the screen.
+    await tester.ensureVisible(
+      find.text('Slow chilli with all the trimmings').first,
+    );
+    await pumpFrames(tester, frames: 4);
+    await tester.longPress(
+      find.text('Slow chilli with all the trimmings').first,
+    );
+    await pumpFrames(tester, frames: 12);
+
+    await tester.tap(find.text('Edit portion'));
+    await pumpFrames(tester, frames: 12);
+
+    await tester.dragUntilVisible(
+      find.text('Remove'),
+      find.byType(ListView).last,
+      const Offset(0, -120),
+    );
+    await pumpFrames(tester, frames: 4);
+
+    final Rect remove = tester.getRect(find.text('Remove'));
+    final Rect primary = tester.getRect(find.byType(FilledButton).last);
+
+    expect(
+      primary.left - remove.right,
+      greaterThan(48),
+      reason:
+          'Remove sits ${(primary.left - remove.right).round()} points from '
+          'the button beside it, and there is no undo behind it',
+    );
+  });
 }
