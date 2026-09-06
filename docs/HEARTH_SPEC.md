@@ -361,6 +361,18 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
 - **Dynamic type / font scaling** honored throughout — and *honoured*, not
   capped: a fixed height around a growing label is the same fault as ignoring
   the setting, one step further along.
+- **Tested at the smallest supported size, not just the usual one.** 320
+  points wide is an iPhone SE and people still use one. Three separate
+  overflows at large text lived on screens the sweep already visited and
+  passed at 390 — the width was the whole difference, and nothing looked.
+- **Fixed chrome above a scrolling list is a trap on a short screen.** At
+  large text the chrome alone can be taller than the viewport, which leaves
+  the list a negative height. Chrome and content belong in one scroll view.
+- **A destructive action is never packed beside the button people mean to
+  press.** Remove deletes a logged meal and its frozen snapshot at once, and
+  the log sheet has no undo behind it. It keeps the width of the sheet between
+  it and the primary action while they share a line, and moves to its own line
+  rather than closing that gap.
 - **A sheet or screen that can outgrow the space it has must scroll.** At the
   largest text sizes almost everything does. The log sheet's picker scrolled
   from the start; the view you reach *after* choosing something did not, and

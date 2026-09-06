@@ -37,14 +37,14 @@ void main() {
     ],
   );
 
-  // The sizes the rest of the accessibility sweep uses. A 320-wide phone at
-  // 3x overflows before this sheet is even opened — a separate, older fault
-  // on a size nothing in the project tests, and not this one to fix here.
+  // The sizes the accessibility sweep uses, including the small phone the
+  // sweep gained at the same time as this line.
   for (final ({double scale, Size size, String where}) at
       in <({double scale, Size size, String where})>[
         (scale: 1.0, size: const Size(390, 844), where: 'a phone'),
         (scale: 2.0, size: const Size(390, 844), where: 'a phone'),
         (scale: 3.0, size: const Size(390, 844), where: 'a phone'),
+        (scale: 3.0, size: const Size(320, 568), where: 'a small phone'),
       ]) {
     final double scale = at.scale;
     testWidgets('choosing something to log survives ${scale}x on ${at.where}', (
@@ -79,6 +79,12 @@ void main() {
       await pumpFrames(tester, frames: 12);
       expect(tester.takeException(), isNull, reason: 'the picker overflowed');
 
+      // On a small phone at the largest text the row is below the fold, so
+      // it has to be brought on screen before it can be tapped.
+      await tester.ensureVisible(
+        find.text('Slow chilli with all the trimmings').last,
+      );
+      await pumpFrames(tester, frames: 4);
       await tester.tap(find.text('Slow chilli with all the trimmings').last);
       await pumpFrames(tester, frames: 12);
 

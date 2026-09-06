@@ -320,6 +320,22 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     );
   }
 
+  /// The button the sheet exists to offer, shared by both arrangements above.
+  Widget _primaryAction({
+    required Map<String, Food> foods,
+    required Map<String, Recipe> recipes,
+    required bool update,
+  }) => FilledButton(
+    onPressed: _busy ? null : () => _log(foods: foods, recipes: recipes),
+    child: Text(
+      _busy
+          ? 'Saving…'
+          : update
+          ? 'Update'
+          : 'Log it',
+    ),
+  );
+
   Widget _confirmView(
     ScrollController controller,
     Macros perServing,
@@ -373,47 +389,44 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
           // Wrapped rather than a Row: three labels side by side stop
           // fitting long before the text is at its largest, and a button
           // pushed off the edge is one nobody can press.
-          // Remove stays hard left, with the width of the sheet between it
-          // and the button beside it.
+          // Remove hard left, the actions hard right, and onto separate
+          // lines rather than off the edge when they stop fitting.
           //
-          // A Wrap looked tidier and was worse: with no Spacer to hold them
-          // apart it packed Remove eight points from Update at every text
-          // size, while both grew — so the mis-tap risk was worst for exactly
-          // the people who set large text. Remove deletes a logged meal and
-          // its frozen snapshot at once, and this route has no undo: the
-          // restore behind Undo is wired to the swipe, which this never goes
-          // through. The gap matters more than the tidiness did.
-          Row(
-            children: <Widget>[
-              if (_isExisting)
+          // A plain Row overflows by 27 points on a 320-point phone at three
+          // times the text. A plain Wrap fits, but packs Remove eight points
+          // from the button beside it at every size — and Remove deletes a
+          // logged meal and its frozen snapshot at once, with no undo on this
+          // route, because the restore behind Undo is wired to the swipe.
+          // `spaceBetween` keeps the width of the sheet between them while
+          // they share a line, and `runSpacing` keeps them apart when they do
+          // not.
+          if (_isExisting)
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              runSpacing: HearthSpacing.md,
+              children: <Widget>[
                 TextButton(
                   onPressed: _busy ? null : _remove,
                   child: const Text('Remove'),
                 ),
-              const Spacer(),
-              if (!_isExisting) ...<Widget>[
+                _primaryAction(foods: foods, recipes: recipes, update: true),
+              ],
+            )
+          else
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: HearthSpacing.sm,
+              runSpacing: HearthSpacing.sm,
+              children: <Widget>[
                 TextButton(
                   onPressed: _busy
                       ? null
                       : () => _plan(foods: foods, recipes: recipes),
                   child: const Text('Plan only'),
                 ),
-                const SizedBox(width: HearthSpacing.sm),
+                _primaryAction(foods: foods, recipes: recipes, update: false),
               ],
-              FilledButton(
-                onPressed: _busy
-                    ? null
-                    : () => _log(foods: foods, recipes: recipes),
-                child: Text(
-                  _busy
-                      ? 'Saving…'
-                      : alreadyLogged
-                      ? 'Update'
-                      : 'Log it',
-                ),
-              ),
-            ],
-          ),
+            ),
         ],
       ),
     );

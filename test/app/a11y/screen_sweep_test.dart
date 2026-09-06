@@ -84,10 +84,16 @@ void main() {
   /// accessibility size.
   const List<double> scales = <double>[1.0, 1.4, 2.0, 3.0];
 
-  /// A phone, and a desk. The shell swaps layouts on width, so a sweep that
-  /// only ever pumps a phone leaves the sidebar — a fixed-width rail full of
-  /// text — untested at every size that matters.
+  /// A phone, a small phone, and a desk. The shell swaps layouts on width, so
+  /// a sweep that only ever pumps one phone leaves the sidebar — a fixed-width
+  /// rail full of text — untested at every size that matters.
+  ///
+  /// 320 points is an iPhone SE, and it is still a size people use. Nothing
+  /// tested it until three separate overflows at large text turned up in one
+  /// afternoon, every one of them on a screen this sweep already visits at
+  /// 390 and passes.
   const Size phone = Size(390, 844);
+  const Size smallPhone = Size(320, 568);
   const Size desktop = Size(900, 500);
 
   Future<void> open(
@@ -135,6 +141,40 @@ void main() {
       });
     }
   }
+
+  group('the same four tabs on a small phone', () {
+    // 320 points, which is an iPhone SE. Everything here is a screen the
+    // sweep above already visits at 390 and passes — the width is the whole
+    // difference.
+    for (final double scale in scales) {
+      testWidgets('every tab survives ${scale}x text', (
+        WidgetTester tester,
+      ) async {
+        await open(
+          tester,
+          scale: scale,
+          brightness: Brightness.light,
+          size: smallPhone,
+        );
+        await pumpFrames(tester);
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'the shell overflowed at ${scale}x text on a small phone',
+        );
+
+        for (final String tab in tabs) {
+          await tester.tap(find.text(tab).last);
+          await pumpFrames(tester, frames: 10);
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: '$tab overflowed at ${scale}x text on a small phone',
+          );
+        }
+      });
+    }
+  });
 
   group('the same four tabs on a desk, where the sidebar is', () {
     // The sidebar is a fixed 208pt rail with a way home, a section heading and
