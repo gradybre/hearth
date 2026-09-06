@@ -60,12 +60,72 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   Food? _food;
   late double _servings = widget.existing?.entry.servings ?? 1;
 
-  /// Which of the food's serving options the portion counts (spec §5.6).
+  /// Which of the food's servings the portion is *entered* in (spec §5.6).
   ///
-  /// A food knows several — "170 g pot", "100 g", "1 tbsp" — and logging
-  /// could only ever count the default one, so eating half a pot meant
-  /// working out what that was as a multiple of something else.
+  /// Only that. `_servings`, and the `servings` column behind it, have always
+  /// meant multiples of the food's default serving — `EntryResolver` rebuilds
+  /// a logged meal's macros from `defaultServing` — so storing a count in any
+  /// other unit reinterprets it everywhere later: correcting a portion,
+  /// projecting a planned meal, repeating a recent one. The first version of
+  /// this did exactly that, and re-opening a meal logged as 1.7 x 100 g and
+  /// pressing Update turned 170 kcal into 289 without a keystroke.
+  ///
+  /// So this changes the number under your thumb, never the number in the
+  /// row. Half a pot is still half a pot to everything downstream.
   ServingOption? _serving;
+
+  /// [_servings], in whatever serving is being entered in.
+  double get _displayCount => _inServing(_servings, _serving);
+
+  /// Converts a count of default servings into a count of [option].
+  double _inServing(double servings, ServingOption? option) {
+    final Quantity? unit = option?.amount;
+    final Quantity? standard = _food?.defaultServing?.amount;
+    if (unit == null ||
+        standard == null ||
+        unit.kind != standard.kind ||
+        unit.canonicalAmount <= 0) {
+      return servings;
+    }
+    final double converted =
+        servings * standard.canonicalAmount / unit.canonicalAmount;
+    return converted.isFinite && converted > 0 ? converted : servings;
+  }
+
+  /// And back again, which is what actually gets stored.
+  double _inDefaultServings(double count, ServingOption? option) {
+    final Quantity? unit = option?.amount;
+    final Quantity? standard = _food?.defaultServing?.amount;
+    if (unit == null ||
+        standard == null ||
+        unit.kind != standard.kind ||
+        standard.canonicalAmount <= 0) {
+      return count;
+    }
+    final double converted =
+        count * unit.canonicalAmount / standard.canonicalAmount;
+    return converted.isFinite && converted > 0 ? converted : count;
+  }
+
+  /// The servings this food can be entered in.
+  ///
+  /// Only those that can be expressed as a multiple of the default one — the
+  /// same kind, so the two are directly comparable. A volume cannot be
+  /// written as a multiple of a mass without a density the food does not
+  /// carry, and §5.5's rule is that a figure nobody stated is not invented.
+  /// An option that cannot be converted is not offered rather than offered
+  /// and mis-stored.
+  List<ServingOption> get _enterableServings {
+    final ServingOption? standard = _food?.defaultServing;
+    if (standard == null) return const <ServingOption>[];
+    return <ServingOption>[
+      for (final ServingOption option in _food!.servingOptions)
+        if (option.amount.kind == standard.amount.kind &&
+            option.amount.canonicalAmount > 0)
+          option,
+    ];
+  }
+
   bool _busy = false;
 
   bool get _isExisting => widget.existing != null;
@@ -84,33 +144,8 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     if (_recipe != null) {
       return MacroCalculator.forRecipe(_recipe!, foods: foods).perServing;
     }
-    final ServingOption? serving = _serving ?? _food?.defaultServing;
+    final ServingOption? serving = _food?.defaultServing;
     return serving?.macros ?? Macros.zero;
-  }
-
-  /// The same amount of food, counted in a different serving.
-  ///
-  /// Two servings of the same kind are directly comparable — a 170 g pot and
-  /// 100 g are both masses — so switching between them keeps the amount and
-  /// changes the number. Across kinds it would need a density the food does
-  /// not necessarily carry, and §5.5's rule is that a number nobody stated is
-  /// not invented: the count resets to one and the person says what they
-  /// meant.
-  static double _equivalent({
-    required double of,
-    required ServingOption? from,
-    required ServingOption to,
-  }) {
-    final Quantity? was = from?.amount;
-    final Quantity now = to.amount;
-    if (was == null ||
-        was.kind != now.kind ||
-        now.canonicalAmount <= 0 ||
-        was.canonicalAmount <= 0) {
-      return 1;
-    }
-    final double converted = of * was.canonicalAmount / now.canonicalAmount;
-    return converted.isFinite && converted > 0 ? converted : 1;
   }
 
   /// How much of [_perServing]'s minor nutrients those numbers speak for.
@@ -126,7 +161,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     if (_recipe != null) {
       return MacroCalculator.forRecipe(_recipe!, foods: foods).coverage;
     }
-    final ServingOption? serving = _serving ?? _food?.defaultServing;
+    final ServingOption? serving = _food?.defaultServing;
     return serving == null
         ? const NutrientCoverage.notRecorded()
         : NutrientCoverage.ofOne(serving.macros);
@@ -412,26 +447,36 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
             style: context.text.metadata.copyWith(color: colors.textMuted),
           ),
           const SizedBox(height: HearthSpacing.lg),
-          // Which serving the portion counts, before how many of it.
-          if (_food case final Food food
-              when food.servingOptions.length > 1) ...<Widget>[
+          // Which serving the portion is entered in, before how many of it.
+          if (_enterableServings.length > 1) ...<Widget>[
             _ServingPicker(
-              options: food.servingOptions,
-              chosen: _serving ?? food.defaultServing,
+              options: _enterableServings,
+              chosen: _serving ?? _food?.defaultServing,
               onChanged: (ServingOption option) => setState(() {
-                _servings = _equivalent(
-                  of: _servings,
-                  from: _serving ?? food.defaultServing,
-                  to: option,
-                );
+                // The field is rewritten underneath, so the focus has to go
+                // — otherwise the stepper keeps what was typed, and the next
+                // unfocus commits that stale number over the conversion.
+                FocusScope.of(context).unfocus();
                 _serving = option;
               }),
             ),
             const SizedBox(height: HearthSpacing.md),
-          ],
+          ] else if (_food?.defaultServing case final ServingOption only)
+            // One serving still needs saying. "1" on its own could be a
+            // slice, a loaf or 100 g (§8.2 asks for a labelled amount).
+            Padding(
+              padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
+              child: Text(
+                'Serving: ${only.label}',
+                style: context.text.metadata.copyWith(
+                  color: colors.textSecondary,
+                ),
+              ),
+            ),
           _PortionStepper(
-            servings: _servings,
-            onChanged: (double value) => setState(() => _servings = value),
+            servings: _displayCount,
+            onChanged: (double value) =>
+                setState(() => _servings = _inDefaultServings(value, _serving)),
           ),
           const SizedBox(height: HearthSpacing.lg),
           if (!_isExisting) ...<Widget>[
