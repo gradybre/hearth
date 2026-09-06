@@ -208,7 +208,7 @@ abstract final class RecipeMapper {
     'notes': recipe.notes,
     'created_by': recipe.createdBy,
     'is_deleted': recipe.isDeleted,
-    'updated_at': updatedAt.toIso8601String(),
+    'updated_at': updatedAt.toUtc().toIso8601String(),
     'sections': <Map<String, Object?>>[
       for (final RecipeSection section in recipe.orderedSections)
         <String, Object?>{

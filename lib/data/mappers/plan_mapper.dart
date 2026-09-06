@@ -159,7 +159,7 @@ abstract final class PlanMapper {
     'macro_snapshot': entry.macroSnapshot == null
         ? null
         : snapshotToJson(entry.macroSnapshot!),
-    'updated_at': updatedAt.toIso8601String(),
+    'updated_at': updatedAt.toUtc().toIso8601String(),
   };
 
   static MacroTargets targetsToDomain(MacroTargetRow row) => MacroTargets(
@@ -191,7 +191,7 @@ abstract final class PlanMapper {
     'cholesterol_mg': targets.cholesterolMg,
     'carb_g': targets.carbG,
     'fat_g': targets.fatG,
-    'updated_at': updatedAt.toIso8601String(),
+    'updated_at': updatedAt.toUtc().toIso8601String(),
   };
 
   static Map<String, Object?> dayToJson({
@@ -202,7 +202,7 @@ abstract final class PlanMapper {
     'user_id': userId,
     'day': _dateOnly(day.day),
     'notes': day.notes,
-    'updated_at': day.updatedAt.toIso8601String(),
+    'updated_at': day.updatedAt.toUtc().toIso8601String(),
   };
 
   static double _double(Object? value) => value is num ? value.toDouble() : 0;

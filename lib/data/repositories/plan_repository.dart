@@ -432,7 +432,7 @@ class PlanRepository {
           'entries': <Map<String, Object?>>[
             for (final TemplateEntry entry in entries) entry.toJson(),
           ],
-          'updated_at': now.toIso8601String(),
+          'updated_at': now.toUtc().toIso8601String(),
         },
         queuedAt: now,
       );
