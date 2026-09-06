@@ -58,6 +58,11 @@ void main() {
     );
     await tester.tap(find.text('Plan').last);
     await pumpFrames(tester, frames: 12);
+
+    // The slim bars are the expanded view now; the day opens compact (U01).
+    // This file is about the bars, so it asks for them.
+    await tester.tap(find.text('Details'));
+    await pumpFrames(tester, frames: 8);
     return db;
   }
 

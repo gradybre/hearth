@@ -16,6 +16,14 @@ class PreferenceStore {
   /// Light, dark, or whatever the device is doing — see `ThemeChoice`.
   static const String themeChoice = 'app.theme_choice';
 
+  /// Whether the day's summary shows its rings and bars, or the compact
+  /// readout (spec §5.6).
+  ///
+  /// Device-local, like the theme: how much of the summary you want to see
+  /// before the meals is a choice about the screen in your hand, and pushing
+  /// it to a partner would rearrange their day for no reason they could see.
+  static const String daySummaryExpanded = 'plan.day_summary_expanded';
+
   /// Which screen the app opens on — see `LaunchTarget`. Device-local for the
   /// same reason as the theme: where your app opens is not a household
   /// decision.

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/a11y/accessibility.dart';
 import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
@@ -15,6 +16,7 @@ import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
+import '../../domain/planning/nutrient_coverage.dart';
 import '../../domain/planning/week.dart';
 import 'day_picker_sheet.dart';
 import 'entry_resolver.dart';
@@ -251,6 +253,8 @@ class _RemainingCard extends ConsumerWidget {
       targets: targets!,
     );
 
+    final bool expanded = ref.watch(daySummaryExpandedProvider).value ?? false;
+
     return _Card(
       onTap: () => showMacroTargetsSheet(context),
       child: Column(
@@ -272,22 +276,210 @@ class _RemainingCard extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: HearthSpacing.md),
-          MacroRings(progress: progress),
-          // Below the rings and quieter than them: these have targets now,
-          // but calories are still meant to be the loudest thing here and a
-          // ring would put the three on a level with the four (spec §5.6).
-          //
-          // Shown whether or not anything has stated a value; the bars say so
-          // themselves. Hiding them was the first design and it made the
-          // feature invisible — most foods in an established library predate
-          // these columns, so "nothing has said" is the ordinary answer, and
-          // an absent row reads as a feature that was never built.
-          const SizedBox(height: HearthSpacing.lg),
-          MinorNutrientBars(progress: progress),
+          if (expanded) ...<Widget>[
+            MacroRings(progress: progress),
+            // Below the rings and quieter than them: these have targets now,
+            // but calories are still meant to be the loudest thing here and a
+            // ring would put the three on a level with the four (spec §5.6).
+            //
+            // Shown whether or not anything has stated a value; the bars say
+            // so themselves. Hiding them was the first design and it made the
+            // feature invisible — most foods in an established library
+            // predate these columns, so "nothing has said" is the ordinary
+            // answer, and an absent row reads as a feature that was never
+            // built.
+            const SizedBox(height: HearthSpacing.lg),
+            MinorNutrientBars(progress: progress),
+          ] else
+            _CompactSummary(progress: progress),
+          const SizedBox(height: HearthSpacing.sm),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () => ref
+                  .read(daySummaryExpandedProvider.notifier)
+                  .set(expanded: !expanded),
+              child: Text(expanded ? 'Less' : 'Details'),
+            ),
+          ),
         ],
       ),
     );
   }
+}
+
+/// The day in four lines, for the top of a screen whose subject is the meals
+/// below it (spec §5.6).
+///
+/// Same numbers, same words, same three minor nutrients — including the ones
+/// nothing has stated, which read as a dash. What it drops is the drawing:
+/// the rings are the better picture of a day and the worse first screen,
+/// because at ordinary text they push the first meal below the fold.
+class _CompactSummary extends StatelessWidget {
+  const _CompactSummary({required this.progress});
+
+  final DayProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final MacroProgress kcal = progress.forKind(MacroKind.calories);
+    // The ring's own judgement, not a fresh one. Mapping "met" onto "under"
+    // made a day landing exactly on its target read "0 left" with a down
+    // arrow here while the ring beside it said "on target" — the same day,
+    // contradicted by two views of itself.
+    final TargetIndicator calories = switch (kcal.tone) {
+      MacroTone.over => TargetIndicator.forState(
+        TargetState.over,
+        amount: kcal.remaining.abs().round().toString(),
+      ),
+      MacroTone.good when kcal.state == MacroProgressState.met =>
+        TargetIndicator.forState(TargetState.met),
+      // Neutral is the untouched day: still "left", and the honest amount.
+      MacroTone.good || MacroTone.neutral => TargetIndicator.forState(
+        TargetState.under,
+        amount: kcal.remaining.round().toString(),
+      ),
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        // Calories loudest, as everywhere else.
+        Semantics(
+          label:
+              '${kcal.consumed.round()} of ${kcal.target.round()} calories. '
+              '${calories.semanticLabel}',
+          excludeSemantics: true,
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  '${kcal.consumed.round()} of ${kcal.target.round()} kcal',
+                  style: context.text.body,
+                ),
+              ),
+              // Never colour alone: the word travels with the arrow (§6.3).
+              Icon(
+                calories.icon,
+                size: 16,
+                color: kcal.isOver ? colors.overAccent : colors.textMuted,
+              ),
+              const SizedBox(width: HearthSpacing.xxs),
+              Text(
+                calories.shortLabel,
+                style: context.text.metadata.copyWith(
+                  color: kcal.isOver ? colors.overAccent : colors.textMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: HearthSpacing.xs),
+        _CompactRow(
+          readouts: <_Readout>[
+            for (final MacroKind kind in <MacroKind>[
+              MacroKind.protein,
+              MacroKind.carbs,
+              MacroKind.fat,
+            ])
+              _macro(progress.forKind(kind)),
+          ],
+          style: context.text.metadata.copyWith(color: colors.textSecondary),
+        ),
+        const SizedBox(height: HearthSpacing.xxs),
+        _CompactRow(
+          readouts: <_Readout>[
+            for (final MinorNutrient nutrient in MinorNutrient.values)
+              _minor(progress.minor(nutrient)),
+          ],
+          style: context.text.metadata.copyWith(color: colors.textMuted),
+        ),
+      ],
+    );
+  }
+
+  static _Readout _macro(MacroProgress macro) {
+    final String label = MacroRings.labelFor(macro.kind);
+    final String unit = MacroRings.unitFor(macro.kind);
+    return _Readout(
+      text: '$label ${macro.consumed.round()}/${macro.target.round()}$unit',
+      // Spoken in words. A slash is punctuation and an unspaced unit is not a
+      // word — the rings say "Protein: 20 of 150 g" and this has to say the
+      // same thing, or the compact view is a downgrade for anyone listening
+      // to it rather than looking at it (spec §6.3).
+      spoken:
+          '$label, ${macro.consumed.round()} of ${macro.target.round()} $unit.',
+    );
+  }
+
+  /// A dash, never a zero, and a floor marked as one (spec §5.6).
+  ///
+  /// "0" would claim the day had none of it, when the truth is that nothing
+  /// eaten was ever asked. And a total that does not account for everything
+  /// eaten is a floor rather than a figure — printed bare it reads exactly
+  /// like a complete one, which is the whole defect this column exists to
+  /// avoid. The compact view marks it and says so out loud.
+  static _Readout _minor(MinorProgress nutrient) {
+    final MinorNutrient kind = nutrient.nutrient;
+    final String target = '${nutrient.target.round()}${kind.unit}';
+
+    if (!nutrient.isKnown) {
+      return _Readout(
+        text: '${kind.label} —/$target',
+        // The word, not the dash: most screen readers pass over punctuation
+        // at default verbosity, so "Fibre, of 28 g" would be both
+        // ungrammatical and silent about the thing that matters.
+        spoken:
+            '${kind.label}, not stated, of ${nutrient.target.round()} '
+            '${kind.unit}.'
+            '${nutrient.countedParts == 0 ? ' Nothing logged yet.' : ''}',
+      );
+    }
+
+    final String amount = nutrient.consumed!.round().toString();
+    final bool floor = nutrient.coverage != MinorCoverage.complete;
+    return _Readout(
+      // "≥" rather than a bare number: at a glance it is the difference
+      // between "you have had 14 g of fibre" and "you have had at least 14 g,
+      // and something you ate never said".
+      text: '${kind.label} ${floor ? '≥' : ''}$amount/$target',
+      spoken:
+          '${kind.label}, ${floor ? 'at least ' : ''}$amount of '
+          '${nutrient.target.round()} ${kind.unit}.'
+          '${floor ? ' Not a full count.' : ''}',
+    );
+  }
+}
+
+/// One short readout: what it looks like, and what it says.
+class _Readout {
+  const _Readout({required this.text, required this.spoken});
+
+  final String text;
+  final String spoken;
+}
+
+/// Several short readouts on one line, wrapping rather than overflowing.
+class _CompactRow extends StatelessWidget {
+  const _CompactRow({required this.readouts, required this.style});
+
+  final List<_Readout> readouts;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: HearthSpacing.md,
+    runSpacing: HearthSpacing.xxs,
+    children: <Widget>[
+      for (final _Readout readout in readouts)
+        Semantics(
+          label: readout.spoken,
+          excludeSemantics: true,
+          child: Text(readout.text, style: style),
+        ),
+    ],
+  );
 }
 
 class _SlotSection extends ConsumerWidget {

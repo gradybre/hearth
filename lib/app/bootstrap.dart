@@ -15,6 +15,7 @@ class Boot {
     required this.database,
     required this.theme,
     required this.launchTarget,
+    required this.daySummaryExpanded,
   });
 
   /// Whether Supabase was configured and started.
@@ -33,6 +34,12 @@ class Boot {
   /// route, and a route decided after the first frame means watching the home
   /// screen appear and then be replaced.
   final LaunchTarget launchTarget;
+
+  /// Whether the day's summary opens on its rings (spec §5.6). Same reason
+  /// again, and it is worth about 170 points: a value that arrives a frame
+  /// late means the card renders compact and then jumps, under the thumb of
+  /// somebody about to log a meal.
+  final bool daySummaryExpanded;
 }
 
 /// Brings up anything that must exist before the first frame.
@@ -50,6 +57,7 @@ Future<Boot> bootstrap() async {
   final HearthDatabase database = HearthDatabase();
   ThemeChoice theme = ThemeChoice.system;
   LaunchTarget launchTarget = LaunchTarget.home;
+  bool daySummaryExpanded = false;
   try {
     final PreferenceStore preferences = PreferenceStore(database);
     theme = ThemeChoice.parse(
@@ -57,6 +65,9 @@ Future<Boot> bootstrap() async {
     );
     launchTarget = LaunchTarget.parse(
       await preferences.read(PreferenceStore.launchTarget),
+    );
+    daySummaryExpanded = await preferences.readFlag(
+      PreferenceStore.daySummaryExpanded,
     );
   } on Object {
     // A local cache that cannot be read is a real problem, but it is not this
@@ -71,6 +82,7 @@ Future<Boot> bootstrap() async {
       database: database,
       theme: theme,
       launchTarget: launchTarget,
+      daySummaryExpanded: daySummaryExpanded,
     );
   }
 
@@ -93,5 +105,6 @@ Future<Boot> bootstrap() async {
     database: database,
     theme: theme,
     launchTarget: launchTarget,
+    daySummaryExpanded: daySummaryExpanded,
   );
 }
