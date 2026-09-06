@@ -19,6 +19,7 @@ class CentredMessage extends StatelessWidget {
     required this.children,
     this.gutter = HearthSpacing.lg,
     this.maxWidth = 380,
+    this.scrollable = true,
     super.key,
   });
 
@@ -28,42 +29,60 @@ class CentredMessage extends StatelessWidget {
   /// A line of prose is unreadable when it runs the full width of a tablet.
   final double maxWidth;
 
+  /// Whether this should scroll when it does not fit.
+  ///
+  /// False when the caller is already handling that — a
+  /// `SliverFillRemaining(hasScrollBody: false)`, say, which asks its child
+  /// for an intrinsic height and cannot get one through a `LayoutBuilder`.
+  /// Saying so up front is what lets that caller size itself properly, rather
+  /// than claiming a whole viewport of scroll it does not need.
+  final bool scrollable;
+
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (BuildContext context, BoxConstraints constraints) {
-      final Widget content = ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: children,
-        ),
-      );
+  Widget build(BuildContext context) {
+    final Widget content = ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: children,
+      ),
+    );
 
-      // Unbounded height means this is already inside something that scrolls
-      // — a sliver, or another scroll view. Adding a second scrollable there
-      // is both wrong and, because the minimum height would be infinite, a
-      // hard layout error. Just lay the content out.
-      if (!constraints.hasBoundedHeight) {
-        return Padding(
-          padding: EdgeInsets.all(gutter),
-          child: Center(child: content),
-        );
-      }
-
-      return SingleChildScrollView(
+    if (!scrollable) {
+      return Padding(
         padding: EdgeInsets.all(gutter),
-        child: ConstrainedBox(
-          // Centres while it fits; scrolls once it does not.
-          constraints: BoxConstraints(
-            minHeight: (constraints.maxHeight - gutter * 2).clamp(
-              0.0,
-              double.infinity,
-            ),
-          ),
-          child: Center(child: content),
-        ),
+        child: Center(child: content),
       );
-    },
-  );
+    }
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        // Unbounded height means this is already inside something that scrolls
+        // — a sliver, or another scroll view. Adding a second scrollable there
+        // is both wrong and, because the minimum height would be infinite, a
+        // hard layout error. Just lay the content out.
+        if (!constraints.hasBoundedHeight) {
+          return Padding(
+            padding: EdgeInsets.all(gutter),
+            child: Center(child: content),
+          );
+        }
+
+        return SingleChildScrollView(
+          padding: EdgeInsets.all(gutter),
+          child: ConstrainedBox(
+            // Centres while it fits; scrolls once it does not.
+            constraints: BoxConstraints(
+              minHeight: (constraints.maxHeight - gutter * 2).clamp(
+                0.0,
+                double.infinity,
+              ),
+            ),
+            child: Center(child: content),
+          ),
+        );
+      },
+    );
+  }
 }

@@ -321,6 +321,12 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   }
 
   /// The button the sheet exists to offer, shared by both arrangements above.
+  ///
+  /// [update] is whether this entry has *already been logged*, which is not
+  /// the same as whether it exists: a planned meal exists and has not been
+  /// logged, and that is precisely the entry whose button has to say "Log
+  /// it". Collapsing the two is how the one button whose whole job is to log
+  /// a planned meal stopped saying so.
   Widget _primaryAction({
     required Map<String, Food> foods,
     required Map<String, Recipe> recipes,
@@ -401,22 +407,45 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
           // they share a line, and `runSpacing` keeps them apart when they do
           // not.
           if (_isExisting)
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              runSpacing: HearthSpacing.md,
+            // Side by side while they fit, stacked when they do not — and
+            // stacked with the primary *above* Remove, a full gap apart.
+            //
+            // A Wrap could not do this. `spaceBetween` only separates
+            // children that share a run, so once they wrapped it fell back to
+            // start-alignment and put the primary directly beneath Remove,
+            // twelve points away and flush to the same edge — the adjacency
+            // this arrangement exists to prevent, rotated ninety degrees.
+            OverflowBar(
+              alignment: MainAxisAlignment.spaceBetween,
+              overflowAlignment: OverflowBarAlignment.end,
+              overflowDirection: VerticalDirection.up,
+              // The gap is required, not left over. `spaceBetween` only
+              // spreads what is spare, so at three times the text on a small
+              // phone the two buttons very nearly fill the line and it spread
+              // them by five points. Demanding the gap as spacing means they
+              // share a line only when it can be honoured, and stack — with
+              // the same gap, and the primary above — when it cannot.
+              spacing: HearthSpacing.xxxl,
+              overflowSpacing: HearthSpacing.xxxl,
               children: <Widget>[
                 TextButton(
                   onPressed: _busy ? null : _remove,
                   child: const Text('Remove'),
                 ),
-                _primaryAction(foods: foods, recipes: recipes, update: true),
+                _primaryAction(
+                  foods: foods,
+                  recipes: recipes,
+                  update: alreadyLogged,
+                ),
               ],
             )
           else
-            Wrap(
-              alignment: WrapAlignment.end,
+            // No destructive button here, so the only question is fitting.
+            OverflowBar(
+              alignment: MainAxisAlignment.end,
+              overflowAlignment: OverflowBarAlignment.end,
               spacing: HearthSpacing.sm,
-              runSpacing: HearthSpacing.sm,
+              overflowSpacing: HearthSpacing.sm,
               children: <Widget>[
                 TextButton(
                   onPressed: _busy
@@ -424,7 +453,11 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
                       : () => _plan(foods: foods, recipes: recipes),
                   child: const Text('Plan only'),
                 ),
-                _primaryAction(foods: foods, recipes: recipes, update: false),
+                _primaryAction(
+                  foods: foods,
+                  recipes: recipes,
+                  update: alreadyLogged,
+                ),
               ],
             ),
         ],

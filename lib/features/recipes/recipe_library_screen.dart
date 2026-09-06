@@ -161,13 +161,21 @@ class RecipeLibraryScreen extends ConsumerWidget {
                 ],
                 if (recipes.isEmpty)
                   // Filling what is left, so a centred message stays centred
-                  // on a tall screen. `hasScrollBody` is true because the
-                  // message handles its own overflow — and because false asks
-                  // the child for an intrinsic height, which the LayoutBuilder
-                  // inside CentredMessage cannot answer.
-                  SliverFillRemaining(child: _EmptyLibrary(gutter: gutter))
+                  // on a tall screen and grows past it when it must.
+                  //
+                  // `hasScrollBody: false` asks the child for an intrinsic
+                  // height, which a LayoutBuilder cannot answer — so the
+                  // message is told not to scroll, and answers. With a scroll
+                  // body instead, this sliver claims a whole viewport of
+                  // scroll extent regardless of the chrome above it, and the
+                  // empty states gain dead scroll they never had.
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _EmptyLibrary(gutter: gutter),
+                  )
                 else if ((shown.value ?? const <Recipe>[]).isEmpty)
                   SliverFillRemaining(
+                    hasScrollBody: false,
                     child: _NoMatches(
                       gutter: gutter,
                       filter: filter,
@@ -209,6 +217,9 @@ class _NoMatches extends StatelessWidget {
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     return CentredMessage(
+      // Inside a SliverFillRemaining that sizes itself from this, so it
+      // must not claim to scroll: see the sliver below.
+      scrollable: false,
       gutter: gutter,
       children: <Widget>[
         Text(
@@ -477,6 +488,9 @@ class _EmptyLibrary extends StatelessWidget {
     final HearthTextStyles text = context.text;
 
     return CentredMessage(
+      // Inside a SliverFillRemaining that sizes itself from this, so it
+      // must not claim to scroll: see the sliver below.
+      scrollable: false,
       gutter: gutter,
       children: <Widget>[
         Text(

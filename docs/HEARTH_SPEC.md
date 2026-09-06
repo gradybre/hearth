@@ -362,17 +362,25 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
   capped: a fixed height around a growing label is the same fault as ignoring
   the setting, one step further along.
 - **Tested at the smallest supported size, not just the usual one.** 320
-  points wide is an iPhone SE and people still use one. Three separate
-  overflows at large text lived on screens the sweep already visited and
-  passed at 390 — the width was the whole difference, and nothing looked.
+  points wide is an iPhone SE and people still use one. Several overflows at
+  large text lived on screens the sweep already visited and passed at 390 —
+  the width was the whole difference, and nothing looked. The worst put both
+  actions of a long-pressed meal entirely off the screen, so it could be
+  neither edited nor removed.
+- **And swept by walking flows, not by visiting tabs.** Every one of those
+  faults was a step or two past a tab: a sheet opened, an item chosen, a row
+  long-pressed. A sweep that stops at the four tabs is a sweep of four
+  screens.
 - **Fixed chrome above a scrolling list is a trap on a short screen.** At
   large text the chrome alone can be taller than the viewport, which leaves
   the list a negative height. Chrome and content belong in one scroll view.
 - **A destructive action is never packed beside the button people mean to
   press.** Remove deletes a logged meal and its frozen snapshot at once, and
-  the log sheet has no undo behind it. It keeps the width of the sheet between
-  it and the primary action while they share a line, and moves to its own line
-  rather than closing that gap.
+  the log sheet has no undo behind it. The gap is *required* rather than left
+  over: the two share a line only when a full gap fits between them, and
+  otherwise stack — the same gap apart, with the primary above. Spreading
+  whatever space happens to be spare is not enough, because at large text on a
+  small phone what is spare is five points.
 - **A sheet or screen that can outgrow the space it has must scroll.** At the
   largest text sizes almost everything does. The log sheet's picker scrolled
   from the start; the view you reach *after* choosing something did not, and

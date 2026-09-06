@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/app/theme/hearth_spacing.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
@@ -125,17 +126,18 @@ void main() {
     });
   }
 
-  testWidgets('Remove is nowhere near the button beside it', (
-    WidgetTester tester,
-  ) async {
-    // A Wrap tidied these into one right-aligned run and put Remove eight
-    // points from Update at every text size, while both grew — so the
-    // mis-tap risk was worst for the people who set large text. Remove
-    // deletes a logged meal and its frozen snapshot at once, and this route
-    // has no undo: the restore behind Undo is wired to the swipe, which this
-    // never goes through.
+  /// Opens the confirm view for an entry that already exists on the plan.
+  ///
+  /// Planned rather than logged, deliberately: that is the state where "there
+  /// is an existing entry" and "it has already been logged" come apart.
+  Future<void> openExistingEntry(
+    WidgetTester tester, {
+    required Size size,
+    required double scale,
+  }) async {
     await pumpHearthApp(
       tester,
+      size: size,
       recipes: <Recipe>[chilli()],
       foods: <Food>[yoghurt()],
       entries: <MealPlanEntry>[
@@ -154,11 +156,7 @@ void main() {
         carbG: 200,
         fatG: 70,
       ),
-      // At ordinary text size. The gap this pins was eight points at *every*
-      // scale, so 1x demonstrates it — and the route to this view crosses
-      // another screen that overflows at 3x on its own account, which is a
-      // separate fault and not this test's business.
-      textScale: 1.0,
+      textScale: scale,
     );
 
     await tester.tap(find.text('Plan').last);
@@ -180,6 +178,8 @@ void main() {
     );
     await pumpFrames(tester, frames: 12);
 
+    await tester.ensureVisible(find.text('Edit portion'));
+    await pumpFrames(tester, frames: 4);
     await tester.tap(find.text('Edit portion'));
     await pumpFrames(tester, frames: 12);
 
@@ -189,16 +189,87 @@ void main() {
       const Offset(0, -120),
     );
     await pumpFrames(tester, frames: 4);
+  }
 
-    final Rect remove = tester.getRect(find.text('Remove'));
+  testWidgets('Remove is nowhere near the button beside it', (
+    WidgetTester tester,
+  ) async {
+    // A Wrap tidied these into one right-aligned run and put Remove eight
+    // points from the primary at every text size, while both grew — so the
+    // mis-tap risk was worst for the people who set large text. Remove
+    // deletes a logged meal and its frozen snapshot at once, and this route
+    // has no undo: the restore behind Undo is wired to the swipe, which this
+    // never goes through.
+    await openExistingEntry(tester, size: const Size(390, 844), scale: 1);
+
+    // Button box to button box. Measuring the *label* against the button
+    // beside it flatters the gap by however much padding the button has,
+    // and it is the boxes that catch a thumb.
+    final Rect remove = tester.getRect(
+      find.ancestor(of: find.text('Remove'), matching: find.byType(TextButton)),
+    );
     final Rect primary = tester.getRect(find.byType(FilledButton).last);
 
     expect(
-      primary.left - remove.right,
-      greaterThan(48),
+      _gapBetween(remove, primary),
+      greaterThanOrEqualTo(HearthSpacing.xxxl),
       reason:
-          'Remove sits ${(primary.left - remove.right).round()} points from '
+          'Remove sits ${_gapBetween(remove, primary).round()} points from '
           'the button beside it, and there is no undo behind it',
     );
   });
+
+  testWidgets('and stays away from it when they stop fitting side by side', (
+    WidgetTester tester,
+  ) async {
+    // On a small phone at the largest text they cannot share a line. A Wrap
+    // put the primary directly beneath Remove, twelve points away and flush
+    // to the same edge — the same adjacency, rotated ninety degrees.
+    await openExistingEntry(tester, size: const Size(320, 568), scale: 3);
+
+    // Button box to button box. Measuring the *label* against the button
+    // beside it flatters the gap by however much padding the button has,
+    // and it is the boxes that catch a thumb.
+    final Rect remove = tester.getRect(
+      find.ancestor(of: find.text('Remove'), matching: find.byType(TextButton)),
+    );
+    final Rect primary = tester.getRect(find.byType(FilledButton).last);
+
+    expect(
+      _gapBetween(remove, primary),
+      greaterThanOrEqualTo(HearthSpacing.xxxl),
+      reason:
+          'stacked, Remove is ${_gapBetween(remove, primary).round()} points '
+          'from the button beside it',
+    );
+    expect(
+      primary.top,
+      lessThan(remove.top),
+      reason:
+          'stacked, the destructive button should not be the one under your '
+          'thumb after the primary',
+    );
+  });
+
+  testWidgets('a planned meal is logged, not updated', (
+    WidgetTester tester,
+  ) async {
+    // A planned entry exists and has not been logged, so the button whose
+    // whole job is to log it has to say so. "There is an existing entry" and
+    // "it has already been logged" are different questions, and collapsing
+    // them is how this button stopped saying what it does.
+    await openExistingEntry(tester, size: const Size(390, 844), scale: 1);
+
+    expect(find.text('Log it'), findsOneWidget);
+    expect(find.text('Update'), findsNothing);
+  });
+}
+
+/// The clear space between two buttons, whichever way they are arranged.
+double _gapBetween(Rect a, Rect b) {
+  final double horizontal = a.left < b.left
+      ? b.left - a.right
+      : a.left - b.right;
+  final double vertical = a.top < b.top ? b.top - a.bottom : a.top - b.bottom;
+  return horizontal > vertical ? horizontal : vertical;
 }
