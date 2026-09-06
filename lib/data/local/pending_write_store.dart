@@ -97,10 +97,54 @@ class PendingWriteStore {
         );
   }
 
-  /// Everything waiting to sync, oldest first.
-  Future<List<PendingWrite>> pending({int? limit}) async {
+  /// How long a refused write waits before each next try.
+  ///
+  /// Passes are triggered by local writes rather than a timer, so somebody
+  /// typing a shopping list can produce several a second — and a write the
+  /// server keeps refusing would be refused several times a second.
+  ///
+  /// The tail is deliberately long. The first draft ran 2s, 5s, 15s, 30s, 60s
+  /// and gave up after five tries, which sounds reasonable and is not: the
+  /// whole budget is spent in **fifty-two seconds**. Anything the server is
+  /// briefly unhappy about — a deploy window, an incident, a session expiring
+  /// a moment before it refreshes — would strand a phone's entire outbox
+  /// before anyone could look up from the shopping list. These waits span
+  /// about two and a half hours, which is long enough for the transient
+  /// things to stop being true.
+  static const List<Duration> backoff = <Duration>[
+    Duration(seconds: 2),
+    Duration(seconds: 30),
+    Duration(minutes: 5),
+    Duration(minutes: 30),
+    Duration(hours: 2),
+  ];
+
+  /// How many times a write is asked before it stops being asked.
+  ///
+  /// One more than the number of waits, and it has to stay that way: a wait
+  /// sits *between* two attempts, so N waits allow N+1 tries. Set to five
+  /// alongside five waits, the last wait was unreachable — the cap stranded
+  /// the write on the very attempt that would have earned it, and the
+  /// schedule the docs described was a third longer than the real one.
+  ///
+  /// A test holds the two together, since a const cannot read the list's
+  /// length.
+  static const int maxAttempts = 6;
+
+  /// Everything ready to sync now, oldest first.
+  ///
+  /// Excludes writes still waiting out a backoff, and writes that have given
+  /// up. Neither is dropped — see [strandedCount] and [count].
+  Future<List<PendingWrite>> pending({int? limit, DateTime? now}) async {
+    final DateTime at = now ?? DateTime.now().toUtc();
     final SimpleSelectStatement<$PendingWritesTable, PendingWriteRow> query =
         _db.select(_db.pendingWrites)
+          ..where(
+            ($PendingWritesTable t) =>
+                t.attempts.isSmallerThanValue(maxAttempts) &
+                (t.nextAttemptAt.isNull() |
+                    t.nextAttemptAt.isSmallerOrEqualValue(at)),
+          )
           ..orderBy(<OrderClauseGenerator<$PendingWritesTable>>[
             ($PendingWritesTable t) => OrderingTerm.asc(t.sequence),
           ]);
@@ -158,17 +202,75 @@ class PendingWriteStore {
     )..where(($PendingWritesTable t) => t.sequence.equals(sequence))).go();
   }
 
-  /// Records a failure and leaves the write queued to try again.
+  /// How many writes have stopped being asked.
+  ///
+  /// Kept, not dropped. Giving up means giving up *asking* — losing a logged
+  /// meal to a server that refused it is exactly the failure the queue exists
+  /// to prevent.
+  Future<int> strandedCount() async {
+    final List<PendingWriteRow> rows =
+        await (_db.select(_db.pendingWrites)..where(
+              ($PendingWritesTable t) =>
+                  t.attempts.isBiggerOrEqualValue(maxAttempts),
+            ))
+            .get();
+    return rows.length;
+  }
+
+  /// Asks the stranded writes again, from the beginning.
+  ///
+  /// Without this a write that gave up is stuck for ever, and so is its
+  /// record: `hasPendingFor` still refuses to let a pull overwrite something
+  /// that has not been sent, which is right — the local copy is the newer
+  /// one, and discarding it to unstick the sync would lose the very work the
+  /// queue exists to protect. But that leaves two devices quietly disagreeing
+  /// with no way back, and an upsert can at least be re-issued by editing the
+  /// record again while a stranded *delete* cannot: the row is already gone
+  /// from this screen, so there is nothing left to press.
+  ///
+  /// So the way back is deliberate and the user's: Settings offers it when
+  /// there is something to offer it for.
+  Future<int> retryStranded({DateTime? now}) async {
+    final int stranded = await strandedCount();
+    if (stranded == 0) return 0;
+
+    await (_db.update(_db.pendingWrites)..where(
+          ($PendingWritesTable t) =>
+              t.attempts.isBiggerOrEqualValue(maxAttempts),
+        ))
+        .write(
+          const PendingWritesCompanion(
+            attempts: Value<int>(0),
+            nextAttemptAt: Value<DateTime?>(null),
+          ),
+        );
+    return stranded;
+  }
+
+  /// Records a failure and leaves the write queued to try again later.
   ///
   /// The write is never dropped on error: losing a logged meal to a flaky
   /// connection is exactly the failure the queue exists to prevent.
-  Future<void> markFailed(int sequence, String error) async {
+  Future<void> markFailed(int sequence, String error, {DateTime? now}) async {
+    final DateTime at = now ?? DateTime.now().toUtc();
+    final PendingWriteRow? row =
+        await (_db.select(_db.pendingWrites)
+              ..where(($PendingWritesTable t) => t.sequence.equals(sequence)))
+            .getSingleOrNull();
+    if (row == null) return;
+
+    final int attempts = row.attempts + 1;
+    // One wait between attempts, so attempt N is followed by wait N. The last
+    // attempt is followed by nothing, because the cap is what ends it.
+    final Duration wait = backoff[(attempts - 1).clamp(0, backoff.length - 1)];
+
     await (_db.update(
       _db.pendingWrites,
     )..where(($PendingWritesTable t) => t.sequence.equals(sequence))).write(
       PendingWritesCompanion.custom(
-        attempts: _db.pendingWrites.attempts + const Constant<int>(1),
+        attempts: Constant<int>(attempts),
         lastError: Constant<String>(error),
+        nextAttemptAt: Constant<DateTime>(at.add(wait)),
       ),
     );
   }

@@ -348,9 +348,32 @@ class SupabaseRemoteGateway implements RemoteGateway {
 
   /// Postgrest reports a dead connection as an exception like any other, so
   /// the shape has to be read rather than the type.
+  /// Whether this is the server being unreachable rather than refusing.
+  ///
+  /// The distinction now costs something: a refusal spends one of a write's
+  /// few attempts, and a write that spends them all stops being sent at all
+  /// (spec §7.1). So a condition that will pass on its own must not look like
+  /// a refusal — a deploy window where an RPC is briefly missing, a session
+  /// expiring a moment before it refreshes, or the server having five minutes
+  /// of trouble. None of those are anything the write did wrong, and all of
+  /// them would otherwise burn a phone's whole outbox in under a minute,
+  /// because passes are triggered by local writes rather than by a clock.
   static bool _looksLikeOutage(PostgrestException error) {
     final String message = error.message.toLowerCase();
+    final int? status = int.tryParse(error.code ?? '');
     return error.code == null ||
+        // Anything the server says is its own fault, not the request's.
+        (status != null && status >= 500) ||
+        // A session that has aged out. The client refreshes it and the very
+        // next pass succeeds; charging the write for that would stop it being
+        // sent over something that fixed itself.
+        error.code == 'PGRST301' ||
+        // A function the database has not been given yet. Server-first is the
+        // deploy order, but a build that gets ahead of a migration should
+        // wait for it rather than throw the queue away — see the deploy-order
+        // note in docs/SYNC_DESIGN.md.
+        error.code == 'PGRST202' ||
+        error.code == '42883' ||
         message.contains('failed host lookup') ||
         message.contains('connection') ||
         message.contains('socket') ||

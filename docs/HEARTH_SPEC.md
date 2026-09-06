@@ -356,6 +356,31 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
     polling timer. That is the relaxation this section already allows, and a
     maintained socket buys little for two people who are rarely in the app at
     the same moment. Revisit if that stops being true.
+- **A write that cannot be sent stops being asked, but is never dropped.** A
+  refusal waits before the next try, over a schedule that reaches hours rather
+  than seconds, and after six tries it stops being tried at all. Passes are
+  triggered by local writes rather than a timer, so a write the server keeps
+  refusing would otherwise be refused several times a second for as long as
+  somebody kept typing — but a budget spent in under a minute is no better,
+  because a deploy window or a passing incident would then strand a phone's
+  whole outbox before anyone looked up. Things the server says are its own
+  fault — a 5xx, an expired session, a function a migration has not yet
+  created — are treated as being offline rather than as refusals, and cost
+  nothing. It stays queued and is reported: giving up means giving up
+  *asking*, and losing a logged meal to a server that refused it is the
+  failure the queue exists to prevent. Being offline is not a failed attempt
+  either; six aeroplane journeys must not strand a meal that nothing was ever
+  wrong with.
+- **And it can be asked again on purpose.** A stranded write still stops its
+  record accepting the server's copy, which is right — the local one is newer
+  — but that leaves two devices disagreeing with nothing to do about it. An
+  edit re-issues an upsert; a deletion cannot be re-issued, because the row is
+  already gone from the screen. So Settings offers it, when there is something
+  to offer it for.
+- **A sync asked for during a sync happens afterwards.** Requests made while a
+  pass is running coalesce into exactly one rerun — not none, which left a
+  write waiting for whatever happened to trigger the next pass, and not one
+  each, which would have a recipe save chase its own tail.
 - **A deletion is a change, not an absence.** Every synced table that a user
   can delete from soft-deletes: the row stays and `is_deleted` turns true, so
   the deletion travels on the ordinary pull like any other change. A plain

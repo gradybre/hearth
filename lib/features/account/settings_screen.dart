@@ -1030,6 +1030,23 @@ class _SyncPanel extends ConsumerWidget {
               ? null
               : () => ref.read(syncControllerProvider.notifier).sync(),
         ),
+        // Only when there is something to press it for. A write that has
+        // stopped trying is otherwise stuck for good, and so is its record: a
+        // pull will not overwrite something unsent, which is right, but it
+        // leaves two devices quietly disagreeing with no way back. An edit
+        // re-issues an upsert; a deletion cannot be re-issued, because the
+        // row is already gone from the screen.
+        if ((status.result?.stranded ?? 0) > 0)
+          SettingsActionRow(
+            icon: Icons.refresh,
+            title: 'Try the stuck changes again',
+            onTap: status.isSyncing
+                ? null
+                : () async {
+                    await ref.read(pendingWriteStoreProvider).retryStranded();
+                    await ref.read(syncControllerProvider.notifier).sync();
+                  },
+          ),
       ],
     );
   }
@@ -1044,10 +1061,31 @@ class _SyncPanel extends ConsumerWidget {
           ? 'Nothing waiting to send.'
           : '$queued waiting to send.';
     }
-    if (result.stoppedBecauseOffline) {
+    // The pull's answer counts too. Push only learns it is offline by
+    // attempting a write, and a queue holding nothing but writes waiting out
+    // a backoff never enters that loop — so without this, tapping Sync now in
+    // a lift reported everything as up to date with a change still unsent.
+    if (result.stoppedBecauseOffline ||
+        (status.pulled?.stoppedBecauseOffline ?? false)) {
       return '$queued waiting — no connection just now.';
     }
-    if (result.failed > 0) {
+    // Both, when both. A stranded write has stopped being tried, so `failed`
+    // goes back to zero on the next pass and it would vanish from the panel
+    // if it were reported second — but reporting only the stranded ones told
+    // somebody with six fresh failures that the problem was one change.
+    if (result.stranded > 0 || result.failed > 0) {
+      final int n = result.stranded;
+      final String stuck = n == 1
+          ? '1 change has stopped trying'
+          : '$n changes have stopped trying';
+      if (n > 0 && result.failed > 0) {
+        return '$stuck, and ${result.failed} more could not be sent. '
+            'They are all still saved here.';
+      }
+      if (n > 0) {
+        return '$stuck, after several goes. '
+            '${n == 1 ? 'It is' : 'They are'} still saved here.';
+      }
       return '${result.failed} could not be sent. They are still saved here.';
     }
 

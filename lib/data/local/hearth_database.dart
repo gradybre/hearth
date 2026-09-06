@@ -49,7 +49,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 25;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -229,6 +229,28 @@ class HearthDatabase extends _$HearthDatabase {
       // in it until something draws one.
       if (from < 24) {
         await _addColumnIfMissing(m, recipes, recipes.iconSvg);
+      }
+      // v25 gives a failed write a time to wait until. Without one a refusal
+      // was retried on every pass for ever, and passes are triggered by local
+      // writes — so somebody typing a shopping list produced several a second
+      // (spec §7.1).
+      if (from < 25) {
+        await _addColumnIfMissing(
+          m,
+          pendingWrites,
+          pendingWrites.nextAttemptAt,
+        );
+        // And the counter starts again, because it did not mean this before.
+        //
+        // Until now `attempts` was incremented on every failed pass and read
+        // by nothing, and passes fire on every local write — so one bad
+        // afternoon while somebody was typing drove a write's count into the
+        // dozens. Carried across, every one of those rows would already be
+        // over the new cap and would strand on the first pass after
+        // upgrading, without being tried once, including the many that would
+        // now succeed. The old number counted passes since a failure; the new
+        // one counts tries.
+        await customStatement('UPDATE pending_writes SET attempts = 0');
       }
     },
     beforeOpen: (OpeningDetails details) async {

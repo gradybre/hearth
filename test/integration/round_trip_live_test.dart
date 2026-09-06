@@ -180,7 +180,7 @@ void main() {
       0,
       reason:
           'reconnect could not send: '
-          '${(await phone.queue.pending()).map((PendingWrite w) => w.lastError)}',
+          '${(await phone.queue.pending(now: DateTime.now().toUtc().add(const Duration(days: 1)))).map((PendingWrite w) => w.lastError)}',
     );
     expect(reconnected.pushed, greaterThan(0));
     expect(reconnected.isFullyDrained, isTrue);
@@ -238,7 +238,7 @@ void main() {
       0,
       reason:
           'the phone could not send it: '
-          '${(await phone.queue.pending()).map((PendingWrite w) => w.lastError)}',
+          '${(await phone.queue.pending(now: DateTime.now().toUtc().add(const Duration(days: 1)))).map((PendingWrite w) => w.lastError)}',
     );
     expect(pushed.pushed, greaterThan(0));
 
