@@ -35,11 +35,15 @@ enum MinorCoverage {
 /// The three minor nutrients' coverage, carried together.
 @immutable
 class NutrientCoverage {
-  const NutrientCoverage(this._byNutrient);
+  const NutrientCoverage(
+    this._byNutrient, [
+    this._unread = const <String, Object?>{},
+  ]);
 
   /// What a frozen record says when it predates coverage entirely.
   const NutrientCoverage.notRecorded()
-    : _byNutrient = const <MinorNutrient, MinorCoverage>{};
+    : _byNutrient = const <MinorNutrient, MinorCoverage>{},
+      _unread = const <String, Object?>{};
 
   /// One food's own answer: it stated a nutrient, or it did not.
   ///
@@ -63,7 +67,21 @@ class NutrientCoverage {
         MinorNutrient.fiber: MinorCoverage.unknown,
         MinorNutrient.sodium: MinorCoverage.unknown,
         MinorNutrient.cholesterol: MinorCoverage.unknown,
-      };
+      },
+      _unread = const <String, Object?>{};
+
+  /// Nothing was missing, because nothing was going to contribute.
+  ///
+  /// Vacuous, and deliberately so: a recipe of nothing but seasonings adds no
+  /// nutrition, so it should neither claim knowledge nor take any away from
+  /// the meals beside it.
+  const NutrientCoverage.allComplete()
+    : _byNutrient = const <MinorNutrient, MinorCoverage>{
+        MinorNutrient.fiber: MinorCoverage.complete,
+        MinorNutrient.sodium: MinorCoverage.complete,
+        MinorNutrient.cholesterol: MinorCoverage.complete,
+      },
+      _unread = const <String, Object?>{};
 
   /// A stand-in contributor that knows nothing, used to make a sum partial.
   ///
@@ -73,6 +91,10 @@ class NutrientCoverage {
   const NutrientCoverage.someUnknown() : this.allUnknown();
 
   final Map<MinorNutrient, MinorCoverage> _byNutrient;
+
+  /// Sub-keys and vocabulary this version could not read, carried back out
+  /// untouched. Never interpreted — only preserved.
+  final Map<String, Object?> _unread;
 
   MinorCoverage of(MinorNutrient nutrient) =>
       _byNutrient[nutrient] ?? MinorCoverage.notRecorded;
@@ -118,7 +140,10 @@ class NutrientCoverage {
 
   /// Only the nutrients that have something to say, for storage. An empty map
   /// reads back as [MinorCoverage.notRecorded], which is what it means.
-  Map<String, String> toJson() => <String, String>{
+  Map<String, Object?> toJson() => <String, Object?>{
+    // What could not be read first, so anything this version does understand
+    // wins over the copy it could not parse.
+    ..._unread,
     for (final MapEntry<MinorNutrient, MinorCoverage> entry
         in _byNutrient.entries)
       entry.key.name: entry.value.name,
@@ -131,12 +156,38 @@ class NutrientCoverage {
   factory NutrientCoverage.fromJson(Object? raw) {
     if (raw is! Map) return const NutrientCoverage.notRecorded();
 
-    return NutrientCoverage(<MinorNutrient, MinorCoverage>{
-      for (final MinorNutrient nutrient in MinorNutrient.values)
-        if (_read(raw[nutrient.name]) case final MinorCoverage state)
-          nutrient: state,
-    });
+    return NutrientCoverage(
+      <MinorNutrient, MinorCoverage>{
+        for (final MinorNutrient nutrient in MinorNutrient.values)
+          if (_read(raw[nutrient.name]) case final MinorCoverage state)
+            nutrient: state,
+      },
+      // What this reader could not make sense of, kept so writing back cannot
+      // erase it. Reading tolerantly and then rewriting `{}` would be a
+      // slower way of destroying the same thing: a newer client saying
+      // "estimated" for the fibre, plus a sodium this version *can* read,
+      // would come back with both gone (§4).
+      <String, Object?>{
+        // Any key that is not one of this version's three, whatever its
+        // value. Filtering on whether the *value* looked familiar dropped a
+        // nutrient this version has never heard of whose state happened to be
+        // a word it has — "potassium: partial" is not ours to read or to lose.
+        for (final MapEntry<Object?, Object?> field in raw.entries)
+          if (field.key case final String key)
+            if (!_ownedKeys.contains(key)) key: field.value,
+        // And our own three where the word is one we do not know.
+        for (final MinorNutrient nutrient in MinorNutrient.values)
+          if (raw.containsKey(nutrient.name) &&
+              _read(raw[nutrient.name]) == null)
+            nutrient.name: raw[nutrient.name],
+      },
+    );
   }
+
+  /// The keys this version writes for itself.
+  static final Set<String> _ownedKeys = <String>{
+    for (final MinorNutrient nutrient in MinorNutrient.values) nutrient.name,
+  };
 
   static MinorCoverage? _read(Object? value) {
     for (final MinorCoverage state in MinorCoverage.values) {

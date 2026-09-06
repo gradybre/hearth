@@ -383,6 +383,12 @@ class _EntryRow extends ConsumerWidget {
       await plans.logEntry(
         entry.entry.id,
         liveMacros: entry.perServing,
+        // Beside the macros, from the same resolve. Reading coverage back off
+        // `perServing` answers "complete" for a partial recipe, because a
+        // total is non-null the moment *any* ingredient states the nutrient —
+        // and this is the commonest gesture in the app to freeze that on
+        // (spec §5.6).
+        liveCoverage: entry.liveCoverage,
         label: entry.label,
       );
     }

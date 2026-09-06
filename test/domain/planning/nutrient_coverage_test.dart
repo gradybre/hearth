@@ -143,4 +143,41 @@ void main() {
       );
     });
   });
+
+  group('coverage a newer version wrote', () {
+    test('survives a word this one does not know', () {
+      // Reading tolerantly and then writing `{}` back would be a slower way
+      // of destroying the same thing: the unreadable fibre *and* a sodium
+      // this version can read would both be gone (§4).
+      final NutrientCoverage read = NutrientCoverage.fromJson(<String, Object?>{
+        'fiber': 'estimated',
+        'sodium': 'complete',
+      });
+
+      expect(read.of(MinorNutrient.fiber), MinorCoverage.notRecorded);
+      expect(read.of(MinorNutrient.sodium), MinorCoverage.complete);
+
+      final Map<String, Object?> back = read.toJson();
+      expect(back['fiber'], 'estimated', reason: 'not this version\'s to lose');
+      expect(back['sodium'], 'complete');
+    });
+
+    test('and a sub-key it has never heard of', () {
+      final Map<String, Object?> back = NutrientCoverage.fromJson(
+        <String, Object?>{'sodium': 'complete', 'potassium': 'partial'},
+      ).toJson();
+
+      expect(back['potassium'], 'partial');
+    });
+
+    test('but what this version understands still wins', () {
+      // Written after the carried keys, so a stale copy cannot shadow it.
+      final NutrientCoverage summed = NutrientCoverage.sum(<NutrientCoverage>[
+        NutrientCoverage.fromJson(<String, Object?>{'fiber': 'estimated'}),
+        NutrientCoverage.ofOne(const Macros(kcal: 1, fiberG: 2)),
+      ]);
+
+      expect(summed.of(MinorNutrient.fiber), MinorCoverage.notRecorded);
+    });
+  });
 }

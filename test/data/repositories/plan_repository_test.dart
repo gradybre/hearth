@@ -7,6 +7,7 @@ import 'package:hearth/data/repositories/plan_repository.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/nutrient_coverage.dart';
 import 'package:hearth/domain/planning/recent_log.dart';
 import 'package:hearth/domain/planning/week_template.dart';
 
@@ -91,6 +92,9 @@ void main() {
         refId: 'food-1',
         servings: 2,
         loggedMacros: const Macros(kcal: 100, proteinG: 17),
+        // Not a test about coverage; saying so beats letting the repository
+        // infer a completeness nothing checked.
+        loggedCoverage: const NutrientCoverage.notRecorded(),
         label: 'Greek yogurt',
       );
 
@@ -115,6 +119,7 @@ void main() {
           planned.id,
           liveMacros: const Macros(kcal: 938, proteinG: 98, fatG: 60),
           label: 'Braised short ribs',
+          liveCoverage: const NutrientCoverage.notRecorded(),
         );
 
         expect(logged!.isLogged, isTrue);
@@ -137,6 +142,7 @@ void main() {
         liveMacros: const Macros(kcal: 400),
         label: 'Dinner',
         portion: 0.5,
+        liveCoverage: const NutrientCoverage.notRecorded(),
       );
 
       expect(logged!.macroSnapshot!.macros.kcal, 200);
@@ -151,6 +157,9 @@ void main() {
         refId: 'recipe-1',
         servings: 1.5,
         loggedMacros: const Macros(kcal: 400, proteinG: 30, carbG: 12, fatG: 9),
+        // Not a test about coverage; saying so beats letting the repository
+        // infer a completeness nothing checked.
+        loggedCoverage: const NutrientCoverage.notRecorded(),
         label: 'Chicken and rice',
       );
 
@@ -173,6 +182,9 @@ void main() {
         refId: 'recipe-1',
         servings: 1,
         loggedMacros: const Macros(kcal: 400),
+        // Not a test about coverage; saying so beats letting the repository
+        // infer a completeness nothing checked.
+        loggedCoverage: const NutrientCoverage.notRecorded(),
         label: 'Dinner',
       );
 
@@ -210,6 +222,9 @@ void main() {
         refId: 'food-1',
         servings: 1,
         loggedMacros: const Macros(kcal: 100),
+        // Not a test about coverage; saying so beats letting the repository
+        // infer a completeness nothing checked.
+        loggedCoverage: const NutrientCoverage.notRecorded(),
         label: 'Yogurt',
       );
 
@@ -251,6 +266,9 @@ void main() {
         refId: 'food-yogurt',
         servings: 1,
         loggedMacros: const Macros(kcal: 100),
+        // Not a test about coverage; saying so beats letting the repository
+        // infer a completeness nothing checked.
+        loggedCoverage: const NutrientCoverage.notRecorded(),
         label: 'Greek yogurt',
       );
       clock = clock.add(const Duration(hours: 1));
@@ -261,6 +279,9 @@ void main() {
         refId: 'recipe-1',
         servings: 2,
         loggedMacros: const Macros(kcal: 400),
+        // Not a test about coverage; saying so beats letting the repository
+        // infer a completeness nothing checked.
+        loggedCoverage: const NutrientCoverage.notRecorded(),
         label: 'Short ribs',
       );
 
@@ -291,6 +312,9 @@ void main() {
         refId: 'food-yogurt',
         servings: 1.5,
         loggedMacros: const Macros(kcal: 100),
+        // Not a test about coverage; saying so beats letting the repository
+        // infer a completeness nothing checked.
+        loggedCoverage: const NutrientCoverage.notRecorded(),
         label: 'Greek yogurt',
       );
 
@@ -320,6 +344,9 @@ void main() {
           refId: 'food-yogurt',
           servings: 1,
           loggedMacros: const Macros(kcal: 100),
+          // Not a test about coverage; saying so beats letting the repository
+          // infer a completeness nothing checked.
+          loggedCoverage: const NutrientCoverage.notRecorded(),
           label: 'Greek yogurt',
         );
 
@@ -344,6 +371,9 @@ void main() {
         refId: 'food-yogurt',
         servings: 1,
         loggedMacros: const Macros(kcal: 100),
+        // Not a test about coverage; saying so beats letting the repository
+        // infer a completeness nothing checked.
+        loggedCoverage: const NutrientCoverage.notRecorded(),
         label: 'Greek yogurt',
       );
       final RecentLog recent = (await repository.recentLogs()).single;
@@ -413,6 +443,9 @@ void main() {
         refId: 'food-1',
         servings: 1,
         loggedMacros: const Macros(kcal: 100),
+        // Not a test about coverage; saying so beats letting the repository
+        // infer a completeness nothing checked.
+        loggedCoverage: const NutrientCoverage.notRecorded(),
         label: 'Yogurt',
       );
       await repository.add(
@@ -707,6 +740,9 @@ void main() {
           carbG: 30,
           fatG: 20,
         ),
+        // Not a test about coverage; saying so beats letting the repository
+        // infer a completeness nothing checked.
+        loggedCoverage: const NutrientCoverage.notRecorded(),
       );
       final WeekTemplate saved = (await repository.saveWeekAsTemplate(
         anchor: wednesday,

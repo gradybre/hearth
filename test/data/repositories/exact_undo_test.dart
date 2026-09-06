@@ -6,6 +6,7 @@ import 'package:hearth/data/local/plan_store.dart';
 import 'package:hearth/data/repositories/plan_repository.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/nutrient_coverage.dart';
 
 /// Undo puts back exactly what was there (spec §4, R01).
 ///
@@ -61,6 +62,9 @@ void main() {
     refId: 'recipe-1',
     servings: servings,
     loggedMacros: perServing,
+    // This test is not about coverage; saying so beats letting the
+    // repository infer a completeness nothing checked.
+    loggedCoverage: const NutrientCoverage.notRecorded(),
     label: 'Guard stew',
   );
 
@@ -84,6 +88,9 @@ void main() {
         refId: logged.refId,
         servings: logged.servings,
         loggedMacros: logged.macroSnapshot!.macros,
+        // This test is not about coverage; saying so beats letting the
+        // repository infer a completeness nothing checked.
+        loggedCoverage: const NutrientCoverage.notRecorded(),
         label: logged.macroSnapshot!.label,
       );
 

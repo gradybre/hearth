@@ -1,4 +1,7 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/app/theme/hearth_theme.dart';
+import 'package:hearth/app/widgets/minor_nutrient_bars.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
@@ -212,6 +215,66 @@ void main() {
       // is an empty day rather than foods that were asked and did not know.
       expect(find.text('— of 2300 mg'), findsOneWidget);
       expect(find.text('nothing logged yet'), findsWidgets);
+    });
+  });
+
+  group('what the note says, in each of its states', () {
+    // The user-visible half of the coverage work, and it had no test at all:
+    // the old assertion matched `textContaining('did not say')`, which the
+    // single-clause version already satisfied.
+    Widget barOf(MinorCoverage coverage, {int silent = 0}) => MaterialApp(
+      theme: HearthTheme.light(),
+      home: Scaffold(
+        body: MinorNutrientBars(
+          progress: DayProgress.from(
+            consumed: const Macros(kcal: 400, fiberG: 5),
+            targets: targets,
+            countedParts: 2,
+            unknownCounts: <MinorNutrient, int>{MinorNutrient.fiber: silent},
+            coverage: NutrientCoverage(<MinorNutrient, MinorCoverage>{
+              MinorNutrient.fiber: coverage,
+            }),
+          ),
+        ),
+      ),
+    );
+
+    testWidgets('a floor says it is one', (WidgetTester tester) async {
+      await tester.pumpWidget(barOf(MinorCoverage.partial));
+      await pumpFrames(tester);
+
+      expect(find.textContaining('at least this'), findsOneWidget);
+    });
+
+    testWidgets('history from before says that instead', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(barOf(MinorCoverage.notRecorded));
+      await pumpFrames(tester);
+
+      expect(find.textContaining('before Hearth'), findsOneWidget);
+    });
+
+    testWidgets('and both can be true at once, so both are said', (
+      WidgetTester tester,
+    ) async {
+      // "1 of 2 did not say" on its own implies the other one fully did. It
+      // did not — it was missing an ingredient's worth.
+      await tester.pumpWidget(barOf(MinorCoverage.partial, silent: 1));
+      await pumpFrames(tester);
+
+      expect(find.textContaining('1 of 2 did not say'), findsOneWidget);
+      expect(find.textContaining('at least this'), findsOneWidget);
+    });
+
+    testWidgets('a complete total says nothing at all', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(barOf(MinorCoverage.complete));
+      await pumpFrames(tester);
+
+      expect(find.textContaining('at least this'), findsNothing);
+      expect(find.textContaining('did not say'), findsNothing);
     });
   });
 }

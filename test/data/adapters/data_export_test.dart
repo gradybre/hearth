@@ -13,6 +13,7 @@ import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/nutrient_coverage.dart';
 import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
@@ -101,6 +102,9 @@ void main() {
       refId: 'recipe-1',
       servings: 2,
       loggedMacros: const Macros(kcal: 500, proteinG: 40, carbG: 30, fatG: 20),
+      // This test is not about coverage; saying so beats letting the
+      // repository infer a completeness nothing checked.
+      loggedCoverage: const NutrientCoverage.notRecorded(),
     );
 
     await recipes.upsert(

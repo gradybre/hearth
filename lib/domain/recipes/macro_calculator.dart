@@ -159,10 +159,17 @@ class RecipeMacros {
       if (anyGap) const NutrientCoverage.someUnknown(),
     ];
 
-    // Everything asked, nothing known — not "nobody wrote it down". An
-    // all-seasoning or wholly unmatched recipe is a real answer about a real
-    // meal, and `notRecorded` would absorb every other meal in the day.
-    if (counted.isEmpty) return const NutrientCoverage.allUnknown();
+    if (counted.isEmpty) {
+      // A recipe of nothing but salt to taste contributes no nutrition at
+      // all, so nothing about it is missing — it is vacuously covered, and
+      // calling it unknown would drag an otherwise complete day to "partial"
+      // on account of an entry that added nothing.
+      if (!anyGap) return const NutrientCoverage.allComplete();
+      // Everything asked, nothing known — not "nobody wrote it down". A
+      // wholly unmatched recipe is a real answer about a real meal, and
+      // `notRecorded` would absorb every other meal in the day.
+      return const NutrientCoverage.allUnknown();
+    }
     return NutrientCoverage.sum(counted);
   }
 

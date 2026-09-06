@@ -369,4 +369,119 @@ void main() {
       );
     });
   });
+
+  group('the one-tap confirm, which is the commonest gesture there is', () {
+    late HearthDatabase db;
+    late PlanRepository repository;
+
+    setUp(() {
+      db = HearthDatabase.forTesting(NativeDatabase.memory());
+      repository = PlanRepository(
+        database: db,
+        store: PlanStore(db),
+        queue: PendingWriteStore(db),
+        userId: 'user-1',
+        clock: () => DateTime.utc(2026, 9, 5, 8),
+        idFactory: () => 'entry-1',
+      );
+    });
+
+    tearDown(() => db.close());
+
+    test('freezes the coverage the recipe really had', () async {
+      // The door the last round missed. `add` was covered; this one was not,
+      // and it is the tap that confirms a planned meal — so a partial recipe
+      // was still freezing "complete" on the commonest action in the app.
+      final MealPlanEntry planned = await repository.add(
+        date: DateTime(2026, 9, 5),
+        slot: MealSlot.breakfast,
+        refType: PlanRefType.recipe,
+        refId: 'recipe-porridge',
+        servings: 1,
+      );
+
+      final ResolvedEntry live = EntryResolver.resolveAll(
+        <MealPlanEntry>[planned],
+        recipes: <String, Recipe>{'recipe-porridge': porridge()},
+        foods: foods,
+      ).single;
+
+      final MealPlanEntry? logged = await repository.logEntry(
+        planned.id,
+        liveMacros: live.perServing,
+        liveCoverage: live.liveCoverage,
+        label: 'Porridge',
+      );
+
+      expect(
+        logged!.macroSnapshot!.coverage.of(MinorNutrient.fiber),
+        MinorCoverage.partial,
+      );
+    });
+
+    test('and editing the portion afterwards keeps it', () async {
+      // Re-logging builds a fresh snapshot. It must carry what the old one
+      // knew, including fields a newer client wrote (§4).
+      final MealPlanEntry planned = await repository.add(
+        date: DateTime(2026, 9, 5),
+        slot: MealSlot.breakfast,
+        refType: PlanRefType.recipe,
+        refId: 'recipe-porridge',
+        servings: 1,
+      );
+      final ResolvedEntry live = EntryResolver.resolveAll(
+        <MealPlanEntry>[planned],
+        recipes: <String, Recipe>{'recipe-porridge': porridge()},
+        foods: foods,
+      ).single;
+
+      await repository.logEntry(
+        planned.id,
+        liveMacros: live.perServing,
+        liveCoverage: live.liveCoverage,
+        label: 'Porridge',
+      );
+      final MealPlanEntry? bigger = await repository.logEntry(
+        planned.id,
+        liveMacros: live.perServing,
+        liveCoverage: live.liveCoverage,
+        label: 'Porridge',
+        portion: 2,
+      );
+
+      expect(bigger!.macroSnapshot!.servings, 2);
+      expect(
+        bigger.macroSnapshot!.coverage.of(MinorNutrient.fiber),
+        MinorCoverage.partial,
+      );
+    });
+  });
+
+  group('a recipe of nothing but seasoning', () {
+    test('takes nothing away from the meals beside it', () {
+      // It contributes no nutrition, so nothing about it is missing. Calling
+      // it unknown would drag an otherwise complete day to "partial" over an
+      // entry that added nothing at all.
+      final Recipe allSalt = aRecipe(
+        id: 'recipe-porridge',
+        title: 'Seasoning',
+        servings: 1,
+        ingredients: <RecipeIngredient>[
+          anIngredient('A pinch of salt', needsNoMatch: true),
+          anIngredient('Pepper to taste', needsNoMatch: true),
+        ],
+      );
+
+      final ResolvedEntry resolved = EntryResolver.resolveAll(
+        <MealPlanEntry>[entryFor(logged: false)],
+        recipes: <String, Recipe>{'recipe-porridge': allSalt},
+        foods: foods,
+      ).single;
+
+      expect(
+        resolved.liveCoverage.of(MinorNutrient.fiber),
+        MinorCoverage.complete,
+      );
+    });
+  });
 }
