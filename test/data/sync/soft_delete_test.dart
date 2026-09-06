@@ -2,10 +2,15 @@ import 'dart:convert';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/data/local/collection_store.dart';
 import 'package:hearth/data/local/hearth_database.dart';
+import 'package:hearth/data/local/ingredient_match_store.dart';
+import 'package:hearth/data/local/pending_write_store.dart';
 import 'package:hearth/data/mappers/plan_mapper.dart';
 import 'package:hearth/data/mappers/shopping_mapper.dart';
 import 'package:hearth/data/remote/supabase_remote_gateway.dart';
+import 'package:hearth/data/repositories/collection_repository.dart';
+import 'package:hearth/data/repositories/ingredient_match_repository.dart';
 import 'package:hearth/data/sync/remote_rows.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 
@@ -179,6 +184,181 @@ void main() {
         ),
       );
       expect(item['is_deleted'], false);
+    });
+
+    test(
+      'including the three built by hand inside their repositories',
+      () async {
+        // These are written inline rather than by a mapper, which is exactly
+        // where a key gets dropped without anything noticing.
+        final PendingWriteStore queue = PendingWriteStore(db);
+
+        await CollectionRepository(
+          database: db,
+          store: CollectionStore(db),
+          queue: queue,
+          householdId: 'house-1',
+          userId: 'user-1',
+        ).createCollection('Weeknights');
+
+        await IngredientMatchRepository(
+          database: db,
+          store: IngredientMatchStore(db),
+          queue: queue,
+          householdId: 'house-1',
+        ).rememberNoMatch('olive oil');
+
+        final Map<String, Map<String, Object?>> byTable =
+            <String, Map<String, Object?>>{
+              for (final PendingWrite write in await queue.pending())
+                if (write.operation == WriteOperation.upsert)
+                  write.entityTable: write.payload,
+            };
+
+        for (final String table in <String>[
+          'collections',
+          'ingredient_matches',
+        ]) {
+          expect(
+            byTable[table],
+            isNotNull,
+            reason: '$table queued nothing to check',
+          );
+          expect(
+            byTable[table]!['is_deleted'],
+            false,
+            reason: '$table would write a row that stays a tombstone',
+          );
+        }
+      },
+    );
+  });
+
+  group('a cookbook deleted with recipes still in it', () {
+    // The chain that made this worse than the bug it fixes. The delete is a
+    // tombstone now, so the server-side cascade that used to take the
+    // membership rows with it never fires; their own policy still returns
+    // them, because it asks about the recipe rather than the parent. Locally
+    // the collection row goes and the local cascade takes the memberships
+    // with it — so re-inserting those pairs breaks the local foreign key, the
+    // exception escapes the whole pull, and every sync on both phones fails
+    // from then on, for ever, because the orphans never go away.
+    test('does not take every future sync down with it', () async {
+      await db
+          .into(db.collections)
+          .insertOnConflictUpdate(
+            CollectionRow(
+              id: 'col-1',
+              householdId: 'house-1',
+              name: 'Weeknights',
+              sortOrder: 0,
+              updatedAt: t0,
+            ),
+          );
+
+      // The cookbook is deleted elsewhere and the tombstone arrives.
+      await rows.applyCollection(<String, Object?>{
+        'id': 'col-1',
+        'household_id': 'house-1',
+        'name': 'Weeknights',
+        'sort_order': 0,
+        'is_deleted': true,
+        'updated_at': t0.toIso8601String(),
+      });
+
+      // The server still hands over the membership rows underneath it.
+      await expectLater(
+        rows.replaceMemberships(
+          remote: <(String, String)>{('col-1', 'recipe-1')},
+          hasPendingWrite: (String _) async => false,
+          now: t0,
+        ),
+        completes,
+      );
+      expect(await db.select(db.recipeCollections).get(), isEmpty);
+    });
+
+    test(
+      'and a favourite for a recipe this device has not got is skipped too',
+      () async {
+        await expectLater(
+          rows.replaceFavorites(
+            userId: 'user-1',
+            remoteRecipeIds: <String>{'recipe-never-pulled'},
+            hasPendingWrite: (String _) async => false,
+            now: t0,
+          ),
+          completes,
+        );
+        expect(await db.select(db.recipeFavorites).get(), isEmpty);
+      },
+    );
+  });
+
+  group('a forgotten ingredient answer', () {
+    test('goes even when this device kept a different id for it', () async {
+      // The insert path resolves on (household, wording) precisely because a
+      // local row may still carry a random id rather than the derived one. A
+      // tombstone matching on the id the insert does not trust would leave
+      // the wording in place, quietly answering ingredients the household
+      // said to stop answering.
+      await db
+          .into(db.ingredientMatches)
+          .insert(
+            IngredientMatchesCompanion.insert(
+              id: 'a-random-legacy-id',
+              householdId: 'house-1',
+              ingredientString: 'olive oil',
+              updatedAt: t0,
+            ),
+          );
+
+      await rows.applyIngredientMatch(<String, Object?>{
+        'id': 'the-derived-id',
+        'household_id': 'house-1',
+        'ingredient_string': 'olive oil',
+        'is_deleted': true,
+        'updated_at': t0.toIso8601String(),
+      });
+
+      expect(await db.select(db.ingredientMatches).get(), isEmpty);
+    });
+  });
+
+  group('a shopping line deleted elsewhere', () {
+    test('comes off the list here', () async {
+      await db
+          .into(db.shoppingLists)
+          .insertOnConflictUpdate(
+            ShoppingListRow(
+              id: 'list-1',
+              householdId: 'house-1',
+              fromDate: DateTime.utc(2026, 8, 24),
+              toDate: DateTime.utc(2026, 8, 30),
+              status: 'draft',
+              updatedAt: t0,
+            ),
+          );
+      Map<String, Object?> item({required bool deleted}) => <String, Object?>{
+        'id': 'item-1',
+        'shopping_list_id': 'list-1',
+        'item_key': 'milk',
+        'raw_name': 'Milk',
+        'checked': false,
+        'is_manual': true,
+        'sort_order': 0,
+        'has_unquantified': false,
+        'source_recipe_ids': const <String>[],
+        'is_deleted': deleted,
+        'updated_at': t0.toIso8601String(),
+      };
+
+      await rows.applyShoppingItem(item(deleted: false));
+      expect(await db.select(db.shoppingListItems).get(), hasLength(1));
+
+      await rows.applyShoppingItem(item(deleted: true));
+
+      expect(await db.select(db.shoppingListItems).get(), isEmpty);
     });
   });
 }
