@@ -247,28 +247,24 @@ class PlanRepository {
   /// happened, and the one thing here that is allowed to be new.
   ///
   /// Idempotent by construction: the same id is upserted, so a double tap or a
-  /// replayed action puts back one meal rather than two. Queued after the
-  /// delete it undoes, so the ordering that reaches the server is the ordering
-  /// the user performed.
-  Future<MealPlanEntry> restore(
-    MealPlanEntry entry, {
-    required DateTime date,
-  }) async {
+  /// replayed action puts back one meal rather than two.
+  ///
+  /// The queued upsert **supersedes** the queued delete rather than following
+  /// it — [PendingWriteStore.enqueue] drops earlier pending writes for the
+  /// same row — so the delete is never sent and the server never sees the meal
+  /// leave. If the delete was already pushed, the upsert re-inserts it. Both
+  /// routes converge; neither depends on per-entity ordering, which the queue
+  /// does not promise.
+  ///
+  /// No day is ensured and none is re-queued. Removing an entry does not
+  /// remove its day, and the entry's own `dayId` is a foreign key that was
+  /// valid a moment ago — so asking for the date again would be asking the
+  /// caller to restate something the entry already knows, and getting it
+  /// wrong would write the meal to a day nobody checked.
+  Future<MealPlanEntry> restore(MealPlanEntry entry) async {
     final DateTime now = _now();
 
     return _db.transaction(() async {
-      // The date comes from the caller because a day's id is a uuid5 of it
-      // and cannot be read back. `ensureDay` finds the existing row — removing
-      // an entry does not remove its day — so this is a guard rather than a
-      // creation in the ordinary case.
-      final MealPlanDayRow day = await _store.ensureDay(
-        userId: _userId,
-        date: date,
-        idFactory: () => entry.dayId,
-        updatedAt: now,
-      );
-      await _queueDay(day, now);
-
       await _store.upsertEntry(entry, updatedAt: now);
       await _queueEntry(entry, now);
       return entry;

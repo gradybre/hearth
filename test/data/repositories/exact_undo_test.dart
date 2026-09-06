@@ -65,11 +65,14 @@ void main() {
   );
 
   group('the arithmetic', () {
-    test('the old route doubled it, which is the defect', () async {
-      // What `_restore` did: hand the frozen total back through `add`, whose
-      // `loggedMacros` is documented as "the macros for ONE serving" and is
-      // duly scaled by the portion. This test is the reproduction, kept so
-      // the defect stays legible after the fix.
+    test('`add` scales, which is why a total cannot go through it', () async {
+      // A characterisation of `add`'s contract rather than a guard: it is
+      // green on both sides of the fix, because `add` has not changed and
+      // should not. It is here so the next reader can see *why* the old route
+      // was wrong without reconstructing it — `loggedMacros` is documented as
+      // "the macros for ONE serving", and a frozen snapshot is already a
+      // total. The guard against the defect returning is the gesture test in
+      // `day_gestures_test.dart`, which fails on the old implementation.
       final MealPlanEntry logged = await logMeal(servings: 2);
       expect(logged.macroSnapshot!.macros.kcal, 200);
 
@@ -96,10 +99,7 @@ void main() {
       expect(logged.macroSnapshot!.macros.kcal, 200);
 
       await repository.removeEntry(logged.id);
-      final MealPlanEntry restored = await repository.restore(
-        logged,
-        date: today,
-      );
+      final MealPlanEntry restored = await repository.restore(logged);
 
       expect(restored.macroSnapshot!.macros.kcal, 200);
       expect(restored.contribution(), logged.contribution());
@@ -112,10 +112,7 @@ void main() {
       expect(logged.macroSnapshot!.macros.kcal, 50);
 
       await repository.removeEntry(logged.id);
-      final MealPlanEntry restored = await repository.restore(
-        logged,
-        date: today,
-      );
+      final MealPlanEntry restored = await repository.restore(logged);
 
       expect(restored.macroSnapshot!.macros.kcal, 50);
     });
@@ -123,10 +120,7 @@ void main() {
     test('and every one of the seven survives, unknowns included', () async {
       final MealPlanEntry logged = await logMeal(servings: 2);
       await repository.removeEntry(logged.id);
-      final MealPlanEntry restored = await repository.restore(
-        logged,
-        date: today,
-      );
+      final MealPlanEntry restored = await repository.restore(logged);
 
       final Macros back = restored.macroSnapshot!.macros;
       expect(back.proteinG, 16);
@@ -143,10 +137,7 @@ void main() {
     test('the portion, the slot, the label and the day', () async {
       final MealPlanEntry logged = await logMeal(servings: 1.5);
       await repository.removeEntry(logged.id);
-      final MealPlanEntry restored = await repository.restore(
-        logged,
-        date: today,
-      );
+      final MealPlanEntry restored = await repository.restore(logged);
 
       expect(restored.servings, 1.5);
       expect(restored.slot, MealSlot.dinner);
@@ -164,10 +155,7 @@ void main() {
 
       await repository.removeEntry(logged.id);
       clock = clock.add(const Duration(hours: 14));
-      final MealPlanEntry restored = await repository.restore(
-        logged,
-        date: today,
-      );
+      final MealPlanEntry restored = await repository.restore(logged);
 
       expect(restored.loggedAt, ateAt);
       expect(restored.macroSnapshot!.capturedAt, ateAt);
@@ -183,10 +171,7 @@ void main() {
       );
 
       await repository.removeEntry(planned.id);
-      final MealPlanEntry restored = await repository.restore(
-        planned,
-        date: today,
-      );
+      final MealPlanEntry restored = await repository.restore(planned);
 
       expect(restored.isLogged, isFalse);
       expect(restored.isPlanned, isTrue);
@@ -200,12 +185,51 @@ void main() {
       final MealPlanEntry logged = await logMeal(servings: 2);
       await repository.removeEntry(logged.id);
 
-      await repository.restore(logged, date: today);
-      await repository.restore(logged, date: today);
+      await repository.restore(logged);
+      await repository.restore(logged);
 
       final List<MealPlanEntry> entries = await repository.entriesFor(today);
       expect(entries, hasLength(1));
       expect(entries.single.macroSnapshot!.macros.kcal, 200);
+    });
+  });
+
+  group('what the server is told', () {
+    test('the delete never leaves, because the undo supersedes it', () async {
+      // The comment used to claim the upsert replays *after* the delete. It
+      // does not: `enqueue` drops earlier pending writes for the same row, so
+      // the delete is superseded and never sent. Same destination, different
+      // mechanism — and a later change that leaned on per-entity ordering
+      // would have been built on a promise the queue does not make.
+      final MealPlanEntry logged = await logMeal(servings: 2);
+      await repository.removeEntry(logged.id);
+      await repository.restore(logged);
+
+      final List<PendingWrite> queued = await queue.pending();
+      final List<PendingWrite> forEntry = queued
+          .where((PendingWrite w) => w.entityId == logged.id)
+          .toList();
+
+      expect(forEntry, hasLength(1));
+      expect(forEntry.single.operation, WriteOperation.upsert);
+    });
+
+    test('and what it carries is the total that was eaten', () async {
+      final MealPlanEntry logged = await logMeal(servings: 2);
+      await repository.removeEntry(logged.id);
+      await repository.restore(logged);
+
+      final PendingWrite write = (await queue.pending()).lastWhere(
+        (PendingWrite w) => w.entityId == logged.id,
+      );
+
+      final Map<String, Object?> snapshot =
+          write.payload['macro_snapshot']! as Map<String, Object?>;
+
+      expect(snapshot['kcal'], 200.0);
+      expect(snapshot['fiber_g'], 5.0);
+      // Never asked, and the queue does not invent an answer either.
+      expect(snapshot['sodium_mg'], isNull);
     });
   });
 }
