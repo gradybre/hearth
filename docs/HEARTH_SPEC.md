@@ -256,6 +256,18 @@ belongs to the Nutrition section.
 - **Backdating:** any day is editable (forgot to log yesterday, etc.); frozen snapshots keep past integrity intact.
 
 ### 5.7 Shopping List + Walmart Adapter
+- **An answer is applied to the list as it stands, not as it was asked
+  about.** Editing the list by asking sends the list and gets back a set of
+  changes, and those changes land on whatever the list is when they arrive —
+  so a line ticked off in the aisle while the answer was being worked out
+  survives it. If the list has been rebuilt for a different range in the
+  meantime it is a different shop, the answer is not applied at all, and the
+  panel says so rather than guessing.
+- **Undo takes back that answer and nothing else.** It reverses the changes
+  the answer made, line by line. A line changed since is left alone and the
+  count is reported — the newer edit is the one somebody meant, and quietly
+  reverting it would be the same fault in the other direction. It is never a
+  restore of the whole list as it stood before.
 - **The range on screen is the range the list covers.** Opening the app shows
   the dates the current list was built for, not "today plus six" regardless —
   build on a Friday for the weekend and the week after, open it on Sunday, and
