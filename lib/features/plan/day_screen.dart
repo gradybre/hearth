@@ -395,25 +395,18 @@ class _EntryRow extends ConsumerWidget {
     ref.invalidate(dayEntriesProvider);
   }
 
-  /// Puts back what a swipe took away.
+  /// Puts back what a swipe took away — the same row, not a copy of it.
   ///
-  /// A new row rather than the same one — the delete is real, not a flag —
-  /// but with the portion and, for a logged meal, the frozen numbers it had.
-  /// Undo has to give back what was there, not a fresh planned copy of it.
+  /// The delete is real rather than a flag, but the entry keeps its identity
+  /// through it: the same id, portion, slot, frozen numbers, and the moment it
+  /// was actually eaten. Undo has to give back what was there, and a fresh
+  /// planned copy is not that.
   Future<void> _restore(WidgetRef ref) async {
-    await ref
-        .read(planRepositoryProvider)
-        .add(
-          date: date,
-          slot: entry.entry.slot,
-          refType: entry.entry.refType,
-          refId: entry.entry.refId,
-          servings: entry.entry.servings,
-          loggedMacros: entry.entry.isLogged
-              ? entry.entry.macroSnapshot?.macros
-              : null,
-          label: entry.entry.isLogged ? entry.label : null,
-        );
+    // `restore`, not `add`. A logged entry's snapshot is already multiplied by
+    // the portion, and `add` takes a per-serving figure and scales it — so
+    // this route put back two servings of a 100 kcal meal as 400 kcal, and
+    // half a serving as 25 (spec §4).
+    await ref.read(planRepositoryProvider).restore(entry.entry);
     ref.invalidate(dayEntriesProvider);
   }
 
