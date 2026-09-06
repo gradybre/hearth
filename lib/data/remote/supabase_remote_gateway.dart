@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../local/pending_write_store.dart';
+import 'page_cursor.dart';
 import 'remote_gateway.dart';
 
 /// The real sync target (spec §7.1).
@@ -126,18 +127,31 @@ class SupabaseRemoteGateway implements RemoteGateway {
     await query;
   }
 
+  /// What a table is sorted and paged by.
+  ///
+  /// Always ends in something unique, because a cursor that cannot move is a
+  /// loop that never ends. Most tables page by `(updated_at, id)`; the two
+  /// join tables carry no timestamp at all, so they page by their pair — the
+  /// same columns that identify them for a delete.
+  static List<String> pageOrderFor(String entityTable) =>
+      deleteKeys[entityTable] ??
+      <String>['updated_at', keyColumns[entityTable] ?? 'id'];
+
   @override
   Future<List<RemoteRecord>> fetchChanged({
     required String entityTable,
     DateTime? since,
   }) async {
+    final List<String> order = pageOrderFor(entityTable);
+
     try {
-      final PostgrestFilterBuilder<List<Map<String, dynamic>>> query = _client
-          .from(entityTable)
-          .select();
-      final List<Map<String, dynamic>> rows = since == null
-          ? await query
-          : await query.gte('updated_at', since.toUtc().toIso8601String());
+      final List<Map<String, dynamic>> rows =
+          await readAllPages<Map<String, dynamic>>(
+            page: (PageCursor? after) =>
+                _page(entityTable, order: order, since: since, after: after),
+            cursorOf: (Map<String, dynamic> row) =>
+                PageCursor(<String>[for (final String c in order) '${row[c]}']),
+          );
 
       return <RemoteRecord>[
         for (final Map<String, dynamic> row in rows)
@@ -155,6 +169,59 @@ class SupabaseRemoteGateway implements RemoteGateway {
       throw RemoteUnavailable('$error');
     }
   }
+
+  /// One page: everything sorted after [after], oldest first.
+  Future<List<Map<String, dynamic>>> _page(
+    String entityTable, {
+    required List<String> order,
+    required DateTime? since,
+    required PageCursor? after,
+  }) async {
+    PostgrestFilterBuilder<List<Map<String, dynamic>>> query = _client
+        .from(entityTable)
+        .select();
+
+    if (since != null) {
+      query = query.gte('updated_at', since.toUtc().toIso8601String());
+    }
+    if (after != null) {
+      query = query.or(_keysetAfter(order, after));
+    }
+
+    PostgrestTransformBuilder<List<Map<String, dynamic>>> sorted = query.order(
+      order.first,
+      ascending: true,
+    );
+    for (final String column in order.skip(1)) {
+      sorted = sorted.order(column, ascending: true);
+    }
+    return sorted.limit(_pageSize);
+  }
+
+  /// The keyset predicate for a composite sort key.
+  ///
+  /// `(a, b) > (A, B)` written the long way, because PostgREST has no tuple
+  /// comparison: either `a` is past `A`, or it matches and `b` is past `B`.
+  /// Values are quoted — a timestamp is full of characters the filter grammar
+  /// would otherwise read as syntax.
+  static String _keysetAfter(List<String> order, PageCursor after) {
+    final List<String> clauses = <String>[];
+    for (int i = 0; i < order.length; i++) {
+      final List<String> equals = <String>[
+        for (int j = 0; j < i; j++) '${order[j]}.eq."${after.values[j]}"',
+      ];
+      final String greater = '${order[i]}.gt."${after.values[i]}"';
+      clauses.add(
+        equals.isEmpty ? greater : 'and(${equals.join(',')},$greater)',
+      );
+    }
+    return clauses.join(',');
+  }
+
+  /// Rows per request. Well under any plausible `max_rows`, so a page is a
+  /// page rather than a silent truncation — and if the server caps it lower
+  /// anyway, [readAllPages] simply asks again.
+  static const int _pageSize = 500;
 
   @override
   Future<List<RemoteRecord>> fetchChangedAggregates({
