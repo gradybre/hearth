@@ -63,7 +63,9 @@ import '../data/sync/library_sync.dart';
 import '../data/sync/photo_sync.dart';
 import '../data/sync/record_sync.dart';
 import '../data/sync/remote_rows.dart';
+import '../data/sync/sync_checkpoints.dart';
 import '../data/sync/sync_engine.dart';
+import '../data/sync/sync_scope.dart';
 import '../domain/cooking/cook_session.dart';
 import '../domain/foods/food_query.dart';
 import '../domain/foods/no_match_rule.dart';
@@ -924,6 +926,28 @@ final StreamProvider<int> pendingWriteCountProvider = StreamProvider<int>(
 final NotifierProvider<SyncController, SyncStatus> syncControllerProvider =
     NotifierProvider<SyncController, SyncStatus>(SyncController.new);
 
+/// Whose data a sync pass is for, read fresh on every use.
+///
+/// `ref.read` rather than `ref.watch` at the call site: a pass in flight has
+/// to be able to notice that this changed underneath it, which it cannot do
+/// if the value was captured when the sync object was built.
+final Provider<SyncScope> syncScopeProvider = Provider<SyncScope>(
+  (Ref ref) => SyncScope(
+    userId: ref.watch(currentUserIdProvider),
+    householdId: ref.watch(currentHouseholdIdProvider),
+  ),
+);
+
+/// The checkpoint store, for the one caller outside sync that needs it: an
+/// explicit sign-out, which forgets them all.
+final Provider<SyncCheckpoints> syncCheckpointsProvider =
+    Provider<SyncCheckpoints>(
+      (Ref ref) => SyncCheckpoints(
+        preferences: ref.watch(preferenceStoreProvider),
+        scope: () => ref.read(syncScopeProvider),
+      ),
+    );
+
 final Provider<LibrarySync> librarySyncProvider = Provider<LibrarySync>(
   (Ref ref) => LibrarySync(
     engine: ref.watch(syncEngineProvider),
@@ -931,6 +955,7 @@ final Provider<LibrarySync> librarySyncProvider = Provider<LibrarySync>(
     foods: ref.watch(foodStoreProvider),
     queue: ref.watch(pendingWriteStoreProvider),
     preferences: ref.watch(preferenceStoreProvider),
+    scope: () => ref.read(syncScopeProvider),
   ),
 );
 
@@ -944,7 +969,7 @@ final Provider<RecordSync> recordSyncProvider = Provider<RecordSync>(
     rows: ref.watch(remoteRowsProvider),
     queue: ref.watch(pendingWriteStoreProvider),
     preferences: ref.watch(preferenceStoreProvider),
-    userId: () => ref.read(currentUserIdProvider),
+    scope: () => ref.read(syncScopeProvider),
   ),
 );
 

@@ -19,6 +19,7 @@ import 'package:hearth/data/sync/library_sync.dart';
 import 'package:hearth/data/sync/record_sync.dart';
 import 'package:hearth/data/sync/remote_rows.dart';
 import 'package:hearth/data/sync/sync_engine.dart';
+import 'package:hearth/data/sync/sync_scope.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
@@ -105,13 +106,14 @@ void main() {
         foods: FoodStore(db),
         queue: queue,
         preferences: PreferenceStore(db),
+        scope: () => SyncScope(userId: userId, householdId: householdId),
       ),
       records: RecordSync(
         engine: engine,
         rows: RemoteRows(db),
         queue: queue,
         preferences: PreferenceStore(db),
-        userId: () => userId,
+        scope: () => SyncScope(userId: userId, householdId: householdId),
       ),
     );
   }

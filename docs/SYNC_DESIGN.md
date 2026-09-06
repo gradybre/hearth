@@ -154,6 +154,35 @@ pagination, scope, deletion and repair is not reviewable:
    detectable. No behaviour change beyond completeness.
 2. **D2 — scope.** Versioned scoped keys, the v1 discard, sign-out clearing,
    a scope token captured at pass start and checked before applying.
+
+   *As built,* with one deliberate difference. Sign-out clearing was listed
+   here as part of what keeps two accounts apart; once the keys are scoped it
+   cannot be, because a scoped key is unreadable by the wrong account by
+   construction. Clearing on **every** sign-out would then be pure cost — a
+   full library re-download each time a session expires. So it is wired to an
+   *explicit* sign-out only, and its job is different: it is the repair lever
+   for a checkpoint that has moved past a row the server can no longer offer
+   (a restore from backup, or a timestamp bug like N02). "Sign out and back
+   in" is what somebody will try, and it now does something.
+
+   Both sync paths keep their own copy of the pull loop, so the key, the v1
+   disposal and the scope check live in one `SyncCheckpoints` rather than
+   twice — and both paths have their own regressions, because covering one of
+   two twins is how D1b's paging guard nearly shipped half-blind.
+
+   A pass therefore checks itself against **two** things, not one: the
+   identity it began under, and how many times the checkpoints had been
+   deliberately cleared. The second exists because the first does not cover
+   the repair lever's own race — someone taps Sync now and then Sign out, the
+   sweep runs while the pass is still working through its tables, and the pass
+   writes its checkpoint straight back over it. Same account throughout, so
+   nothing about the scope changed; the clearing count is what moves.
+
+   The memberships stage gets its own check, after its fetches and before it
+   writes. It is the only stage that *replaces* rather than merges — rows the
+   server did not send are deleted locally — so run under a session that
+   changed underneath it, it would not write the wrong favourites so much as
+   delete the right ones.
 3. **D3 — deletion.** Reconciliation for the five hard-delete tables, and the
    resurrection guard on replayed upserts.
 
