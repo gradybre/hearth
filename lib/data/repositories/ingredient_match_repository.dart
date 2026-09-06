@@ -126,6 +126,11 @@ class IngredientMatchRepository {
           'ingredient_string': key,
           'food_id': foodId,
           'needs_no_match': needsNoMatch,
+          // Explicit, because this table's upsert resolves on the unique
+          // index rather than the id: answering the same wording again has
+          // to revive the row already sitting on that name, not be refused
+          // by it (spec §7.1).
+          'is_deleted': false,
           'updated_at': at.toUtc().toIso8601String(),
         },
         queuedAt: at,

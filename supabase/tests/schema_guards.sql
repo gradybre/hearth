@@ -1097,3 +1097,114 @@ begin
   raise notice 'recipe icon guards passed';
 end;
 $$;
+
+-- ── A deletion reaches the other phone (spec §7.1) ─────────────────────────
+--
+-- Five tables used to remove rows outright, and a pull only ever sees rows
+-- that exist — so a meal your partner deleted stayed on your phone for ever.
+-- They soft-delete now, the way recipes and foods always have.
+--
+-- Guarded per table by name rather than written out five times: they were
+-- given this treatment together and the next one added to the list should
+-- fail here rather than quietly go without.
+do $$
+declare
+  v_table text;
+  v_owner uuid := gen_random_uuid();
+  v_house uuid := gen_random_uuid();
+  v_list uuid;
+  v_item uuid;
+  v_again uuid;
+  v_deleted boolean;
+begin
+  foreach v_table in array array[
+    'meal_plan_entries', 'shopping_list_items', 'collections',
+    'plan_templates', 'ingredient_matches'
+  ] loop
+    if not exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public'
+        and table_name = v_table
+        and column_name = 'is_deleted'
+    ) then
+      raise exception '% cannot record that a row was deleted', v_table;
+    end if;
+
+    -- Not nullable and not null-by-default: "unknown" is not one of the two
+    -- states a deletion has, and a null here would read as neither.
+    if exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public'
+        and table_name = v_table
+        and column_name = 'is_deleted'
+        and (is_nullable = 'YES' or column_default is null)
+    ) then
+      raise exception '%.is_deleted is nullable or has no default', v_table;
+    end if;
+  end loop;
+
+  -- A deleted line must not hold its name on the list for ever. Re-adding
+  -- milk after deleting it writes a new row, and the old whole-table
+  -- constraint would have refused it on behalf of a line nobody can see.
+  insert into auth.users (
+    id, instance_id, aud, role, email, encrypted_password,
+    email_confirmed_at, created_at, updated_at
+  )
+  values (
+    v_owner, '00000000-0000-0000-0000-000000000000', 'authenticated',
+    -- Keyed off the fixture id rather than a fixed address, so this block
+    -- can be re-run against a database that already has one.
+    'authenticated', v_owner || '@delete-guard.test', 'x', now(), now(), now()
+  );
+  insert into public.households (id, name, owner_id)
+  values (v_house, 'Delete guard', v_owner);
+  insert into public.shopping_lists (household_id, from_date, to_date)
+    values (v_house, current_date, current_date + 6)
+    returning id into v_list;
+
+  insert into public.shopping_list_items (shopping_list_id, item_key, raw_name)
+    values (v_list, 'milk', 'Milk') returning id into v_item;
+  update public.shopping_list_items set is_deleted = true where id = v_item;
+
+  begin
+    insert into public.shopping_list_items (shopping_list_id, item_key, raw_name)
+      values (v_list, 'milk', 'Milk') returning id into v_again;
+  exception when unique_violation then
+    raise exception 'a deleted line still holds its name on the list';
+  end;
+
+  -- And two *live* lines of the same name are still refused, which is what
+  -- the constraint was there for in the first place.
+  begin
+    insert into public.shopping_list_items (shopping_list_id, item_key, raw_name)
+      values (v_list, 'milk', 'Milk');
+    raise exception 'two live lines of the same name were allowed';
+  exception when unique_violation then
+    null;
+  end;
+
+  -- `ingredient_matches` keeps its whole-table constraint on purpose: it is
+  -- the upsert's conflict target. Answering the same wording again must
+  -- therefore revive the row rather than be refused.
+  insert into public.ingredient_matches (household_id, ingredient_string)
+    values (v_house, 'olive oil');
+  update public.ingredient_matches set is_deleted = true
+    where household_id = v_house and ingredient_string = 'olive oil';
+
+  insert into public.ingredient_matches (household_id, ingredient_string, is_deleted)
+    values (v_house, 'olive oil', false)
+    on conflict (household_id, ingredient_string) do update
+      set is_deleted = excluded.is_deleted;
+
+  select is_deleted into v_deleted from public.ingredient_matches
+    where household_id = v_house and ingredient_string = 'olive oil';
+  if v_deleted then
+    raise exception 'answering the same wording again did not revive the match';
+  end if;
+
+  -- The household and its rows go; the fixture user stays, as the other
+  -- guards in this file leave theirs. This runs against a reset database.
+  delete from public.households where id = v_house;
+  raise notice 'soft delete guards passed';
+end;
+$$;

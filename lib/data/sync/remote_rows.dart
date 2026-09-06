@@ -49,27 +49,46 @@ class RemoteRows {
         ),
       );
 
-  Future<void> applyEntry(Map<String, Object?> json) => _db
-      .into(_db.mealPlanEntries)
-      .insertOnConflictUpdate(
-        MealPlanEntryRow(
-          id: '${json['id']}',
-          dayId: '${json['meal_plan_day_id']}',
-          mealSlot: '${json['meal_slot']}',
-          refType: '${json['ref_type']}',
-          refId: '${json['ref_id']}',
-          servings: _double(json['servings']) ?? 0,
-          isPlanned: json['is_planned'] == true,
-          isLogged: json['is_logged'] == true,
-          loggedAt: json['logged_at'] == null ? null : _time(json['logged_at']),
-          // Copied as text, never rebuilt: this is the frozen record of what
-          // was eaten (spec §4).
-          macroSnapshot: json['macro_snapshot'] == null
-              ? null
-              : jsonEncode(json['macro_snapshot']),
-          updatedAt: _time(json['updated_at']),
-        ),
-      );
+  /// Whether an arriving row says it has been deleted.
+  ///
+  /// The five record tables soft-delete now (spec §7.1): the row stays on the
+  /// server so the deletion can travel, and each device removes its own copy
+  /// on the way past. Local storage is a cache of what exists, so there is
+  /// nothing here for a tombstone to be useful for.
+  static bool _isDeleted(Map<String, Object?> json) =>
+      json['is_deleted'] == true;
+
+  Future<void> applyEntry(Map<String, Object?> json) async {
+    if (_isDeleted(json)) {
+      await (_db.delete(
+        _db.mealPlanEntries,
+      )..where(($MealPlanEntriesTable e) => e.id.equals('${json['id']}'))).go();
+      return;
+    }
+    await _db
+        .into(_db.mealPlanEntries)
+        .insertOnConflictUpdate(
+          MealPlanEntryRow(
+            id: '${json['id']}',
+            dayId: '${json['meal_plan_day_id']}',
+            mealSlot: '${json['meal_slot']}',
+            refType: '${json['ref_type']}',
+            refId: '${json['ref_id']}',
+            servings: _double(json['servings']) ?? 0,
+            isPlanned: json['is_planned'] == true,
+            isLogged: json['is_logged'] == true,
+            loggedAt: json['logged_at'] == null
+                ? null
+                : _time(json['logged_at']),
+            // Copied as text, never rebuilt: this is the frozen record of what
+            // was eaten (spec §4).
+            macroSnapshot: json['macro_snapshot'] == null
+                ? null
+                : jsonEncode(json['macro_snapshot']),
+            updatedAt: _time(json['updated_at']),
+          ),
+        );
+  }
 
   Future<void> applyTargets(Map<String, Object?> json) => _db
       .into(_db.macroTargets)
@@ -113,32 +132,48 @@ class RemoteRows {
         ].join('\n')
       : '';
 
-  Future<void> applyCollection(Map<String, Object?> json) => _db
-      .into(_db.collections)
-      .insertOnConflictUpdate(
-        CollectionRow(
-          id: '${json['id']}',
-          householdId: '${json['household_id']}',
-          name: '${json['name'] ?? ''}',
-          sortOrder: _int(json['sort_order']) ?? 0,
-          updatedAt: _time(json['updated_at']),
-        ),
-      );
+  Future<void> applyCollection(Map<String, Object?> json) async {
+    if (_isDeleted(json)) {
+      await (_db.delete(
+        _db.collections,
+      )..where(($CollectionsTable c) => c.id.equals('${json['id']}'))).go();
+      return;
+    }
+    await _db
+        .into(_db.collections)
+        .insertOnConflictUpdate(
+          CollectionRow(
+            id: '${json['id']}',
+            householdId: '${json['household_id']}',
+            name: '${json['name'] ?? ''}',
+            sortOrder: _int(json['sort_order']) ?? 0,
+            updatedAt: _time(json['updated_at']),
+          ),
+        );
+  }
 
   /// A saved week arriving from another device (spec §5.6).
-  Future<void> applyPlanTemplate(Map<String, Object?> json) => _db
-      .into(_db.planTemplates)
-      .insertOnConflictUpdate(
-        PlanTemplateRow(
-          id: '${json['id']}',
-          userId: '${json['user_id']}',
-          name: '${json['name'] ?? ''}',
-          // The server column is jsonb, so this arrives decoded; the local
-          // column holds the text. Re-encoding beats storing "[object]".
-          entries: jsonEncode(json['entries'] ?? const <Object?>[]),
-          updatedAt: _time(json['updated_at']),
-        ),
-      );
+  Future<void> applyPlanTemplate(Map<String, Object?> json) async {
+    if (_isDeleted(json)) {
+      await (_db.delete(
+        _db.planTemplates,
+      )..where(($PlanTemplatesTable t) => t.id.equals('${json['id']}'))).go();
+      return;
+    }
+    await _db
+        .into(_db.planTemplates)
+        .insertOnConflictUpdate(
+          PlanTemplateRow(
+            id: '${json['id']}',
+            userId: '${json['user_id']}',
+            name: '${json['name'] ?? ''}',
+            // The server column is jsonb, so this arrives decoded; the local
+            // column holds the text. Re-encoding beats storing "[object]".
+            entries: jsonEncode(json['entries'] ?? const <Object?>[]),
+            updatedAt: _time(json['updated_at']),
+          ),
+        );
+  }
 
   Future<void> applyShoppingList(Map<String, Object?> json) => _db
       .into(_db.shoppingLists)
@@ -160,6 +195,13 @@ class RemoteRows {
   /// take the rest of the table's pull down with it, and the list is one
   /// place ahead in the same pass.
   Future<void> applyShoppingItem(Map<String, Object?> json) async {
+    if (_isDeleted(json)) {
+      await (_db.delete(
+            _db.shoppingListItems,
+          )..where(($ShoppingListItemsTable i) => i.id.equals('${json['id']}')))
+          .go();
+      return;
+    }
     final String listId = '${json['shopping_list_id']}';
     final bool haveList =
         await (_db.select(_db.shoppingLists)
@@ -215,6 +257,21 @@ class RemoteRows {
   Future<void> applyIngredientMatch(Map<String, Object?> json) async {
     final String key = normaliseKey('${json['ingredient_string'] ?? ''}');
     if (key.isEmpty) return;
+    if (_isDeleted(json)) {
+      // By household and wording, not by id. The insert below deliberately
+      // resolves on `(household_id, ingredient_string)` because a local row
+      // may still carry a random id rather than the derived one — and a
+      // tombstone that matched on the id the insert does not trust would
+      // leave the forgotten wording in place, quietly answering ingredients
+      // the household said to stop answering.
+      await (_db.delete(_db.ingredientMatches)..where(
+            ($IngredientMatchesTable m) =>
+                m.householdId.equals('${json['household_id']}') &
+                m.ingredientString.equals(key),
+          ))
+          .go();
+      return;
+    }
 
     // A match naming a food this device has not got is skipped rather than
     // inserted. Foods are pulled before records so this is rare, but the row
@@ -288,7 +345,15 @@ class RemoteRows {
           .go();
     }
 
+    // Same guard as the memberships below: a favourite naming a recipe this
+    // device has not got would break the local foreign key and take the whole
+    // pull down with it.
+    final Set<String> knownRecipes = <String>{
+      for (final RecipeRow row in await _db.select(_db.recipes).get()) row.id,
+    };
+
     for (final String recipeId in remoteRecipeIds) {
+      if (!knownRecipes.contains(recipeId)) continue;
       await _db
           .into(_db.recipeFavorites)
           .insertOnConflictUpdate(
@@ -325,7 +390,32 @@ class RemoteRows {
           .go();
     }
 
+    // Only pairs whose two ends are actually here.
+    //
+    // A cookbook that is deleted now leaves its membership rows behind on the
+    // server: the delete is a tombstone rather than a removal, so the cascade
+    // that used to take them with it never fires, and their own policy still
+    // returns them because it asks about the recipe rather than the parent.
+    // The local row is gone and the local cascade took the local memberships
+    // with it — so re-inserting those pairs breaks the local foreign key, and
+    // the exception escapes the whole pull. Every sync on both phones would
+    // fail from then on, for ever, because the orphans never go away.
+    //
+    // Skipping is the same answer this file already gives for a shopping line
+    // whose list has not arrived and a match naming a food this device has
+    // not got: a row that cannot be attached to anything waits for the pass
+    // that brings its parent, and costs nothing until then.
+    final Set<String> knownCollections = <String>{
+      for (final CollectionRow row in await _db.select(_db.collections).get())
+        row.id,
+    };
+    final Set<String> knownRecipes = <String>{
+      for (final RecipeRow row in await _db.select(_db.recipes).get()) row.id,
+    };
+
     for (final (String collectionId, String recipeId) pair in remote) {
+      if (!knownCollections.contains(pair.$1)) continue;
+      if (!knownRecipes.contains(pair.$2)) continue;
       await _db
           .into(_db.recipeCollections)
           .insertOnConflictUpdate(

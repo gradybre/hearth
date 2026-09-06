@@ -356,6 +356,15 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
     polling timer. That is the relaxation this section already allows, and a
     maintained socket buys little for two people who are rarely in the app at
     the same moment. Revisit if that stops being true.
+- **A deletion is a change, not an absence.** Every synced table that a user
+  can delete from soft-deletes: the row stays and `is_deleted` turns true, so
+  the deletion travels on the ordinary pull like any other change. A plain
+  select only returns rows that exist, which is why a meal deleted on one
+  phone used to stay on the other for ever. Each device removes its own copy
+  when the flag arrives — local storage is a cache of what exists. The two
+  membership tables (`recipe_favorites`, `recipe_collections`) are the
+  deliberate exception: they are fetched whole and reconciled by replacement
+  every pass, so absence there already reads correctly as removal.
 - **A checkpoint belongs to an account, not to a device.** Each table's pull
   remembers how far it has read, and that marker is keyed by user *and*
   household and carries a version. Two accounts on one phone is the case this

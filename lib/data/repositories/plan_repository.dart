@@ -432,6 +432,10 @@ class PlanRepository {
           'entries': <Map<String, Object?>>[
             for (final TemplateEntry entry in entries) entry.toJson(),
           ],
+          // A row that was deleted and is being written again — an undo,
+          // a restore, the same name re-added — has to come back rather than
+          // stay a tombstone (spec §7.1).
+          'is_deleted': false,
           'updated_at': now.toUtc().toIso8601String(),
         },
         queuedAt: now,

@@ -37,6 +37,26 @@ class SupabaseRemoteGateway implements RemoteGateway {
     'recipe_collections': <String>['collection_id', 'recipe_id'],
   };
 
+  /// Tables that record a deletion rather than removing the row (spec §7.1).
+  ///
+  /// A plain select only ever returns rows that exist, so there is nothing in
+  /// one that says "this used to be here" — which is why a meal deleted on
+  /// one phone stayed on the other for ever. These five now do what recipes
+  /// and foods have always done: the row stays, the flag turns, and the
+  /// ordinary pull carries it across like any other change.
+  ///
+  /// The two membership tables are deliberately absent. They are fetched
+  /// whole every pass and reconciled by replacement, so absence there is
+  /// already read correctly as removal; a flag as well would be a second
+  /// mechanism for the same fact, and the two would eventually disagree.
+  static const Set<String> softDeleteTables = <String>{
+    'meal_plan_entries',
+    'shopping_list_items',
+    'collections',
+    'plan_templates',
+    'ingredient_matches',
+  };
+
   /// Tables whose upsert must resolve on a unique constraint rather than on
   /// the primary key.
   ///
@@ -114,7 +134,12 @@ class SupabaseRemoteGateway implements RemoteGateway {
     Map<String, Object?> payload,
   ) async {
     final List<String> keys = deleteKeys[table] ?? const <String>['id'];
-    PostgrestFilterBuilder<void> query = _client.from(table).delete();
+    // A recorded deletion rather than a removal, for the tables that have
+    // somewhere to record it. The filter is built the same way either way, so
+    // a missing key is still refused rather than matching every row.
+    PostgrestFilterBuilder<void> query = softDeleteTables.contains(table)
+        ? _client.from(table).update(<String, Object?>{'is_deleted': true})
+        : _client.from(table).delete();
     for (final String key in keys) {
       final Object? value = payload[key] ?? (key == 'id' ? entityId : null);
       if (value == null) {

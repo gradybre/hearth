@@ -30,8 +30,11 @@ task seems to require breaking one.
    split; check §4/§8.2 before assuming which one a table is.
 
 3. **Frozen log snapshots.** Every log entry stores `macro_snapshot` (macros + portion at log
-   time). Editing or deleting a recipe/food later must never rewrite past days. Recipes and
-   foods are **soft-deleted**, never physically removed. (§4)
+   time). Editing or deleting a recipe/food later must never rewrite past days. Recipes,
+   foods, and the five record tables a user can delete from (plan entries,
+   shopping lines, collections, saved weeks, ingredient matches) are
+   **soft-deleted**, never physically removed — a deletion has to be able to
+   travel to the other phone, and an absence cannot. (§4, §7.2)
 
 4. **Review before save / before commit.** Anything automated that produces user data — AI
    import, AI generation, shopping export — passes through a mandatory human review screen

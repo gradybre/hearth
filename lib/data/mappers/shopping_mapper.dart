@@ -42,6 +42,10 @@ abstract final class ShoppingMapper {
         'sort_order': item.sortOrder,
         'source_recipe_ids': sourceIdsToList(item.sourceRecipeIds),
         'planned_rest': plannedRestToJson(item.plannedRest),
+        // A line taken off the list and put back — Undo, or the same name
+        // added again — has to come back rather than stay a tombstone
+        // (spec §7.1).
+        'is_deleted': false,
         'updated_at': item.updatedAt.toUtc().toIso8601String(),
       };
 
