@@ -159,6 +159,10 @@ abstract final class PlanMapper {
     'macro_snapshot': entry.macroSnapshot == null
         ? null
         : snapshotToJson(entry.macroSnapshot!),
+    // A row that was deleted and is being written again — Undo, or the
+    // restore behind it — has to come back rather than stay a tombstone
+    // (spec §7.1).
+    'is_deleted': false,
     'updated_at': updatedAt.toUtc().toIso8601String(),
   };
 

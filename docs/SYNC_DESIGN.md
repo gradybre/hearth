@@ -67,7 +67,7 @@ reports "synced"; the previous account's outbox is pushed under the new JWT,
 refused by RLS, and retried for ever; and their rows stay on disk, reachable
 by any by-id path and by the export.
 
-### R03 — hard deletes never propagate
+### R03 — hard deletes never propagate *(fixed in D3)*
 
 Recipes and foods soft-delete. Five tables hard-delete — `meal_plan_entries`,
 `shopping_list_items`, `collections`, `plan_templates`, `ingredient_matches` —
@@ -132,7 +132,7 @@ sound and already tested.
 
 | Decision | Proposed | Why it is not obvious |
 |---|---|---|
-| **Deletion** | Reconciliation, not tombstones | A complete fetch already knows what exists. Absence *in a complete, successful, unfiltered pass* is proof of deletion; absence in a truncated or failed one is not — so this only works if truncation is impossible, which §2 gives us. Tombstones would need a retention policy and a fallback for a phone offline longer than it. |
+| **Deletion** | ~~Reconciliation, not tombstones~~ → **soft delete, as recipes and foods already do** | *Settled by Brendan, against this row's original proposal.* The choice was framed as reconciliation versus a separate tombstone table, and both were worse than the option already in the codebase. Soft-deleting in place needs no retention policy, no second mechanism, and no id sweep whose cost grows with every meal ever logged on a pass that fires after every local write — and last-write-wins, which is already sound and already tested, makes a delete beat an older edit for free. Reconciliation stays available as a backstop if it is ever needed. |
 | **Checkpoint key** | `sync.v2.<project>.<stream>.<owner>` | Must include project so a staging swap cannot poison production, and owner so §R05 cannot recur. v2 so old unscoped keys are never read as if they were complete. |
 | **Repair** | Version marker; first run of v2 ignores every v1 watermark and reconciles fully | The current watermarks may already have advanced past rows never seen. They cannot be trusted, only discarded. |
 | **Sign-out** | Clear watermarks and *keep* the outbox and rows | Deleting unsynced work to fix a scope bug would be the cure being worse. Rows stay, scoped queries already hide them, and the export needs a scope filter (a separate finding). |
@@ -183,8 +183,23 @@ pagination, scope, deletion and repair is not reviewable:
    server did not send are deleted locally — so run under a session that
    changed underneath it, it would not write the wrong favourites so much as
    delete the right ones.
-3. **D3 — deletion.** Reconciliation for the five hard-delete tables, and the
-   resurrection guard on replayed upserts.
+3. **D3 — deletion.** *Split in two.*
+
+   **D3a — propagation.** The five hard-delete tables soft-delete, the way
+   recipes and foods always have: the row stays, `is_deleted` turns true, and
+   the ordinary watermark pull carries it across. Each device removes its own
+   copy on the way past — local storage is a cache of what exists, so there is
+   nothing there for a tombstone to be useful for. The two membership tables
+   keep hard deletes deliberately: they are fetched whole and reconciled by
+   replacement every pass, so absence there is already read correctly, and a
+   flag as well would be a second mechanism for the same fact.
+
+   **D3b — the resurrection guard**, still to come. An upsert replayed from
+   the outbox can clear `is_deleted` on a row another device deleted. Left out
+   of D3a on purpose rather than half-answered: recipes and foods have had the
+   same hole since they were built (`upsert_recipe` sets
+   `is_deleted = excluded.is_deleted` outright), so the rule belongs in one
+   place covering all seven tables, not bolted onto five of them.
 
 **E — B01's retry and status** follows, and is where "Synced" stops being a
 claim the app cannot support.
