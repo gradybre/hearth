@@ -785,6 +785,137 @@ begin
 end;
 $$;
 
+-- ── A library can be read past the row cap (spec §7.1) ─────────────────────
+--
+-- PostgREST truncates a response at `max_rows` and says nothing, so the pull
+-- that asked for everything at once took the first thousand rows and moved
+-- its watermark past the rest. The paged functions exist so a client can
+-- cursor instead — and the properties that make that safe are worth pinning,
+-- because all of them fail silently.
+--
+-- Both tables, driven by name rather than written out once: the two paged
+-- functions are duplicates of each other, and a guard covering only one lets
+-- the other's cursor rot. A wrong tiebreak in `changed_recipes_page` would
+-- re-read a boundary row on every page, or stall the client's paging loop
+-- outright — and neither shows up anywhere else.
+do $$
+declare
+  v_table text;
+  v_after_ts timestamptz;
+  v_after_id uuid;
+  v_rows integer;
+  v_total integer;
+  v_pages integer;
+  v_last jsonb;
+  v_actual integer;
+  v_compared integer;
+  v_mismatch integer;
+  v_capped integer;
+begin
+  foreach v_table in array array['foods', 'recipes'] loop
+    v_after_ts := null;
+    v_after_id := null;
+    v_total := 0;
+    v_pages := 0;
+
+    -- 1. Cursoring reads every row exactly once.
+    loop
+      execute format(
+        'select count(*) from public.changed_%s_page(null, $1, $2, 100)',
+        v_table
+      ) into v_rows using v_after_ts, v_after_id;
+      exit when v_rows = 0;
+
+      v_pages := v_pages + 1;
+      v_total := v_total + v_rows;
+      if v_pages > 200 then
+        raise exception 'paging % did not finish: the cursor is not advancing',
+          v_table;
+      end if;
+
+      -- The page's *last* row in the page's own ordering. Getting this
+      -- backwards overlaps the pages and counts rows twice — which is how
+      -- this guard first failed, and is exactly the mistake a client could
+      -- make.
+      execute format(
+        'select x from public.changed_%s_page(null, $1, $2, 100) x '
+        'order by (x ->> ''updated_at'') desc, (x ->> ''id'') desc limit 1',
+        v_table
+      ) into v_last using v_after_ts, v_after_id;
+      v_after_ts := (v_last ->> 'updated_at')::timestamptz;
+      v_after_id := (v_last ->> 'id')::uuid;
+    end loop;
+
+    execute format('select count(*) from public.%I', v_table) into v_actual;
+    if v_total <> v_actual then
+      raise exception 'paging read % of %, the table holds %',
+        v_total, v_table, v_actual;
+    end if;
+
+    -- 2. A page says exactly what the unpaged function says.
+    --
+    -- Six guards in this file assert that `changed_foods` / `changed_recipes`
+    -- carry a column the client needs — nutrients, kind, global foods,
+    -- `is_modifier`, the menu columns, the icon. The client now reads only
+    -- the paged twins, so every one of those guards is aimed at a function
+    -- the app no longer calls. Comparing whole rows points them all back at
+    -- the real path for free, and catches the next column added to one
+    -- definition and forgotten in the other.
+    execute format(
+      'select count(*), count(*) filter (where p is distinct from u) '
+      'from public.changed_%s_page(null, null, null, 1000) p '
+      'join public.changed_%s(null) u on (u ->> ''id'') = (p ->> ''id'')',
+      v_table, v_table
+    ) into v_compared, v_mismatch;
+
+    if v_compared = 0 then
+      raise exception 'nothing compared: % returned no rows either way',
+        v_table;
+    end if;
+    if v_mismatch > 0 then
+      raise exception '% of % rows differ between the paged and unpaged %',
+        v_mismatch, v_compared, v_table;
+    end if;
+  end loop;
+
+  -- 3. The limit is clamped rather than trusted. A caller asking for a
+  -- million rows is asking PostgREST to truncate again, silently — the very
+  -- defect these functions exist to remove.
+  --
+  -- Asserting that against the seeded catalogue proves nothing: it holds a
+  -- few hundred foods, so an unclamped call returns a few hundred and the
+  -- check passes whether the clamp is there or not. Grow the table past the
+  -- cap first, so the clamp is the only thing that can hold the count down.
+  insert into public.foods (name)
+  select 'guard page filler ' || g from generate_series(1, 1001) g;
+
+  -- Counted before the cleanup and judged after it: raising in between would
+  -- leave a thousand fillers sitting in the library.
+  select count(*) into v_capped
+  from public.changed_foods_page(null, null, null, 999999);
+  select count(*) into v_rows
+  from public.changed_foods_page(null, null, null, 0);
+
+  delete from public.foods where name like 'guard page filler %';
+
+  if v_capped > 1000 then
+    raise exception 'the page limit is not clamped: % rows came back', v_capped;
+  end if;
+  -- And the floor, so a client asking for nothing still makes progress
+  -- rather than looping on an empty page for ever.
+  if v_rows <> 1 then
+    raise exception 'a page of zero returned % rows, not one', v_rows;
+  end if;
+
+  -- 4. The unpaged functions are still there. They are what a phone running
+  -- an older build calls, and nothing here may take them away mid-rollout.
+  perform 1 from public.changed_foods(null) limit 1;
+  perform 1 from public.changed_recipes(null) limit 1;
+
+  raise notice 'paged library guards passed';
+end;
+$$;
+
 -- ── A menu keeps its own shape (spec §5.2) ──────────────────────────────────
 --
 -- The builder lays a menu out by `menu_group` and `menu_order`, and both have
