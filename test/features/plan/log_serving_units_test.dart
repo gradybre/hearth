@@ -133,7 +133,7 @@ void main() {
       tester,
       foods: <Food>[yoghurt()],
       entries: <MealPlanEntry>[
-        MealPlanEntry(
+        const MealPlanEntry(
           id: 'e-yog',
           dayId: 'day-1',
           slot: MealSlot.breakfast,
