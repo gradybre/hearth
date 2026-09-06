@@ -43,13 +43,13 @@ class LibrarySync {
   final SyncCheckpoints _checkpoints;
 
   Future<PullResult> pull() async {
-    // One scope for the whole pass, captured before the first request. Both
-    // tables belong to the same library, and half of one account's and half
-    // of another's is not a library.
-    final SyncScope scope = _checkpoints.current;
+    // One pass identity, captured before the first request. Both tables
+    // belong to the same library, and half of one account's and half of
+    // another's is not a library.
+    final SyncPass pass = await _checkpoints.begin();
 
     final PullResult recipes = await _pullTable(
-      scope,
+      pass,
       'recipes',
       localUpdatedAt: _recipes.updatedAtFor,
       apply: (RemoteRecord record) => _recipes.upsert(
@@ -60,7 +60,7 @@ class LibrarySync {
     if (recipes.abandonedScope) return recipes;
 
     final PullResult foods = await _pullTable(
-      scope,
+      pass,
       'foods',
       localUpdatedAt: _foods.updatedAtFor,
       apply: (RemoteRecord record) => _foods.upsert(
@@ -79,13 +79,13 @@ class LibrarySync {
   }
 
   Future<PullResult> _pullTable(
-    SyncScope scope,
+    SyncPass pass,
     String table, {
     required Future<DateTime?> Function(String id) localUpdatedAt,
     required Future<void> Function(RemoteRecord record) apply,
   }) async {
     final DateTime startedAt = DateTime.now().toUtc();
-    final DateTime? since = await _checkpoints.since(scope, table);
+    final DateTime? since = await _checkpoints.since(pass, table);
 
     final PullResult result;
     try {
@@ -98,7 +98,7 @@ class LibrarySync {
         // abandoned pass stops writing, the fewer of the wrong account's
         // answers land in this device's store.
         apply: (RemoteRecord record) async {
-          if (_checkpoints.changedSince(scope)) throw const _ScopeChanged();
+          if (await _checkpoints.hasEnded(pass)) throw const _ScopeChanged();
           await apply(record);
         },
       );
@@ -109,7 +109,7 @@ class LibrarySync {
     // And again after the answers are in, because a pass that returned
     // nothing never reached the check above — and it is the checkpoint, not
     // the rows, that does the lasting damage.
-    if (_checkpoints.changedSince(scope)) {
+    if (await _checkpoints.hasEnded(pass)) {
       return PullResult(
         applied: result.applied,
         skipped: result.skipped,
@@ -121,7 +121,7 @@ class LibrarySync {
     // Advancing it after an offline attempt would skip everything that
     // changed while this device was away.
     if (!result.stoppedBecauseOffline) {
-      await _checkpoints.record(scope, table, startedAt.subtract(overlap));
+      await _checkpoints.record(pass, table, startedAt.subtract(overlap));
     }
     return result;
   }

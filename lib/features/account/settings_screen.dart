@@ -92,8 +92,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (!confirmed) return;
     // Before the sign-out, not after: once the session is gone the providers
     // this reads are rebuilding, and a checkpoint left behind is one nobody
-    // will think to clear later.
-    await ref.read(syncCheckpointsProvider).forgetEverything();
+    // will think to clear later. A pass already in flight notices the
+    // clearing and abandons rather than writing its checkpoint back.
+    //
+    // Guarded, because this is a step between the user and the thing they
+    // actually asked for. A device that cannot clear its checkpoints must
+    // still be able to sign out; the worst case is a stale checkpoint, and
+    // staying signed in against someone's wishes is worse than that.
+    try {
+      await ref.read(syncCheckpointsProvider).forgetEverything();
+    } on Object {
+      // Deliberately swallowed: see above.
+    }
     await ref.read(authGatewayProvider).signOut();
   }
 
@@ -1039,6 +1049,13 @@ class _SyncPanel extends ConsumerWidget {
     }
     if (result.failed > 0) {
       return '${result.failed} could not be sent. They are still saved here.';
+    }
+
+    // Before "up to date", because an abandoned pass is neither up to date
+    // nor a failure: it started asking for one account and finished under
+    // another, so it threw its answers away and will ask again.
+    if (status.pulled?.abandonedScope ?? false) {
+      return 'The account changed while syncing. Starting again.';
     }
 
     final int pulled = status.pulled?.applied ?? 0;

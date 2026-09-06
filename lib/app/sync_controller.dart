@@ -103,6 +103,8 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
         await photos.pull();
       }
 
+      final bool abandoned = library.abandonedScope || records.abandonedScope;
+
       state = SyncStatus.done(
         result,
         pulled: PullResult(
@@ -110,8 +112,15 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
           skipped: library.skipped + records.skipped,
           stoppedBecauseOffline:
               library.stoppedBecauseOffline || records.stoppedBecauseOffline,
+          abandonedScope: abandoned,
         ),
       );
+
+      // An abandoned pass brought down part of nothing and left no
+      // checkpoint. Ask again under whoever is signed in now: the sign-in
+      // that usually causes this fires its own nudge, but a household
+      // changing or a deliberate clearing does not have to.
+      if (abandoned) syncSoon();
     } on Object catch (error) {
       // Object, not Exception: a type error from a malformed payload is an
       // Error, and letting it escape would lose the sync silently.

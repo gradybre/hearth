@@ -114,26 +114,30 @@ void main() {
     test(
       'and does not overwrite it either, so she is not reset in turn',
       () async {
+        // Asserted on the stored value itself rather than on the date. Every
+        // write in this test lands within a millisecond or two of the last,
+        // so "is it recent" is true whether the key is shared or not — the
+        // question is whether it is still *her* value.
         await syncFor().pull();
-        await syncFor().pull();
-        final DateTime? hers = gateway.sinceFor('recipes');
+        final String? hers = await preferences.read(
+          alice.watermarkKeyFor('recipes'),
+        );
         expect(hers, isNotNull);
 
-        // Bob signs in, pulls whole, and signs out again. Alice's checkpoint
-        // must still be hers: a shared key would have been overwritten by his
-        // pass and she would re-download the library every time he used the
-        // phone.
+        // Bob signs in on the same phone and pulls the whole library.
         current = bob;
         await syncFor().pull();
-        current = alice;
-        await syncFor().pull();
 
-        expect(gateway.sinceFor('recipes'), isNotNull);
         expect(
-          gateway
-              .sinceFor('recipes')!
-              .isBefore(hers!.add(const Duration(days: 1))),
-          isTrue,
+          await preferences.read(alice.watermarkKeyFor('recipes')),
+          hers,
+          reason:
+              'a shared key would have been overwritten by his pass, and '
+              'she would re-read the library every time he used the phone',
+        );
+        expect(
+          await preferences.read(bob.watermarkKeyFor('recipes')),
+          isNotNull,
         );
       },
     );
@@ -262,6 +266,35 @@ void main() {
     });
   });
 
+  group('clearing while a pull is in flight', () {
+    test('is not undone by the pass finishing afterwards', () async {
+      // The repair lever's whole job. Someone taps Sync now, then Sign out;
+      // the pass is still working through its tables when the checkpoints are
+      // swept, and if it writes its checkpoint back the sweep silently did
+      // nothing at all.
+      await syncFor().pull();
+      await syncFor().pull();
+      expect(gateway.sinceFor('recipes'), isNotNull);
+
+      final SyncCheckpoints checkpoints = SyncCheckpoints(
+        preferences: preferences,
+        scope: () => current,
+      );
+      gateway.onFetch = () => checkpoints.forgetEverything();
+
+      final PullResult result = await syncFor().pull();
+      expect(result.abandonedScope, isTrue);
+
+      gateway.onFetch = null;
+      await syncFor().pull();
+      expect(
+        gateway.sinceFor('recipes'),
+        isNull,
+        reason: 'the swept checkpoint must not have been written back',
+      );
+    });
+  });
+
   group('the records path, which keeps its own copy of all this', () {
     // A plan and a day's logs are one person's, so this path is where an
     // inherited checkpoint costs somebody their own history rather than the
@@ -294,6 +327,31 @@ void main() {
       );
     });
 
+    test('the memberships stage does not run for the wrong account', () async {
+      // It is the one stage that *deletes* local rows: favourites and
+      // cookbook contents the server did not send are removed. Run under a
+      // session that changed underneath it, it would not write the wrong
+      // favourites so much as delete the right ones — and it holds the two
+      // widest network waits in the pass.
+      // Flipped *inside* the memberships fetch, not before it. An earlier
+      // flip is caught by the per-table check and never reaches this stage at
+      // all — which is how the first version of this test passed with the
+      // membership check deleted.
+      gateway.onFetch = () {
+        if (gateway.wasAsked('recipe_favorites')) current = bob;
+      };
+
+      final PullResult result = await recordSyncFor().pull();
+
+      expect(
+        result.abandonedScope,
+        isTrue,
+        reason:
+            'the answers arrived under a session that was no longer the '
+            'one that asked, so nothing may be replaced from them',
+      );
+    });
+
     test('an account change mid-pass leaves no checkpoint behind', () async {
       gateway.onFetch = () => current = bob;
 
@@ -316,6 +374,10 @@ class _FakeGateway implements RemoteGateway {
   void Function()? onFetch;
 
   DateTime? sinceFor(String table) => asked[table];
+
+  /// Distinct from `sinceFor(table) == null`, which is also what a pull that
+  /// asked for everything looks like. A test about a stage that was never
+  /// reached needs to tell those two apart.
   bool wasAsked(String table) => asked.containsKey(table);
 
   @override
