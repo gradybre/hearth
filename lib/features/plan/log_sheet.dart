@@ -320,6 +320,28 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     );
   }
 
+  /// The button the sheet exists to offer, shared by both arrangements above.
+  ///
+  /// [update] is whether this entry has *already been logged*, which is not
+  /// the same as whether it exists: a planned meal exists and has not been
+  /// logged, and that is precisely the entry whose button has to say "Log
+  /// it". Collapsing the two is how the one button whose whole job is to log
+  /// a planned meal stopped saying so.
+  Widget _primaryAction({
+    required Map<String, Food> foods,
+    required Map<String, Recipe> recipes,
+    required bool update,
+  }) => FilledButton(
+    onPressed: _busy ? null : () => _log(foods: foods, recipes: recipes),
+    child: Text(
+      _busy
+          ? 'Saving…'
+          : update
+          ? 'Update'
+          : 'Log it',
+    ),
+  );
+
   Widget _confirmView(
     ScrollController controller,
     Macros perServing,
@@ -373,47 +395,71 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
           // Wrapped rather than a Row: three labels side by side stop
           // fitting long before the text is at its largest, and a button
           // pushed off the edge is one nobody can press.
-          // Remove stays hard left, with the width of the sheet between it
-          // and the button beside it.
+          // Remove hard left, the actions hard right, and onto separate
+          // lines rather than off the edge when they stop fitting.
           //
-          // A Wrap looked tidier and was worse: with no Spacer to hold them
-          // apart it packed Remove eight points from Update at every text
-          // size, while both grew — so the mis-tap risk was worst for exactly
-          // the people who set large text. Remove deletes a logged meal and
-          // its frozen snapshot at once, and this route has no undo: the
-          // restore behind Undo is wired to the swipe, which this never goes
-          // through. The gap matters more than the tidiness did.
-          Row(
-            children: <Widget>[
-              if (_isExisting)
+          // A plain Row overflows by 27 points on a 320-point phone at three
+          // times the text. A plain Wrap fits, but packs Remove eight points
+          // from the button beside it at every size — and Remove deletes a
+          // logged meal and its frozen snapshot at once, with no undo on this
+          // route, because the restore behind Undo is wired to the swipe.
+          // `spaceBetween` keeps the width of the sheet between them while
+          // they share a line, and `runSpacing` keeps them apart when they do
+          // not.
+          if (_isExisting)
+            // Side by side while they fit, stacked when they do not — and
+            // stacked with the primary *above* Remove, a full gap apart.
+            //
+            // A Wrap could not do this. `spaceBetween` only separates
+            // children that share a run, so once they wrapped it fell back to
+            // start-alignment and put the primary directly beneath Remove,
+            // twelve points away and flush to the same edge — the adjacency
+            // this arrangement exists to prevent, rotated ninety degrees.
+            OverflowBar(
+              alignment: MainAxisAlignment.spaceBetween,
+              overflowAlignment: OverflowBarAlignment.end,
+              overflowDirection: VerticalDirection.up,
+              // The gap is required, not left over. `spaceBetween` only
+              // spreads what is spare, so at three times the text on a small
+              // phone the two buttons very nearly fill the line and it spread
+              // them by five points. Demanding the gap as spacing means they
+              // share a line only when it can be honoured, and stack — with
+              // the same gap, and the primary above — when it cannot.
+              spacing: HearthSpacing.xxxl,
+              overflowSpacing: HearthSpacing.xxxl,
+              children: <Widget>[
                 TextButton(
                   onPressed: _busy ? null : _remove,
                   child: const Text('Remove'),
                 ),
-              const Spacer(),
-              if (!_isExisting) ...<Widget>[
+                _primaryAction(
+                  foods: foods,
+                  recipes: recipes,
+                  update: alreadyLogged,
+                ),
+              ],
+            )
+          else
+            // No destructive button here, so the only question is fitting.
+            OverflowBar(
+              alignment: MainAxisAlignment.end,
+              overflowAlignment: OverflowBarAlignment.end,
+              spacing: HearthSpacing.sm,
+              overflowSpacing: HearthSpacing.sm,
+              children: <Widget>[
                 TextButton(
                   onPressed: _busy
                       ? null
                       : () => _plan(foods: foods, recipes: recipes),
                   child: const Text('Plan only'),
                 ),
-                const SizedBox(width: HearthSpacing.sm),
-              ],
-              FilledButton(
-                onPressed: _busy
-                    ? null
-                    : () => _log(foods: foods, recipes: recipes),
-                child: Text(
-                  _busy
-                      ? 'Saving…'
-                      : alreadyLogged
-                      ? 'Update'
-                      : 'Log it',
+                _primaryAction(
+                  foods: foods,
+                  recipes: recipes,
+                  update: alreadyLogged,
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
     );

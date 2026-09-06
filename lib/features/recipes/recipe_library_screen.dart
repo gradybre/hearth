@@ -104,61 +104,90 @@ class RecipeLibraryScreen extends ConsumerWidget {
               library: ref.watch(foodLibraryProvider).value ?? const <Food>[],
             ).isNotEmpty;
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
+            // Slivers rather than a Column with an Expanded list.
+            //
+            // The header and the filter bar were fixed chrome above the list,
+            // and on a 320x568 phone at three times the text they are taller
+            // than the screen on their own — so the list was handed a
+            // negative height and the whole thing overflowed by ten points.
+            // As slivers the chrome scrolls away with the content, which is
+            // what a short screen needs and what a tall one never noticed.
+            return CustomScrollView(
+              slivers: <Widget>[
                 // Outside the empty/non-empty branch on purpose. The household
                 // control used to live only in the populated case, which hid it
                 // from exactly the person who needs it — someone with an empty
                 // library, about to share a code.
-                Padding(
-                  padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
-                  child: Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: Text('Recipes', style: context.text.recipeTitle),
-                      ),
-                      // Only when there is something to sweep. A button that
-                      // can only ever say "nothing to do" is a button that
-                      // teaches people not to press it.
-                      if (sweepable)
-                        IconButton(
-                          icon: const Icon(Icons.push_pin_outlined),
-                          tooltip: 'Apply defaults to unmatched ingredients',
-                          onPressed: () => context.push('/recipe/defaults'),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
+                    child: Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            'Recipes',
+                            style: context.text.recipeTitle,
+                          ),
                         ),
-                      // The household lives behind the library rather than in a
-                      // settings pillar of its own: it is a thing you set up
-                      // once and then forget (spec §5.1).
-                      IconButton(
-                        icon: const Icon(Icons.people_outline),
-                        tooltip: 'Household',
-                        onPressed: () => context.push('/household'),
-                      ),
-                    ],
+                        // Only when there is something to sweep. A button that
+                        // can only ever say "nothing to do" is a button that
+                        // teaches people not to press it.
+                        if (sweepable)
+                          IconButton(
+                            icon: const Icon(Icons.push_pin_outlined),
+                            tooltip: 'Apply defaults to unmatched ingredients',
+                            onPressed: () => context.push('/recipe/defaults'),
+                          ),
+                        // The household lives behind the library rather than in a
+                        // settings pillar of its own: it is a thing you set up
+                        // once and then forget (spec §5.1).
+                        IconButton(
+                          icon: const Icon(Icons.people_outline),
+                          tooltip: 'Household',
+                          onPressed: () => context.push('/household'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: HearthSpacing.md),
-                if (hasLibrary) ...<Widget>[
-                  RecipeFilterBar(gutter: gutter),
-                  const SizedBox(height: HearthSpacing.md),
-                ],
-                Expanded(
-                  child: recipes.isEmpty
-                      ? _EmptyLibrary(gutter: gutter)
-                      : (shown.value ?? const <Recipe>[]).isEmpty
-                      ? _NoMatches(
-                          gutter: gutter,
-                          filter: filter,
-                          onClear: () => ref
-                              .read(recipeFilterProvider.notifier)
-                              .clearAll(),
-                        )
-                      : _RecipeList(
-                          recipes: shown.value ?? const <Recipe>[],
-                          gutter: gutter,
-                        ),
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: HearthSpacing.md),
                 ),
+                if (hasLibrary) ...<Widget>[
+                  SliverToBoxAdapter(child: RecipeFilterBar(gutter: gutter)),
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: HearthSpacing.md),
+                  ),
+                ],
+                if (recipes.isEmpty)
+                  // Filling what is left, so a centred message stays centred
+                  // on a tall screen and grows past it when it must.
+                  //
+                  // `hasScrollBody: false` asks the child for an intrinsic
+                  // height, which a LayoutBuilder cannot answer — so the
+                  // message is told not to scroll, and answers. With a scroll
+                  // body instead, this sliver claims a whole viewport of
+                  // scroll extent regardless of the chrome above it, and the
+                  // empty states gain dead scroll they never had.
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _EmptyLibrary(gutter: gutter),
+                  )
+                else if ((shown.value ?? const <Recipe>[]).isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _NoMatches(
+                      gutter: gutter,
+                      filter: filter,
+                      onClear: () =>
+                          ref.read(recipeFilterProvider.notifier).clearAll(),
+                    ),
+                  )
+                else
+                  _RecipeSliver(
+                    recipes: shown.value ?? const <Recipe>[],
+                    gutter: gutter,
+                  ),
               ],
             );
           },
@@ -188,6 +217,9 @@ class _NoMatches extends StatelessWidget {
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     return CentredMessage(
+      // Inside a SliverFillRemaining that sizes itself from this, so it
+      // must not claim to scroll: see the sliver below.
+      scrollable: false,
       gutter: gutter,
       children: <Widget>[
         Text(
@@ -229,24 +261,28 @@ class _NoMatches extends StatelessWidget {
   }
 }
 
-class _RecipeList extends StatelessWidget {
-  const _RecipeList({required this.recipes, required this.gutter});
+/// The list, as a sliver so it shares one scroll view with the chrome above
+/// it (see the comment on that scroll view).
+class _RecipeSliver extends StatelessWidget {
+  const _RecipeSliver({required this.recipes, required this.gutter});
 
   final List<Recipe> recipes;
   final double gutter;
 
   @override
-  Widget build(BuildContext context) => ListView.separated(
+  Widget build(BuildContext context) => SliverPadding(
     padding: EdgeInsets.fromLTRB(gutter, 0, gutter, gutter + 72),
-    itemCount: recipes.length,
-    separatorBuilder: (BuildContext context, int index) =>
-        const SizedBox(height: HearthSpacing.md),
-    itemBuilder: (BuildContext context, int index) => _DeletableRecipe(
-      // Keyed by recipe, not by position. Without this the element at an index
-      // is reused when the list shifts, so deleting a recipe handed its
-      // swiped-open state straight to whatever moved up into its place.
-      key: ValueKey<String>(recipes[index].id),
-      recipe: recipes[index],
+    sliver: SliverList.separated(
+      itemCount: recipes.length,
+      separatorBuilder: (BuildContext context, int index) =>
+          const SizedBox(height: HearthSpacing.md),
+      itemBuilder: (BuildContext context, int index) => _DeletableRecipe(
+        // Keyed by recipe, not by position. Without this the element at an
+        // index is reused when the list shifts, so deleting a recipe handed
+        // its swiped-open state straight to whatever moved up into its place.
+        key: ValueKey<String>(recipes[index].id),
+        recipe: recipes[index],
+      ),
     ),
   );
 }
@@ -452,6 +488,9 @@ class _EmptyLibrary extends StatelessWidget {
     final HearthTextStyles text = context.text;
 
     return CentredMessage(
+      // Inside a SliverFillRemaining that sizes itself from this, so it
+      // must not claim to scroll: see the sliver below.
+      scrollable: false,
       gutter: gutter,
       children: <Widget>[
         Text(

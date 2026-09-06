@@ -420,9 +420,18 @@ class _EntryRow extends ConsumerWidget {
     final _EntryAction? choice = await showModalBottomSheet<_EntryAction>(
       context: context,
       backgroundColor: context.colors.surface,
+      // Scrollable, and constrained to most of the screen rather than all of
+      // it. At three times the text on a small phone this sheet is 545 points
+      // taller than the screen, and both of the things it exists to offer are
+      // off the bottom — so a long-pressed meal cannot be edited or removed
+      // at all (spec §6.3).
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+      ),
       builder: (BuildContext context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: ListView(
+          shrinkWrap: true,
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.all(HearthSpacing.lg),
