@@ -85,6 +85,6 @@ class FoodProfileRepository {
     'preferred_meal_types': profile.preferredMealTypes,
     'calories_per_meal_target': profile.caloriesPerMeal,
     'protein_target_g': profile.proteinPerMealG,
-    'updated_at': updatedAt.toIso8601String(),
+    'updated_at': updatedAt.toUtc().toIso8601String(),
   };
 }

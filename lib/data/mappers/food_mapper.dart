@@ -161,7 +161,7 @@ abstract final class FoodMapper {
     'is_zero_calorie': food.isZeroCalorie,
     'is_modifier': food.isModifier,
     'is_deleted': food.isDeleted,
-    'updated_at': updatedAt.toIso8601String(),
+    'updated_at': updatedAt.toUtc().toIso8601String(),
     'serving_options': <Map<String, Object?>>[
       for (int i = 0; i < food.servingOptions.length; i++)
         <String, Object?>{

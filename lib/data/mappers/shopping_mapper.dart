@@ -16,7 +16,7 @@ abstract final class ShoppingMapper {
         'from_date': _dateOnly(list.fromDate),
         'to_date': _dateOnly(list.toDate),
         'status': list.status,
-        'updated_at': list.updatedAt.toIso8601String(),
+        'updated_at': list.updatedAt.toUtc().toIso8601String(),
       };
 
   static Map<String, Object?> itemToJson(ShoppingItemRow item) =>
@@ -42,7 +42,7 @@ abstract final class ShoppingMapper {
         'sort_order': item.sortOrder,
         'source_recipe_ids': sourceIdsToList(item.sourceRecipeIds),
         'planned_rest': plannedRestToJson(item.plannedRest),
-        'updated_at': item.updatedAt.toIso8601String(),
+        'updated_at': item.updatedAt.toUtc().toIso8601String(),
       };
 
   /// The joined local string as the `uuid[]` the server column expects.
