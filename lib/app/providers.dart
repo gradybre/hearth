@@ -748,15 +748,47 @@ daySummaryExpandedProvider = AsyncNotifierProvider<DaySummaryExpanded, bool>(
   DaySummaryExpanded.new,
 );
 
+/// The summary layout already read off the device before the first frame, by
+/// `bootstrap`.
+///
+/// Null in anything that did not come through `main` — widget tests, mostly —
+/// where the notifier reads it itself and the first frame or two follow the
+/// device instead.
+final Provider<bool?> bootDaySummaryExpandedProvider = Provider<bool?>(
+  (Ref ref) => null,
+);
+
 class DaySummaryExpanded extends AsyncNotifier<bool> {
   PreferenceStore get _store => ref.read(preferenceStoreProvider);
 
   @override
-  FutureOr<bool> build() => _store.readFlag(PreferenceStore.daySummaryExpanded);
+  FutureOr<bool> build() {
+    // Synchronously when the app came through main(). A value that arrives a
+    // frame later is about 170 points of layout jumping under the thumb of
+    // somebody who opened the app to log a meal.
+    final bool? atLaunch = ref.read(bootDaySummaryExpandedProvider);
+    if (atLaunch != null) return atLaunch;
+    return _store.readFlag(PreferenceStore.daySummaryExpanded);
+  }
 
+  /// Changes the layout, and rethrows if the change could not be stored.
+  ///
+  /// Taken back on failure rather than left optimistic — the same reasoning
+  /// as the theme two providers up: a write that failed and was never undone
+  /// leaves the card expanded now and compact at the next launch, with
+  /// nothing ever said about why.
   Future<void> set({required bool expanded}) async {
+    final AsyncValue<bool> previous = state;
     state = AsyncValue<bool>.data(expanded);
-    await _store.writeFlag(PreferenceStore.daySummaryExpanded, value: expanded);
+    try {
+      await _store.writeFlag(
+        PreferenceStore.daySummaryExpanded,
+        value: expanded,
+      );
+    } on Object {
+      state = previous;
+      rethrow;
+    }
   }
 }
 

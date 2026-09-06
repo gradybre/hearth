@@ -29,6 +29,11 @@ Future<void> main() async {
         // a value that arrived late would show the home screen and then
         // replace it, which is a flash nobody could mistake for anything else.
         bootLaunchTargetProvider.overrideWithValue(boot.launchTarget),
+        // And how much of the day's summary to show, for the same reason at
+        // a smaller scale (spec §5.6).
+        bootDaySummaryExpandedProvider.overrideWithValue(
+          boot.daySummaryExpanded,
+        ),
       ],
       child: const HearthApp(),
     ),

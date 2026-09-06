@@ -1,5 +1,8 @@
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/app/providers.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/data/local/preference_store.dart';
 import 'package:hearth/domain/models/food.dart';
@@ -140,6 +143,91 @@ void main() {
     await pumpFrames(tester, frames: 12);
 
     expect(find.text('Details'), findsOneWidget);
+  });
+
+  test('a stored choice is read back, not just written', () async {
+    // The write had a test and the read did not, so replacing `build` with a
+    // bare `false` — the preference stored and then permanently ignored —
+    // left every test in this file green.
+    final HearthDatabase db = HearthDatabase.forTesting(
+      NativeDatabase.memory(),
+    );
+    addTearDown(db.close);
+    await PreferenceStore(db)
+        .writeFlag(PreferenceStore.daySummaryExpanded, value: true);
+
+    final ProviderContainer container = ProviderContainer(
+      overrides: [databaseProvider.overrideWithValue(db)],
+    );
+    addTearDown(container.dispose);
+
+    expect(await container.read(daySummaryExpandedProvider.future), isTrue);
+  });
+
+  testWidgets('a partial total is marked as a floor, not printed bare', (
+    WidgetTester tester,
+  ) async {
+    // The defect §5.6 exists to prevent, in the view everyone now sees by
+    // default: a running total that does not account for everything eaten
+    // reads exactly like one that does.
+    await pumpHearthApp(
+      tester,
+      foods: <Food>[
+        aFood(
+          'Oats',
+          id: 'f-oats',
+          servingOptions: <ServingOption>[
+            aServing(
+              amount: 100,
+              unit: Units.gram,
+              macros: const Macros(kcal: 200, fiberG: 14),
+            ),
+          ],
+        ),
+        aFood(
+          'Milk',
+          id: 'f-milk',
+          servingOptions: <ServingOption>[
+            aServing(
+              amount: 100,
+              unit: Units.gram,
+              macros: const Macros(kcal: 60),
+            ),
+          ],
+        ),
+      ],
+      entries: <MealPlanEntry>[
+        for (final ({String id, Macros macros}) part
+            in <({String id, Macros macros})>[
+              (id: 'f-oats', macros: const Macros(kcal: 200, fiberG: 14)),
+              (id: 'f-milk', macros: const Macros(kcal: 60)),
+            ])
+          MealPlanEntry(
+            id: 'e-${part.id}',
+            dayId: 'day-1',
+            slot: MealSlot.breakfast,
+            refType: PlanRefType.food,
+            refId: part.id,
+            servings: 1,
+          ).log(
+            liveMacros: part.macros,
+            at: DateTime.utc(2026, 9, 7, 8),
+            label: part.id,
+            coverage: NutrientCoverage.ofOne(part.macros),
+          ),
+      ],
+      targets: targets,
+    );
+    await tester.tap(find.text('Plan').last);
+    await pumpFrames(tester, frames: 12);
+
+    expect(
+      find.text('Fibre ≥14/28g'),
+      findsOneWidget,
+      reason:
+          'a floor printed bare reads exactly like a complete total, which '
+          'is the whole thing this column is for',
+    );
   });
 
   testWidgets('and the choice is remembered on this device', (

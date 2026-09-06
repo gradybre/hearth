@@ -187,6 +187,29 @@ void main() {
         expectSurvived(tester, 'the end of the targets sheet at $at');
       });
 
+      testWidgets('the expanded summary survives $at', (
+        WidgetTester tester,
+      ) async {
+        // The rings and slim bars are behind Details now (U01), and behind a
+        // tap is where a sweep stops looking: they were still shipped, still
+        // reachable, and swept at no size or theme at all.
+        await open(tester, size: device.size, scale: scale);
+        await tester.tap(find.text('Plan').last);
+        await pumpFrames(tester, frames: 12);
+
+        await reach(tester, find.text('Details'));
+        expect(
+          find.text('Less'),
+          findsOneWidget,
+          reason: 'the summary never expanded at $at',
+        );
+        expectSurvived(tester, 'the expanded summary at $at');
+
+        // And its far end, for the same reason the targets sheet needs it.
+        await bring(tester, find.text('Cholesterol'));
+        expectSurvived(tester, 'the end of the expanded summary at $at');
+      });
+
       testWidgets('a meal\'s own options survive $at', (
         WidgetTester tester,
       ) async {

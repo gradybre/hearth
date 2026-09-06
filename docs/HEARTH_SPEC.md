@@ -233,10 +233,13 @@ belongs to the Nutrition section.
 - **Meal slots:** breakfast, lunch, dinner, snack.
 - **The day opens on its meals, not on a picture of them.** The summary is
   compact by default — calories against the target with what is left or over,
-  the three macros, and all three minor nutrients including the ones nothing
-  has stated, which read as a dash. The rings and slim bars are one tap away
-  behind *Details*, and the choice is remembered on the device the way the
-  theme is. With the rings shown, the first logged meal sits 855 points down
+  the three macros, and all three minor nutrients. It keeps the distinctions
+  the bars make, because they are the point: a dash where nothing has stated
+  a value, and a "≥" where the total is a floor rather than a figure. A
+  partial total printed bare reads exactly like a complete one, which is the
+  defect this column exists to prevent. The rings and slim bars are one tap
+  away behind *Details*, and the choice is read off the device before the
+  first frame the way the theme and the launch screen are. With the rings shown, the first logged meal sits 855 points down
   an 844-point screen at ordinary text: on screen only in the sense that its
   heading is, with everything the heading labels below the fold.
 - Add individual foods or recipes (recipe added as N servings) to any slot on any day.
