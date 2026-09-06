@@ -138,7 +138,17 @@ class SupabaseRemoteGateway implements RemoteGateway {
     // somewhere to record it. The filter is built the same way either way, so
     // a missing key is still refused rather than matching every row.
     PostgrestFilterBuilder<void> query = softDeleteTables.contains(table)
-        ? _client.from(table).update(<String, Object?>{'is_deleted': true})
+        ? _client.from(table).update(<String, Object?>{
+            'is_deleted': true,
+            // The writer's own clock travels with the deletion. The server
+            // records it as `deleted_at`, and an upsert may only clear the
+            // flag with a write made after that — which is how an edit left
+            // unsent in an outbox stops undoing a deliberate deletion
+            // (spec §7.1). Omitted only by a payload from an older build,
+            // and the trigger falls back rather than refusing the write.
+            if (payload['updated_at'] != null)
+              'updated_at': payload['updated_at'],
+          })
         : _client.from(table).delete();
     for (final String key in keys) {
       final Object? value = payload[key] ?? (key == 'id' ? entityId : null);

@@ -365,6 +365,15 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
   membership tables (`recipe_favorites`, `recipe_collections`) are the
   deliberate exception: they are fetched whole and reconciled by replacement
   every pass, so absence there already reads correctly as removal.
+- **A deletion is not undone by a write that predates it.** An edit made
+  before the household deleted a row, and still sitting unsent in an outbox,
+  must not bring the row back when it finally sends. The deletion records the
+  deleting writer's own stated time, and only a write made after that may
+  clear the flag — so an Undo always works, including from the device that did
+  the deleting, while a stale replay does not. The comparison is deliberately
+  between two writers' clocks rather than a writer's and the server's: the
+  stored `updated_at` is set server-side, and comparing across the two would
+  mean a phone a couple of seconds slow could not undo its own deletion.
 - **A checkpoint belongs to an account, not to a device.** Each table's pull
   remembers how far it has read, and that marker is keyed by user *and*
   household and carries a version. Two accounts on one phone is the case this

@@ -1188,13 +1188,21 @@ begin
   -- therefore revive the row rather than be refused.
   insert into public.ingredient_matches (household_id, ingredient_string)
     values (v_house, 'olive oil');
-  update public.ingredient_matches set is_deleted = true
+  -- Stating the time, as every real write does: the tombstone records the
+  -- deleting writer's clock, and only a later write may clear it.
+  update public.ingredient_matches
+    set is_deleted = true, updated_at = timestamptz '2026-09-14 12:00:00Z'
     where household_id = v_house and ingredient_string = 'olive oil';
 
-  insert into public.ingredient_matches (household_id, ingredient_string, is_deleted)
-    values (v_house, 'olive oil', false)
+  insert into public.ingredient_matches (
+    household_id, ingredient_string, is_deleted, updated_at
+  )
+    values (
+      v_house, 'olive oil', false, timestamptz '2026-09-14 12:00:01Z'
+    )
     on conflict (household_id, ingredient_string) do update
-      set is_deleted = excluded.is_deleted;
+      set is_deleted = excluded.is_deleted,
+          updated_at = excluded.updated_at;
 
   select is_deleted into v_deleted from public.ingredient_matches
     where household_id = v_house and ingredient_string = 'olive oil';
@@ -1206,5 +1214,126 @@ begin
   -- guards in this file leave theirs. This runs against a reset database.
   delete from public.households where id = v_house;
   raise notice 'soft delete guards passed';
+end;
+$$;
+
+-- ── A deletion is not undone by a write that predates it (spec §7.1) ───────
+--
+-- Every soft-deleting table had the same hole, and recipes and foods have had
+-- it since they were built: an edit sitting unsent in one phone's outbox
+-- clears the flag on a row the other phone deleted. The rule is one trigger
+-- across all seven, so it is checked across all seven here.
+--
+-- Both directions matter equally. A guard that only refused would be a guard
+-- that broke Undo, and Undo is the commoner action by a wide margin.
+do $$
+declare
+  v_table text;
+  v_owner uuid := gen_random_uuid();
+  v_house uuid := gen_random_uuid();
+  v_list uuid;
+  v_id uuid;
+  v_deleted boolean;
+  v_at timestamptz;
+  v_missing text[] := '{}';
+begin
+  -- Every soft-deleting table carries the rule. A table that gained
+  -- `is_deleted` without it would be the one that still resurrects.
+  foreach v_table in array array[
+    'recipes', 'foods', 'meal_plan_entries', 'shopping_list_items',
+    'collections', 'plan_templates', 'ingredient_matches'
+  ] loop
+    if not exists (
+      select 1 from pg_trigger t
+      join pg_class c on c.oid = t.tgrelid
+      where not t.tgisinternal
+        and c.relname = v_table
+        and t.tgname = v_table || '_refuse_resurrection'
+    ) then
+      v_missing := v_missing || v_table;
+    end if;
+
+    -- And somewhere to record whose clock said so.
+    if not exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = v_table
+        and column_name = 'deleted_at'
+    ) then
+      v_missing := v_missing || (v_table || '.deleted_at');
+    end if;
+  end loop;
+
+  if array_length(v_missing, 1) is not null then
+    raise exception 'these can still be resurrected: %',
+      array_to_string(v_missing, ', ');
+  end if;
+
+  -- The rule itself, on one real table.
+  insert into auth.users (
+    id, instance_id, aud, role, email, encrypted_password,
+    email_confirmed_at, created_at, updated_at
+  )
+  values (
+    v_owner, '00000000-0000-0000-0000-000000000000', 'authenticated',
+    'authenticated', v_owner || '@resurrection-guard.test', 'x',
+    now(), now(), now()
+  );
+  insert into public.households (id, name, owner_id)
+  values (v_house, 'Resurrection guard', v_owner);
+  insert into public.shopping_lists (household_id, from_date, to_date)
+    values (v_house, current_date, current_date + 6) returning id into v_list;
+
+  insert into public.shopping_list_items (shopping_list_id, item_key, raw_name)
+    values (v_list, 'milk', 'Milk') returning id into v_id;
+
+  -- One phone deletes it, stating its own clock.
+  update public.shopping_list_items
+    set is_deleted = true, updated_at = timestamptz '2026-09-14 12:00:00Z'
+    where id = v_id;
+
+  select deleted_at into v_at from public.shopping_list_items where id = v_id;
+  if v_at is distinct from timestamptz '2026-09-14 12:00:00Z' then
+    raise exception 'the tombstone did not record the writer''s time: %', v_at;
+  end if;
+
+  -- The other phone pushes an edit it made *before* that. It must not undo it.
+  update public.shopping_list_items
+    set is_deleted = false, raw_name = 'Whole milk',
+        updated_at = timestamptz '2026-09-14 11:59:00Z'
+    where id = v_id;
+
+  select is_deleted into v_deleted
+    from public.shopping_list_items where id = v_id;
+  if not v_deleted then
+    raise exception 'a write from before the deletion undid it';
+  end if;
+
+  -- Undo, made after the deletion, must still work — including from the very
+  -- device that deleted it, one second later.
+  update public.shopping_list_items
+    set is_deleted = false, updated_at = timestamptz '2026-09-14 12:00:01Z'
+    where id = v_id;
+
+  select is_deleted, deleted_at into v_deleted, v_at
+    from public.shopping_list_items where id = v_id;
+  if v_deleted then
+    raise exception 'Undo could not bring the line back';
+  end if;
+  if v_at is not null then
+    raise exception 'a live row is still carrying a deletion time: %', v_at;
+  end if;
+
+  -- And it can be deleted again afterwards, rather than being stuck alive.
+  update public.shopping_list_items
+    set is_deleted = true, updated_at = timestamptz '2026-09-14 12:00:02Z'
+    where id = v_id;
+  select is_deleted into v_deleted
+    from public.shopping_list_items where id = v_id;
+  if not v_deleted then
+    raise exception 'the line could not be deleted a second time';
+  end if;
+
+  delete from public.households where id = v_house;
+  raise notice 'resurrection guards passed';
 end;
 $$;

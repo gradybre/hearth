@@ -92,6 +92,10 @@ class IngredientMatchRepository {
         operation: WriteOperation.delete,
         payload: <String, Object?>{
           'id': IngredientMatchStore.idFor(_householdId, key),
+          // Stated, not left to the server: the tombstone records the deleting
+          // writer's own clock, so an Undo from this same device is always
+          // newer than the deletion it undoes (spec §7.1).
+          'updated_at': at.toUtc().toIso8601String(),
         },
         queuedAt: at,
       );
