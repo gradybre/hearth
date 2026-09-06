@@ -3,6 +3,7 @@ import 'package:meta/meta.dart';
 import '../models/food.dart';
 import '../models/macros.dart';
 import '../models/recipe.dart';
+import '../planning/nutrient_coverage.dart';
 import '../units/quantity.dart';
 import '../units/unit_converter.dart';
 
@@ -128,6 +129,49 @@ class RecipeMacros {
   int unknownCountFor(MinorNutrient nutrient) => ingredients
       .where((IngredientMacros i) => i.isResolved && !i.macros.knows(nutrient))
       .length;
+
+  /// How much of this recipe's total each minor nutrient speaks for.
+  ///
+  /// Only the ingredients that actually *counted* are asked. One excluded as
+  /// optional, or marked as a seasoning, is no more a gap in the fibre total
+  /// than it is in the calories — it was never going to contribute, so its
+  /// silence is not a hole in what the rest add up to.
+  ///
+  /// This is what survives being logged. [partialNoteFor] says the same thing
+  /// in words for the recipe page; this says it in a form a frozen snapshot
+  /// can carry, because once a meal is eaten the ingredients are no longer
+  /// reachable and the qualification cannot be recomputed (spec §4).
+  NutrientCoverage get coverage {
+    // A data gap contributes nothing to the total *because* it is a hole —
+    // an unmatched food, a line with no amount, a unit nothing can convert.
+    // On the recipe page that is safe, because `incompleteReason` sits beside
+    // the number saying so; frozen into a snapshot it is not, because the
+    // reason does not travel. So a gap makes every nutrient partial rather
+    // than being quietly excused.
+    final bool anyGap = ingredients.any((IngredientMacros i) => i.isDataGap);
+
+    final List<NutrientCoverage> counted = <NutrientCoverage>[
+      for (final IngredientMacros i in ingredients)
+        // The two deliberate exclusions really are excused: salt to taste and
+        // a line marked as needing no food were never going to contribute, so
+        // their silence is not a hole in what the rest add up to.
+        if (i.isResolved) NutrientCoverage.ofOne(i.macros),
+      if (anyGap) const NutrientCoverage.someUnknown(),
+    ];
+
+    if (counted.isEmpty) {
+      // A recipe of nothing but salt to taste contributes no nutrition at
+      // all, so nothing about it is missing — it is vacuously covered, and
+      // calling it unknown would drag an otherwise complete day to "partial"
+      // on account of an entry that added nothing.
+      if (!anyGap) return const NutrientCoverage.allComplete();
+      // Everything asked, nothing known — not "nobody wrote it down". A
+      // wholly unmatched recipe is a real answer about a real meal, and
+      // `notRecorded` would absorb every other meal in the day.
+      return const NutrientCoverage.allUnknown();
+    }
+    return NutrientCoverage.sum(counted);
+  }
 
   /// One phrase saying a [nutrient] total is only part of the story, or null
   /// when every counted ingredient knew it.

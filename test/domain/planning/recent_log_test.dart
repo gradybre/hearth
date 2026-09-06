@@ -1,5 +1,6 @@
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/nutrient_coverage.dart';
 import 'package:hearth/domain/planning/recent_log.dart';
 import 'package:test/test.dart';
 
@@ -23,6 +24,7 @@ MealPlanEntry logged({
       liveMacros: Macros(kcal: kcal),
       at: at,
       label: label,
+      coverage: const NutrientCoverage.notRecorded(),
     );
 
 MealPlanEntry planned({required String id, required String refId}) =>

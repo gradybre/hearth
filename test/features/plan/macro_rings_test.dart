@@ -3,6 +3,7 @@ import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/nutrient_coverage.dart';
 import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/app_harness.dart';
@@ -100,6 +101,7 @@ void main() {
         liveMacros: Macros(kcal: kcal, proteinG: proteinG),
         at: DateTime.now(),
         label: 'Roast chicken',
+        coverage: const NutrientCoverage.notRecorded(),
       ),
     ],
   );

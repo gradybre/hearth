@@ -2,6 +2,7 @@ import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/nutrient_coverage.dart';
 import 'package:hearth/domain/units/unit.dart';
 import 'package:hearth/features/plan/entry_resolver.dart';
 import 'package:test/test.dart';
@@ -62,6 +63,7 @@ void main() {
       liveMacros: snapshotMacros ?? const Macros(kcal: 400),
       at: loggedAt,
       label: label,
+      coverage: const NutrientCoverage.notRecorded(),
     );
   }
 
@@ -162,6 +164,7 @@ void main() {
           liveMacros: const Macros(kcal: 165, proteinG: 31),
           at: loggedAt,
           label: 'Chicken breast',
+          coverage: const NutrientCoverage.notRecorded(),
         ),
         const MealPlanEntry(
           id: 'b',

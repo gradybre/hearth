@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../domain/models/macros.dart';
 import '../../domain/planning/day_progress.dart';
+import '../../domain/planning/nutrient_coverage.dart';
 import '../a11y/accessibility.dart';
 import '../theme/hearth_colors.dart';
 import '../theme/hearth_spacing.dart';
@@ -111,18 +112,36 @@ class _Bar extends StatelessWidget {
     // from everything eaten or from one food out of six, and only one of
     // those is worth trusting. The denominator is there because "2 did not
     // say" reads very differently against three foods and against nine.
-    final String? coverage;
+    // Two different questions, so two clauses rather than a chain. How many
+    // meals said nothing at all, and whether what the rest said covers
+    // everything in them. A day can be both — one meal silent and another
+    // missing an ingredient's worth — and "1 of 2 did not say" on its own
+    // implies the other fully did (spec §5.6).
+    String? coverage;
     if (nutrient.countedParts == 0) {
       coverage = 'nothing logged yet';
     } else if (!nutrient.isKnown) {
       coverage = nutrient.countedParts == 1
           ? 'the one thing logged did not say'
           : 'none of the ${nutrient.countedParts} things logged said';
-    } else if (nutrient.unknownCount > 0) {
-      coverage =
-          '${nutrient.unknownCount} of ${nutrient.countedParts} did not say';
     } else {
-      coverage = null;
+      final String? silent = nutrient.unknownCount > 0
+          ? '${nutrient.unknownCount} of ${nutrient.countedParts} did not say'
+          : null;
+      // "At least", never a bare total. A real number that does not account
+      // for everything eaten is a floor, and saying so is the whole feature.
+      final String? floor = switch (nutrient.coverage) {
+        MinorCoverage.partial => 'at least this, not a full count',
+        // Frozen before coverage was recorded. As loud as partial on purpose:
+        // an absorbing state that absorbs into silence would make a mixed day
+        // quieter than one with no coverage at all.
+        MinorCoverage.notRecorded =>
+          'some of this was logged before Hearth '
+              'tracked how complete it was',
+        MinorCoverage.complete || MinorCoverage.unknown => null,
+      };
+      coverage = <String>[?silent, ?floor].join(', ');
+      coverage = coverage.isEmpty ? null : coverage;
     }
 
     return Semantics(

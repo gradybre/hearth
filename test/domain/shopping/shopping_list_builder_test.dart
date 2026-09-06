@@ -3,6 +3,7 @@ import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/nutrient_coverage.dart';
 import 'package:hearth/domain/shopping/shopping_line.dart';
 import 'package:hearth/domain/shopping/shopping_list_builder.dart';
 import 'package:hearth/domain/units/unit.dart';
@@ -84,6 +85,7 @@ void main() {
             liveMacros: const Macros(kcal: 500),
             at: DateTime(2026, 9, 8),
             label: 'eaten',
+            coverage: const NutrientCoverage.notRecorded(),
           )
         : base;
   }

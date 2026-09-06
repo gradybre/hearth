@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
+import '../../domain/planning/nutrient_coverage.dart';
 import '../local/hearth_database.dart';
 
 /// Maps plan entries, snapshots, and targets between domain and rows.
@@ -25,8 +26,28 @@ abstract final class PlanMapper {
   static PlanRefType refTypeFromSql(String value) =>
       value == 'recipe' ? PlanRefType.recipe : PlanRefType.food;
 
+  /// Keys this version writes. Anything else found on the way in is carried
+  /// in `unreadFields` and written back untouched, so a local edit cannot
+  /// delete a newer client's record of a frozen meal.
+  static const Set<String> _snapshotKeys = <String>{
+    'kcal',
+    'protein_g',
+    'carb_g',
+    'fat_g',
+    'fiber_g',
+    'sodium_mg',
+    'cholesterol_mg',
+    'coverage',
+    'servings',
+    'captured_at',
+    'label',
+  };
+
   static Map<String, Object?> snapshotToJson(MacroSnapshot snapshot) =>
       <String, Object?>{
+        // First, so a key this version does understand always wins over a
+        // stale copy of itself.
+        ...snapshot.unreadFields,
         'kcal': snapshot.macros.kcal,
         'protein_g': snapshot.macros.proteinG,
         'carb_g': snapshot.macros.carbG,
@@ -39,6 +60,11 @@ abstract final class PlanMapper {
         'fiber_g': snapshot.macros.fiberG,
         'sodium_mg': snapshot.macros.sodiumMg,
         'cholesterol_mg': snapshot.macros.cholesterolMg,
+        // How much of those numbers the minor three actually speak for
+        // (spec §5.6). Written alongside them rather than derived later,
+        // because once a meal is eaten its ingredients are gone and a partial
+        // total can never be re-qualified.
+        'coverage': snapshot.coverage.toJson(),
         'servings': snapshot.servings,
         'captured_at': snapshot.capturedAt.toIso8601String(),
         'label': snapshot.label,
@@ -67,6 +93,14 @@ abstract final class PlanMapper {
         sodiumMg: _nullableDouble(decoded['sodium_mg']),
         cholesterolMg: _nullableDouble(decoded['cholesterol_mg']),
       ),
+      // Absent, malformed, or written by a newer version than this reader
+      // understands all read as "not recorded" — never as complete. A
+      // snapshot frozen before coverage existed cannot earn it retroactively.
+      coverage: NutrientCoverage.fromJson(decoded['coverage']),
+      unreadFields: <String, Object?>{
+        for (final MapEntry<String, Object?> field in decoded.entries)
+          if (!_snapshotKeys.contains(field.key)) field.key: field.value,
+      },
       servings: _double(decoded['servings']),
       capturedAt:
           DateTime.tryParse(decoded['captured_at']?.toString() ?? '') ??

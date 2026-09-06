@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
+import '../../domain/planning/nutrient_coverage.dart';
 import '../../domain/planning/recent_log.dart';
 import '../../domain/planning/week.dart';
 import '../../domain/planning/week_template.dart';
@@ -89,6 +90,7 @@ class PlanRepository {
     required DateTime date,
     required MealSlot slot,
     required Macros liveMacros,
+    NutrientCoverage? liveCoverage,
     double? portion,
   }) => add(
     date: date,
@@ -96,6 +98,7 @@ class PlanRepository {
     refType: recent.refType,
     refId: recent.refId,
     servings: portion ?? recent.servings,
+    loggedCoverage: liveCoverage,
     // Macros are recomputed from the current library rather than copied from
     // the old snapshot: repeating a meal should record what that food is
     // today, not what it was when first logged.
@@ -120,8 +123,17 @@ class PlanRepository {
     required String refId,
     required double servings,
     Macros? loggedMacros,
+    NutrientCoverage? loggedCoverage,
     String? label,
   }) async {
+    assert(
+      loggedCoverage != null ||
+          refType == PlanRefType.food ||
+          loggedMacros == null,
+      'A recipe must state its own coverage: its total is non-null whenever '
+      'any one ingredient knows, so inferring from it claims a completeness '
+      'nothing checked (spec §5.6).',
+    );
     final DateTime now = _now();
 
     return _db.transaction(() async {
@@ -148,6 +160,11 @@ class PlanRepository {
           liveMacros: loggedMacros,
           at: now,
           label: label ?? '',
+          // Falling back to what the numbers themselves imply is right only
+          // for a single food, where a non-null value really does mean the
+          // food stated it. A recipe's caller must pass its own coverage —
+          // see `log`'s note on why the default was the bug (spec §5.6).
+          coverage: loggedCoverage ?? NutrientCoverage.ofOne(loggedMacros),
         );
       }
 
@@ -167,6 +184,10 @@ class PlanRepository {
     required Macros liveMacros,
     required String label,
     double? portion,
+    // Required. Its optional twin on `log` was the whole defect, and leaving
+    // one here put it back one level up: the day screen's one-tap confirm
+    // promptly fell through it and froze "complete" on a partial recipe.
+    required NutrientCoverage liveCoverage,
   }) async {
     final DateTime now = _now();
 
@@ -179,6 +200,7 @@ class PlanRepository {
         at: now,
         label: label,
         portion: portion,
+        coverage: liveCoverage,
       );
       await _store.upsertEntry(logged, updatedAt: now);
       await _queueEntry(logged, now);

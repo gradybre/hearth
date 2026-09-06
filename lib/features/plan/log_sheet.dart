@@ -13,6 +13,7 @@ import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/parsing/amount_parser.dart';
 import '../../domain/planning/meal_plan.dart';
+import '../../domain/planning/nutrient_coverage.dart';
 import '../../domain/planning/recent_log.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import '../foods/external_food_results.dart';
@@ -79,6 +80,25 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     return serving?.macros ?? Macros.zero;
   }
 
+  /// How much of [_perServing]'s minor nutrients those numbers speak for.
+  ///
+  /// Computed beside them rather than inferred from them: a recipe's total is
+  /// non-null whenever *any* ingredient stated the nutrient, so reading it
+  /// back off the sum answers "complete" for a partial recipe (spec §5.6).
+  NutrientCoverage _coverage({
+    required Map<String, Food> foods,
+    required Map<String, Recipe> recipes,
+  }) {
+    if (widget.existing != null) return widget.existing!.liveCoverage;
+    if (_recipe != null) {
+      return MacroCalculator.forRecipe(_recipe!, foods: foods).coverage;
+    }
+    final ServingOption? serving = _food?.defaultServing;
+    return serving == null
+        ? const NutrientCoverage.notRecorded()
+        : NutrientCoverage.ofOne(serving.macros);
+  }
+
   String get _label =>
       widget.existing?.label ?? _recipe?.title ?? _food?.name ?? '';
 
@@ -89,6 +109,10 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     setState(() => _busy = true);
     try {
       final Macros perServing = _perServing(foods: foods, recipes: recipes);
+      final NutrientCoverage coverage = _coverage(
+        foods: foods,
+        recipes: recipes,
+      );
 
       if (_isExisting) {
         await ref
@@ -96,6 +120,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
             .logEntry(
               widget.existing!.entry.id,
               liveMacros: perServing,
+              liveCoverage: coverage,
               label: _label,
               portion: _servings,
             );
@@ -109,6 +134,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
               refId: _recipe?.id ?? _food!.id,
               servings: _servings,
               loggedMacros: perServing,
+              loggedCoverage: coverage,
               label: _label,
             );
       }
@@ -164,6 +190,22 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
         PlanRefType.food =>
           foods[recent.refId]?.defaultServing?.macros ?? Macros.zero,
       };
+      // Beside the numbers, from the same source, for the same reason: a
+      // recipe's coverage lives in its ingredients and cannot be read back
+      // off its total (spec §5.6).
+      final NutrientCoverage coverage = switch (recent.refType) {
+        PlanRefType.recipe =>
+          recipes[recent.refId] == null
+              ? const NutrientCoverage.notRecorded()
+              : MacroCalculator.forRecipe(
+                  recipes[recent.refId]!,
+                  foods: foods,
+                ).coverage,
+        PlanRefType.food => switch (foods[recent.refId]?.defaultServing) {
+          final ServingOption serving => NutrientCoverage.ofOne(serving.macros),
+          null => const NutrientCoverage.notRecorded(),
+        },
+      };
 
       await ref
           .read(planRepositoryProvider)
@@ -172,6 +214,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
             date: widget.date,
             slot: widget.slot,
             liveMacros: perServing,
+            liveCoverage: coverage,
           );
       ref.invalidate(dayEntriesProvider);
       ref.invalidate(recentLogsProvider);

@@ -1,6 +1,8 @@
+import 'package:collection/collection.dart';
 import 'package:meta/meta.dart';
 
 import '../models/macros.dart';
+import 'nutrient_coverage.dart';
 
 /// The four meal slots a day is divided into (spec §5.6).
 enum MealSlot { breakfast, lunch, dinner, snack }
@@ -22,6 +24,8 @@ class MacroSnapshot {
     required this.servings,
     required this.capturedAt,
     required this.label,
+    this.coverage = const NutrientCoverage.notRecorded(),
+    this.unreadFields = const <String, Object?>{},
   });
 
   /// Macros for the portion actually eaten — already multiplied by [servings].
@@ -37,16 +41,58 @@ class MacroSnapshot {
   /// make old history unreadable.
   final String label;
 
+  /// How much of [macros]' minor nutrients the numbers actually speak for
+  /// (spec §5.6).
+  ///
+  /// Frozen with everything else, and for the same reason: once a meal is
+  /// eaten its ingredients are no longer reachable, so a partial total can
+  /// never be re-qualified from today's library. Editing the recipe tomorrow
+  /// must not make yesterday's fibre look complete.
+  ///
+  /// Defaults to [MinorCoverage.notRecorded] so that every snapshot frozen
+  /// before this existed says so, rather than claiming a completeness nothing
+  /// ever checked.
+  final NutrientCoverage coverage;
+
+  /// Keys this version does not understand, carried so it cannot destroy them.
+  ///
+  /// A snapshot is frozen history, and a *newer* client may have written
+  /// fields this one has never heard of. Sync and export pass the stored JSON
+  /// across verbatim, but a local edit — changing a portion, dragging a meal
+  /// to another slot — reads the row into this object and writes it back out.
+  /// Without somewhere to put them, that round trip would silently delete
+  /// another version's record of what was eaten, permanently and for both
+  /// people (§4).
+  ///
+  /// Deliberately opaque: this version does not interpret them, it only
+  /// promises not to lose them.
+  final Map<String, Object?> unreadFields;
+
   @override
   bool operator ==(Object other) =>
       other is MacroSnapshot &&
       other.macros == macros &&
       other.servings == servings &&
+      other.coverage == coverage &&
+      // In the comparison because a round-trip test written as
+      // `roundTrip(x) == x` is the natural way to guard this, and without it
+      // that test passes while the fields are being lost.
+      const MapEquality<String, Object?>().equals(
+        other.unreadFields,
+        unreadFields,
+      ) &&
       other.capturedAt == capturedAt &&
       other.label == label;
 
   @override
-  int get hashCode => Object.hash(macros, servings, capturedAt, label);
+  int get hashCode => Object.hash(
+    macros,
+    servings,
+    coverage,
+    const MapEquality<String, Object?>().hash(unreadFields),
+    capturedAt,
+    label,
+  );
 
   @override
   String toString() => 'MacroSnapshot($label, ${servings}x, $macros)';
@@ -97,6 +143,7 @@ class MealPlanEntry {
     required DateTime at,
     required String label,
     double? portion,
+    required NutrientCoverage coverage,
   }) {
     final double logged = portion ?? servings;
     return MealPlanEntry(
@@ -114,6 +161,22 @@ class MealPlanEntry {
         servings: logged,
         capturedAt: at,
         label: label,
+        // Required, not defaulted. Defaulting to `ofOne(liveMacros)` looked
+        // harmless and was the whole bug wearing a hat: a recipe's summed
+        // total is non-null whenever *any* ingredient stated the nutrient, so
+        // `ofOne` answered "complete" for precisely the partial recipe this
+        // exists to qualify — and froze that claim into history, which is
+        // worse than the absent key it replaced. Making it required means a
+        // caller that has not thought about coverage cannot compile.
+        //
+        // Scaling a portion cannot change what was known: half a recipe whose
+        // fibre was partial is still partial.
+        coverage: coverage,
+        // Carried across a re-log. Editing a portion on an already-logged meal
+        // comes through here, and that is exactly the local edit `unreadFields`
+        // exists to survive — dropping them would delete a newer client's
+        // record of the same meal, for both people (§4).
+        unreadFields: macroSnapshot?.unreadFields ?? const <String, Object?>{},
       ),
     );
   }

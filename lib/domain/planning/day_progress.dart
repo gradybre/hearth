@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../models/macros.dart';
+import 'nutrient_coverage.dart';
 
 /// A day's macro targets, set per week (spec §5.6).
 @immutable
@@ -167,6 +168,7 @@ class MinorProgress {
     required this.state,
     this.unknownCount = 0,
     this.countedParts = 0,
+    this.coverage = MinorCoverage.notRecorded,
   });
 
   final MinorNutrient nutrient;
@@ -196,7 +198,16 @@ class MinorProgress {
   /// one of those is how a row stops being read.
   final int countedParts;
 
+  /// How much of [consumed] this number speaks for (spec §5.6).
+  ///
+  /// [MinorCoverage.partial] is the one worth reading: a total that is real
+  /// but is a floor, because something that contributed never stated it.
+  final MinorCoverage coverage;
+
   bool get isKnown => consumed != null;
+
+  /// True when the number is real but does not account for everything eaten.
+  bool get isPartial => isKnown && coverage == MinorCoverage.partial;
 
   /// What is left. For fibre that is what remains to get; for sodium and
   /// cholesterol it is what remains to spend.
@@ -258,6 +269,7 @@ class DayProgress {
     required this.fat,
     this.unknownCounts = const <MinorNutrient, int>{},
     this.countedParts = 0,
+    this.coverage = const NutrientCoverage.notRecorded(),
   });
 
   /// Builds a day's progress from what's been eaten and the day's targets.
@@ -271,9 +283,11 @@ class DayProgress {
     double tolerance = 0,
     Map<MinorNutrient, int> unknownCounts = const <MinorNutrient, int>{},
     int countedParts = 0,
+    NutrientCoverage coverage = const NutrientCoverage.notRecorded(),
   }) => DayProgress(
     unknownCounts: unknownCounts,
     countedParts: countedParts,
+    coverage: coverage,
     consumed: consumed,
     targets: targets,
     calories: _progress(
@@ -301,19 +315,31 @@ class DayProgress {
     required Iterable<Macros> parts,
     required MacroTargets targets,
     double tolerance = 0,
+    Iterable<NutrientCoverage>? coverage,
   }) {
     final List<Macros> all = parts.toList(growable: false);
+    final List<NutrientCoverage> covers =
+        coverage?.toList(growable: false) ??
+        <NutrientCoverage>[
+          for (final Macros m in all) NutrientCoverage.ofOne(m),
+        ];
+
     return DayProgress.from(
       consumed: Macros.sum(all),
       targets: targets,
       tolerance: tolerance,
       countedParts: all.length,
+      // What each meal *contains* — an entry that said nothing at all.
       unknownCounts: <MinorNutrient, int>{
         for (final MinorNutrient nutrient in MinorNutrient.values)
           nutrient: all
               .where((Macros macros) => !macros.knows(nutrient))
               .length,
       },
+      // And what each meal *covers*, which is the finer question. An entry can
+      // state a fibre total and still be missing an ingredient's worth of it;
+      // counting entries could never see that (R06).
+      coverage: NutrientCoverage.sum(covers),
     );
   }
 
@@ -329,6 +355,13 @@ class DayProgress {
   /// How many things counted towards the day, or zero when it was built from
   /// a total. Distinguishes "nothing logged" from "nothing knew".
   final int countedParts;
+
+  /// How much of the day's minor-nutrient totals those numbers speak for.
+  ///
+  /// Finer than [unknownCounts], which can only see a meal that said nothing
+  /// at all. A recipe missing one ingredient's fibre sums to a real number and
+  /// reads as knowing; only its coverage says the total is a floor.
+  final NutrientCoverage coverage;
 
   final MacroProgress calories;
   final MacroProgress protein;
@@ -368,6 +401,7 @@ class DayProgress {
       state: state,
       unknownCount: unknownCounts[nutrient] ?? 0,
       countedParts: countedParts,
+      coverage: coverage.of(nutrient),
     );
   }
 
