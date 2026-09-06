@@ -16,6 +16,13 @@ Future<void> showMacroTargetsSheet(BuildContext context) =>
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      // Nine tenths rather than all of it, so there is still a scrim to tap
+      // to dismiss. This is not what makes the sheet scroll —
+      // `isScrollControlled` already caps the child at the screen height —
+      // it is only about leaving a way out.
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+      ),
       backgroundColor: Colors.transparent,
       builder: (BuildContext context) => const _MacroTargetsSheet(),
     );
@@ -116,73 +123,82 @@ class _MacroTargetsSheetState extends ConsumerState<_MacroTargetsSheet> {
             top: Radius.circular(HearthRadius.xl),
           ),
         ),
+        // Scrollable: at three times the text this sheet is 462 points taller
+        // than the screen, so Save was off the bottom with no way to reach it
+        // (spec §6.3). `shrinkWrap` keeps the sheet the height of its content
+        // while that fits, so it stays a short sheet at ordinary text rather
+        // than becoming a full-height one.
         child: SafeArea(
-          child: Padding(
+          child: ListView(
+            shrinkWrap: true,
             padding: const EdgeInsets.all(HearthSpacing.lg),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text('Weekly targets', style: context.text.sectionHeader),
-                const SizedBox(height: HearthSpacing.xs),
-                Text(
-                  'Daily targets for this week. You can change them week to '
-                  'week.',
-                  style: context.text.metadata.copyWith(
-                    color: colors.textMuted,
+            children: <Widget>[
+              Text('Weekly targets', style: context.text.sectionHeader),
+              const SizedBox(height: HearthSpacing.xs),
+              Text(
+                'Daily targets for this week. You can change them week to '
+                'week.',
+                style: context.text.metadata.copyWith(color: colors.textMuted),
+              ),
+              const SizedBox(height: HearthSpacing.lg),
+              Row(
+                children: <Widget>[
+                  _TargetField(controller: _kcal, label: 'kcal'),
+                  const SizedBox(width: HearthSpacing.sm),
+                  _TargetField(controller: _protein, label: 'Protein'),
+                  const SizedBox(width: HearthSpacing.sm),
+                  _TargetField(controller: _carbs, label: 'Carbs'),
+                  const SizedBox(width: HearthSpacing.sm),
+                  _TargetField(controller: _fat, label: 'Fat'),
+                ],
+              ),
+              const SizedBox(height: HearthSpacing.lg),
+              Text('Fibre, sodium, cholesterol', style: context.text.body),
+              const SizedBox(height: HearthSpacing.xxs),
+              Text(
+                'Leave blank for the Daily Values — 28 g, 2,300 mg and '
+                '300 mg. Fibre is one to reach; the other two are budgets.',
+                style: context.text.metadata.copyWith(color: colors.textMuted),
+              ),
+              const SizedBox(height: HearthSpacing.sm),
+              // These stay a Row of Expanded fields, which cannot overflow:
+              // each child is given a tight width and the labels wrap inside
+              // it. A LayoutBuilder that stacked them "when they no longer
+              // fit" was solving a problem this row does not have, and its
+              // threshold stacked all four macro fields on every iPhone at
+              // ordinary text.
+              Row(
+                children: <Widget>[
+                  _TargetField(controller: _fibre, label: 'Fibre g'),
+                  const SizedBox(width: HearthSpacing.sm),
+                  _TargetField(controller: _sodium, label: 'Sodium mg'),
+                  const SizedBox(width: HearthSpacing.sm),
+                  _TargetField(controller: _cholesterol, label: 'Chol. mg'),
+                ],
+              ),
+              const SizedBox(height: HearthSpacing.lg),
+              // "Cancel" and "Save targets" side by side are 36 points wider
+              // than the sheet at three times the text, which puts Save off
+              // the right-hand edge. Stacked when they do not fit.
+              OverflowBar(
+                alignment: MainAxisAlignment.end,
+                overflowAlignment: OverflowBarAlignment.end,
+                spacing: HearthSpacing.sm,
+                overflowSpacing: HearthSpacing.sm,
+                children: <Widget>[
+                  TextButton(
+                    onPressed: _saving
+                        ? null
+                        : () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
                   ),
-                ),
-                const SizedBox(height: HearthSpacing.lg),
-                Row(
-                  children: <Widget>[
-                    _TargetField(controller: _kcal, label: 'kcal'),
-                    const SizedBox(width: HearthSpacing.sm),
-                    _TargetField(controller: _protein, label: 'Protein'),
-                    const SizedBox(width: HearthSpacing.sm),
-                    _TargetField(controller: _carbs, label: 'Carbs'),
-                    const SizedBox(width: HearthSpacing.sm),
-                    _TargetField(controller: _fat, label: 'Fat'),
-                  ],
-                ),
-                const SizedBox(height: HearthSpacing.lg),
-                Text('Fibre, sodium, cholesterol', style: context.text.body),
-                const SizedBox(height: HearthSpacing.xxs),
-                Text(
-                  'Leave blank for the Daily Values — 28 g, 2,300 mg and '
-                  '300 mg. Fibre is one to reach; the other two are budgets.',
-                  style: context.text.metadata.copyWith(
-                    color: colors.textMuted,
+                  FilledButton(
+                    onPressed: _saving ? null : _save,
+                    child: Text(_saving ? 'Saving…' : 'Save targets'),
                   ),
-                ),
-                const SizedBox(height: HearthSpacing.sm),
-                Row(
-                  children: <Widget>[
-                    _TargetField(controller: _fibre, label: 'Fibre g'),
-                    const SizedBox(width: HearthSpacing.sm),
-                    _TargetField(controller: _sodium, label: 'Sodium mg'),
-                    const SizedBox(width: HearthSpacing.sm),
-                    _TargetField(controller: _cholesterol, label: 'Chol. mg'),
-                  ],
-                ),
-                const SizedBox(height: HearthSpacing.lg),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: <Widget>[
-                    TextButton(
-                      onPressed: _saving
-                          ? null
-                          : () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                    const SizedBox(width: HearthSpacing.sm),
-                    FilledButton(
-                      onPressed: _saving ? null : _save,
-                      child: Text(_saving ? 'Saving…' : 'Save targets'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
