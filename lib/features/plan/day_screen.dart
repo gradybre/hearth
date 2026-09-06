@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/a11y/accessibility.dart';
 import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
@@ -251,6 +252,8 @@ class _RemainingCard extends ConsumerWidget {
       targets: targets!,
     );
 
+    final bool expanded = ref.watch(daySummaryExpandedProvider).value ?? false;
+
     return _Card(
       onTap: () => showMacroTargetsSheet(context),
       child: Column(
@@ -272,22 +275,146 @@ class _RemainingCard extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: HearthSpacing.md),
-          MacroRings(progress: progress),
-          // Below the rings and quieter than them: these have targets now,
-          // but calories are still meant to be the loudest thing here and a
-          // ring would put the three on a level with the four (spec §5.6).
-          //
-          // Shown whether or not anything has stated a value; the bars say so
-          // themselves. Hiding them was the first design and it made the
-          // feature invisible — most foods in an established library predate
-          // these columns, so "nothing has said" is the ordinary answer, and
-          // an absent row reads as a feature that was never built.
-          const SizedBox(height: HearthSpacing.lg),
-          MinorNutrientBars(progress: progress),
+          if (expanded) ...<Widget>[
+            MacroRings(progress: progress),
+            // Below the rings and quieter than them: these have targets now,
+            // but calories are still meant to be the loudest thing here and a
+            // ring would put the three on a level with the four (spec §5.6).
+            //
+            // Shown whether or not anything has stated a value; the bars say
+            // so themselves. Hiding them was the first design and it made the
+            // feature invisible — most foods in an established library
+            // predate these columns, so "nothing has said" is the ordinary
+            // answer, and an absent row reads as a feature that was never
+            // built.
+            const SizedBox(height: HearthSpacing.lg),
+            MinorNutrientBars(progress: progress),
+          ] else
+            _CompactSummary(progress: progress),
+          const SizedBox(height: HearthSpacing.sm),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () => ref
+                  .read(daySummaryExpandedProvider.notifier)
+                  .set(expanded: !expanded),
+              child: Text(expanded ? 'Less' : 'Details'),
+            ),
+          ),
         ],
       ),
     );
   }
+}
+
+/// The day in four lines, for the top of a screen whose subject is the meals
+/// below it (spec §5.6).
+///
+/// Same numbers, same words, same three minor nutrients — including the ones
+/// nothing has stated, which read as a dash. What it drops is the drawing:
+/// the rings are the better picture of a day and the worse first screen,
+/// because at ordinary text they push the first meal below the fold.
+class _CompactSummary extends StatelessWidget {
+  const _CompactSummary({required this.progress});
+
+  final DayProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final MacroProgress kcal = progress.forKind(MacroKind.calories);
+    final TargetIndicator calories = TargetIndicator.forState(
+      kcal.isOver ? TargetState.over : TargetState.under,
+      amount: kcal.remaining.abs().round().toString(),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        // Calories loudest, as everywhere else.
+        Semantics(
+          label:
+              '${kcal.consumed.round()} of ${kcal.target.round()} calories. '
+              '${calories.semanticLabel}',
+          excludeSemantics: true,
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  '${kcal.consumed.round()} of ${kcal.target.round()} kcal',
+                  style: context.text.body,
+                ),
+              ),
+              // Never colour alone: the word travels with the arrow (§6.3).
+              Icon(
+                calories.icon,
+                size: 16,
+                color: kcal.isOver ? colors.overAccent : colors.textMuted,
+              ),
+              const SizedBox(width: HearthSpacing.xxs),
+              Text(
+                calories.shortLabel,
+                style: context.text.metadata.copyWith(
+                  color: kcal.isOver ? colors.overAccent : colors.textMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: HearthSpacing.xs),
+        _CompactRow(
+          entries: <String>[
+            for (final MacroKind kind in <MacroKind>[
+              MacroKind.protein,
+              MacroKind.carbs,
+              MacroKind.fat,
+            ])
+              _macro(progress.forKind(kind)),
+          ],
+          style: context.text.metadata.copyWith(color: colors.textSecondary),
+        ),
+        const SizedBox(height: HearthSpacing.xxs),
+        _CompactRow(
+          entries: <String>[
+            for (final MinorNutrient nutrient in MinorNutrient.values)
+              _minor(progress.minor(nutrient)),
+          ],
+          style: context.text.metadata.copyWith(color: colors.textMuted),
+        ),
+      ],
+    );
+  }
+
+  static String _macro(MacroProgress macro) =>
+      '${MacroRings.labelFor(macro.kind)} ${macro.consumed.round()}'
+      '/${macro.target.round()}${MacroRings.unitFor(macro.kind)}';
+
+  /// A dash, never a zero: "0" would claim the day had none of it, when the
+  /// truth is that nothing eaten was ever asked (spec §5.6).
+  static String _minor(MinorProgress nutrient) {
+    final String amount = nutrient.isKnown
+        ? nutrient.consumed!.round().toString()
+        : '—';
+    return '${nutrient.nutrient.label} $amount'
+        '/${nutrient.target.round()}${nutrient.nutrient.unit}';
+  }
+}
+
+/// Several short readouts on one line, wrapping rather than overflowing.
+class _CompactRow extends StatelessWidget {
+  const _CompactRow({required this.entries, required this.style});
+
+  final List<String> entries;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: HearthSpacing.md,
+    runSpacing: HearthSpacing.xxs,
+    children: <Widget>[
+      for (final String entry in entries) Text(entry, style: style),
+    ],
+  );
 }
 
 class _SlotSection extends ConsumerWidget {

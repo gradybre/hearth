@@ -41,6 +41,10 @@ class MacroRings extends StatelessWidget {
   };
 
   /// What a target is counted in, when it is not the macro's own word.
+  /// What the macro is called on screen, shared with the compact readout so
+  /// the two cannot drift apart.
+  static String labelFor(MacroKind kind) => _labels[kind]!;
+
   static String unitFor(MacroKind kind) =>
       kind == MacroKind.calories ? 'kcal' : 'g';
 

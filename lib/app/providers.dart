@@ -738,6 +738,28 @@ final Provider<ThemeChoice?> launchThemeChoiceProvider = Provider<ThemeChoice?>(
   (Ref ref) => null,
 );
 
+/// Whether the day's summary is showing its rings and bars (spec §5.6).
+///
+/// Compact by default. The rings are the better picture of a day and the
+/// worse first screen: at ordinary text they push the first meal below the
+/// fold, and the meals are what the day is for.
+final AsyncNotifierProvider<DaySummaryExpanded, bool>
+daySummaryExpandedProvider = AsyncNotifierProvider<DaySummaryExpanded, bool>(
+  DaySummaryExpanded.new,
+);
+
+class DaySummaryExpanded extends AsyncNotifier<bool> {
+  PreferenceStore get _store => ref.read(preferenceStoreProvider);
+
+  @override
+  FutureOr<bool> build() => _store.readFlag(PreferenceStore.daySummaryExpanded);
+
+  Future<void> set({required bool expanded}) async {
+    state = AsyncValue<bool>.data(expanded);
+    await _store.writeFlag(PreferenceStore.daySummaryExpanded, value: expanded);
+  }
+}
+
 class ThemeChoiceNotifier extends AsyncNotifier<ThemeChoice> {
   PreferenceStore get _store => ref.read(preferenceStoreProvider);
 

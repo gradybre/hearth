@@ -47,6 +47,11 @@ void main() {
     );
     await tester.tap(find.text('Plan').last);
     await pumpFrames(tester);
+
+    // The rings are the expanded view now; the day opens compact (U01). This
+    // file is about the rings, so it asks for them.
+    await tester.tap(find.text('Details'));
+    await pumpFrames(tester, frames: 8);
   }
 
   testWidgets('each ring says what its target is', (WidgetTester tester) async {
