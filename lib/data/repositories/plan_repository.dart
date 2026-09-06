@@ -230,6 +230,51 @@ class PlanRepository {
     });
   }
 
+  /// Puts a removed entry back exactly as it was (spec §4).
+  ///
+  /// A restore is not a new meal, and that is the whole of it. The obvious
+  /// route — hand the entry's numbers back through [add] — is wrong, because
+  /// a logged entry's snapshot is **already multiplied by the portion**: it
+  /// records what was eaten, not what one serving contains. [add] takes a
+  /// per-serving figure and scales it, so two servings of a 100 kcal meal
+  /// came back as 400, and half a serving came back as 25. At exactly one
+  /// serving the two readings agree, which is why it survived being used.
+  ///
+  /// So this takes the entry itself and writes it back whole: the same id, the
+  /// same portion, slot and day, the same frozen snapshot, and the same moment
+  /// it was actually eaten. The sync mutation carries [_now] because that is
+  /// when this device changed its mind — a different fact from when the meal
+  /// happened, and the one thing here that is allowed to be new.
+  ///
+  /// Idempotent by construction: the same id is upserted, so a double tap or a
+  /// replayed action puts back one meal rather than two. Queued after the
+  /// delete it undoes, so the ordering that reaches the server is the ordering
+  /// the user performed.
+  Future<MealPlanEntry> restore(
+    MealPlanEntry entry, {
+    required DateTime date,
+  }) async {
+    final DateTime now = _now();
+
+    return _db.transaction(() async {
+      // The date comes from the caller because a day's id is a uuid5 of it
+      // and cannot be read back. `ensureDay` finds the existing row — removing
+      // an entry does not remove its day — so this is a guard rather than a
+      // creation in the ordinary case.
+      final MealPlanDayRow day = await _store.ensureDay(
+        userId: _userId,
+        date: date,
+        idFactory: () => entry.dayId,
+        updatedAt: now,
+      );
+      await _queueDay(day, now);
+
+      await _store.upsertEntry(entry, updatedAt: now);
+      await _queueEntry(entry, now);
+      return entry;
+    });
+  }
+
   Future<void> removeEntry(String entryId) async {
     final DateTime now = _now();
     await _db.transaction(() async {
