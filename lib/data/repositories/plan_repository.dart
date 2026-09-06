@@ -230,6 +230,47 @@ class PlanRepository {
     });
   }
 
+  /// Puts a removed entry back exactly as it was (spec §4).
+  ///
+  /// A restore is not a new meal, and that is the whole of it. The obvious
+  /// route — hand the entry's numbers back through [add] — is wrong, because
+  /// a logged entry's snapshot is **already multiplied by the portion**: it
+  /// records what was eaten, not what one serving contains. [add] takes a
+  /// per-serving figure and scales it, so two servings of a 100 kcal meal
+  /// came back as 400, and half a serving came back as 25. At exactly one
+  /// serving the two readings agree, which is why it survived being used.
+  ///
+  /// So this takes the entry itself and writes it back whole: the same id, the
+  /// same portion, slot and day, the same frozen snapshot, and the same moment
+  /// it was actually eaten. The sync mutation carries [_now] because that is
+  /// when this device changed its mind — a different fact from when the meal
+  /// happened, and the one thing here that is allowed to be new.
+  ///
+  /// Idempotent by construction: the same id is upserted, so a double tap or a
+  /// replayed action puts back one meal rather than two.
+  ///
+  /// The queued upsert **supersedes** the queued delete rather than following
+  /// it — [PendingWriteStore.enqueue] drops earlier pending writes for the
+  /// same row — so the delete is never sent and the server never sees the meal
+  /// leave. If the delete was already pushed, the upsert re-inserts it. Both
+  /// routes converge; neither depends on per-entity ordering, which the queue
+  /// does not promise.
+  ///
+  /// No day is ensured and none is re-queued. Removing an entry does not
+  /// remove its day, and the entry's own `dayId` is a foreign key that was
+  /// valid a moment ago — so asking for the date again would be asking the
+  /// caller to restate something the entry already knows, and getting it
+  /// wrong would write the meal to a day nobody checked.
+  Future<MealPlanEntry> restore(MealPlanEntry entry) async {
+    final DateTime now = _now();
+
+    return _db.transaction(() async {
+      await _store.upsertEntry(entry, updatedAt: now);
+      await _queueEntry(entry, now);
+      return entry;
+    });
+  }
+
   Future<void> removeEntry(String entryId) async {
     final DateTime now = _now();
     await _db.transaction(() async {

@@ -191,4 +191,57 @@ void main() {
       expect(row.servings, 1);
     });
   });
+
+  testWidgets('the undo puts back the meal that was eaten, not double it', (
+    WidgetTester tester,
+  ) async {
+    // R01 through the gesture rather than the repository: two servings at 100
+    // kcal each is a 200 kcal dinner, and swiping it away and changing your
+    // mind must leave the day exactly where it started.
+    final HearthDatabase db = await pumpHearthApp(
+      tester,
+      foods: <Food>[
+        aFood(
+          'Guard stew',
+          id: 'food-stew',
+          servingOptions: <ServingOption>[
+            aServing(
+              amount: 1,
+              unit: Units.item,
+              macros: const Macros(kcal: 100, proteinG: 8),
+            ),
+          ],
+        ),
+      ],
+      entries: <MealPlanEntry>[
+        const MealPlanEntry(
+          id: 'entry-stew',
+          dayId: 'day-1',
+          slot: MealSlot.dinner,
+          refType: PlanRefType.food,
+          refId: 'food-stew',
+          servings: 2,
+        ).log(
+          liveMacros: const Macros(kcal: 100, proteinG: 8),
+          at: DateTime.utc(2026, 8, 31, 19),
+          label: 'Guard stew',
+        ),
+      ],
+    );
+    await tester.tap(find.text('Plan').last);
+    await pumpFrames(tester, frames: 12);
+
+    await tester.drag(find.text('Guard stew'), const Offset(-400, 0));
+    await pumpFrames(tester, frames: 12);
+    await tester.tap(find.text('Delete'));
+    await pumpFrames(tester, frames: 12);
+    await tester.tap(find.text('Undo'));
+    await pumpFrames(tester, frames: 20);
+
+    final List<MealPlanEntryRow> rows = await db
+        .select(db.mealPlanEntries)
+        .get();
+    expect(rows, hasLength(1));
+    expect(rows.single.macroSnapshot, contains('"kcal":200.0'));
+  });
 }
