@@ -139,9 +139,15 @@ class ServingDraft {
   /// minor three it is the *only* way to say "unknown". This is for text that
   /// was typed and cannot be read, which would otherwise land as a silent zero
   /// on a major macro or a silent gap on a minor one.
+  /// A number that has been started but not finished.
+  static final RegExp _partial = RegExp(r'^[-−+]?\.?$');
+
   Iterable<String> get unreadableFields sync* {
     for (final (String name, String raw) in <(String, String)>[
-      ('calories', kcal),
+      // "kcal" is what the field is labelled, so it is what the complaint
+      // names — "the calories is not a number" sent people looking for a
+      // field that is not on the screen.
+      ('kcal', kcal),
       ('protein', protein),
       ('carbs', carbs),
       ('fat', fat),
@@ -149,7 +155,12 @@ class ServingDraft {
       ('sodium', sodium),
       ('cholesterol', cholesterol),
     ]) {
-      if (raw.trim().isNotEmpty && _field(raw) == null) yield name;
+      final String text = raw.trim();
+      // A lone sign or a bare point is a number half-typed, not a mistake.
+      // Complaining at the first keystroke of "-180" or ".5" would put a red
+      // line under somebody mid-word.
+      if (text.isEmpty || _partial.hasMatch(text)) continue;
+      if (_field(raw) == null) yield name;
     }
   }
 
@@ -308,9 +319,14 @@ class FoodDraft {
   /// must reopen exactly as it was stored, or saving it again would quietly
   /// edit macros nobody touched.
   static String _rounded(String value, {int decimals = 1}) {
-    final double? parsed = double.tryParse(value);
-    if (parsed == null) return value;
-    return writeAmount(double.parse(parsed.toStringAsFixed(decimals)));
+    // `parseAmount` and `_plain`, matching the fields this feeds. With
+    // `double.tryParse` on the way in it silently no-opped on exactly the
+    // values it exists for — a scanned 0.75 g arrived as "3/4", failed to
+    // parse, and came back unrounded — and with `writeAmount` on the way out
+    // it put a fraction into a field whose keyboard has no "/".
+    final double? parsed = parseAmount(value);
+    if (parsed == null || !parsed.isFinite) return value;
+    return _plain(double.parse(parsed.toStringAsFixed(decimals)));
   }
 
   /// A food nobody had, carrying only the number that was scanned, so the next
@@ -550,13 +566,28 @@ class FoodDraft {
     isModifier: isModifier ?? this.isModifier,
   );
 
+  /// A nutrient as a field's text: a plain decimal, never a kitchen fraction.
+  ///
+  /// `writeAmount` renders "1 1/2", which is right for a measuring amount —
+  /// two thirds of a cup is how a recipe is written and how a jug is marked.
+  /// A nutrient is not that. Nobody writes a gram and a half of protein as
+  /// "1 1/2 g", and the seven nutrient fields carry a **decimal keyboard**,
+  /// which has no "/" on it. So a stored 1.5 reopened as "1 1/2", one
+  /// backspace made it "1 1/", and there was no key on the pad that could put
+  /// it back — a value the user could see, could break, and could not repair.
+  ///
+  /// The Amount field above is the opposite case and keeps `writeAmount`: it
+  /// takes `TextInputType.text` precisely so a fraction can be typed there.
+  static String _plain(double value) => value == value.roundToDouble()
+      ? value.round().toString()
+      : value.toString();
+
   /// A zero macro reopens as an empty field, not a literal "0".
   ///
   /// Showing "0" made the field look filled in, and typing into it produced
   /// "0250" rather than "250" — the digits landed beside a value the user
   /// never entered. Empty also lets the hint do its job.
-  static String _macroText(double value) =>
-      value == 0 ? '' : writeAmount(value);
+  static String _macroText(double value) => value == 0 ? '' : _plain(value);
 
   /// A minor nutrient as a field's text: empty for unknown, **"0" for a
   /// stated zero** (spec §5.6).
@@ -566,8 +597,7 @@ class FoodDraft {
   /// and nothing is lost. Here a blank field means "nobody said", so blanking
   /// a stated zero would turn a fact into a gap on every edit. Water really
   /// does have no sodium.
-  static String _minorText(double? value) =>
-      value == null ? '' : writeAmount(value);
+  static String _minorText(double? value) => value == null ? '' : _plain(value);
 }
 
 /// A typed pack size — "1 lb", "7.2 oz" — as a quantity, or null.

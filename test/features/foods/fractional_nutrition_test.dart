@@ -189,8 +189,53 @@ void main() {
       expect(draftWith().isValid, isTrue);
     });
 
-    test('and a fraction is readable, so it is not one', () {
-      expect(draftWith(protein: '1 1/2', fiber: '1/4').macrosError, isNull);
+    test('and a fraction typed by hand is readable, so it is not one', () {
+      // Asserting the value, not merely the absence of a complaint: the old
+      // reader also returned no error here, because "1 1/2" became a silent
+      // zero and zero is not negative. Only the number tells the two apart.
+      final FoodDraft draft = draftWith(protein: '1 1/2', fiber: '1/4');
+
+      expect(draft.macrosError, isNull);
+      expect(draft.servings.single.macros.proteinG, 1.5);
+      expect(draft.servings.single.macros.fiberG, 0.25);
+    });
+
+    test('and a number half-typed is not a mistake yet', () {
+      // The error renders live, so complaining at the first character of
+      // "-180" or ".5" would put a red line under somebody mid-word.
+      expect(draftWith(protein: '-').macrosError, isNull);
+      expect(draftWith(protein: '.').macrosError, isNull);
+      expect(draftWith(protein: '−').macrosError, isNull);
+    });
+  });
+
+  group('what the field shows when it reopens', () {
+    String fieldFor(Macros stored, String Function(ServingDraft) pick) =>
+        pick(FoodDraft.fromFood(storedWith(stored)).servings.single);
+
+    test('is a decimal, because the keyboard has no slash on it', () {
+      // The seven nutrient fields carry a decimal keypad. A stored 1.5
+      // reopening as "1 1/2" was a value you could see, could break with one
+      // backspace, and could not repair — there is no "/" to press.
+      expect(
+        fieldFor(const Macros(kcal: 90, proteinG: 1.5), (s) => s.protein),
+        '1.5',
+      );
+      expect(
+        fieldFor(const Macros(kcal: 90, fiberG: 0.5), (s) => s.fiber),
+        '0.5',
+      );
+    });
+
+    test('and a whole number keeps no decimal point', () {
+      expect(
+        fieldFor(const Macros(kcal: 90, proteinG: 12), (s) => s.protein),
+        '12',
+      );
+    });
+
+    test('and a stated zero still reads "0" for a minor nutrient', () {
+      expect(fieldFor(const Macros(kcal: 90, fiberG: 0), (s) => s.fiber), '0');
     });
   });
 }
