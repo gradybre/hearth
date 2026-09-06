@@ -743,11 +743,33 @@ class _ChatCardState extends ConsumerState<_ChatCard> {
     if (next != null) widget.onApply(next);
   }
 
-  void _undo() {
-    final List<ShoppingLine>? before = ref
+  Future<void> _undo() async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final ShoppingUndo? undone = await ref
         .read(shoppingChatProvider.notifier)
         .undo();
-    if (before != null) widget.onApply(before);
+    // Null means there was nothing to undo, or the list is no longer the one
+    // the answer changed — the controller says so itself in that second case,
+    // by way of the panel, so there is nothing to add here.
+    if (undone == null) return;
+
+    widget.onApply(undone.lines);
+
+    // Said rather than silently done. Undo took back the answer; anything
+    // changed since is somebody's own more recent decision, and leaving it
+    // without a word would look like undo had missed.
+    if (undone.kept > 0 && mounted) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            undone.kept == 1
+                ? 'Undone. One line you changed since was left as it is.'
+                : 'Undone. ${undone.kept} lines you changed since were left '
+                      'as they are.',
+          ),
+        ),
+      );
+    }
   }
 
   @override

@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:meta/meta.dart';
 
 import '../units/quantity.dart';
@@ -95,6 +96,48 @@ class ShoppingLine {
   final int sortOrder;
 
   final List<String> sourceRecipeIds;
+
+  /// Value equality, so "has this line changed since?" is a question that can
+  /// be asked (spec §5.7).
+  ///
+  /// Undoing an AI answer has to leave alone any line somebody has edited
+  /// since, and telling those apart means comparing lines rather than
+  /// identities — two lines with the same [key] are the same *item*, which is
+  /// exactly not the question.
+  @override
+  bool operator ==(Object other) =>
+      other is ShoppingLine &&
+      other.key == key &&
+      other.name == name &&
+      const ListEquality<Quantity>().equals(other.planned, planned) &&
+      other.wanted == wanted &&
+      other.onHand == onHand &&
+      other.checked == checked &&
+      other.foodId == foodId &&
+      other.storeTag == storeTag &&
+      other.isManual == isManual &&
+      other.hasUnquantified == hasUnquantified &&
+      other.sortOrder == sortOrder &&
+      const ListEquality<String>().equals(
+        other.sourceRecipeIds,
+        sourceRecipeIds,
+      );
+
+  @override
+  int get hashCode => Object.hash(
+    key,
+    name,
+    const ListEquality<Quantity>().hash(planned),
+    wanted,
+    onHand,
+    checked,
+    foodId,
+    storeTag,
+    isManual,
+    hasUnquantified,
+    sortOrder,
+    const ListEquality<String>().hash(sourceRecipeIds),
+  );
 
   /// Whether the amount was decided by hand rather than by the recipes.
   bool get isEdited => wanted != null;
