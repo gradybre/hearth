@@ -785,6 +785,66 @@ begin
 end;
 $$;
 
+-- ── A library can be read past the row cap (spec §7.1) ─────────────────────
+--
+-- PostgREST truncates a response at `max_rows` and says nothing, so the pull
+-- that asked for everything at once took the first thousand rows and moved
+-- its watermark past the rest. The paged functions exist so a client can
+-- cursor instead — and the properties that make that safe are worth pinning,
+-- because all three fail silently.
+do $$
+declare
+  v_after_ts timestamptz := null;
+  v_after_id uuid := null;
+  v_rows integer;
+  v_total integer := 0;
+  v_pages integer := 0;
+  v_last jsonb;
+begin
+  -- 1. Cursoring reads every row exactly once.
+  loop
+    select count(*) into v_rows
+    from public.changed_foods_page(null, v_after_ts, v_after_id, 100);
+    exit when v_rows = 0;
+
+    v_pages := v_pages + 1;
+    v_total := v_total + v_rows;
+    if v_pages > 200 then
+      raise exception 'paging did not finish: the cursor is not advancing';
+    end if;
+
+    -- The page's *last* row in the page's own ordering. Getting this
+    -- backwards overlaps the pages and counts rows twice — which is how this
+    -- guard first failed, and is exactly the mistake a client could make.
+    select x into v_last
+    from public.changed_foods_page(null, v_after_ts, v_after_id, 100) x
+    order by (x ->> 'updated_at') desc, (x ->> 'id') desc
+    limit 1;
+    v_after_ts := (v_last ->> 'updated_at')::timestamptz;
+    v_after_id := (v_last ->> 'id')::uuid;
+  end loop;
+
+  if v_total <> (select count(*) from public.foods) then
+    raise exception 'paging read % foods, the table holds %',
+      v_total, (select count(*) from public.foods);
+  end if;
+
+  -- 2. The limit is clamped rather than trusted. A caller asking for a
+  -- million is asking PostgREST to truncate again, silently.
+  if (select count(*) from public.changed_foods_page(null, null, null, 999999))
+     > 1000 then
+    raise exception 'the page limit is not clamped';
+  end if;
+
+  -- 3. The unpaged functions are still there. They are what a phone running
+  -- an older build calls, and nothing here may take them away mid-rollout.
+  perform 1 from public.changed_foods(null) limit 1;
+  perform 1 from public.changed_recipes(null) limit 1;
+
+  raise notice 'paged library guards passed';
+end;
+$$;
+
 -- ── A menu keeps its own shape (spec §5.2) ──────────────────────────────────
 --
 -- The builder lays a menu out by `menu_group` and `menu_order`, and both have

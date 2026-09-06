@@ -218,6 +218,39 @@ class SupabaseRemoteGateway implements RemoteGateway {
     return clauses.join(',');
   }
 
+  /// One page of an aggregate, from the paged function.
+  ///
+  /// A `setof jsonb` has nowhere for a client to put a cursor, so unlike the
+  /// plain selects this needs the server's help: `changed_*_page` takes the
+  /// last row seen and returns what sorts after it.
+  Future<List<Object?>> _aggregatePage(
+    ({String function, String parameter}) aggregate,
+    DateTime? since,
+    PageCursor? after,
+  ) async {
+    // Deliberately untyped. Asking for a generic here makes the call site
+    // depend on exactly how the driver decodes a `setof jsonb`, and getting
+    // that wrong fails as an empty result rather than an error — a sync that
+    // reports success and brings nothing down.
+    final Object? response = await _client.rpc<Object?>(
+      '${aggregate.function}_page',
+      params: <String, Object?>{
+        aggregate.parameter: since?.toUtc().toIso8601String(),
+        'p_after_updated_at': after?.values.first,
+        'p_after_id': after == null ? null : after.values[1],
+        'p_limit': _pageSize,
+      },
+    );
+
+    if (response is! List) {
+      throw StateError(
+        '${aggregate.function}_page returned ${response.runtimeType}, '
+        'not a list of records.',
+      );
+    }
+    return response;
+  }
+
   /// Rows per request. Well under any plausible `max_rows`, so a page is a
   /// page rather than a silent truncation — and if the server caps it lower
   /// anyway, [readAllPages] simply asks again.
@@ -239,26 +272,16 @@ class SupabaseRemoteGateway implements RemoteGateway {
     }
 
     try {
-      // Deliberately untyped. Asking for a generic here makes the call site
-      // depend on exactly how the driver decodes a `setof jsonb`, and getting
-      // that wrong fails as an empty result rather than an error — a sync that
-      // reports success and brings nothing down.
-      final Object? response = await _client.rpc<Object?>(
-        aggregate.function,
-        params: <String, Object?>{
-          aggregate.parameter: since?.toUtc().toIso8601String(),
-        },
+      final List<Object?> rows = await readAllPages<Object?>(
+        page: (PageCursor? after) => _aggregatePage(aggregate, since, after),
+        cursorOf: (Object? row) => PageCursor(<String>[
+          '${(row! as Map)['updated_at']}',
+          '${(row as Map)['id']}',
+        ]),
       );
 
-      if (response is! List) {
-        throw StateError(
-          '${aggregate.function} returned ${response.runtimeType}, '
-          'not a list of records.',
-        );
-      }
-
       return <RemoteRecord>[
-        for (final Object? row in response)
+        for (final Object? row in rows)
           if (row is Map)
             RemoteRecord(
               id: '${row['id']}',
