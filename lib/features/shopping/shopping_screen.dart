@@ -748,6 +748,9 @@ class _ChatCardState extends ConsumerState<_ChatCard> {
     final ShoppingUndo? undone = await ref
         .read(shoppingChatProvider.notifier)
         .undo();
+    // Null means there was nothing to undo, or the list is no longer the one
+    // the answer changed — the controller says so itself in that second case,
+    // by way of the panel, so there is nothing to add here.
     if (undone == null) return;
 
     widget.onApply(undone.lines);

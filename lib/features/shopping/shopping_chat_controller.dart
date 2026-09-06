@@ -162,6 +162,12 @@ class ShoppingChatController extends Notifier<ShoppingChatState> {
       );
       final ShoppingLine? present = at >= 0 ? lines[at] : null;
 
+      // The answer added it and somebody has since removed it themselves.
+      // Undo wanted it gone too, so there is nothing to keep and nothing to
+      // report — counting it would put "one line was left as it is" on screen
+      // about a line that is not there.
+      if (change.before == null && at < 0) continue;
+
       // Changed since the answer: leave it, and say so.
       if (present != change.after) {
         kept++;
@@ -211,37 +217,24 @@ class ShoppingChatController extends Notifier<ShoppingChatState> {
       );
       if (_run != run) return null;
 
-      _messages.add(
-        ShoppingMessage(
-          fromUser: false,
-          text: answer.reply?.trim().isNotEmpty ?? false
-              ? answer.reply!.trim()
-              : 'Done.',
-        ),
-      );
-      // Nothing asked for means nothing to undo: an answer that changed the
-      // list is the only kind worth being able to take back.
-      if (answer.edits.isEmpty) {
-        state = ShoppingChatIdle(messages: messages);
-        return null;
-      }
-
       // Applied to the list as it stands, not as it stood when the question
       // went out. Somebody ticks a line off in the aisle while this is
       // thinking; applying to the older copy would write over that with a
       // list that predates it.
-      final ShoppingListSnapshot? now = await ref
-          .read(shoppingRepositoryProvider)
-          .current();
+      final ShoppingListSnapshot? now = answer.edits.isEmpty
+          ? asked
+          : await ref.read(shoppingRepositoryProvider).current();
 
-      if (asked == null ||
-          now == null ||
-          now.id != asked.id ||
-          now.from != asked.from ||
-          now.to != asked.to) {
+      if (answer.edits.isNotEmpty && !_isSameShop(asked, now)) {
         // A different shop: the list was rebuilt for another range, or
         // replaced. Names in the answer mean things about the old one, and
         // there is no honest way to map them onto this.
+        //
+        // Nothing is recorded as said, either — the reply is added below,
+        // after this. A transcript reading "Added coffee." above a banner
+        // saying the list was left alone puts words in the assistant's mouth,
+        // and Try again would send that confirmation back to it, so it would
+        // reasonably answer that it had already done the thing.
         state = ShoppingChatFailed(
           'The list changed while I was working that out, so I have left it '
           'alone. Ask again and I will use the list as it is now.',
@@ -251,13 +244,32 @@ class ShoppingChatController extends Notifier<ShoppingChatState> {
         return null;
       }
 
+      _messages.add(
+        ShoppingMessage(
+          fromUser: false,
+          text: answer.reply?.trim().isNotEmpty ?? false
+              ? answer.reply!.trim()
+              : 'Done.',
+        ),
+      );
       state = ShoppingChatIdle(messages: messages);
 
+      // Nothing asked for means nothing to undo: an answer that changed the
+      // list is the only kind worth being able to take back.
+      if (answer.edits.isEmpty) return null;
+
       final List<ShoppingLine> next = ShoppingEdits.apply(
-        now.lines,
+        now?.lines ?? const <ShoppingLine>[],
         answer.edits,
       );
-      _journal = _journalOf(now, next);
+
+      // A household with no list yet has nothing to undo *to*: the answer is
+      // what brings the list into being, and `replace` mints its id on the
+      // way past, so there is no id here for an undo to check itself against.
+      // Asking for the first thing on the list is a real path — the empty
+      // state invites it in as many words — and refusing it was this guard's
+      // first version doing more than it was asked.
+      _journal = now == null ? null : _journalOf(now, next);
       return next;
     } on RecipeAiException catch (error) {
       if (_run != run) return null;
@@ -276,6 +288,20 @@ class ShoppingChatController extends Notifier<ShoppingChatState> {
       );
       return null;
     }
+  }
+
+  /// Whether these two are the same shop.
+  ///
+  /// The range as well as the id: `rebuild` reuses the existing list's id, so
+  /// an id on its own would not notice that the dates had moved underneath
+  /// the question. Two nulls are the same shop too — a household that had no
+  /// list when it asked and still has none is not a list that changed.
+  static bool _isSameShop(
+    ShoppingListSnapshot? asked,
+    ShoppingListSnapshot? now,
+  ) {
+    if (asked == null || now == null) return asked == null && now == null;
+    return now.id == asked.id && now.from == asked.from && now.to == asked.to;
   }
 
   /// What changed between [snapshot] and [after], line by line.

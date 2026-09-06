@@ -192,6 +192,100 @@ void main() {
       expect(next, isNull);
     },
   );
+
+  test('asking for the first thing on an empty list still works', () async {
+    // The empty state invites it in as many words — "Add coffee and paper
+    // towels" — and a household that has never built a list has no list for
+    // the guard to compare. Refusing there was the guard doing more than it
+    // was asked, and it made the feature dead until somebody found Build.
+    assistant.reply = const ShoppingAnswer(
+      reply: 'Added coffee.',
+      edits: <ShoppingEdit>[
+        ShoppingEdit(kind: ShoppingEditKind.add, name: 'coffee'),
+      ],
+    );
+
+    final List<ShoppingLine>? next = await container
+        .read(shoppingChatProvider.notifier)
+        .send('add coffee', const <ShoppingLine>[]);
+
+    expect(next, isNotNull);
+    expect(next!.single.name, 'coffee');
+  });
+
+  test('a refused answer is not recorded as something it said', () async {
+    await seed(<ShoppingLine>[line('milk')]);
+    final List<ShoppingLine> asAsked = await stored();
+
+    assistant.onEdit = () async {
+      await container
+          .read(shoppingRepositoryProvider)
+          .rebuild(
+            from: DateTime(2026, 10, 1),
+            to: DateTime(2026, 10, 7),
+            entriesByDay: const <DateTime, List<MealPlanEntry>>{},
+            recipes: const <String, Recipe>{},
+            foods: const <String, Food>{},
+          );
+    };
+    assistant.reply = const ShoppingAnswer(
+      reply: 'Added eggs.',
+      edits: <ShoppingEdit>[
+        ShoppingEdit(kind: ShoppingEditKind.add, name: 'eggs'),
+      ],
+    );
+
+    await container
+        .read(shoppingChatProvider.notifier)
+        .send('add eggs', asAsked);
+
+    // "Added eggs." above a banner saying the list was left alone would put
+    // words in its mouth — and Try again would send that confirmation back,
+    // so it would reasonably answer that it had already done it.
+    final List<ShoppingMessage> said = container
+        .read(shoppingChatProvider.notifier)
+        .messages;
+    expect(said.where((ShoppingMessage m) => !m.fromUser), isEmpty);
+  });
+
+  test(
+    'undoing a line you already deleted yourself says nothing was kept',
+    () async {
+      await seed(<ShoppingLine>[line('milk')]);
+      final List<ShoppingLine> asAsked = await stored();
+
+      assistant.reply = const ShoppingAnswer(
+        reply: 'Added eggs.',
+        edits: <ShoppingEdit>[
+          ShoppingEdit(kind: ShoppingEditKind.add, name: 'eggs'),
+        ],
+      );
+      final List<ShoppingLine>? applied = await container
+          .read(shoppingChatProvider.notifier)
+          .send('add eggs', asAsked);
+      await container.read(shoppingRepositoryProvider).replace(applied!);
+
+      // The shopper swipes the eggs away themselves.
+      await seed(<ShoppingLine>[
+        for (final ShoppingLine l in await stored())
+          if (l.key != 'eggs') l,
+      ]);
+
+      final ShoppingUndo? undone = await container
+          .read(shoppingChatProvider.notifier)
+          .undo();
+
+      expect(undone, isNotNull);
+      expect(undone!.lines.any((ShoppingLine l) => l.key == 'eggs'), isFalse);
+      expect(
+        undone.kept,
+        0,
+        reason:
+            'undo and the shopper wanted the same thing, so nothing was left '
+            'behind to report',
+      );
+    },
+  );
 }
 
 class _ScriptedAssistant implements ShoppingAssistant {
