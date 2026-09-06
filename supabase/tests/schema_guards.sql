@@ -1235,6 +1235,7 @@ declare
   v_id uuid;
   v_deleted boolean;
   v_at timestamptz;
+  v_count integer;
   v_missing text[] := '{}';
 begin
   -- Every soft-deleting table carries the rule. A table that gained
@@ -1331,6 +1332,126 @@ begin
     from public.shopping_list_items where id = v_id;
   if not v_deleted then
     raise exception 'the line could not be deleted a second time';
+  end if;
+
+  -- A deleted row with no recorded time is a row the rule cannot protect,
+  -- and the two ways to get one are the two that were nearly shipped: rows
+  -- already deleted when the column was added, and rows that arrive already
+  -- deleted through an insert a before-update trigger never sees.
+  for v_table in
+    select unnest(array[
+      'recipes', 'foods', 'meal_plan_entries', 'shopping_list_items',
+      'collections', 'plan_templates', 'ingredient_matches'
+    ])
+  loop
+    execute format(
+      'select count(*) from public.%I where is_deleted and deleted_at is null',
+      v_table
+    ) into v_count;
+    if v_count > 0 then
+      raise exception '% has % deleted rows that can still be resurrected',
+        v_table, v_count;
+    end if;
+  end loop;
+
+  -- The backfill, which nothing else can reach. A fresh database has no
+  -- rows left over from before the rule existed, so the statement that gave
+  -- them a time would otherwise ship untested — and it is the whole of what
+  -- protects everything deleted up to now.
+  --
+  -- The trigger has to come off to manufacture the state, which is itself
+  -- the point: once it is on, a deleted row cannot be talked out of its
+  -- `deleted_at` by any update at all.
+  insert into public.shopping_list_items (
+    shopping_list_id, item_key, raw_name, is_deleted, updated_at
+  )
+  values (v_list, 'oats', 'Oats', true, timestamptz '2026-09-14 12:00:00Z')
+  returning id into v_id;
+
+  alter table public.shopping_list_items
+    disable trigger shopping_list_items_refuse_resurrection;
+  update public.shopping_list_items set deleted_at = null where id = v_id;
+
+  -- Still off for the backfill, exactly as the migration takes the triggers
+  -- away before running it. That ordering is load-bearing rather than tidy:
+  -- with the rule in force, an update changing neither flag holds
+  -- `deleted_at` at what the row already had — so the backfill would undo
+  -- itself, silently, and protect nothing. This guard failed that way first.
+  update public.shopping_list_items set deleted_at = updated_at
+    where is_deleted and deleted_at is null;
+
+  alter table public.shopping_list_items
+    enable trigger shopping_list_items_refuse_resurrection;
+
+  select deleted_at into v_at from public.shopping_list_items where id = v_id;
+  if v_at is null then
+    raise exception 'the backfill left a deleted row without a time';
+  end if;
+
+  update public.shopping_list_items
+    set is_deleted = false, updated_at = timestamptz '2020-01-01 00:00:00Z'
+    where id = v_id;
+  select is_deleted into v_deleted
+    from public.shopping_list_items where id = v_id;
+  if not v_deleted then
+    raise exception 'a backfilled row was resurrected by an older write';
+  end if;
+
+  -- Arriving already deleted. A recipe created and deleted while offline
+  -- reaches the server as a single insert, because the outbox supersedes the
+  -- create with the delete.
+  insert into public.shopping_list_items (
+    shopping_list_id, item_key, raw_name, is_deleted, updated_at
+  )
+  values (
+    v_list, 'butter', 'Butter', true, timestamptz '2026-09-14 12:00:00Z'
+  )
+  returning id into v_id;
+
+  select deleted_at into v_at from public.shopping_list_items where id = v_id;
+  if v_at is null then
+    raise exception 'a row inserted already deleted recorded no time';
+  end if;
+
+  update public.shopping_list_items
+    set is_deleted = false, updated_at = timestamptz '2020-01-01 00:00:00Z'
+    where id = v_id;
+  select is_deleted into v_deleted
+    from public.shopping_list_items where id = v_id;
+  if not v_deleted then
+    raise exception 'a row inserted already deleted was resurrected';
+  end if;
+
+  -- A client cannot name the time itself. There are no column grants in this
+  -- schema, so `deleted_at` is writable through the API like any other
+  -- column, and a far-future one would put a row beyond anything the app can
+  -- do about it.
+  insert into public.shopping_list_items (shopping_list_id, item_key, raw_name)
+    values (v_list, 'flour', 'Flour') returning id into v_id;
+
+  update public.shopping_list_items
+    set is_deleted = true,
+        deleted_at = timestamptz '9999-01-01 00:00:00Z',
+        updated_at = timestamptz '2026-09-14 12:00:00Z'
+    where id = v_id;
+
+  select deleted_at into v_at from public.shopping_list_items where id = v_id;
+  if v_at <> timestamptz '2026-09-14 12:00:00Z' then
+    raise exception 'a client named its own deletion time: %', v_at;
+  end if;
+
+  -- And it cannot park one on a row that is still alive for the next
+  -- deletion to adopt.
+  insert into public.shopping_list_items (shopping_list_id, item_key, raw_name)
+    values (v_list, 'sugar', 'Sugar') returning id into v_id;
+
+  update public.shopping_list_items
+    set deleted_at = timestamptz '9999-01-01 00:00:00Z',
+        updated_at = timestamptz '2026-09-14 12:00:00Z'
+    where id = v_id;
+  select deleted_at into v_at from public.shopping_list_items where id = v_id;
+  if v_at is not null then
+    raise exception 'a live row was made to carry a deletion time: %', v_at;
   end if;
 
   delete from public.households where id = v_house;
