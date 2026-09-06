@@ -358,7 +358,15 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
 - **Recipe reader principle:** in cook/read mode, show ingredients and directions and little else — minimal chrome (research: the reader should be ruthlessly focused).
 
 ### 6.3 Accessibility (baseline, non-negotiable)
-- **Dynamic type / font scaling** honored throughout.
+- **Dynamic type / font scaling** honored throughout — and *honoured*, not
+  capped: a fixed height around a growing label is the same fault as ignoring
+  the setting, one step further along.
+- **A sheet or screen that can outgrow the space it has must scroll.** At the
+  largest text sizes almost everything does. The log sheet's picker scrolled
+  from the start; the view you reach *after* choosing something did not, and
+  at three times the text it ran 200 pixels off the bottom of the screen and
+  took "Log it" with it. A sweep that opens a sheet without going through it
+  is a sweep of the first screen only.
 - **Screen-reader labels** on all interactive elements and data.
 - **Never color-alone** for meaning — over/under macro states carry an icon/label as well as color.
 - **Reduced motion** — honor the OS setting for any animation.

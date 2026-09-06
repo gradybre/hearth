@@ -313,7 +313,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
                 ),
               ),
               child: hasChoice
-                  ? _confirmView(perServing, foods, recipes)
+                  ? _confirmView(controller, perServing, foods, recipes)
                   : _pickerView(controller, recipes, foods),
             ),
       ),
@@ -321,6 +321,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   }
 
   Widget _confirmView(
+    ScrollController controller,
     Macros perServing,
     Map<String, Food> foods,
     Map<String, Recipe> recipes,
@@ -329,73 +330,81 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     final Macros total = perServing.scaledBy(_servings);
     final bool alreadyLogged = widget.existing?.entry.isLogged ?? false;
 
+    // Scrollable, and through the sheet's own controller so that dragging
+    // the content also grows the sheet (spec §6.3).
+    //
+    // The picker half has always had this; the half you reach *after*
+    // choosing something never did, and it is the one every logged meal goes
+    // through. At three times the text it overflowed by 200 pixels, taking
+    // "Log it" off the bottom of the screen with it.
     return SafeArea(
-      child: Padding(
+      child: ListView(
+        controller: controller,
         padding: const EdgeInsets.all(HearthSpacing.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(_label, style: context.text.sectionHeader),
-            const SizedBox(height: HearthSpacing.xs),
-            Text(
-              alreadyLogged
-                  ? 'Already logged. Adjust the portion or remove it.'
-                  : '${total.kcal.round()} kcal · '
-                        'P ${total.proteinG.round()}  '
-                        'C ${total.carbG.round()}  '
-                        'F ${total.fatG.round()}',
-              style: context.text.metadata.copyWith(color: colors.textMuted),
-            ),
-            const SizedBox(height: HearthSpacing.lg),
-            _PortionStepper(
-              servings: _servings,
-              onChanged: (double value) => setState(() => _servings = value),
-            ),
-            const SizedBox(height: HearthSpacing.lg),
-            if (!_isExisting) ...<Widget>[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: _busy ? null : _assignAcrossDays,
-                  icon: const Icon(Icons.event_repeat_outlined, size: 18),
-                  label: const Text('Add to several days'),
-                ),
+        children: <Widget>[
+          Text(_label, style: context.text.sectionHeader),
+          const SizedBox(height: HearthSpacing.xs),
+          Text(
+            alreadyLogged
+                ? 'Already logged. Adjust the portion or remove it.'
+                : '${total.kcal.round()} kcal · '
+                      'P ${total.proteinG.round()}  '
+                      'C ${total.carbG.round()}  '
+                      'F ${total.fatG.round()}',
+            style: context.text.metadata.copyWith(color: colors.textMuted),
+          ),
+          const SizedBox(height: HearthSpacing.lg),
+          _PortionStepper(
+            servings: _servings,
+            onChanged: (double value) => setState(() => _servings = value),
+          ),
+          const SizedBox(height: HearthSpacing.lg),
+          if (!_isExisting) ...<Widget>[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _busy ? null : _assignAcrossDays,
+                icon: const Icon(Icons.event_repeat_outlined, size: 18),
+                label: const Text('Add to several days'),
               ),
-              const SizedBox(height: HearthSpacing.sm),
-            ],
-            Row(
-              children: <Widget>[
-                if (_isExisting)
-                  TextButton(
-                    onPressed: _busy ? null : _remove,
-                    child: const Text('Remove'),
-                  ),
-                const Spacer(),
-                if (!_isExisting)
-                  TextButton(
-                    onPressed: _busy
-                        ? null
-                        : () => _plan(foods: foods, recipes: recipes),
-                    child: const Text('Plan only'),
-                  ),
-                const SizedBox(width: HearthSpacing.sm),
-                FilledButton(
+            ),
+            const SizedBox(height: HearthSpacing.sm),
+          ],
+          // Wrapped rather than a Row: three labels side by side stop
+          // fitting long before the text is at its largest, and a button
+          // pushed off the edge is one nobody can press.
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: HearthSpacing.sm,
+            runSpacing: HearthSpacing.sm,
+            children: <Widget>[
+              if (_isExisting)
+                TextButton(
+                  onPressed: _busy ? null : _remove,
+                  child: const Text('Remove'),
+                ),
+              if (!_isExisting)
+                TextButton(
                   onPressed: _busy
                       ? null
-                      : () => _log(foods: foods, recipes: recipes),
-                  child: Text(
-                    _busy
-                        ? 'Saving…'
-                        : alreadyLogged
-                        ? 'Update'
-                        : 'Log it',
-                  ),
+                      : () => _plan(foods: foods, recipes: recipes),
+                  child: const Text('Plan only'),
                 ),
-              ],
-            ),
-          ],
-        ),
+              FilledButton(
+                onPressed: _busy
+                    ? null
+                    : () => _log(foods: foods, recipes: recipes),
+                child: Text(
+                  _busy
+                      ? 'Saving…'
+                      : alreadyLogged
+                      ? 'Update'
+                      : 'Log it',
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
