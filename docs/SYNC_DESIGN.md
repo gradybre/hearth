@@ -160,6 +160,30 @@ pagination, scope, deletion and repair is not reviewable:
 **E — B01's retry and status** follows, and is where "Synced" stops being a
 claim the app cannot support.
 
+### Deploy order, both directions
+
+D1b's paged functions are the first place the client hard-depends on
+something only a migration provides, so the ordering is now load-bearing in a
+way it was not before.
+
+**Server first, then the client.** A build that calls `changed_recipes_page`
+against a database without it gets PostgREST's `PGRST202`, which is a
+`PostgrestException` and not a `SocketException` — so it is *not* converted
+to `RemoteUnavailable`, and it escapes `LibrarySync.pull()` to
+`SyncController.sync()`. The library pull, the record pull and both photo
+passes are all skipped for that run. It is loud (`SyncStatus.failed`) and it
+recovers the moment the migration lands, so it is an outage rather than
+corruption — but it is an outage gated on the step CLAUDE.md rule 8 exists
+because this repo has already missed it three times.
+
+The other direction is already handled: the unpaged `changed_recipes` and
+`changed_foods` stay in place for phones on an older build, and a guard
+asserts they are still there.
+
+Deliberately **no client-side fallback to the unpaged function**. Falling back
+would restore exactly the silent truncation this package exists to remove, and
+would do it at the one moment nobody is watching.
+
 ---
 
 ## 5. What this note does not settle
