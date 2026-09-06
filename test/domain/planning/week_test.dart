@@ -82,4 +82,75 @@ void main() {
       );
     });
   });
+
+  group('addDays (spec §5.7, R08)', () {
+    test('crosses a month without arithmetic of its own', () {
+      expect(addDays(DateTime(2026, 1, 30), 3), DateTime(2026, 2, 2));
+    });
+
+    test('and a year, and a leap day', () {
+      expect(addDays(DateTime(2026, 12, 30), 3), DateTime(2027, 1, 2));
+      expect(addDays(DateTime(2028, 2, 28), 1), DateTime(2028, 2, 29));
+    });
+
+    test('walks backwards when asked to', () {
+      expect(addDays(DateTime(2026, 3, 2), -3), DateTime(2026, 2, 27));
+    });
+
+    test('leaves a midnight key at midnight', () {
+      final DateTime moved = addDays(DateTime(2026, 3, 1), 10);
+      expect(moved.hour, 0);
+      expect(moved.minute, 0);
+    });
+
+    test('over a daylight-saving change, where a day is not 24 hours', () {
+      // The bug itself, on any machine whose zone actually changes. CI runs
+      // in UTC, where every day really is 24 hours and this cannot fail —
+      // which is why the convention is also enforced by reading the source,
+      // in test/architecture/calendar_arithmetic_test.dart.
+      final List<DateTime> transitions = <DateTime>[];
+      DateTime day = DateTime(2026);
+      while (day.year == 2026) {
+        final DateTime next = DateTime(day.year, day.month, day.day + 1);
+        if (next.timeZoneOffset != day.timeZoneOffset) transitions.add(day);
+        day = next;
+      }
+
+      if (transitions.isEmpty) {
+        markTestSkipped('this machine\'s timezone has no daylight saving');
+        return;
+      }
+
+      for (final DateTime before in transitions) {
+        final DateTime after = addDays(before, 1);
+        final DateTime expected = DateTime(
+          before.year,
+          before.month,
+          before.day + 1,
+        );
+
+        // The calendar date, not the hour. Some zones shift at midnight
+        // itself — Chile, Cuba, Iran, Egypt — so one midnight a year does not
+        // exist there and Dart normalises it to 01:00. The production code is
+        // right in those zones too, because `dayKey` normalises identically
+        // and the keys still compare equal; it was only ever the assertion
+        // that assumed midnight always exists.
+        expect(
+          after,
+          expected,
+          reason: 'crossing $before gave $after, not $expected',
+        );
+
+        // And where there *is* a midnight to land on, the old way misses it —
+        // so the assertion above is not passing by luck.
+        if (expected.hour == 0) {
+          expect(
+            before.add(const Duration(days: 1)),
+            isNot(expected),
+            reason: 'a Duration of 24 hours should not agree here',
+          );
+        }
+      }
+    });
+  });
 }

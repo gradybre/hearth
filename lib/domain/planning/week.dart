@@ -9,24 +9,34 @@ library;
 DateTime dayKey(DateTime moment) =>
     DateTime(moment.year, moment.month, moment.day);
 
+/// [days] later than [date], on the calendar rather than on the clock.
+///
+/// A local day is 23 or 25 hours long on the two nights a year that daylight
+/// saving changes, so adding `Duration(days: n)` — which is exactly `n × 24`
+/// hours — lands an hour either side of midnight and belongs to the wrong
+/// date. Every date in this app is a midnight key, so that is not a display
+/// nicety: it is the difference between Sunday's plan and Monday's.
+///
+/// The `DateTime` constructor normalises overflow, so this crosses months and
+/// years without arithmetic of its own, and negative [days] walk backwards.
+DateTime addDays(DateTime date, int days) =>
+    DateTime(date.year, date.month, date.day + days);
+
 /// The Monday on or before [moment].
 ///
-/// `DateTime.weekday` is 1 for Monday, so subtracting `weekday - 1` days walks
-/// back to the start of the week without special-casing Sunday — which is the
-/// bug this helper exists to prevent.
+/// `DateTime.weekday` is 1 for Monday, so stepping back `weekday - 1` days
+/// walks to the start of the week without special-casing Sunday — which is
+/// the bug this helper exists to prevent.
 DateTime startOfWeek(DateTime moment) {
   final DateTime day = dayKey(moment);
-  return day.subtract(Duration(days: day.weekday - DateTime.monday));
+  return addDays(day, -(day.weekday - DateTime.monday));
 }
 
 /// The seven days of the week containing [moment], Monday first.
 List<DateTime> weekOf(DateTime moment) {
   final DateTime monday = startOfWeek(moment);
   return <DateTime>[
-    for (int i = 0; i < DateTime.daysPerWeek; i++)
-      // Adding days via DateTime rather than Duration keeps this correct
-      // across daylight-saving boundaries, where a "day" is not 24 hours.
-      DateTime(monday.year, monday.month, monday.day + i),
+    for (int i = 0; i < DateTime.daysPerWeek; i++) addDays(monday, i),
   ];
 }
 

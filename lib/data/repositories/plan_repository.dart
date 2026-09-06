@@ -401,7 +401,7 @@ class PlanRepository {
     final DateTime monday = startOfWeek(anchor);
     final Map<DateTime, List<MealPlanEntry>> week = await entriesBetween(
       monday,
-      monday.add(const Duration(days: 6)),
+      addDays(monday, 6),
     );
 
     final List<TemplateEntry> entries = WeekTemplate.from(week);

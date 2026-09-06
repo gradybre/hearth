@@ -72,7 +72,7 @@ class ShoppingRepository {
   /// The range a list opens on before anyone adjusts it.
   ({DateTime from, DateTime to}) defaultRange() {
     final DateTime from = dayKey(_now());
-    return (from: from, to: from.add(const Duration(days: defaultDays - 1)));
+    return (from: from, to: addDays(from, defaultDays - 1));
   }
 
   /// Builds the list for a range and merges it over whatever is already there.
