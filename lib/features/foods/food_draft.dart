@@ -98,17 +98,71 @@ class ServingDraft {
       carbs.trim().isEmpty &&
       fat.trim().isEmpty;
 
+  /// One field's number, or null for a field nobody filled in.
+  ///
+  /// **`parseAmount`, not `double.tryParse`** — and that is the whole of R02.
+  /// These fields are written by `writeAmount`, which renders friendly
+  /// fractions because that is what a person types into a measuring field:
+  /// half a gram goes in as "1/2". `double.tryParse` cannot read its partner's
+  /// output, so every value the fraction table can express came back as
+  /// nothing at all — and the two ways that landed were both silent and
+  /// neither looked wrong on screen. A major macro fell through `?? 0` and
+  /// became a stated **zero**; a minor became **null**, a fact the food really
+  /// did state demoted to "nobody said", which is the one distinction §5.6
+  /// rests on. `parseAmount` is `writeAmount`'s documented inverse and reads
+  /// fractions, mixed numbers and a leading sign.
+  ///
+  /// Non-finite is refused rather than carried: `parseAmount` will not produce
+  /// one, but a paste could, and NaN in a nutrient poisons every total it
+  /// reaches.
+  static double? _field(String raw) {
+    final double? value = parseAmount(raw);
+    if (value == null || !value.isFinite) return null;
+    return value;
+  }
+
   Macros get macros => Macros(
-    kcal: double.tryParse(kcal.trim()) ?? 0,
-    proteinG: double.tryParse(protein.trim()) ?? 0,
-    carbG: double.tryParse(carbs.trim()) ?? 0,
-    fatG: double.tryParse(fat.trim()) ?? 0,
-    // No `?? 0`: an empty field is a question nobody answered, and
-    // `double.tryParse` already says so.
-    fiberG: double.tryParse(fiber.trim()),
-    sodiumMg: double.tryParse(sodium.trim()),
-    cholesterolMg: double.tryParse(cholesterol.trim()),
+    kcal: _field(kcal) ?? 0,
+    proteinG: _field(protein) ?? 0,
+    carbG: _field(carbs) ?? 0,
+    fatG: _field(fat) ?? 0,
+    // No `?? 0`: an empty field is a question nobody answered, and there is a
+    // difference between a food with no fibre and a food nobody asked.
+    fiberG: _field(fiber),
+    sodiumMg: _field(sodium),
+    cholesterolMg: _field(cholesterol),
   );
+
+  /// Fields holding something that is not a number.
+  ///
+  /// Blank is not one of these — blank is a legitimate answer, and for the
+  /// minor three it is the *only* way to say "unknown". This is for text that
+  /// was typed and cannot be read, which would otherwise land as a silent zero
+  /// on a major macro or a silent gap on a minor one.
+  /// A number that has been started but not finished.
+  static final RegExp _partial = RegExp(r'^[-−+]?\.?$');
+
+  Iterable<String> get unreadableFields sync* {
+    for (final (String name, String raw) in <(String, String)>[
+      // "kcal" is what the field is labelled, so it is what the complaint
+      // names — "the calories is not a number" sent people looking for a
+      // field that is not on the screen.
+      ('kcal', kcal),
+      ('protein', protein),
+      ('carbs', carbs),
+      ('fat', fat),
+      ('fibre', fiber),
+      ('sodium', sodium),
+      ('cholesterol', cholesterol),
+    ]) {
+      final String text = raw.trim();
+      // A lone sign or a bare point is a number half-typed, not a mistake.
+      // Complaining at the first keystroke of "-180" or ".5" would put a red
+      // line under somebody mid-word.
+      if (text.isEmpty || _partial.hasMatch(text)) continue;
+      if (_field(raw) == null) yield name;
+    }
+  }
 
   /// How the portion reads in a picker: "100 g", "1 item".
   String get label {
@@ -265,9 +319,14 @@ class FoodDraft {
   /// must reopen exactly as it was stored, or saving it again would quietly
   /// edit macros nobody touched.
   static String _rounded(String value, {int decimals = 1}) {
-    final double? parsed = double.tryParse(value);
-    if (parsed == null) return value;
-    return writeAmount(double.parse(parsed.toStringAsFixed(decimals)));
+    // `parseAmount` and `_plain`, matching the fields this feeds. With
+    // `double.tryParse` on the way in it silently no-opped on exactly the
+    // values it exists for — a scanned 0.75 g arrived as "3/4", failed to
+    // parse, and came back unrounded — and with `writeAmount` on the way out
+    // it put a fraction into a field whose keyboard has no "/".
+    final double? parsed = parseAmount(value);
+    if (parsed == null || !parsed.isFinite) return value;
+    return _plain(double.parse(parsed.toStringAsFixed(decimals)));
   }
 
   /// A food nobody had, carrying only the number that was scanned, so the next
@@ -397,6 +456,20 @@ class FoodDraft {
   /// succeed, sit in the queue, and fail silently on the way up. Better to say
   /// so on the screen where the number was typed (§5.2).
   String? get macrosError {
+    // Before the sign check, because a field nobody can read has no sign to
+    // judge. Named rather than counted: "check the numbers" makes somebody
+    // re-read all seven.
+    final List<String> unreadable = <String>[
+      for (final ServingDraft serving in usableServings)
+        ...serving.unreadableFields,
+    ];
+    if (unreadable.isNotEmpty) {
+      final Set<String> named = unreadable.toSet();
+      return named.length == 1
+          ? 'The ${named.single} is not a number Hearth can read.'
+          : 'These are not numbers Hearth can read: ${named.join(', ')}.';
+    }
+
     if (isModifier) return null;
     final bool anyNegative = usableServings.any(
       (ServingDraft s) =>
@@ -493,13 +566,28 @@ class FoodDraft {
     isModifier: isModifier ?? this.isModifier,
   );
 
+  /// A nutrient as a field's text: a plain decimal, never a kitchen fraction.
+  ///
+  /// `writeAmount` renders "1 1/2", which is right for a measuring amount —
+  /// two thirds of a cup is how a recipe is written and how a jug is marked.
+  /// A nutrient is not that. Nobody writes a gram and a half of protein as
+  /// "1 1/2 g", and the seven nutrient fields carry a **decimal keyboard**,
+  /// which has no "/" on it. So a stored 1.5 reopened as "1 1/2", one
+  /// backspace made it "1 1/", and there was no key on the pad that could put
+  /// it back — a value the user could see, could break, and could not repair.
+  ///
+  /// The Amount field above is the opposite case and keeps `writeAmount`: it
+  /// takes `TextInputType.text` precisely so a fraction can be typed there.
+  static String _plain(double value) => value == value.roundToDouble()
+      ? value.round().toString()
+      : value.toString();
+
   /// A zero macro reopens as an empty field, not a literal "0".
   ///
   /// Showing "0" made the field look filled in, and typing into it produced
   /// "0250" rather than "250" — the digits landed beside a value the user
   /// never entered. Empty also lets the hint do its job.
-  static String _macroText(double value) =>
-      value == 0 ? '' : writeAmount(value);
+  static String _macroText(double value) => value == 0 ? '' : _plain(value);
 
   /// A minor nutrient as a field's text: empty for unknown, **"0" for a
   /// stated zero** (spec §5.6).
@@ -509,8 +597,7 @@ class FoodDraft {
   /// and nothing is lost. Here a blank field means "nobody said", so blanking
   /// a stated zero would turn a fact into a gap on every edit. Water really
   /// does have no sodium.
-  static String _minorText(double? value) =>
-      value == null ? '' : writeAmount(value);
+  static String _minorText(double? value) => value == null ? '' : _plain(value);
 }
 
 /// A typed pack size — "1 lb", "7.2 oz" — as a quantity, or null.
