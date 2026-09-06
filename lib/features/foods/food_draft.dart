@@ -98,17 +98,60 @@ class ServingDraft {
       carbs.trim().isEmpty &&
       fat.trim().isEmpty;
 
+  /// One field's number, or null for a field nobody filled in.
+  ///
+  /// **`parseAmount`, not `double.tryParse`** — and that is the whole of R02.
+  /// These fields are written by `writeAmount`, which renders friendly
+  /// fractions because that is what a person types into a measuring field:
+  /// half a gram goes in as "1/2". `double.tryParse` cannot read its partner's
+  /// output, so every value the fraction table can express came back as
+  /// nothing at all — and the two ways that landed were both silent and
+  /// neither looked wrong on screen. A major macro fell through `?? 0` and
+  /// became a stated **zero**; a minor became **null**, a fact the food really
+  /// did state demoted to "nobody said", which is the one distinction §5.6
+  /// rests on. `parseAmount` is `writeAmount`'s documented inverse and reads
+  /// fractions, mixed numbers and a leading sign.
+  ///
+  /// Non-finite is refused rather than carried: `parseAmount` will not produce
+  /// one, but a paste could, and NaN in a nutrient poisons every total it
+  /// reaches.
+  static double? _field(String raw) {
+    final double? value = parseAmount(raw);
+    if (value == null || !value.isFinite) return null;
+    return value;
+  }
+
   Macros get macros => Macros(
-    kcal: double.tryParse(kcal.trim()) ?? 0,
-    proteinG: double.tryParse(protein.trim()) ?? 0,
-    carbG: double.tryParse(carbs.trim()) ?? 0,
-    fatG: double.tryParse(fat.trim()) ?? 0,
-    // No `?? 0`: an empty field is a question nobody answered, and
-    // `double.tryParse` already says so.
-    fiberG: double.tryParse(fiber.trim()),
-    sodiumMg: double.tryParse(sodium.trim()),
-    cholesterolMg: double.tryParse(cholesterol.trim()),
+    kcal: _field(kcal) ?? 0,
+    proteinG: _field(protein) ?? 0,
+    carbG: _field(carbs) ?? 0,
+    fatG: _field(fat) ?? 0,
+    // No `?? 0`: an empty field is a question nobody answered, and there is a
+    // difference between a food with no fibre and a food nobody asked.
+    fiberG: _field(fiber),
+    sodiumMg: _field(sodium),
+    cholesterolMg: _field(cholesterol),
   );
+
+  /// Fields holding something that is not a number.
+  ///
+  /// Blank is not one of these — blank is a legitimate answer, and for the
+  /// minor three it is the *only* way to say "unknown". This is for text that
+  /// was typed and cannot be read, which would otherwise land as a silent zero
+  /// on a major macro or a silent gap on a minor one.
+  Iterable<String> get unreadableFields sync* {
+    for (final (String name, String raw) in <(String, String)>[
+      ('calories', kcal),
+      ('protein', protein),
+      ('carbs', carbs),
+      ('fat', fat),
+      ('fibre', fiber),
+      ('sodium', sodium),
+      ('cholesterol', cholesterol),
+    ]) {
+      if (raw.trim().isNotEmpty && _field(raw) == null) yield name;
+    }
+  }
 
   /// How the portion reads in a picker: "100 g", "1 item".
   String get label {
@@ -397,6 +440,20 @@ class FoodDraft {
   /// succeed, sit in the queue, and fail silently on the way up. Better to say
   /// so on the screen where the number was typed (§5.2).
   String? get macrosError {
+    // Before the sign check, because a field nobody can read has no sign to
+    // judge. Named rather than counted: "check the numbers" makes somebody
+    // re-read all seven.
+    final List<String> unreadable = <String>[
+      for (final ServingDraft serving in usableServings)
+        ...serving.unreadableFields,
+    ];
+    if (unreadable.isNotEmpty) {
+      final Set<String> named = unreadable.toSet();
+      return named.length == 1
+          ? 'The ${named.single} is not a number Hearth can read.'
+          : 'These are not numbers Hearth can read: ${named.join(', ')}.';
+    }
+
     if (isModifier) return null;
     final bool anyNegative = usableServings.any(
       (ServingDraft s) =>
