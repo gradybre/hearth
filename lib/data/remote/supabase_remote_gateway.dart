@@ -128,6 +128,26 @@ class SupabaseRemoteGateway implements RemoteGateway {
     );
   }
 
+  /// What a deletion actually writes, for a table that records one.
+  ///
+  /// The writer's own clock travels with it. The server records that as
+  /// `deleted_at`, and an upsert may only clear the flag with a write made
+  /// after it — which is how an edit left unsent in an outbox stops undoing a
+  /// deliberate deletion (spec §7.1).
+  ///
+  /// A payload from an older build states no time; the server falls back to
+  /// its own clock rather than refusing the write, so the deletion still
+  /// happens and only the comparison is a little less exact.
+  ///
+  /// Separated out to be readable on its own: it is the one line that carries
+  /// the client's clock onto the wire, and it sits inside a call that needs a
+  /// live Postgrest to exercise.
+  static Map<String, Object?> softDeletePatch(Map<String, Object?> payload) =>
+      <String, Object?>{
+        'is_deleted': true,
+        if (payload['updated_at'] != null) 'updated_at': payload['updated_at'],
+      };
+
   Future<void> _delete(
     String table,
     String entityId,
@@ -138,7 +158,7 @@ class SupabaseRemoteGateway implements RemoteGateway {
     // somewhere to record it. The filter is built the same way either way, so
     // a missing key is still refused rather than matching every row.
     PostgrestFilterBuilder<void> query = softDeleteTables.contains(table)
-        ? _client.from(table).update(<String, Object?>{'is_deleted': true})
+        ? _client.from(table).update(softDeletePatch(payload))
         : _client.from(table).delete();
     for (final String key in keys) {
       final Object? value = payload[key] ?? (key == 'id' ? entityId : null);

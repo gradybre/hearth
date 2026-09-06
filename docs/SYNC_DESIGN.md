@@ -194,12 +194,25 @@ pagination, scope, deletion and repair is not reviewable:
    replacement every pass, so absence there is already read correctly, and a
    flag as well would be a second mechanism for the same fact.
 
-   **D3b — the resurrection guard**, still to come. An upsert replayed from
-   the outbox can clear `is_deleted` on a row another device deleted. Left out
-   of D3a on purpose rather than half-answered: recipes and foods have had the
-   same hole since they were built (`upsert_recipe` sets
-   `is_deleted = excluded.is_deleted` outright), so the rule belongs in one
-   place covering all seven tables, not bolted onto five of them.
+   **D3b — the resurrection guard.** An upsert replayed from the outbox could
+   clear `is_deleted` on a row another device deleted, and D3a made that reach
+   *further*: all five record payloads now state `is_deleted` explicitly, so
+   every replayed upsert is a resurrection attempt. One trigger across all
+   seven soft-deleting tables, because recipes and foods have had the same
+   hole since they were built.
+
+   **Not compared against `updated_at`.** Every one of these tables has a
+   `touch_updated_at` trigger, so the stored value is the *server's* clock
+   while the incoming one is the writer's. Comparing across the two means a
+   phone two seconds slow cannot undo its own deletion — the Undo looks older
+   than the tombstone it is undoing. So the tombstone records the deleting
+   writer's stated time in `deleted_at`, and the comparison is client clock
+   against client clock: strictly increasing on one device, and across two it
+   rests on the assumption the rest of sync already rests on.
+
+   Only the flag is held, not the whole write. A tombstone whose other columns
+   took a stale value is invisible either way, and refusing the write outright
+   would strand it in the outbox for ever.
 
 **E — B01's retry and status** follows, and is where "Synced" stops being a
 claim the app cannot support.

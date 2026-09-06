@@ -191,7 +191,13 @@ class ShoppingRepository {
           entityTable: itemsTable,
           entityId: id,
           operation: WriteOperation.delete,
-          payload: <String, Object?>{'id': id},
+          payload: <String, Object?>{
+            'id': id,
+            // Stated, not left to the server: the tombstone records the deleting
+            // writer's own clock, so an Undo from this same device is always
+            // newer than the deletion it undoes (spec §7.1).
+            'updated_at': now.toUtc().toIso8601String(),
+          },
           queuedAt: now,
         );
       }
