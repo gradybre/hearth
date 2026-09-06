@@ -256,6 +256,19 @@ belongs to the Nutrition section.
 - **Backdating:** any day is editable (forgot to log yesterday, etc.); frozen snapshots keep past integrity intact.
 
 ### 5.7 Shopping List + Walmart Adapter
+- **The range on screen is the range the list covers.** Opening the app shows
+  the dates the current list was built for, not "today plus six" regardless —
+  build on a Friday for the weekend and the week after, open it on Sunday, and
+  the label used to describe a different stretch from the one the lines came
+  from, so rebuilding moved the list to match the label rather than the other
+  way round. A range the user has adjusted is theirs and survives anything the
+  list does; until they adjust it, the list speaks for itself.
+- **Dates are stepped on the calendar, never by adding hours.** A local day is
+  23 or 25 hours long on the two nights a year daylight saving changes, so
+  `Duration(days: n)` lands an hour either side of midnight and belongs to the
+  wrong date. Every date in the app is a midnight key, so that is the
+  difference between Sunday's plan and Monday's. `addDays` does it correctly
+  and a test reads the source to make sure nothing goes back to the other way.
 - Build a shopping list from the planned recipes/foods over **an adjustable date range**, defaulting to today through the next seven days. Not a calendar week: shopping on a Friday covers the weekend and the week after, and never lines up with one. Already-logged entries are excluded — something eaten was already bought.
 - **Aggregation:** two-stage. First, each recipe's sections are flattened to a single per-recipe ingredient total (duplicates across sections summed). Then duplicate ingredients across all the week's recipes combine into one line item. Optional/to-taste ingredients are excluded.
 - **Mixed-unit aggregation:** when the same ingredient appears in different units across recipes (2 tbsp + 50 g butter), convert to one sensible unit **when density is known**; otherwise list both quantities under a single line item.

@@ -351,11 +351,38 @@ final Provider<ShoppingRepository> shoppingRepositoryProvider =
 /// Adjustable, and deliberately not a week: the shop happens on a Friday for a
 /// stretch covering the weekend and the week after (spec §5.7).
 class ShoppingRange extends Notifier<({DateTime from, DateTime to})> {
+  /// Whether the dates on screen are the user's rather than the list's.
+  ///
+  /// Once they have chosen, the list must stop speaking for them — see the
+  /// listener below.
+  bool _chosen = false;
+
   @override
-  ({DateTime from, DateTime to}) build() =>
-      ref.watch(shoppingRepositoryProvider).defaultRange();
+  ({DateTime from, DateTime to}) build() {
+    // The list's own range, once it is known, rather than "today plus six"
+    // regardless. Build a list on Friday covering the weekend and the week
+    // after, open the app on Sunday, and the dates on screen used to describe
+    // a different stretch from the one the lines came from — and rebuilding
+    // then moved the list to match the label rather than the other way round.
+    //
+    // Listened to rather than watched. Watching would rebuild this notifier
+    // every time anything about the list changed — ticking an item is a
+    // change — and each rebuild would discard dates the user had just chosen.
+    ref.listen(shoppingListProvider, (
+      AsyncValue<ShoppingListSnapshot?>? _,
+      AsyncValue<ShoppingListSnapshot?> next,
+    ) {
+      if (_chosen) return;
+      if (next.value case final ShoppingListSnapshot saved) {
+        state = (from: saved.from, to: saved.to);
+      }
+    }, fireImmediately: true);
+
+    return ref.read(shoppingRepositoryProvider).defaultRange();
+  }
 
   void set({DateTime? from, DateTime? to}) {
+    _chosen = true;
     final DateTime start = from ?? state.from;
     final DateTime end = to ?? state.to;
     // A range that ends before it starts is a mis-tap, not an instruction.

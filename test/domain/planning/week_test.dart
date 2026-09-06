@@ -82,4 +82,63 @@ void main() {
       );
     });
   });
+
+  group('addDays (spec §5.7, R08)', () {
+    test('crosses a month without arithmetic of its own', () {
+      expect(addDays(DateTime(2026, 1, 30), 3), DateTime(2026, 2, 2));
+    });
+
+    test('and a year, and a leap day', () {
+      expect(addDays(DateTime(2026, 12, 30), 3), DateTime(2027, 1, 2));
+      expect(addDays(DateTime(2028, 2, 28), 1), DateTime(2028, 2, 29));
+    });
+
+    test('walks backwards when asked to', () {
+      expect(addDays(DateTime(2026, 3, 2), -3), DateTime(2026, 2, 27));
+    });
+
+    test('leaves a midnight key at midnight', () {
+      final DateTime moved = addDays(DateTime(2026, 3, 1), 10);
+      expect(moved.hour, 0);
+      expect(moved.minute, 0);
+    });
+
+    test('over a daylight-saving change, where a day is not 24 hours', () {
+      // The bug itself, on any machine whose zone actually changes. CI runs
+      // in UTC, where every day really is 24 hours and this cannot fail —
+      // which is why the convention is also enforced by reading the source,
+      // in test/architecture/calendar_arithmetic_test.dart.
+      final List<DateTime> transitions = <DateTime>[];
+      DateTime day = DateTime(2026);
+      while (day.year == 2026) {
+        final DateTime next = DateTime(day.year, day.month, day.day + 1);
+        if (next.timeZoneOffset != day.timeZoneOffset) transitions.add(day);
+        day = next;
+      }
+
+      if (transitions.isEmpty) {
+        markTestSkipped('this machine\'s timezone has no daylight saving');
+        return;
+      }
+
+      for (final DateTime before in transitions) {
+        final DateTime after = addDays(before, 1);
+
+        expect(
+          after.hour,
+          0,
+          reason: 'crossing $before landed at ${after.hour}:00, not midnight',
+        );
+        expect(after.day, isNot(before.day));
+
+        // And the way that was written before does exactly what this exists
+        // to stop — so the test above is not passing by luck.
+        expect(
+          before.add(const Duration(days: 1)).hour,
+          isNot(0),
+          reason: 'a Duration of 24 hours should not land on midnight here',
+        );
+      }
+    });
+  });
 }

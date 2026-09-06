@@ -127,7 +127,7 @@ class WeekTemplate {
     final DateTime monday = startOfWeek(anchor);
     return <({DateTime date, TemplateEntry entry})>[
       for (final TemplateEntry entry in entries)
-        (date: monday.add(Duration(days: entry.weekday - 1)), entry: entry),
+        (date: addDays(monday, entry.weekday - 1), entry: entry),
     ];
   }
 

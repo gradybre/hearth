@@ -68,7 +68,7 @@ class _DayPickerSheetState extends ConsumerState<_DayPickerSheet> {
     // the job needs.
     final List<DateTime> days = <DateTime>[
       ...weekOf(anchor),
-      ...weekOf(anchor.add(const Duration(days: 7))),
+      ...weekOf(addDays(anchor, 7)),
     ];
 
     return ConstrainedBox(
