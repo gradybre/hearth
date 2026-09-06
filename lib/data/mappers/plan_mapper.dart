@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
+import '../../domain/planning/nutrient_coverage.dart';
 import '../local/hearth_database.dart';
 
 /// Maps plan entries, snapshots, and targets between domain and rows.
@@ -39,6 +40,11 @@ abstract final class PlanMapper {
         'fiber_g': snapshot.macros.fiberG,
         'sodium_mg': snapshot.macros.sodiumMg,
         'cholesterol_mg': snapshot.macros.cholesterolMg,
+        // How much of those numbers the minor three actually speak for
+        // (spec §5.6). Written alongside them rather than derived later,
+        // because once a meal is eaten its ingredients are gone and a partial
+        // total can never be re-qualified.
+        'coverage': snapshot.coverage.toJson(),
         'servings': snapshot.servings,
         'captured_at': snapshot.capturedAt.toIso8601String(),
         'label': snapshot.label,
@@ -67,6 +73,10 @@ abstract final class PlanMapper {
         sodiumMg: _nullableDouble(decoded['sodium_mg']),
         cholesterolMg: _nullableDouble(decoded['cholesterol_mg']),
       ),
+      // Absent, malformed, or written by a newer version than this reader
+      // understands all read as "not recorded" — never as complete. A
+      // snapshot frozen before coverage existed cannot earn it retroactively.
+      coverage: NutrientCoverage.fromJson(decoded['coverage']),
       servings: _double(decoded['servings']),
       capturedAt:
           DateTime.tryParse(decoded['captured_at']?.toString() ?? '') ??

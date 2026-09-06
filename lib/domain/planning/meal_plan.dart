@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../models/macros.dart';
+import 'nutrient_coverage.dart';
 
 /// The four meal slots a day is divided into (spec §5.6).
 enum MealSlot { breakfast, lunch, dinner, snack }
@@ -22,6 +23,7 @@ class MacroSnapshot {
     required this.servings,
     required this.capturedAt,
     required this.label,
+    this.coverage = const NutrientCoverage.notRecorded(),
   });
 
   /// Macros for the portion actually eaten — already multiplied by [servings].
@@ -37,16 +39,31 @@ class MacroSnapshot {
   /// make old history unreadable.
   final String label;
 
+  /// How much of [macros]' minor nutrients the numbers actually speak for
+  /// (spec §5.6).
+  ///
+  /// Frozen with everything else, and for the same reason: once a meal is
+  /// eaten its ingredients are no longer reachable, so a partial total can
+  /// never be re-qualified from today's library. Editing the recipe tomorrow
+  /// must not make yesterday's fibre look complete.
+  ///
+  /// Defaults to [MinorCoverage.notRecorded] so that every snapshot frozen
+  /// before this existed says so, rather than claiming a completeness nothing
+  /// ever checked.
+  final NutrientCoverage coverage;
+
   @override
   bool operator ==(Object other) =>
       other is MacroSnapshot &&
       other.macros == macros &&
       other.servings == servings &&
+      other.coverage == coverage &&
       other.capturedAt == capturedAt &&
       other.label == label;
 
   @override
-  int get hashCode => Object.hash(macros, servings, capturedAt, label);
+  int get hashCode =>
+      Object.hash(macros, servings, coverage, capturedAt, label);
 
   @override
   String toString() => 'MacroSnapshot($label, ${servings}x, $macros)';
@@ -97,6 +114,7 @@ class MealPlanEntry {
     required DateTime at,
     required String label,
     double? portion,
+    NutrientCoverage? coverage,
   }) {
     final double logged = portion ?? servings;
     return MealPlanEntry(
@@ -114,6 +132,9 @@ class MealPlanEntry {
         servings: logged,
         capturedAt: at,
         label: label,
+        // Scaling a portion cannot change what was known about it: half a
+        // recipe whose fibre was partial is still partial.
+        coverage: coverage ?? NutrientCoverage.ofOne(liveMacros),
       ),
     );
   }

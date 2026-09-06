@@ -3,6 +3,7 @@ import 'package:meta/meta.dart';
 import '../models/food.dart';
 import '../models/macros.dart';
 import '../models/recipe.dart';
+import '../planning/nutrient_coverage.dart';
 import '../units/quantity.dart';
 import '../units/unit_converter.dart';
 
@@ -128,6 +129,22 @@ class RecipeMacros {
   int unknownCountFor(MinorNutrient nutrient) => ingredients
       .where((IngredientMacros i) => i.isResolved && !i.macros.knows(nutrient))
       .length;
+
+  /// How much of this recipe's total each minor nutrient speaks for.
+  ///
+  /// Only the ingredients that actually *counted* are asked. One excluded as
+  /// optional, or marked as a seasoning, is no more a gap in the fibre total
+  /// than it is in the calories — it was never going to contribute, so its
+  /// silence is not a hole in what the rest add up to.
+  ///
+  /// This is what survives being logged. [partialNoteFor] says the same thing
+  /// in words for the recipe page; this says it in a form a frozen snapshot
+  /// can carry, because once a meal is eaten the ingredients are no longer
+  /// reachable and the qualification cannot be recomputed (spec §4).
+  NutrientCoverage get coverage => NutrientCoverage.sum(<NutrientCoverage>[
+    for (final IngredientMacros i in ingredients)
+      if (i.isResolved) NutrientCoverage.ofOne(i.macros),
+  ]);
 
   /// One phrase saying a [nutrient] total is only part of the story, or null
   /// when every counted ingredient knew it.

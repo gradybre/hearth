@@ -4,6 +4,7 @@ import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/planning/meal_plan.dart';
+import '../../domain/planning/nutrient_coverage.dart';
 import '../../domain/recipes/macro_calculator.dart';
 
 /// A plan entry with everything needed to draw and total it.
@@ -13,6 +14,7 @@ class ResolvedEntry {
     required this.entry,
     required this.label,
     required this.perServing,
+    this.liveCoverage = const NutrientCoverage.notRecorded(),
     required this.isResolvable,
     this.servingLabel,
   });
@@ -25,6 +27,12 @@ class ResolvedEntry {
 
   /// Live macros for one serving. Zero when the reference is gone.
   final Macros perServing;
+
+  /// How much of [perServing]'s minor nutrients the numbers speak for, live.
+  ///
+  /// A logged entry answers from its frozen coverage instead; this is what a
+  /// *planned* one is costed with, and what gets frozen when it is eaten.
+  final NutrientCoverage liveCoverage;
 
   /// False when the recipe or food behind this entry no longer resolves.
   ///
@@ -39,6 +47,17 @@ class ResolvedEntry {
   ///
   /// Logged entries answer from their snapshot; planned ones are costed live.
   Macros get contribution => entry.contribution(plannedMacros: perServing);
+
+  /// How much of [contribution]'s minor nutrients it speaks for.
+  ///
+  /// Frozen for a logged entry and live for a planned one, matching where the
+  /// numbers themselves come from. Editing a recipe changes what tonight's
+  /// plan is expected to cover; it cannot change what last night's dinner did
+  /// (spec §4).
+  NutrientCoverage get contributionCoverage =>
+      entry.isLogged && entry.macroSnapshot != null
+      ? entry.macroSnapshot!.coverage
+      : liveCoverage;
 
   /// True when this is on the plan but not yet eaten.
   bool get isPending => !entry.isLogged;
@@ -71,16 +90,22 @@ abstract final class EntryResolver {
                 ? snapshot!.label
                 : 'Removed recipe',
             perServing: Macros.zero,
+            liveCoverage: const NutrientCoverage.notRecorded(),
             isResolvable: false,
           );
         }
+        // The whole `RecipeMacros`, not just its per-serving total: the
+        // coverage lives in the ingredients, and taking `.perServing` alone is
+        // where the qualification used to be dropped (R06).
+        final RecipeMacros macros = MacroCalculator.forRecipe(
+          recipe,
+          foods: foods,
+        );
         return ResolvedEntry(
           entry: entry,
           label: recipe.title,
-          perServing: MacroCalculator.forRecipe(
-            recipe,
-            foods: foods,
-          ).perServing,
+          perServing: macros.perServing,
+          liveCoverage: macros.coverage,
           isResolvable: true,
         );
 
@@ -94,6 +119,7 @@ abstract final class EntryResolver {
                 ? snapshot!.label
                 : 'Removed food',
             perServing: Macros.zero,
+            liveCoverage: const NutrientCoverage.notRecorded(),
             isResolvable: false,
           );
         }
@@ -134,6 +160,19 @@ abstract final class EntryResolver {
   static List<Macros> eatenParts(Iterable<ResolvedEntry> entries) => <Macros>[
     for (final ResolvedEntry entry in entries)
       if (entry.entry.isLogged) entry.contribution,
+  ];
+
+  /// What each logged contribution actually speaks for, in the same order.
+  ///
+  /// Counting entries told you how many meals said nothing at all. It could
+  /// not see inside one: a recipe whose second ingredient never stated its
+  /// fibre summed to a non-null number, so the entry read as knowing, and the
+  /// day showed a partial total as though it were whole (R06).
+  static List<NutrientCoverage> eatenCoverage(
+    Iterable<ResolvedEntry> entries,
+  ) => <NutrientCoverage>[
+    for (final ResolvedEntry entry in entries)
+      if (entry.entry.isLogged) entry.contributionCoverage,
   ];
 
   /// What the rest of the plan would add if every planned entry were eaten.

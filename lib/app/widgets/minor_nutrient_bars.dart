@@ -121,6 +121,11 @@ class _Bar extends StatelessWidget {
     } else if (nutrient.unknownCount > 0) {
       coverage =
           '${nutrient.unknownCount} of ${nutrient.countedParts} did not say';
+    } else if (nutrient.isPartial) {
+      // A number that is real and is a floor. Counting meals could not see
+      // this: every meal stated a total, and one of them was missing an
+      // ingredient's worth of it (spec §5.6).
+      coverage = 'at least this — something in a meal did not say';
     } else {
       coverage = null;
     }
