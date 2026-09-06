@@ -359,8 +359,15 @@ class ShoppingRange extends Notifier<({DateTime from, DateTime to})> {
 
   @override
   ({DateTime from, DateTime to}) build() {
-    // The list's own range, once it is known, rather than "today plus six"
-    // regardless. Build a list on Friday covering the weekend and the week
+    // A different household is a different list, and a range chosen for the
+    // old one means nothing against it. Watched, so signing in rebuilds this;
+    // the flag is cleared here because Riverpod reuses the notifier object
+    // across rebuilds, so a stale `true` would outlive the state it was about
+    // and pin the range for good.
+    ref.watch(currentHouseholdIdProvider);
+    _chosen = false;
+
+    // The list's own range, rather than "today plus six" regardless. Build a list on Friday covering the weekend and the week
     // after, open the app on Sunday, and the dates on screen used to describe
     // a different stretch from the one the lines came from — and rebuilding
     // then moved the list to match the label rather than the other way round.
@@ -368,6 +375,13 @@ class ShoppingRange extends Notifier<({DateTime from, DateTime to})> {
     // Listened to rather than watched. Watching would rebuild this notifier
     // every time anything about the list changed — ticking an item is a
     // change — and each rebuild would discard dates the user had just chosen.
+    //
+    // No `fireImmediately`: a listener that fires inside `build` assigns
+    // `state` and then `build` returns over the top of it, silently. That is
+    // not a hypothetical — it is what the first version of this did, and it
+    // left the fix working in a test and not on the phone, because the screen
+    // only builds its body once the list has loaded and so always hit the
+    // already-loaded case.
     ref.listen(shoppingListProvider, (
       AsyncValue<ShoppingListSnapshot?>? _,
       AsyncValue<ShoppingListSnapshot?> next,
@@ -376,8 +390,16 @@ class ShoppingRange extends Notifier<({DateTime from, DateTime to})> {
       if (next.value case final ShoppingListSnapshot saved) {
         state = (from: saved.from, to: saved.to);
       }
-    }, fireImmediately: true);
+    });
 
+    // The list as it already stands, which on the screen's own path is the
+    // usual case rather than the exception.
+    if (ref.read(shoppingListProvider).value
+        case final ShoppingListSnapshot saved) {
+      return (from: saved.from, to: saved.to);
+    }
+
+    // No list yet: today, and the week that follows it.
     return ref.read(shoppingRepositoryProvider).defaultRange();
   }
 

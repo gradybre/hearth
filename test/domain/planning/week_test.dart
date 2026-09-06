@@ -123,21 +123,33 @@ void main() {
 
       for (final DateTime before in transitions) {
         final DateTime after = addDays(before, 1);
-
-        expect(
-          after.hour,
-          0,
-          reason: 'crossing $before landed at ${after.hour}:00, not midnight',
+        final DateTime expected = DateTime(
+          before.year,
+          before.month,
+          before.day + 1,
         );
-        expect(after.day, isNot(before.day));
 
-        // And the way that was written before does exactly what this exists
-        // to stop — so the test above is not passing by luck.
+        // The calendar date, not the hour. Some zones shift at midnight
+        // itself — Chile, Cuba, Iran, Egypt — so one midnight a year does not
+        // exist there and Dart normalises it to 01:00. The production code is
+        // right in those zones too, because `dayKey` normalises identically
+        // and the keys still compare equal; it was only ever the assertion
+        // that assumed midnight always exists.
         expect(
-          before.add(const Duration(days: 1)).hour,
-          isNot(0),
-          reason: 'a Duration of 24 hours should not land on midnight here',
+          after,
+          expected,
+          reason: 'crossing $before gave $after, not $expected',
         );
+
+        // And where there *is* a midnight to land on, the old way misses it —
+        // so the assertion above is not passing by luck.
+        if (expected.hour == 0) {
+          expect(
+            before.add(const Duration(days: 1)),
+            isNot(expected),
+            reason: 'a Duration of 24 hours should not agree here',
+          );
+        }
       }
     });
   });
