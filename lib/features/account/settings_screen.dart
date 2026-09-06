@@ -1047,6 +1047,17 @@ class _SyncPanel extends ConsumerWidget {
     if (result.stoppedBecauseOffline) {
       return '$queued waiting — no connection just now.';
     }
+    // Before the ordinary failure line: a stranded write has stopped being
+    // tried, so `failed` goes back to zero on the next pass and the panel
+    // would otherwise say everything was up to date.
+    if (result.stranded > 0) {
+      final int n = result.stranded;
+      return n == 1
+          ? '1 change could not be sent, after several tries. It is still '
+                'saved here.'
+          : '$n changes could not be sent, after several tries. They are '
+                'still saved here.';
+    }
     if (result.failed > 0) {
       return '${result.failed} could not be sent. They are still saved here.';
     }

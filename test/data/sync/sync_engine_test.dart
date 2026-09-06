@@ -178,7 +178,14 @@ void main() {
       expect(result.failed, 1);
       expect(result.stillQueued, 1);
 
-      final PendingWrite failed = (await queue.pending()).single;
+      // Not offered again immediately: a refusal now waits before the next
+      // try, because passes are triggered by local writes and would otherwise
+      // retry it several times a second (B01).
+      expect(await queue.pending(), isEmpty);
+
+      final PendingWrite failed = (await queue.pending(
+        now: DateTime.now().toUtc().add(const Duration(minutes: 1)),
+      )).single;
       expect(failed.entityId, 'bad');
       expect(failed.attempts, 1);
       expect(failed.lastError, contains('server rejected'));

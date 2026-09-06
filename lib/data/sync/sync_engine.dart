@@ -35,12 +35,19 @@ class SyncResult {
     required this.pushed,
     required this.failed,
     required this.stillQueued,
+    this.stranded = 0,
     this.stoppedBecauseOffline = false,
   });
 
   final int pushed;
   final int failed;
   final int stillQueued;
+
+  /// Writes that have stopped being asked, having been refused [
+  /// PendingWriteStore.maxAttempts] times. They are still here — giving up
+  /// means giving up asking, never giving up the work — but nothing will send
+  /// them without something changing.
+  final int stranded;
 
   /// True when the run stopped early because the server was unreachable. Not
   /// a failure — the queue is intact and will drain on reconnect.
@@ -59,19 +66,27 @@ class SyncResult {
 ///    failure leaves it queued with the error recorded — losing a meal you
 ///    logged offline is the one outcome this must never produce.
 class SyncEngine {
-  SyncEngine({required PendingWriteStore queue, required RemoteGateway gateway})
-    : _queue = queue,
-      _gateway = gateway;
+  SyncEngine({
+    required PendingWriteStore queue,
+    required RemoteGateway gateway,
+    DateTime Function()? clock,
+  }) : _queue = queue,
+       _gateway = gateway,
+       _clock = clock ?? (() => DateTime.now().toUtc());
 
   final PendingWriteStore _queue;
   final RemoteGateway _gateway;
+
+  /// Injectable so a test can watch a backoff elapse without waiting for it.
+  final DateTime Function() _clock;
 
   /// Pushes everything queued.
   ///
   /// Stops at the first sign the server is unreachable rather than marching
   /// through the whole queue racking up failures against every write.
   Future<SyncResult> push() async {
-    final List<PendingWrite> writes = await _queue.pending();
+    final DateTime now = _clock();
+    final List<PendingWrite> writes = await _queue.pending(now: now);
     int pushed = 0;
     int failed = 0;
     bool offline = false;
@@ -92,7 +107,7 @@ class SyncEngine {
         offline = true;
         break;
       } on Exception catch (error) {
-        await _queue.markFailed(write.sequence, error.toString());
+        await _queue.markFailed(write.sequence, error.toString(), now: now);
         failed++;
       }
     }
@@ -101,6 +116,7 @@ class SyncEngine {
       pushed: pushed,
       failed: failed,
       stillQueued: await _queue.count(),
+      stranded: await _queue.strandedCount(),
       stoppedBecauseOffline: offline,
     );
   }

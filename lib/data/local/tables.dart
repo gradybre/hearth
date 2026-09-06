@@ -283,6 +283,14 @@ class PendingWrites extends Table {
   DateTimeColumn get queuedAt => dateTime()();
   IntColumn get attempts => integer().withDefault(const Constant(0))();
   TextColumn get lastError => text().nullable()();
+
+  /// The earliest this write may be tried again, after a failure.
+  ///
+  /// Null means now. A failure that retried on every pass would hammer the
+  /// server for as long as it kept being refused — and passes are triggered
+  /// by local writes, so somebody typing a shopping list can produce several
+  /// a second (spec §7.1).
+  DateTimeColumn get nextAttemptAt => dateTime().nullable()();
 }
 
 /// A remembered ingredient-string to food mapping (spec §5.3).

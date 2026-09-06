@@ -356,6 +356,19 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
     polling timer. That is the relaxation this section already allows, and a
     maintained socket buys little for two people who are rarely in the app at
     the same moment. Revisit if that stops being true.
+- **A write that cannot be sent stops being asked, but is never dropped.** A
+  refusal waits before the next try, and after five it stops being tried at
+  all — passes are triggered by local writes rather than a timer, so a write
+  the server keeps refusing would otherwise be refused several times a second
+  for as long as somebody kept typing. It stays queued and is reported: giving
+  up means giving up *asking*, and losing a logged meal to a server that
+  refused it is the failure the queue exists to prevent. Being offline is not
+  a failed attempt; five aeroplane journeys must not strand a meal that
+  nothing was ever wrong with.
+- **A sync asked for during a sync happens afterwards.** Requests made while a
+  pass is running coalesce into exactly one rerun — not none, which left a
+  write waiting for whatever happened to trigger the next pass, and not one
+  each, which would have a recipe save chase its own tail.
 - **A deletion is a change, not an absence.** Every synced table that a user
   can delete from soft-deletes: the row stays and `is_deleted` turns true, so
   the deletion travels on the ordinary pull like any other change. A plain

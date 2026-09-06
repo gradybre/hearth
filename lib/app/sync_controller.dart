@@ -8,6 +8,7 @@ import '../data/auth/auth_gateway.dart';
 import '../data/sync/photo_sync.dart';
 import '../data/sync/sync_engine.dart';
 import 'providers.dart';
+import 'sync_gate.dart';
 
 /// When the queue gets drained (spec §7.1).
 ///
@@ -17,7 +18,7 @@ import 'providers.dart';
 /// asking a question whose answer has not changed.
 class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
   Timer? _debounce;
-  bool _running = false;
+  final SyncGate _gate = SyncGate();
 
   /// Whether anyone is signed in, tracked from the account listener rather
   /// than read back from the provider: reading it here answered null even
@@ -73,7 +74,7 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
   }
 
   Future<void> sync() async {
-    if (_running || !ref.read(supabaseReadyProvider)) return;
+    if (!ref.read(supabaseReadyProvider)) return;
 
     // Nothing to sync as nobody. Worse than pointless: RLS answers a
     // signed-out pull with an empty result rather than an error, which looks
@@ -81,7 +82,10 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
     // forward over records this device had never seen, and they would never
     // be asked for again.
     if (!_signedIn) return;
-    _running = true;
+
+    // Turned away rather than dropped: the gate remembers, and says so at the
+    // end of the pass that was already running.
+    if (!_gate.start()) return;
     state = const SyncStatus.syncing();
     try {
       // Push before pull, always. Sending what this device did before
@@ -126,7 +130,10 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
       // Error, and letting it escape would lose the sync silently.
       state = SyncStatus.failed('$error');
     } finally {
-      _running = false;
+      // Asked again while that was running: honour it once, debounced like
+      // any other request rather than called straight through, so a pass that
+      // queues its own writes cannot chase its own tail.
+      if (_gate.finish()) syncSoon();
     }
   }
 }
@@ -160,5 +167,10 @@ class SyncStatus {
   /// True when there is something the user would want to know about: writes
   /// that could not be sent, as opposed to writes merely waiting for a
   /// network.
-  bool get hasProblem => error != null || (result?.failed ?? 0) > 0;
+  ///
+  /// A stranded write counts even though nothing tried it this pass. It has
+  /// stopped being asked, so it will not resolve itself, and going quiet
+  /// about it is how it would sit there unnoticed for ever.
+  bool get hasProblem =>
+      error != null || (result?.failed ?? 0) > 0 || (result?.stranded ?? 0) > 0;
 }

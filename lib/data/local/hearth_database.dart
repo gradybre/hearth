@@ -49,7 +49,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 25;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -229,6 +229,17 @@ class HearthDatabase extends _$HearthDatabase {
       // in it until something draws one.
       if (from < 24) {
         await _addColumnIfMissing(m, recipes, recipes.iconSvg);
+      }
+      // v25 gives a failed write a time to wait until. Without one a refusal
+      // was retried on every pass for ever, and passes are triggered by local
+      // writes — so somebody typing a shopping list produced several a second
+      // (spec §7.1).
+      if (from < 25) {
+        await _addColumnIfMissing(
+          m,
+          pendingWrites,
+          pendingWrites.nextAttemptAt,
+        );
       }
     },
     beforeOpen: (OpeningDetails details) async {

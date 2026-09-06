@@ -10101,6 +10101,18 @@ class $PendingWritesTable extends PendingWrites
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _nextAttemptAtMeta = const VerificationMeta(
+    'nextAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> nextAttemptAt =
+      GeneratedColumn<DateTime>(
+        'next_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     sequence,
@@ -10111,6 +10123,7 @@ class $PendingWritesTable extends PendingWrites
     queuedAt,
     attempts,
     lastError,
+    nextAttemptAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -10185,6 +10198,15 @@ class $PendingWritesTable extends PendingWrites
         lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta),
       );
     }
+    if (data.containsKey('next_attempt_at')) {
+      context.handle(
+        _nextAttemptAtMeta,
+        nextAttemptAt.isAcceptableOrUnknown(
+          data['next_attempt_at']!,
+          _nextAttemptAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -10226,6 +10248,10 @@ class $PendingWritesTable extends PendingWrites
         DriftSqlType.string,
         data['${effectivePrefix}last_error'],
       ),
+      nextAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}next_attempt_at'],
+      ),
     );
   }
 
@@ -10252,6 +10278,14 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
   final DateTime queuedAt;
   final int attempts;
   final String? lastError;
+
+  /// The earliest this write may be tried again, after a failure.
+  ///
+  /// Null means now. A failure that retried on every pass would hammer the
+  /// server for as long as it kept being refused — and passes are triggered
+  /// by local writes, so somebody typing a shopping list can produce several
+  /// a second (spec §7.1).
+  final DateTime? nextAttemptAt;
   const PendingWriteRow({
     required this.sequence,
     required this.entityTable,
@@ -10261,6 +10295,7 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
     required this.queuedAt,
     required this.attempts,
     this.lastError,
+    this.nextAttemptAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -10274,6 +10309,9 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
     map['attempts'] = Variable<int>(attempts);
     if (!nullToAbsent || lastError != null) {
       map['last_error'] = Variable<String>(lastError);
+    }
+    if (!nullToAbsent || nextAttemptAt != null) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
     }
     return map;
   }
@@ -10290,6 +10328,9 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
       lastError: lastError == null && nullToAbsent
           ? const Value.absent()
           : Value(lastError),
+      nextAttemptAt: nextAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextAttemptAt),
     );
   }
 
@@ -10307,6 +10348,7 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
       queuedAt: serializer.fromJson<DateTime>(json['queuedAt']),
       attempts: serializer.fromJson<int>(json['attempts']),
       lastError: serializer.fromJson<String?>(json['lastError']),
+      nextAttemptAt: serializer.fromJson<DateTime?>(json['nextAttemptAt']),
     );
   }
   @override
@@ -10321,6 +10363,7 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
       'queuedAt': serializer.toJson<DateTime>(queuedAt),
       'attempts': serializer.toJson<int>(attempts),
       'lastError': serializer.toJson<String?>(lastError),
+      'nextAttemptAt': serializer.toJson<DateTime?>(nextAttemptAt),
     };
   }
 
@@ -10333,6 +10376,7 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
     DateTime? queuedAt,
     int? attempts,
     Value<String?> lastError = const Value.absent(),
+    Value<DateTime?> nextAttemptAt = const Value.absent(),
   }) => PendingWriteRow(
     sequence: sequence ?? this.sequence,
     entityTable: entityTable ?? this.entityTable,
@@ -10342,6 +10386,9 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
     queuedAt: queuedAt ?? this.queuedAt,
     attempts: attempts ?? this.attempts,
     lastError: lastError.present ? lastError.value : this.lastError,
+    nextAttemptAt: nextAttemptAt.present
+        ? nextAttemptAt.value
+        : this.nextAttemptAt,
   );
   PendingWriteRow copyWithCompanion(PendingWritesCompanion data) {
     return PendingWriteRow(
@@ -10355,6 +10402,9 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
       queuedAt: data.queuedAt.present ? data.queuedAt.value : this.queuedAt,
       attempts: data.attempts.present ? data.attempts.value : this.attempts,
       lastError: data.lastError.present ? data.lastError.value : this.lastError,
+      nextAttemptAt: data.nextAttemptAt.present
+          ? data.nextAttemptAt.value
+          : this.nextAttemptAt,
     );
   }
 
@@ -10368,7 +10418,8 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
           ..write('payload: $payload, ')
           ..write('queuedAt: $queuedAt, ')
           ..write('attempts: $attempts, ')
-          ..write('lastError: $lastError')
+          ..write('lastError: $lastError, ')
+          ..write('nextAttemptAt: $nextAttemptAt')
           ..write(')'))
         .toString();
   }
@@ -10383,6 +10434,7 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
     queuedAt,
     attempts,
     lastError,
+    nextAttemptAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -10395,7 +10447,8 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
           other.payload == this.payload &&
           other.queuedAt == this.queuedAt &&
           other.attempts == this.attempts &&
-          other.lastError == this.lastError);
+          other.lastError == this.lastError &&
+          other.nextAttemptAt == this.nextAttemptAt);
 }
 
 class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
@@ -10407,6 +10460,7 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
   final Value<DateTime> queuedAt;
   final Value<int> attempts;
   final Value<String?> lastError;
+  final Value<DateTime?> nextAttemptAt;
   const PendingWritesCompanion({
     this.sequence = const Value.absent(),
     this.entityTable = const Value.absent(),
@@ -10416,6 +10470,7 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
     this.queuedAt = const Value.absent(),
     this.attempts = const Value.absent(),
     this.lastError = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
   });
   PendingWritesCompanion.insert({
     this.sequence = const Value.absent(),
@@ -10426,6 +10481,7 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
     required DateTime queuedAt,
     this.attempts = const Value.absent(),
     this.lastError = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
   }) : entityTable = Value(entityTable),
        entityId = Value(entityId),
        operation = Value(operation),
@@ -10440,6 +10496,7 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
     Expression<DateTime>? queuedAt,
     Expression<int>? attempts,
     Expression<String>? lastError,
+    Expression<DateTime>? nextAttemptAt,
   }) {
     return RawValuesInsertable({
       if (sequence != null) 'sequence': sequence,
@@ -10450,6 +10507,7 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
       if (queuedAt != null) 'queued_at': queuedAt,
       if (attempts != null) 'attempts': attempts,
       if (lastError != null) 'last_error': lastError,
+      if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
     });
   }
 
@@ -10462,6 +10520,7 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
     Value<DateTime>? queuedAt,
     Value<int>? attempts,
     Value<String?>? lastError,
+    Value<DateTime?>? nextAttemptAt,
   }) {
     return PendingWritesCompanion(
       sequence: sequence ?? this.sequence,
@@ -10472,6 +10531,7 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
       queuedAt: queuedAt ?? this.queuedAt,
       attempts: attempts ?? this.attempts,
       lastError: lastError ?? this.lastError,
+      nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
     );
   }
 
@@ -10502,6 +10562,9 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
     if (lastError.present) {
       map['last_error'] = Variable<String>(lastError.value);
     }
+    if (nextAttemptAt.present) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt.value);
+    }
     return map;
   }
 
@@ -10515,7 +10578,8 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
           ..write('payload: $payload, ')
           ..write('queuedAt: $queuedAt, ')
           ..write('attempts: $attempts, ')
-          ..write('lastError: $lastError')
+          ..write('lastError: $lastError, ')
+          ..write('nextAttemptAt: $nextAttemptAt')
           ..write(')'))
         .toString();
   }
@@ -19540,6 +19604,7 @@ typedef $$PendingWritesTableCreateCompanionBuilder =
       required DateTime queuedAt,
       Value<int> attempts,
       Value<String?> lastError,
+      Value<DateTime?> nextAttemptAt,
     });
 typedef $$PendingWritesTableUpdateCompanionBuilder =
     PendingWritesCompanion Function({
@@ -19551,6 +19616,7 @@ typedef $$PendingWritesTableUpdateCompanionBuilder =
       Value<DateTime> queuedAt,
       Value<int> attempts,
       Value<String?> lastError,
+      Value<DateTime?> nextAttemptAt,
     });
 
 class $$PendingWritesTableFilterComposer
@@ -19599,6 +19665,11 @@ class $$PendingWritesTableFilterComposer
 
   ColumnFilters<String> get lastError => $composableBuilder(
     column: $table.lastError,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -19651,6 +19722,11 @@ class $$PendingWritesTableOrderingComposer
     column: $table.lastError,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PendingWritesTableAnnotationComposer
@@ -19687,6 +19763,11 @@ class $$PendingWritesTableAnnotationComposer
 
   GeneratedColumn<String> get lastError =>
       $composableBuilder(column: $table.lastError, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => column,
+  );
 }
 
 class $$PendingWritesTableTableManager
@@ -19734,6 +19815,7 @@ class $$PendingWritesTableTableManager
                 Value<DateTime> queuedAt = const Value.absent(),
                 Value<int> attempts = const Value.absent(),
                 Value<String?> lastError = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
               }) => PendingWritesCompanion(
                 sequence: sequence,
                 entityTable: entityTable,
@@ -19743,6 +19825,7 @@ class $$PendingWritesTableTableManager
                 queuedAt: queuedAt,
                 attempts: attempts,
                 lastError: lastError,
+                nextAttemptAt: nextAttemptAt,
               ),
           createCompanionCallback:
               ({
@@ -19754,6 +19837,7 @@ class $$PendingWritesTableTableManager
                 required DateTime queuedAt,
                 Value<int> attempts = const Value.absent(),
                 Value<String?> lastError = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
               }) => PendingWritesCompanion.insert(
                 sequence: sequence,
                 entityTable: entityTable,
@@ -19763,6 +19847,7 @@ class $$PendingWritesTableTableManager
                 queuedAt: queuedAt,
                 attempts: attempts,
                 lastError: lastError,
+                nextAttemptAt: nextAttemptAt,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
