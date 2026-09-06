@@ -72,7 +72,7 @@ void main() {
 
       for (int i = 0; i < 20; i++) {
         await engineAt().push();
-        clock = clock.add(const Duration(minutes: 5));
+        clock = clock.add(const Duration(hours: 3));
       }
 
       expect(gateway.attempts, PendingWriteStore.maxAttempts);
@@ -85,7 +85,7 @@ void main() {
       gateway.refuse = true;
       for (int i = 0; i < 20; i++) {
         await engineAt().push();
-        clock = clock.add(const Duration(minutes: 5));
+        clock = clock.add(const Duration(hours: 3));
       }
 
       expect(await queue.count(), 1);
@@ -96,7 +96,7 @@ void main() {
       gateway.refuse = true;
       for (int i = 0; i < 20; i++) {
         await engineAt().push();
-        clock = clock.add(const Duration(minutes: 5));
+        clock = clock.add(const Duration(hours: 3));
       }
 
       final SyncResult result = await engineAt().push();
@@ -114,7 +114,7 @@ void main() {
 
       for (int i = 0; i < 20; i++) {
         await engineAt().push();
-        clock = clock.add(const Duration(minutes: 5));
+        clock = clock.add(const Duration(hours: 3));
       }
 
       gateway.offline = false;
@@ -122,6 +122,119 @@ void main() {
 
       expect(result.pushed, 1);
       expect(await queue.count(), 0);
+    });
+  });
+
+  group('the schedule itself', () {
+    test('has one more try than it has waits', () {
+      // A wait sits between two attempts, so N waits allow N+1 tries. Set to
+      // five alongside five waits, the last wait was unreachable: the cap
+      // stranded the write on the very attempt that would have earned it,
+      // and the schedule the docs described was a third longer than the real
+      // one. A const cannot read the list's length, so this holds them
+      // together instead.
+      expect(
+        PendingWriteStore.maxAttempts,
+        PendingWriteStore.backoff.length + 1,
+      );
+    });
+
+    test('reaches far enough to outlast something transient', () {
+      // The first draft spent its whole budget in fifty-two seconds, which
+      // sounds reasonable and is not: a deploy window, an incident, or a
+      // session expiring a moment before it refreshes would strand a phone's
+      // entire outbox before anyone looked up from the shopping list.
+      final Duration total = PendingWriteStore.backoff.reduce(
+        (Duration a, Duration b) => a + b,
+      );
+      expect(total, greaterThan(const Duration(hours: 2)));
+    });
+
+    test('every wait is used, in order', () async {
+      // Walks the whole schedule and checks each gap is the one named, which
+      // is what the off-by-one in the first version got wrong.
+      gateway.refuse = true;
+      final DateTime start = clock;
+
+      for (int i = 0; i < PendingWriteStore.backoff.length; i++) {
+        await engineAt().push();
+        expect(
+          gateway.attempts,
+          i + 1,
+          reason: 'attempt ${i + 1} did not happen',
+        );
+
+        // A moment short of the wait: nothing yet.
+        clock = clock
+            .add(PendingWriteStore.backoff[i])
+            .subtract(const Duration(seconds: 1));
+        await engineAt().push();
+        expect(
+          gateway.attempts,
+          i + 1,
+          reason:
+              'wait ${i + 1} was shorter than ${PendingWriteStore.backoff[i]}',
+        );
+        clock = clock.add(const Duration(seconds: 1));
+      }
+
+      // And that was the last of them.
+      await engineAt().push();
+      expect(gateway.attempts, PendingWriteStore.maxAttempts);
+      expect(clock.difference(start), greaterThan(const Duration(hours: 2)));
+    });
+  });
+
+  group('a write that gave up', () {
+    test('can be asked again, deliberately', () async {
+      // Otherwise it is stuck for ever, and so is its record: a pull will not
+      // overwrite something unsent. An upsert can at least be re-issued by
+      // editing the record again; a stranded *delete* cannot, because the row
+      // is already gone from the screen and there is nothing left to press.
+      gateway.refuse = true;
+      for (int i = 0; i < 20; i++) {
+        await engineAt().push();
+        clock = clock.add(const Duration(hours: 3));
+      }
+      expect(await queue.strandedCount(), 1);
+
+      gateway.refuse = false;
+      expect(await queue.retryStranded(), 1);
+
+      final SyncResult result = await engineAt().push();
+
+      expect(result.pushed, 1);
+      expect(await queue.count(), 0);
+    });
+
+    test('right away, not in two hours', () async {
+      // The failure that stranded it also set a two-hour wait. Asking again
+      // has to clear that as well as the count, or the button does nothing
+      // and the user is left tapping it.
+      // Walked exactly, so the last failure's wait is still ahead of the
+      // clock. A loop that overshoots leaves the wait in the past and cannot
+      // tell whether it was cleared — which is how the first version of this
+      // test passed with the clearing deleted.
+      gateway.refuse = true;
+      for (int i = 0; i < PendingWriteStore.maxAttempts; i++) {
+        await engineAt().push();
+        if (i < PendingWriteStore.backoff.length) {
+          clock = clock.add(PendingWriteStore.backoff[i]);
+        }
+      }
+      expect(await queue.strandedCount(), 1);
+
+      gateway.refuse = false;
+      await queue.retryStranded();
+
+      // No clock movement at all: this is the user tapping the button.
+      final SyncResult result = await engineAt().push();
+
+      expect(result.pushed, 1);
+    });
+
+    test('and asking again does nothing when nothing is stuck', () async {
+      expect(await queue.retryStranded(), 0);
     });
   });
 }

@@ -217,11 +217,23 @@ pagination, scope, deletion and repair is not reviewable:
 **E — B01's retry and status** follows, and is where "Synced" stops being a
 claim the app cannot support.
 
-*As built.* Both halves, and one small departure. The decision table proposed
-"2s, 5s, 15s, 30s, 60s, then stop the burst; cap attempts" and a dirty flag —
-which is what shipped, with the last delay repeating rather than growing: the
-cap is what ends the retrying, so a sixth delay would never be reached and a
-growing one would only obscure that.
+*As built,* and the decision table's schedule did not survive contact.
+
+It proposed "2s, 5s, 15s, 30s, 60s, then stop the burst; cap attempts", which
+sounds reasonable and is not: **the whole budget is spent in fifty-two
+seconds**. Passes fire on local writes, so a phone in use clears those gates
+almost as fast as they are set — and a deploy window, an incident, or a
+session expiring a moment before it refreshes would strand an entire outbox
+before anyone looked up from the shopping list. The waits now run 2s, 30s,
+5m, 30m, 2h, and the cap is one more than the number of waits rather than a
+number of its own, because a wait sits *between* two attempts and the two
+have to agree.
+
+The other half of the same point: what counts as a refusal at all. A 5xx, an
+expired session, and a function a migration has not created yet are the
+server's problem rather than the write's, so they are classified as being
+offline and cost nothing. Otherwise the deploy order this note itself
+describes would be paid for out of the retry budget.
 
 The coalescing rule lives in its own `SyncGate` rather than as two fields on
 the controller. Not for tidiness: the controller's own path needs a signed-in
