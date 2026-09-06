@@ -16,6 +16,7 @@ import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
 import '../../domain/planning/recent_log.dart';
 import '../../domain/recipes/macro_calculator.dart';
+import '../../domain/units/quantity.dart';
 import '../foods/external_food_results.dart';
 import '../foods/food_search_controller.dart';
 import 'day_picker_sheet.dart';
@@ -58,6 +59,13 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   Recipe? _recipe;
   Food? _food;
   late double _servings = widget.existing?.entry.servings ?? 1;
+
+  /// Which of the food's serving options the portion counts (spec §5.6).
+  ///
+  /// A food knows several — "170 g pot", "100 g", "1 tbsp" — and logging
+  /// could only ever count the default one, so eating half a pot meant
+  /// working out what that was as a multiple of something else.
+  ServingOption? _serving;
   bool _busy = false;
 
   bool get _isExisting => widget.existing != null;
@@ -76,8 +84,33 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     if (_recipe != null) {
       return MacroCalculator.forRecipe(_recipe!, foods: foods).perServing;
     }
-    final ServingOption? serving = _food?.defaultServing;
+    final ServingOption? serving = _serving ?? _food?.defaultServing;
     return serving?.macros ?? Macros.zero;
+  }
+
+  /// The same amount of food, counted in a different serving.
+  ///
+  /// Two servings of the same kind are directly comparable — a 170 g pot and
+  /// 100 g are both masses — so switching between them keeps the amount and
+  /// changes the number. Across kinds it would need a density the food does
+  /// not necessarily carry, and §5.5's rule is that a number nobody stated is
+  /// not invented: the count resets to one and the person says what they
+  /// meant.
+  static double _equivalent({
+    required double of,
+    required ServingOption? from,
+    required ServingOption to,
+  }) {
+    final Quantity? was = from?.amount;
+    final Quantity now = to.amount;
+    if (was == null ||
+        was.kind != now.kind ||
+        now.canonicalAmount <= 0 ||
+        was.canonicalAmount <= 0) {
+      return 1;
+    }
+    final double converted = of * was.canonicalAmount / now.canonicalAmount;
+    return converted.isFinite && converted > 0 ? converted : 1;
   }
 
   /// How much of [_perServing]'s minor nutrients those numbers speak for.
@@ -93,7 +126,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     if (_recipe != null) {
       return MacroCalculator.forRecipe(_recipe!, foods: foods).coverage;
     }
-    final ServingOption? serving = _food?.defaultServing;
+    final ServingOption? serving = _serving ?? _food?.defaultServing;
     return serving == null
         ? const NutrientCoverage.notRecorded()
         : NutrientCoverage.ofOne(serving.macros);
@@ -264,7 +297,10 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   Future<void> _useSavedFood(String foodId) async {
     final Food? food = await ref.read(foodRepositoryProvider).byId(foodId);
     if (!mounted || food == null) return;
-    setState(() => _food = food);
+    setState(() {
+      _food = food;
+      _serving = food.defaultServing;
+    });
   }
 
   Future<void> _remove() async {
@@ -376,6 +412,23 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
             style: context.text.metadata.copyWith(color: colors.textMuted),
           ),
           const SizedBox(height: HearthSpacing.lg),
+          // Which serving the portion counts, before how many of it.
+          if (_food case final Food food
+              when food.servingOptions.length > 1) ...<Widget>[
+            _ServingPicker(
+              options: food.servingOptions,
+              chosen: _serving ?? food.defaultServing,
+              onChanged: (ServingOption option) => setState(() {
+                _servings = _equivalent(
+                  of: _servings,
+                  from: _serving ?? food.defaultServing,
+                  to: option,
+                );
+                _serving = option;
+              }),
+            ),
+            const SizedBox(height: HearthSpacing.md),
+          ],
           _PortionStepper(
             servings: _servings,
             onChanged: (double value) => setState(() => _servings = value),
@@ -596,7 +649,10 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
                         ? 'no serving size'
                         : '${food.defaultServing!.macros.kcal.round()} kcal '
                               'per ${food.defaultServing!.label}',
-                    onTap: () => setState(() => _food = food),
+                    onTap: () => setState(() {
+                      _food = food;
+                      _serving = food.defaultServing;
+                    }),
                   ),
                 // Only ever about what the household already has: results
                 // from further afield may well be listed directly underneath,
@@ -638,6 +694,52 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
 /// The number between them is a field, not a label: a third of a batch is
 /// three taps of a minus button and a tenth is not reachable at all, and
 /// "how much did you eat" is a question with an answer, not a slider.
+/// Which of a food's servings the portion counts (spec §5.6).
+///
+/// Chips rather than a dropdown: they are all visible at once, they reflow at
+/// large text instead of opening a menu over the sheet, and the labels are
+/// the food's own words — "170 g pot", "1 tbsp" — rather than a unit the app
+/// decided on its behalf.
+class _ServingPicker extends StatelessWidget {
+  const _ServingPicker({
+    required this.options,
+    required this.chosen,
+    required this.onChanged,
+  });
+
+  final List<ServingOption> options;
+  final ServingOption? chosen;
+  final ValueChanged<ServingOption> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      Text(
+        'Serving',
+        style: context.text.metadata.copyWith(
+          color: context.colors.textSecondary,
+        ),
+      ),
+      const SizedBox(height: HearthSpacing.xs),
+      Wrap(
+        spacing: HearthSpacing.sm,
+        runSpacing: HearthSpacing.sm,
+        children: <Widget>[
+          for (final ServingOption option in options)
+            ChoiceChip(
+              label: Text(option.label),
+              selected: option.id == chosen?.id,
+              onSelected: (bool picked) {
+                if (picked) onChanged(option);
+              },
+            ),
+        ],
+      ),
+    ],
+  );
+}
+
 class _PortionStepper extends StatefulWidget {
   const _PortionStepper({required this.servings, required this.onChanged});
 
@@ -698,7 +800,9 @@ class _PortionStepperState extends State<_PortionStepper> {
   /// rather than silently logging a number nobody chose.
   void _commit() {
     final double? typed = parseAmount(_field.text);
-    if (typed == null || typed <= 0) {
+    // Not finite is not a portion either: "1e999" parses to infinity, and
+    // infinity is neither caught by `<= 0` nor anything you can eat.
+    if (typed == null || !typed.isFinite || typed <= 0) {
       _field.text = writeAmount(widget.servings);
       return;
     }

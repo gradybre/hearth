@@ -231,6 +231,16 @@ belongs to the Nutrition section.
 ### 5.6 Daily / Weekly Planner + Logging
 - **Combined plan + track in one view.** Each day/slot supports a *planned* state and a *logged* (actually eaten) state.
 - **Meal slots:** breakfast, lunch, dinner, snack.
+- **Log in the food's own servings.** A food knows several — "170 g pot",
+  "100 g", "1 tbsp" — and the portion counts whichever you pick, not whichever
+  is the default. Half a pot is half a pot, rather than something to work out
+  as a multiple of something else in a kitchen. Switching between servings of
+  the same kind keeps the amount and changes the number: a 170 g pot read as
+  100 g units is 1.7 of them, the same food either way. Across kinds it does
+  not guess — a spoon is a volume and a pot is a mass, and without a density
+  the food carries there is no honest number to bring over, so the count
+  starts again (§5.5: a figure nobody stated is not invented). Recipes stay
+  servings-based.
 - **The day opens on its meals, not on a picture of them.** The summary is
   compact by default — calories against the target with what is left or over,
   the three macros, and all three minor nutrients. It keeps the distinctions
