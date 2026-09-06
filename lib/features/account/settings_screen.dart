@@ -89,7 +89,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ) ??
         false;
-    if (confirmed) await ref.read(authGatewayProvider).signOut();
+    if (!confirmed) return;
+    // Before the sign-out, not after: once the session is gone the providers
+    // this reads are rebuilding, and a checkpoint left behind is one nobody
+    // will think to clear later.
+    await ref.read(syncCheckpointsProvider).forgetEverything();
+    await ref.read(authGatewayProvider).signOut();
   }
 
   @override

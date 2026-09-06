@@ -13,6 +13,7 @@ import 'package:hearth/data/local/recipe_store.dart';
 import 'package:hearth/data/remote/supabase_remote_gateway.dart';
 import 'package:hearth/data/sync/library_sync.dart';
 import 'package:hearth/data/sync/sync_engine.dart';
+import 'package:hearth/data/sync/sync_scope.dart';
 import 'package:hearth/domain/models/recipe.dart';
 // Via supabase_flutter, which re-exports the client: depending on `supabase`
 // directly would pin a second copy of a transitive package.
@@ -63,6 +64,10 @@ void main() {
       foods: FoodStore(db),
       queue: queue,
       preferences: PreferenceStore(db),
+      scope: () => SyncScope(
+        userId: client.auth.currentUser?.id ?? 'unknown',
+        householdId: 'live',
+      ),
     );
   });
 

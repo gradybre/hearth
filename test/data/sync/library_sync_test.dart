@@ -8,6 +8,7 @@ import 'package:hearth/data/local/recipe_store.dart';
 import 'package:hearth/data/remote/remote_gateway.dart';
 import 'package:hearth/data/sync/library_sync.dart';
 import 'package:hearth/data/sync/sync_engine.dart';
+import 'package:hearth/data/sync/sync_scope.dart';
 import 'package:hearth/domain/models/recipe.dart';
 
 import '../../support/fixtures.dart';
@@ -110,6 +111,8 @@ void main() {
       foods: FoodStore(db),
       queue: queue,
       preferences: preferences,
+      scope: () =>
+          const SyncScope(userId: 'user-1', householdId: 'household-1'),
     );
   });
 

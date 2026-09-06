@@ -10,6 +10,7 @@ class PullResult {
     required this.applied,
     required this.skipped,
     this.stoppedBecauseOffline = false,
+    this.abandonedScope = false,
   });
 
   final int applied;
@@ -19,6 +20,12 @@ class PullResult {
   final int skipped;
 
   final bool stoppedBecauseOffline;
+
+  /// True when the pass was thrown away because the account or household
+  /// changed while it was running. The answers it was still receiving belong
+  /// to whoever is signed in now, not to whoever it started asking for, so
+  /// nothing further is applied and no checkpoint is written.
+  final bool abandonedScope;
 }
 
 /// What one sync attempt achieved.

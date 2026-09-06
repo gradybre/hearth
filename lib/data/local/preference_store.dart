@@ -1,3 +1,5 @@
+import 'package:drift/drift.dart';
+
 import 'hearth_database.dart';
 
 /// Reads and writes small device-local settings.
@@ -38,6 +40,16 @@ class PreferenceStore {
   Future<void> write(String key, String value) => _db
       .into(_db.preferences)
       .insertOnConflictUpdate(PreferenceRow(key: key, value: value));
+
+  Future<void> delete(String key) => (_db.delete(
+    _db.preferences,
+  )..where(($PreferencesTable p) => p.key.equals(key))).go();
+
+  /// Every key beginning with [prefix]. Used to forget a whole family of
+  /// settings at once rather than naming each of them.
+  Future<void> deleteWithPrefix(String prefix) => (_db.delete(
+    _db.preferences,
+  )..where(($PreferencesTable p) => p.key.like('$prefix%'))).go();
 
   Future<void> writeFlag(String key, {required bool value}) =>
       write(key, value ? 'true' : 'false');

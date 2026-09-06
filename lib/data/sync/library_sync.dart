@@ -4,7 +4,9 @@ import '../local/preference_store.dart';
 import '../local/recipe_store.dart';
 import '../mappers/sync_payload.dart';
 import '../remote/remote_gateway.dart';
+import 'sync_checkpoints.dart';
 import 'sync_engine.dart';
+import 'sync_scope.dart';
 
 /// Brings the shared library down from the server (spec §5.1, §7.1).
 ///
@@ -18,11 +20,12 @@ class LibrarySync {
     required FoodStore foods,
     required PendingWriteStore queue,
     required PreferenceStore preferences,
+    required SyncScope Function() scope,
   }) : _engine = engine,
        _recipes = recipes,
        _foods = foods,
        _queue = queue,
-       _preferences = preferences;
+       _checkpoints = SyncCheckpoints(preferences: preferences, scope: scope);
 
   /// How far back a pull reaches beyond the last one.
   ///
@@ -37,10 +40,16 @@ class LibrarySync {
   final RecipeStore _recipes;
   final FoodStore _foods;
   final PendingWriteStore _queue;
-  final PreferenceStore _preferences;
+  final SyncCheckpoints _checkpoints;
 
   Future<PullResult> pull() async {
+    // One scope for the whole pass, captured before the first request. Both
+    // tables belong to the same library, and half of one account's and half
+    // of another's is not a library.
+    final SyncScope scope = _checkpoints.current;
+
     final PullResult recipes = await _pullTable(
+      scope,
       'recipes',
       localUpdatedAt: _recipes.updatedAtFor,
       apply: (RemoteRecord record) => _recipes.upsert(
@@ -48,7 +57,10 @@ class LibrarySync {
         updatedAt: record.updatedAt,
       ),
     );
+    if (recipes.abandonedScope) return recipes;
+
     final PullResult foods = await _pullTable(
+      scope,
       'foods',
       localUpdatedAt: _foods.updatedAtFor,
       apply: (RemoteRecord record) => _foods.upsert(
@@ -62,41 +74,60 @@ class LibrarySync {
       skipped: recipes.skipped + foods.skipped,
       stoppedBecauseOffline:
           recipes.stoppedBecauseOffline || foods.stoppedBecauseOffline,
+      abandonedScope: foods.abandonedScope,
     );
   }
 
   Future<PullResult> _pullTable(
+    SyncScope scope,
     String table, {
     required Future<DateTime?> Function(String id) localUpdatedAt,
     required Future<void> Function(RemoteRecord record) apply,
   }) async {
     final DateTime startedAt = DateTime.now().toUtc();
-    final DateTime? since = await _watermark(table);
+    final DateTime? since = await _checkpoints.since(scope, table);
 
-    final PullResult result = await _engine.pullAggregates(
-      entityTable: table,
-      since: since,
-      localUpdatedAt: localUpdatedAt,
-      hasPendingWrite: _queue.hasPendingFor,
-      apply: apply,
-    );
+    final PullResult result;
+    try {
+      result = await _engine.pullAggregates(
+        entityTable: table,
+        since: since,
+        localUpdatedAt: localUpdatedAt,
+        hasPendingWrite: _queue.hasPendingFor,
+        // Checked per record rather than once at the end: the sooner an
+        // abandoned pass stops writing, the fewer of the wrong account's
+        // answers land in this device's store.
+        apply: (RemoteRecord record) async {
+          if (_checkpoints.changedSince(scope)) throw const _ScopeChanged();
+          await apply(record);
+        },
+      );
+    } on _ScopeChanged {
+      return const PullResult(applied: 0, skipped: 0, abandonedScope: true);
+    }
+
+    // And again after the answers are in, because a pass that returned
+    // nothing never reached the check above — and it is the checkpoint, not
+    // the rows, that does the lasting damage.
+    if (_checkpoints.changedSince(scope)) {
+      return PullResult(
+        applied: result.applied,
+        skipped: result.skipped,
+        abandonedScope: true,
+      );
+    }
 
     // The watermark only moves on a run that actually reached the server.
     // Advancing it after an offline attempt would skip everything that
     // changed while this device was away.
     if (!result.stoppedBecauseOffline) {
-      await _preferences.write(
-        _watermarkKey(table),
-        startedAt.subtract(overlap).toIso8601String(),
-      );
+      await _checkpoints.record(scope, table, startedAt.subtract(overlap));
     }
     return result;
   }
+}
 
-  Future<DateTime?> _watermark(String table) async {
-    final String? stored = await _preferences.read(_watermarkKey(table));
-    return stored == null ? null : DateTime.tryParse(stored)?.toUtc();
-  }
-
-  static String _watermarkKey(String table) => 'sync.watermark.$table';
+/// Thrown to abandon a pass whose account changed underneath it.
+class _ScopeChanged implements Exception {
+  const _ScopeChanged();
 }

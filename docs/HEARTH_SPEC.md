@@ -356,6 +356,21 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
     polling timer. That is the relaxation this section already allows, and a
     maintained socket buys little for two people who are rarely in the app at
     the same moment. Revisit if that stops being true.
+- **A checkpoint belongs to an account, not to a device.** Each table's pull
+  remembers how far it has read, and that marker is keyed by user *and*
+  household and carries a version. Two accounts on one phone is the case this
+  exists for: a shared marker meant the second account inherited the first's,
+  and because a marker only ever moves forward, everything the second account
+  had written before that moment was never asked for again — not late, never.
+  A pull captures the identity it began under and abandons the pass, writing
+  no marker, if the account changes while it is in flight.
+- **Signing out deliberately forgets every checkpoint.** Scoping is what keeps
+  two accounts apart; this is the repair lever. A marker only moves forward,
+  so a row whose server timestamp ends up behind it — a restore from backup, a
+  bug that once wrote local time as UTC — can never be asked for again, and
+  "sign out and back in" has to mean something. A session merely expiring does
+  not do this; re-downloading the library on its schedule is a cost nobody
+  asked for.
 
 ### 7.3 Notifications
 - **Cook timers** fire even when the app is backgrounded (local notifications).
