@@ -249,6 +249,11 @@ belongs to the Nutrition section.
   about to write to, and the reviewed nutrition is frozen once. Opened from
   the recipe library there is no meal in progress, and an ordinary Save is the
   right ending.
+  - **The recipe is written first and the meal second, so the second can
+    fail on its own.** When it does, the recipe stays written, the editor
+    stays open, and it says so — that is the retry. The editor remembers the
+    recipe it just saved, or the retry would mint a fresh id and leave two
+    copies of the same restaurant meal in the library.
 - **The app can open on today.** *Opens on* offers the home screen, Today,
   and each built section. A section opens on its first destination — which for
   Nutrition is the recipe library — so someone who opens Hearth to log lunch

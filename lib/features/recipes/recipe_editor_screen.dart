@@ -625,6 +625,14 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
           : drafted;
       await ref.read(recipeRepositoryProvider).save(saved);
 
+      // Remembered before anything else can fail. The meal entry is written
+      // after this, and if it throws the editor stays open with the button
+      // live again — which is the retry. Without this the draft would mint a
+      // fresh id on the way through and leave two copies of the same
+      // restaurant meal in the library (§8.3: retain the saved recipe and
+      // offer retry without duplicating it).
+      _existingId = saved.id;
+
       // Not awaited, deliberately (spec §5.2): saving a recipe must never sit
       // waiting on a picture. It lands in the store, so it appears on
       // whatever screen is showing the recipe by the time it arrives.
@@ -642,18 +650,40 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
           saved,
           foods: _foods,
         );
-        await ref
-            .read(planRepositoryProvider)
-            .add(
-              date: intent.date,
-              slot: intent.slot,
-              refType: PlanRefType.recipe,
-              refId: saved.id,
-              servings: 1,
-              loggedMacros: intent.eaten ? macros.perServing : null,
-              loggedCoverage: macros.coverage,
-              label: saved.title,
+        try {
+          await ref
+              .read(planRepositoryProvider)
+              .add(
+                date: intent.date,
+                slot: intent.slot,
+                refType: PlanRefType.recipe,
+                refId: saved.id,
+                servings: 1,
+                loggedMacros: intent.eaten ? macros.perServing : null,
+                loggedCoverage: macros.coverage,
+                label: saved.title,
+              );
+        } on Object {
+          // The recipe is written and stays written; only the meal did not
+          // land. Staying put with the button live is the retry, and the id
+          // remembered above is what stops that retry writing the recipe
+          // twice (§8.3).
+          //
+          // Object, not Exception: a type error from a malformed payload is
+          // an Error, and letting it escape here would leave the editor
+          // looking like it had done nothing at all.
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Saved the recipe, but could not add it to '
+                  '${intent.slot.name}. Try again.',
+                ),
+              ),
             );
+          }
+          return;
+        }
       }
 
       // Pops the id, not nothing: an import needs to tell a save from a

@@ -73,6 +73,13 @@ Future<HearthDatabase> pumpHearthApp(
   /// has. A layout that applies the inset twice looks identical to a correct
   /// one until this is set, which is how a doubled status bar shipped once.
   EdgeInsets viewPadding = EdgeInsets.zero,
+
+  /// Provider overrides for this test, applied ahead of the harness's own.
+  ///
+  /// Typed as `Object` because riverpod's `Override` is sealed and exported
+  /// by neither package — the same reason the list below leaves its own type
+  /// to inference. `cast` recovers it from the elements beside it.
+  List<Object> extraOverrides = const <Object>[],
   List<Recipe> recipes = const <Recipe>[],
   Stream<List<Recipe>>? recipeStream,
   List<Food> foods = const <Food>[],
@@ -166,6 +173,10 @@ Future<HearthDatabase> pumpHearthApp(
       // Types left to inference: flutter_riverpod 3 does not export the
       // `Override` type name, only the methods that produce one.
       overrides: [
+        // The caller's own, first so they win: a test that needs a repository
+        // to fail has no other way to arrange it, and a failure path nobody
+        // can reach in a test is a failure path nobody has checked.
+        ...extraOverrides.cast(),
         databaseProvider.overrideWithValue(db),
         // Seeded the way bootstrap seeds it on a device, because the router is
         // built with a starting route and reads this before the first frame.
