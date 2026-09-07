@@ -11,11 +11,13 @@ import '../features/foods/food_editor_screen.dart';
 import '../features/foods/menu_import_screen.dart';
 import '../features/foods/seasonings_screen.dart';
 import '../features/home/home_screen.dart';
+import '../features/plan/logging_intent.dart';
 import '../features/recipes/default_sweep_screen.dart';
 import '../features/recipes/eat_out_screen.dart';
 import '../features/recipes/recipe_chat_screen.dart';
 import '../features/recipes/recipe_detail_screen.dart';
 import '../features/recipes/recipe_draft.dart';
+import '../features/recipes/recipe_editor_args.dart';
 import '../features/recipes/recipe_editor_screen.dart';
 import '../features/recipes/recipe_import_controller.dart';
 import '../features/recipes/recipe_import_screen.dart';
@@ -116,24 +118,40 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
     ),
     GoRoute(
       path: '/recipe/eat-out',
-      builder: (BuildContext context, GoRouterState state) =>
-          const EatOutScreen(),
+      builder: (BuildContext context, GoRouterState state) => EatOutScreen(
+        // Carried from the log sheet, which knows the day and the slot. The
+        // library's own entry point sends nothing, and an ordinary Save is
+        // the right ending there (U04).
+        intent: state.extra is LoggingIntent
+            ? state.extra! as LoggingIntent
+            : null,
+      ),
     ),
     GoRoute(
       path: '/recipe/new',
-      builder: (BuildContext context, GoRouterState state) =>
-          RecipeEditorScreen(
-            // An import pushes here with the recipe already read — the review
-            // step before anything is written (CLAUDE.md rule 4).
-            imported: state.extra is RecipeImportResult
-                ? state.extra! as RecipeImportResult
-                : null,
-            // A duplicate pushes here with the copy already made, so it is
-            // reviewed and renamed before anything is written.
-            draft: state.extra is RecipeDraft
-                ? state.extra! as RecipeDraft
-                : null,
-          ),
+      builder: (BuildContext context, GoRouterState state) {
+        // One shape that carries all three, and the two bare ones that
+        // predate it. The restaurant builder needs to hand over a draft *and*
+        // the meal it belongs to, which sniffing a single runtime type
+        // cannot express.
+        final Object? extra = state.extra;
+        final RecipeEditorArgs args = extra is RecipeEditorArgs
+            ? extra
+            : RecipeEditorArgs(
+                // An import pushes here with the recipe already read — the
+                // review step before anything is written (CLAUDE.md rule 4).
+                imported: extra is RecipeImportResult ? extra : null,
+                // A duplicate pushes here with the copy already made, so it
+                // is reviewed and renamed before anything is written.
+                draft: extra is RecipeDraft ? extra : null,
+              );
+
+        return RecipeEditorScreen(
+          imported: args.imported,
+          draft: args.draft,
+          intent: args.intent,
+        );
+      },
     ),
     GoRoute(
       path: '/recipe/:id',

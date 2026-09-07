@@ -238,6 +238,17 @@ belongs to the Nutrition section.
   there, so it was something you knew or you did not. (The gesture *was*
   exposed as a semantics action, so a screen reader could reach it; what was
   missing was any indication that there was anything to reach.)
+- **A meal built from a menu lands on the meal it was built for.** The
+  restaurant builder starts on the day screen — a particular day, a particular
+  slot — and ends three screens later in the recipe editor. A typed intent
+  travels with it, so the editor saves the recipe *and* logs it where the
+  build began; before, it saved and stopped, and the meal somebody was in the
+  middle of logging was never logged. The day and slot are never re-derived at
+  the far end, because what is recoverable there is *today's*: a dinner built
+  for last Tuesday must not become tonight's. The button says which meal it is
+  about to write to, and the reviewed nutrition is frozen once. Opened from
+  the recipe library there is no meal in progress, and an ordinary Save is the
+  right ending.
 - **The app can open on today.** *Opens on* offers the home screen, Today,
   and each built section. A section opens on its first destination — which for
   Nutrition is the recipe library — so someone who opens Hearth to log lunch
