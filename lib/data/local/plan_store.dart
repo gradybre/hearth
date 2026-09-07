@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
@@ -209,6 +210,28 @@ class PlanStore {
   /// Targets are per week so they can change week to week (spec §5.6); the
   /// week start is normalised to Monday so a mid-week edit updates the week
   /// you are in rather than creating a second overlapping one.
+  /// The row id for a week's targets, derived rather than random.
+  ///
+  /// The table is unique on (user_id, week_start_date) and keyed on the id, so
+  /// two phones each minting their own id for the same week produce two rows
+  /// for one constrained pair — and the unique key refuses whichever reaches
+  /// the server second, permanently, because retrying carries the same id it
+  /// was refused for. Deriving the id from the pair the key is on means both
+  /// phones arrive at the same row and the later write updates it.
+  ///
+  /// The same reasoning as [IngredientMatchStore.idFor], and the same shape:
+  /// anything a household can decide independently on two devices needs an id
+  /// that does not depend on which device decided it.
+  static String idFor(String userId, DateTime weekStart) => const Uuid().v5(
+    Namespace.url.value,
+    'hearth:macro-targets:$userId:${_dateKey(startOfWeek(weekStart))}',
+  );
+
+  static String _dateKey(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+
   Future<String> setTargets({
     required String userId,
     required DateTime date,
@@ -221,7 +244,10 @@ class PlanStore {
       userId: userId,
       date: weekStart,
     );
-    final String id = existing?.id ?? idFactory();
+    // A row already here keeps its id, whatever it was: it may have been
+    // written before this was derived, and may already be on the server under
+    // that id. Only a new one gets the derived id.
+    final String id = existing?.id ?? idFor(userId, weekStart);
 
     await _db
         .into(_db.macroTargets)

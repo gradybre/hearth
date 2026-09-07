@@ -90,9 +90,34 @@ class RemoteRows {
         );
   }
 
+  /// A week's targets arriving from another device.
+  ///
+  /// Resolved on (user, week) rather than on the id. The table is unique on
+  /// that pair, and a row written on the other phone carries that phone's own
+  /// id — so conflicting on the primary key means an insert, which the unique
+  /// key then refuses, and the exception takes the whole table's pull down
+  /// with it. New rows derive their id from the pair now, but rows written
+  /// before that, or by an older build, still carry a random one.
   Future<void> applyTargets(Map<String, Object?> json) => _db
       .into(_db.macroTargets)
-      .insertOnConflictUpdate(
+      .insert(
+        onConflict: DoUpdate<$MacroTargetsTable, MacroTargetRow>(
+          ($MacroTargetsTable _) => MacroTargetsCompanion(
+            id: Value<String>('${json['id']}'),
+            kcal: Value<double>(_double(json['kcal']) ?? 0),
+            proteinG: Value<double>(_double(json['protein_g']) ?? 0),
+            carbG: Value<double>(_double(json['carb_g']) ?? 0),
+            fatG: Value<double>(_double(json['fat_g']) ?? 0),
+            fiberG: Value<double?>(_double(json['fiber_g'])),
+            sodiumMg: Value<double?>(_double(json['sodium_mg'])),
+            cholesterolMg: Value<double?>(_double(json['cholesterol_mg'])),
+            updatedAt: Value<DateTime>(_time(json['updated_at'])),
+          ),
+          target: <Column<Object>>[
+            _db.macroTargets.userId,
+            _db.macroTargets.weekStartDate,
+          ],
+        ),
         MacroTargetRow(
           id: '${json['id']}',
           userId: '${json['user_id']}',

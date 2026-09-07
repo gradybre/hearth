@@ -541,6 +541,18 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
   pass is running coalesce into exactly one rerun — not none, which left a
   write waiting for whatever happened to trigger the next pass, and not one
   each, which would have a recipe save chase its own tail.
+- **An id both phones can work out for themselves.** Anything a household can
+  decide independently on two devices — a week's macro targets, a remembered
+  ingredient answer, a shopping line — derives its row id from whatever the
+  unique key is on, never from a random value. Two phones setting the same
+  week's targets offline used to mint an id each for one constrained pair, and
+  the second to reach the server was refused for ever, because retrying
+  carries the same id it was refused for.
+  - Rows written before that still carry a random id, so both the server
+    upsert and the local apply resolve on the pair rather than on the id. The
+    local half mattered more: the local table has the same unique key, and
+    applying by id meant a row from the other phone threw on the way in and
+    took the whole table's pull with it.
 - **A deletion is a change, not an absence.** Every synced table that a user
   can delete from soft-deletes: the row stays and `is_deleted` turns true, so
   the deletion travels on the ordinary pull like any other change. A plain
