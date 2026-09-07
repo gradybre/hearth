@@ -466,8 +466,11 @@ class _EmptyLibrary extends StatelessWidget {
         ),
         const SizedBox(height: HearthSpacing.sm),
         Text(
-          'Add a recipe by hand to get started. Importing from a photo '
-          'or a link comes later.',
+          // No colon anywhere in this sentence, deliberately: the cook
+          // timer's test reads "any text containing a colon" as a timer
+          // showing, so prose with one in it fails a test about timers.
+          'Add recipe offers four ways in — write one, import one from a '
+          'photo or a link, build what you ate out, or have Hearth write it.',
           style: text.body.copyWith(color: colors.textSecondary),
           textAlign: TextAlign.center,
         ),

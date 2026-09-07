@@ -271,6 +271,29 @@ void main() {
         expectSurvived(tester, 'the confirm view at $at');
       });
 
+      testWidgets('the ways to add a recipe survive $at', (
+        WidgetTester tester,
+      ) async {
+        // Four rows of prose behind a tap. Behind a tap is where a sweep
+        // stops looking — the same gap the rings fell into when Details was
+        // added, and at the largest text the last row here is off the bottom
+        // of a short phone.
+        await open(tester, size: device.size, scale: scale);
+        await tester.tap(find.text('Recipes').last);
+        await pumpFrames(tester, frames: 12);
+
+        await reach(tester, find.text('Add recipe'));
+        expect(
+          find.text('Write a recipe'),
+          findsOneWidget,
+          reason: 'the sheet never opened at $at',
+        );
+        expectSurvived(tester, 'the add-recipe sheet at $at');
+
+        await bring(tester, find.text('Generate with AI'));
+        expectSurvived(tester, 'the end of the add-recipe sheet at $at');
+      });
+
       testWidgets('a recipe opens and reads $at', (WidgetTester tester) async {
         await open(tester, size: device.size, scale: scale);
         await tester.tap(find.text('Recipes').last);
