@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
+import 'package:hearth/app/shell/destinations.dart';
 import 'package:hearth/app/shell/launch_target.dart';
 import 'package:hearth/app/shell/sections.dart';
 import 'package:hearth/domain/planning/week.dart';
@@ -22,9 +23,25 @@ void main() {
   test('carries no date, so it cannot open on the wrong one', () {
     // A stored `/plan/2026-09-07` would open on the seventh for ever. What
     // "today" means is resolved when the day provider is built, at launch.
-    expect(LaunchTarget.today.path, '/plan');
     expect(LaunchTarget.today.stored, 'today');
     expect(RegExp(r'\d').hasMatch(LaunchTarget.today.path), isFalse);
+  });
+
+  test('and points at the plan destination, not a path of its own', () {
+    // `LaunchTarget.section` takes its path from the registry, on the stated
+    // principle that the sections are data. This one spells the path out,
+    // because a destination has no id to look it up by — so the two can
+    // drift, and the app would open on a route it no longer has for everyone
+    // who chose Today. Held together here instead.
+    final AppDestination plan = foodDestinations.firstWhere(
+      (AppDestination destination) => destination.label == 'Plan',
+    );
+
+    expect(
+      LaunchTarget.today.path,
+      plan.path,
+      reason: 'Today opens on a path the app no longer routes',
+    );
   });
 
   test('is read back from what was stored', () {
@@ -65,20 +82,23 @@ void main() {
       expect(find.text('Week'), findsWidgets);
     });
 
-    testWidgets('showing the day it actually is', (WidgetTester tester) async {
-      // The whole point of the path carrying no date: what "today" means is
-      // decided when the app opens, not when the preference was written.
-      //
-      // Asserted on the resolved date rather than on the header's word:
-      // the summary card is headed "Today" whatever day is shown, so
-      // `find.text('Today')` would pass on any date at all.
+    testWidgets('with the plan tab selected, not merely present', (
+      WidgetTester tester,
+    ) async {
+      // Reading `selectedDateProvider` was the first version of this and it
+      // proved nothing: that provider resolves to today in any container, so
+      // the assertion passed with the *home* launch target too. The selected
+      // icon is a fact about where the app actually opened.
       await pumpHearthApp(tester, launchTarget: LaunchTarget.today);
       await pumpFrames(tester, frames: 12);
 
+      expect(find.byIcon(Icons.calendar_today), findsWidgets);
+      expect(find.byIcon(Icons.menu_book), findsNothing);
+
+      // And the day it opened on is the day it is.
       final ProviderContainer container = ProviderScope.containerOf(
         tester.element(find.byType(MaterialApp).first),
       );
-
       expect(container.read(selectedDateProvider), dayKey(DateTime.now()));
     });
 
@@ -100,7 +120,8 @@ void main() {
       );
       await pumpFrames(tester, frames: 12);
 
-      expect(find.text('Recipes'), findsWidgets);
+      expect(find.byIcon(Icons.menu_book), findsWidgets);
+      expect(find.byIcon(Icons.calendar_today), findsNothing);
     });
   });
 }
