@@ -153,8 +153,9 @@ Future<void> openImport(
   PhotoPicker? picker,
 }) async {
   await pumpHearthApp(tester, recipeAi: ai, photoPicker: picker);
-  await tester.tap(find.byIcon(Icons.document_scanner_outlined));
-  await pumpFrames(tester);
+  // Through the menu, as a person does. This tapped the old import button's
+  // icon directly; that icon is now a row inside the Add recipe sheet (U05).
+  await addRecipeVia(tester, 'Import a recipe');
 }
 
 void main() {
@@ -163,12 +164,17 @@ void main() {
   testWidgets('the library offers importing beside typing one in', (
     WidgetTester tester,
   ) async {
+    // Still the point, in the arrangement that replaced the stacked buttons:
+    // importing is one of the ways in rather than something hidden behind the
+    // editor, and it sits next to writing one and to having Hearth write one
+    // (§5.3, §5.4, U05).
     await pumpHearthApp(tester);
+    await tester.tap(find.text('Add recipe'));
+    await pumpFrames(tester, frames: 12);
 
-    expect(find.byIcon(Icons.document_scanner_outlined), findsOneWidget);
-    // And beside it, having Hearth write one (§5.4).
-    expect(find.byIcon(Icons.auto_awesome), findsOneWidget);
-    expect(find.text('New recipe'), findsOneWidget);
+    expect(find.text('Import a recipe'), findsOneWidget);
+    expect(find.text('Write a recipe'), findsOneWidget);
+    expect(find.text('Generate with AI'), findsOneWidget);
   });
 
   testWidgets('several pictures are one recipe, and it says so', (

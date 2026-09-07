@@ -46,7 +46,7 @@ void main() {
   Future<void> openBuilder(WidgetTester tester) async {
     await tester.tap(find.text('Recipes').last);
     await pumpFrames(tester);
-    await tester.tap(find.byTooltip('Build a meal you ate out'));
+    await addRecipeVia(tester, 'Eat out');
     await pumpFrames(tester, frames: 12);
   }
 

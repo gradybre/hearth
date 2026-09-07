@@ -381,7 +381,7 @@ void main() {
       await at3x(tester);
       await pumpFrames(tester);
 
-      await tester.tap(find.widgetWithText(FloatingActionButton, 'New recipe'));
+      await addRecipeVia(tester, 'Write a recipe');
       await pumpFrames(tester, frames: 15);
 
       expect(tester.takeException(), isNull);

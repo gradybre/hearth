@@ -61,7 +61,7 @@ Future<StubSource> openEditorWith(
   final StubSource source = StubSource(answers);
   await pumpHearthApp(tester, nutritionSources: <NutritionSource>[source]);
 
-  await tester.tap(find.text('New recipe'));
+  await addRecipeVia(tester, 'Write a recipe');
   await pumpFrames(tester);
   await tester.enterText(
     find.byWidgetPredicate(

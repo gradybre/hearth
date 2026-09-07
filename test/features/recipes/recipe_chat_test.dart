@@ -88,8 +88,9 @@ Future<void> openChat(
   List<NutritionSource> nutrition = const <NutritionSource>[],
 }) async {
   await pumpHearthApp(tester, recipeAi: ai, nutritionSources: nutrition);
-  await tester.tap(find.byIcon(Icons.auto_awesome));
-  await pumpFrames(tester);
+  // Through the menu, as a person does. This tapped the old AI button's icon
+  // directly; that icon is now a row inside the Add recipe sheet (U05).
+  await addRecipeVia(tester, 'Generate with AI');
 }
 
 Future<void> say(WidgetTester tester, String text) async {

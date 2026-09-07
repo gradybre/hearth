@@ -61,7 +61,7 @@ Future<void> openRecipeWith(
   required List<Food> foods,
 }) async {
   await pumpHearthApp(tester, foods: foods);
-  await tester.tap(find.text('New recipe'));
+  await addRecipeVia(tester, 'Write a recipe');
   await pumpFrames(tester);
   await tester.enterText(
     find.byWidgetPredicate(

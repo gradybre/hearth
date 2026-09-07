@@ -15,6 +15,7 @@ import '../../domain/models/recipe.dart';
 import '../../domain/recipes/default_sweep.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/recipes/recipe_query.dart';
+import 'add_recipe_sheet.dart';
 import 'macro_stats_row.dart';
 import 'recipe_filter_bar.dart';
 import 'recipe_icon.dart';
@@ -44,52 +45,17 @@ class RecipeLibraryScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: colors.background,
-      // Import sits beside typing rather than replacing it: a recipe out of
-      // your own head is still the common case, and importing is the one that
-      // moves a library across (spec §5.3).
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: <Widget>[
-          FloatingActionButton.small(
-            heroTag: 'recipe-write',
-            onPressed: () => context.push('/recipe/write'),
-            backgroundColor: colors.surfaceElevated,
-            foregroundColor: colors.textPrimary,
-            tooltip: 'Have Hearth write one',
-            child: const Icon(Icons.auto_awesome),
-          ),
-          const SizedBox(height: HearthSpacing.sm),
-          FloatingActionButton.small(
-            heroTag: 'recipe-import',
-            onPressed: () => context.push('/recipe/import'),
-            backgroundColor: colors.surfaceElevated,
-            foregroundColor: colors.textPrimary,
-            tooltip: 'Import from a picture or a link',
-            child: const Icon(Icons.document_scanner_outlined),
-          ),
-          const SizedBox(height: HearthSpacing.sm),
-          // Building a meal you ordered is a different act from writing a
-          // recipe, and it produces one anyway — so it sits with the other
-          // ways in rather than behind the editor (spec §5.2).
-          FloatingActionButton.small(
-            heroTag: 'recipe-eat-out',
-            onPressed: () => context.push('/recipe/eat-out'),
-            backgroundColor: colors.surfaceElevated,
-            foregroundColor: colors.textPrimary,
-            tooltip: 'Build a meal you ate out',
-            child: const Icon(Icons.storefront),
-          ),
-          const SizedBox(height: HearthSpacing.sm),
-          FloatingActionButton.extended(
-            heroTag: 'recipe-new',
-            onPressed: () => context.push('/recipe/new'),
-            backgroundColor: colors.accent,
-            foregroundColor: colors.onAccent,
-            icon: const Icon(Icons.add),
-            label: Text('New recipe', style: context.text.label),
-          ),
-        ],
+      // One labelled control rather than four buttons stacked up the corner.
+      // Three of those four were icon-only, so what they did lived in a
+      // tooltip — a hover, on a device with no pointer — and the stack grew
+      // by one every time another way in was built (U05).
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'recipe-add',
+        onPressed: () => showAddRecipeSheet(context),
+        backgroundColor: colors.accent,
+        foregroundColor: colors.onAccent,
+        icon: const Icon(Icons.add),
+        label: Text('Add recipe', style: context.text.label),
       ),
       body: SafeArea(
         child: library.when(
@@ -500,8 +466,11 @@ class _EmptyLibrary extends StatelessWidget {
         ),
         const SizedBox(height: HearthSpacing.sm),
         Text(
-          'Add a recipe by hand to get started. Importing from a photo '
-          'or a link comes later.',
+          // No colon anywhere in this sentence, deliberately: the cook
+          // timer's test reads "any text containing a colon" as a timer
+          // showing, so prose with one in it fails a test about timers.
+          'Add recipe offers four ways in — write one, import one from a '
+          'photo or a link, build what you ate out, or have Hearth write it.',
           style: text.body.copyWith(color: colors.textSecondary),
           textAlign: TextAlign.center,
         ),

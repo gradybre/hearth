@@ -78,7 +78,7 @@ void main() {
 
     testWidgets('still offers a way to add one', (WidgetTester tester) async {
       await pumpHearthApp(tester);
-      expect(find.text('New recipe'), findsOneWidget);
+      expect(find.text('Add recipe'), findsOneWidget);
     });
   });
 
