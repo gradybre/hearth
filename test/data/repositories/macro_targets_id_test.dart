@@ -104,8 +104,15 @@ void main() {
             'updated_at': '2026-09-07T12:00:00.000Z',
           };
 
-      await rows.applyTargets(arriving('id-from-phone-a', 2000));
-      await rows.applyTargets(arriving('id-from-phone-b', 2200));
+      Future<bool> nothingPending(String _) async => false;
+      await rows.applyTargets(
+        arriving('id-from-phone-a', 2000),
+        hasPendingWrite: nothingPending,
+      );
+      await rows.applyTargets(
+        arriving('id-from-phone-b', 2200),
+        hasPendingWrite: nothingPending,
+      );
 
       final List<MacroTargetRow> stored = await db
           .select(db.macroTargets)
@@ -114,4 +121,53 @@ void main() {
       expect(stored.single.kcal, 2200, reason: 'the later write should win');
     },
   );
+
+  test('but an unsent local change is not overwritten by it', () async {
+    // The pull's own guard asks whether the *incoming* id has an unsent
+    // write, and here the incoming id is the other phone's — so it cannot see
+    // that this phone has its own unsent change to the same week. Resolving
+    // on the pair without checking makes that change disappear, which is the
+    // one thing the queue exists to prevent.
+    final HearthDatabase db = HearthDatabase.forTesting(
+      NativeDatabase.memory(),
+    );
+    addTearDown(db.close);
+    final RemoteRows rows = RemoteRows(db);
+    final PendingWriteStore queue = PendingWriteStore(db);
+
+    Map<String, Object?> row(String id, double kcal, String at) =>
+        <String, Object?>{
+          'id': id,
+          'user_id': 'user-1',
+          'week_start_date': '2026-09-07',
+          'kcal': kcal,
+          'protein_g': 150,
+          'carb_g': 200,
+          'fat_g': 70,
+          'updated_at': at,
+        };
+
+    await rows.applyTargets(
+      row('local-id', 1800, '2026-09-07T09:00:00.000Z'),
+      hasPendingWrite: (String _) async => false,
+    );
+    await queue.enqueue(
+      entityTable: 'macro_targets',
+      entityId: 'local-id',
+      operation: WriteOperation.upsert,
+      payload: const <String, Object?>{'id': 'local-id'},
+      queuedAt: DateTime.utc(2026, 9, 7, 9),
+    );
+
+    await rows.applyTargets(
+      row('other-phone-id', 2200, '2026-09-07T10:00:00.000Z'),
+      hasPendingWrite: queue.hasPendingFor,
+    );
+
+    expect(
+      (await db.select(db.macroTargets).get()).single.kcal,
+      1800,
+      reason: 'the unsent local change was overwritten by the pull',
+    );
+  });
 }

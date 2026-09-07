@@ -53,7 +53,13 @@ class RecordSync {
         >[
           (table: 'meal_plan_days', apply: _rows.applyDay),
           (table: 'meal_plan_entries', apply: _rows.applyEntry),
-          (table: 'macro_targets', apply: _rows.applyTargets),
+          (
+            table: 'macro_targets',
+            // This table's guard needs the queue as well as the row: see
+            // applyTargets.
+            apply: (Map<String, Object?> json) =>
+                _rows.applyTargets(json, hasPendingWrite: _queue.hasPendingFor),
+          ),
           (table: 'collections', apply: _rows.applyCollection),
           (table: 'food_profiles', apply: _rows.applyFoodProfile),
           (table: 'plan_templates', apply: _rows.applyPlanTemplate),

@@ -553,6 +553,12 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
     local half mattered more: the local table has the same unique key, and
     applying by id meant a row from the other phone threw on the way in and
     took the whole table's pull with it.
+  - **And resolving on the pair means the pull's own guard is looking at the
+    wrong thing.** That guard asks whether the *incoming* id has an unsent
+    write; on a table addressed by a pair, the incoming id is the other
+    device's, so it cannot see this device's unsent change to the same row.
+    The apply has to ask about the local row's id as well, or the change the
+    outbox is holding is overwritten by the pull that was meant to be safe.
 - **A deletion is a change, not an absence.** Every synced table that a user
   can delete from soft-deletes: the row stays and `is_deleted` turns true, so
   the deletion travels on the ordinary pull like any other change. A plain
