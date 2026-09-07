@@ -238,6 +238,14 @@ belongs to the Nutrition section.
   there, so it was something you knew or you did not. (The gesture *was*
   exposed as a semantics action, so a screen reader could reach it; what was
   missing was any indication that there was anything to reach.)
+- **A sweep cannot miss what it was never told about.** The surfaces the
+  accessibility sweep visits are declared in one list, and a guard reads the
+  source and fails when anything opens a sheet or a dialog that the list does
+  not mention — either as swept, or as not-yet-swept with a reason. Three
+  times in one package a surface went behind an interaction and left the swept
+  surface silently, because nothing anywhere said it should have been added.
+  Extending the sweep by hand each time treated the symptom; the omission is
+  the failure now. What is uncovered is written down rather than unknown.
 - **One labelled way in, not a stack of icons.** *Add recipe* opens the four
   ways a recipe gets into the library: write one, import one, build what you
   ate out, or have Hearth generate one. Three of the four used to be icon-only
