@@ -21,6 +21,7 @@ import '../foods/external_food_results.dart';
 import '../foods/food_search_controller.dart';
 import 'day_picker_sheet.dart';
 import 'entry_resolver.dart';
+import 'logging_intent.dart';
 
 /// Adds something to a slot, or confirms something already planned.
 ///
@@ -683,7 +684,19 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
                     child: TextButton.icon(
                       onPressed: () {
                         Navigator.of(context).pop();
-                        context.push('/recipe/eat-out');
+                        // The day and the slot travel with it. Three screens
+                        // later the editor has no other way to know them, and
+                        // recovering them there would recover today's — so a
+                        // dinner built for last Tuesday would become tonight's
+                        // (spec §5.6, U04).
+                        context.push(
+                          '/recipe/eat-out',
+                          extra: LoggingIntent(
+                            date: widget.date,
+                            slot: widget.slot,
+                            eaten: true,
+                          ),
+                        );
                       },
                       style: TextButton.styleFrom(
                         foregroundColor: colors.textSecondary,

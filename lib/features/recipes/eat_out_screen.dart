@@ -10,7 +10,9 @@ import '../../domain/foods/restaurant_menu.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/recipes/macro_calculator.dart';
+import '../plan/logging_intent.dart';
 import 'recipe_draft.dart';
+import 'recipe_editor_args.dart';
 
 /// Building a meal from a restaurant's menu (spec §5.2).
 ///
@@ -22,7 +24,13 @@ import 'recipe_draft.dart';
 /// and a look. Nothing is written here (CLAUDE.md rule 4), which is also what
 /// makes an accidental tap free.
 class EatOutScreen extends ConsumerStatefulWidget {
-  const EatOutScreen({super.key});
+  const EatOutScreen({this.intent, super.key});
+
+  /// The meal this build belongs to, when it started from one (U04).
+  ///
+  /// Null when the builder was opened from the recipe library, where there is
+  /// no meal in progress and an ordinary Save is the right ending.
+  final LoggingIntent? intent;
 
   @override
   ConsumerState<EatOutScreen> createState() => _EatOutScreenState();
@@ -171,7 +179,10 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
     }
     context.pushReplacement(
       '/recipe/new',
-      extra: RecipeDraft.fromMenu(restaurant: _restaurant!, picks: picks),
+      extra: RecipeEditorArgs(
+        draft: RecipeDraft.fromMenu(restaurant: _restaurant!, picks: picks),
+        intent: widget.intent,
+      ),
     );
   }
 

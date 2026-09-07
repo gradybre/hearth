@@ -18,11 +18,13 @@ import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/parsing/direction_parser.dart';
 import '../../domain/parsing/ingredient_parser.dart';
+import '../../domain/planning/meal_plan.dart';
 import '../../domain/recipes/ingredient_matcher.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/text/text_normaliser.dart';
 import '../foods/food_picker.dart';
 import '../foods/read_label_sheet.dart';
+import '../plan/logging_intent.dart';
 import 'macro_stats_row.dart';
 import 'match_review_controller.dart';
 import 'match_review_screen.dart';
@@ -50,8 +52,17 @@ class RecipeEditorScreen extends ConsumerStatefulWidget {
     this.recipeId,
     this.imported,
     this.draft,
+    this.intent,
     super.key,
   });
+
+  /// The meal this recipe is being built for, when it began in one (U04).
+  ///
+  /// The restaurant builder starts on the day screen — a particular day, a
+  /// particular slot — and ends here. Without it the editor knows only that a
+  /// recipe was written, so it saves and stops, and the meal somebody was in
+  /// the middle of logging is not logged.
+  final LoggingIntent? intent;
 
   /// Null when creating.
   final String? recipeId;
@@ -614,12 +625,67 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
           : drafted;
       await ref.read(recipeRepositoryProvider).save(saved);
 
+      // Remembered before anything else can fail. The meal entry is written
+      // after this, and if it throws the editor stays open with the button
+      // live again — which is the retry. Without this the draft would mint a
+      // fresh id on the way through and leave two copies of the same
+      // restaurant meal in the library (§8.3: retain the saved recipe and
+      // offer retry without duplicating it).
+      _existingId = saved.id;
+
       // Not awaited, deliberately (spec §5.2): saving a recipe must never sit
       // waiting on a picture. It lands in the store, so it appears on
       // whatever screen is showing the recipe by the time it arrives.
       if (redraw) {
         unawaited(icons.drawFor(recipeId: saved.id, title: saved.title));
       }
+      // And onto the meal it was built for, if it was built for one.
+      //
+      // The day and the slot come from the intent that travelled here, never
+      // from the clock: a dinner built for last Tuesday must not become
+      // tonight's. The nutrition is frozen from the recipe as reviewed on
+      // this screen, once — the same numbers the person just approved.
+      if (widget.intent case final LoggingIntent intent) {
+        final RecipeMacros macros = MacroCalculator.forRecipe(
+          saved,
+          foods: _foods,
+        );
+        try {
+          await ref
+              .read(planRepositoryProvider)
+              .add(
+                date: intent.date,
+                slot: intent.slot,
+                refType: PlanRefType.recipe,
+                refId: saved.id,
+                servings: 1,
+                loggedMacros: intent.eaten ? macros.perServing : null,
+                loggedCoverage: macros.coverage,
+                label: saved.title,
+              );
+        } on Object {
+          // The recipe is written and stays written; only the meal did not
+          // land. Staying put with the button live is the retry, and the id
+          // remembered above is what stops that retry writing the recipe
+          // twice (§8.3).
+          //
+          // Object, not Exception: a type error from a malformed payload is
+          // an Error, and letting it escape here would leave the editor
+          // looking like it had done nothing at all.
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Saved the recipe, but could not add it to '
+                  '${intent.slot.name}. Try again.',
+                ),
+              ),
+            );
+          }
+          return;
+        }
+      }
+
       // Pops the id, not nothing: an import needs to tell a save from a
       // cancel, because cancelling should leave you on the import screen to
       // try different pictures rather than throwing you back to the library.
@@ -709,7 +775,9 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
             padding: const EdgeInsets.only(right: HearthSpacing.sm),
             child: FilledButton(
               onPressed: _saving ? null : _save,
-              child: Text(_saving ? 'Saving…' : 'Save'),
+              child: Text(
+                _saving ? 'Saving…' : widget.intent?.action ?? 'Save',
+              ),
             ),
           ),
         ],
