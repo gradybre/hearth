@@ -301,9 +301,34 @@ class RemoteRows {
   /// wording now, but a row written before that could still be carrying a
   /// random one, and inserting beside it would break the unique index on a
   /// device that has done nothing wrong.
-  Future<void> applyIngredientMatch(Map<String, Object?> json) async {
+  Future<void> applyIngredientMatch(
+    Map<String, Object?> json, {
+    required Future<bool> Function(String entityId) hasPendingWrite,
+  }) async {
     final String key = normaliseKey('${json['ingredient_string'] ?? ''}');
     if (key.isEmpty) return;
+
+    final String household = '${json['household_id']}';
+
+    // The same guard `applyTargets` needs, for the same reason. The pull asks
+    // whether the *incoming* id has an unsent write, and on this table the
+    // incoming id is whatever the server row happens to carry — which for a
+    // row written before ids were derived is not the id this phone queued
+    // under. Without this, an answer given here and not yet sent is replaced
+    // by the one it was correcting, and a tombstone erases it outright.
+    final IngredientMatchRow? local =
+        await (_db.select(_db.ingredientMatches)..where(
+              ($IngredientMatchesTable m) =>
+                  m.householdId.equals(household) &
+                  m.ingredientString.equals(key),
+            ))
+            .getSingleOrNull();
+    if (local != null &&
+        local.id != '${json['id']}' &&
+        await hasPendingWrite(local.id)) {
+      return;
+    }
+
     if (_isDeleted(json)) {
       // By household and wording, not by id. The insert below deliberately
       // resolves on `(household_id, ingredient_string)` because a local row
@@ -313,7 +338,7 @@ class RemoteRows {
       // the household said to stop answering.
       await (_db.delete(_db.ingredientMatches)..where(
             ($IngredientMatchesTable m) =>
-                m.householdId.equals('${json['household_id']}') &
+                m.householdId.equals(household) &
                 m.ingredientString.equals(key),
           ))
           .go();
@@ -342,7 +367,7 @@ class RemoteRows {
         .insert(
           IngredientMatchesCompanion.insert(
             id: '${json['id']}',
-            householdId: '${json['household_id']}',
+            householdId: household,
             ingredientString: key,
             foodId: Value<String?>(foodId),
             needsNoMatch: Value<bool>(json['needs_no_match'] == true),

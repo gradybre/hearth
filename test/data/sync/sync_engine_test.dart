@@ -10,6 +10,12 @@ import 'package:hearth/data/sync/sync_engine.dart';
 class FakeGateway implements RemoteGateway {
   bool offline = false;
   String? failWithErrorForId;
+
+  /// An id the gateway throws an *Error* for rather than an Exception — a
+  /// missing delete key, a malformed payload from an older build. The queue
+  /// has to survive one: an Error that escapes the push loop leaves the write
+  /// unmarked and every later pass throws on it again.
+  String? throwErrorForId;
   final List<String> pushedIds = <String>[];
   List<RemoteRecord> changed = <RemoteRecord>[];
 
@@ -23,6 +29,9 @@ class FakeGateway implements RemoteGateway {
     if (offline) throw const RemoteUnavailable('no connection');
     if (entityId == failWithErrorForId) {
       throw const FormatException('server rejected the row');
+    }
+    if (entityId == throwErrorForId) {
+      throw StateError('Cannot delete from $entityTable without household_id.');
     }
     pushedIds.add(entityId);
   }
@@ -198,6 +207,38 @@ void main() {
 
       await engine.push();
       expect(gateway.pushedIds, contains('good'));
+    });
+
+    test('and neither does one that throws an Error rather than an '
+        'exception', () async {
+      // The one that stops a queue for ever. An Error is not an Exception, so
+      // an `on Exception` catch does not see it: the write is never marked,
+      // never backs off, and the pass throws before it reaches the pull. Every
+      // later pass starts on the same write and throws again — sync is dead in
+      // both directions, on a device that has done nothing wrong.
+      //
+      // A payload written by an older build is exactly how one arrives: it
+      // predates a key the gateway now filters on, and it is already sitting
+      // in the queue when the new build starts.
+      await enqueue('legacy');
+      await enqueue('good');
+      gateway.throwErrorForId = 'legacy';
+
+      final SyncResult result = await engine.push();
+
+      expect(result.failed, 1, reason: 'the write has to be marked, not lost');
+      expect(
+        gateway.pushedIds,
+        contains('good'),
+        reason: 'one unsendable write must not hold the whole queue',
+      );
+
+      final PendingWrite failed = (await queue.pending(
+        now: DateTime.now().toUtc().add(const Duration(minutes: 1)),
+      )).single;
+      expect(failed.entityId, 'legacy');
+      expect(failed.attempts, 1);
+      expect(failed.lastError, contains('household_id'));
     });
   });
 

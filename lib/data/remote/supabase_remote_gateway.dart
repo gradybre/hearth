@@ -177,27 +177,61 @@ class SupabaseRemoteGateway implements RemoteGateway {
         if (payload['updated_at'] != null) 'updated_at': payload['updated_at'],
       };
 
+  /// Which columns and values name the row this delete is for.
+  ///
+  /// Pure and static so the choice can be read and tested on its own, like
+  /// [softDeletePatch]: getting it wrong is silent against a real server,
+  /// which answers 204 whether it matched a row or nothing at all.
+  ///
+  /// A payload that predates the columns this table now filters on falls back
+  /// to the id it does carry. That is the queue's upgrade path, not a
+  /// nicety: a `forget` queued by the previous build is already sitting in
+  /// the outbox when the new build starts, and refusing it outright would
+  /// take out far more than the deletion — see the note in [SyncEngine.push].
+  /// The fallback is narrower than the filter it replaces, never wider, so it
+  /// cannot delete anything the queue did not ask for; the only thing it
+  /// gives up is reaching a row whose id was never derived, which is exactly
+  /// what that older build did anyway.
+  static Map<String, Object?> deleteFilter(
+    String table,
+    String entityId,
+    Map<String, Object?> payload,
+  ) {
+    final List<String> keys = deleteKeys[table] ?? const <String>['id'];
+    final Map<String, Object?> filter = <String, Object?>{
+      for (final String key in keys)
+        if (payload[key] ?? (key == 'id' ? entityId : null)
+            case final Object value)
+          key: value,
+    };
+    if (filter.length == keys.length) return filter;
+
+    // Only an `id` the payload itself carries. Never [entityId], which for a
+    // table keyed by a pair is a composite string the queue made up to have
+    // one — filtering on it would name a column these tables do not have.
+    if (payload['id'] case final Object id) return <String, Object?>{'id': id};
+
+    // Refusing beats guessing: a delete with a missing key would match every
+    // row the policy allows.
+    throw RemoteRefused(
+      'Cannot delete from $table without ${keys.join(' and ')}.',
+    );
+  }
+
   Future<void> _delete(
     String table,
     String entityId,
     Map<String, Object?> payload,
   ) async {
-    final List<String> keys = deleteKeys[table] ?? const <String>['id'];
     // A recorded deletion rather than a removal, for the tables that have
     // somewhere to record it. The filter is built the same way either way, so
     // a missing key is still refused rather than matching every row.
     PostgrestFilterBuilder<void> query = softDeleteTables.contains(table)
         ? _client.from(table).update(softDeletePatch(payload))
         : _client.from(table).delete();
-    for (final String key in keys) {
-      final Object? value = payload[key] ?? (key == 'id' ? entityId : null);
-      if (value == null) {
-        // Refusing beats guessing: a delete with a missing key would match
-        // every row the policy allows.
-        throw StateError('Cannot delete from $table without $key.');
-      }
-      query = query.eq(key, value);
-    }
+    deleteFilter(table, entityId, payload).forEach((String key, Object? value) {
+      query = query.eq(key, value!);
+    });
     await query;
   }
 

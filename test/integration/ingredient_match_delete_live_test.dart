@@ -96,6 +96,9 @@ void main() {
         .eq('household_id', householdId)
         .eq('ingredient_string', wording);
 
+    // Length first, so a row that was removed rather than flagged fails as
+    // "no row" rather than as an unreadable error inside `single`.
+    expect(after, hasLength(1), reason: 'the row was removed, not recorded');
     expect(
       after.single['is_deleted'],
       isTrue,

@@ -29,6 +29,22 @@ class RemoteUnavailable implements Exception {
   String toString() => 'RemoteUnavailable: $message';
 }
 
+/// Thrown when a queued write cannot be sent as written — a delete naming no
+/// row, a payload missing something the request needs.
+///
+/// An `Exception` and deliberately not an `Error`: the queue records a failed
+/// write and carries on, where a thrown `Error` escapes the push loop and
+/// takes the whole pass with it (see [SyncEngine.push]). The write is wrong,
+/// not the code — it was written by a build that is no longer running.
+class RemoteRefused implements Exception {
+  const RemoteRefused(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'RemoteRefused: $message';
+}
+
 /// The seam between the data layer and Supabase.
 ///
 /// An interface rather than a direct client call so sync can be tested without

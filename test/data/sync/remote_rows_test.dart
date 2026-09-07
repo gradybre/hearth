@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/data/local/hearth_database.dart';
@@ -309,6 +310,8 @@ void main() {
   });
 }
 
+Future<bool> _nothingPending(String _) async => false;
+
 /// Ingredient answers arriving from the other phone (spec §5.3, §7.1).
 void ingredientMatchTests(HearthDatabase Function() database) {
   Map<String, Object?> row({
@@ -338,7 +341,8 @@ void ingredientMatchTests(HearthDatabase Function() database) {
   group('an ingredient match from the server', () {
     test('lands as a match', () async {
       await seedOil();
-      await RemoteRows(database()).applyIngredientMatch(row());
+      await RemoteRows(database())
+          .applyIngredientMatch(row(), hasPendingWrite: _nothingPending);
 
       final IngredientMatchRow saved = await database()
           .select(database().ingredientMatches)
@@ -351,6 +355,7 @@ void ingredientMatchTests(HearthDatabase Function() database) {
     test('or as a seasoning, with no food', () async {
       await RemoteRows(database()).applyIngredientMatch(
         row(wording: 'salt', foodId: null, needsNoMatch: true),
+        hasPendingWrite: _nothingPending,
       );
 
       final IngredientMatchRow saved = await database()
@@ -367,7 +372,8 @@ void ingredientMatchTests(HearthDatabase Function() database) {
         // foreign key onto them and a failure would abort the whole table's
         // pull over one row. A match to a food that is not here is useless
         // anyway — the matcher only ever suggests foods the library holds.
-        await RemoteRows(database()).applyIngredientMatch(row());
+        await RemoteRows(database())
+            .applyIngredientMatch(row(), hasPendingWrite: _nothingPending);
         expect(
           await database().select(database().ingredientMatches).get(),
           isEmpty,
@@ -380,9 +386,13 @@ void ingredientMatchTests(HearthDatabase Function() database) {
       // Upserted on the wording rather than the id: a row written before ids
       // were derived could still carry a random one, and inserting beside it
       // would break the unique index on a device that did nothing wrong.
-      await RemoteRows(database()).applyIngredientMatch(row(id: 'old-random'));
+      await RemoteRows(database()).applyIngredientMatch(
+        row(id: 'old-random'),
+        hasPendingWrite: _nothingPending,
+      );
       await RemoteRows(database()).applyIngredientMatch(
         row(id: 'derived', foodId: null, needsNoMatch: true),
+        hasPendingWrite: _nothingPending,
       );
 
       final IngredientMatchRow saved = await database()
@@ -392,8 +402,99 @@ void ingredientMatchTests(HearthDatabase Function() database) {
       expect(saved.needsNoMatch, isTrue);
     });
 
+    test('but not over an answer this device has not sent yet', () async {
+      // The same shape as macro_targets (#37), and the same loss. The pull's
+      // own guard asks whether the *incoming* id has an unsent write — and on
+      // this table the incoming id is whatever the server row happens to
+      // carry, which for a row written before ids were derived is not the id
+      // this phone queued under. So the guard sees nothing, the upsert
+      // resolves on the wording, and an answer the household gave on this
+      // phone is replaced by the one it is still waiting to correct.
+      await seedOil();
+      final HearthDatabase db = database();
+      final PendingWriteStore queue = PendingWriteStore(db);
+
+      // This phone said "evoo is a seasoning", offline. The local row takes
+      // the derived id; the queued write is keyed on it.
+      const String derived = 'derived-id';
+      await db
+          .into(db.ingredientMatches)
+          .insert(
+            IngredientMatchesCompanion.insert(
+              id: derived,
+              householdId: 'household-1',
+              ingredientString: 'evoo',
+              needsNoMatch: const Value<bool>(true),
+              updatedAt: DateTime.utc(2026, 9, 1),
+            ),
+          );
+      await queue.enqueue(
+        entityTable: 'ingredient_matches',
+        entityId: derived,
+        operation: WriteOperation.upsert,
+        payload: const <String, Object?>{'id': derived},
+        queuedAt: DateTime.utc(2026, 9, 1),
+      );
+
+      // The server still holds the old row, under an id of its own.
+      await RemoteRows(db).applyIngredientMatch(
+        row(id: 'old-random'),
+        hasPendingWrite: queue.hasPendingFor,
+      );
+
+      final IngredientMatchRow saved = await db
+          .select(db.ingredientMatches)
+          .getSingle();
+      expect(
+        saved.needsNoMatch,
+        isTrue,
+        reason: 'the unsent answer was overwritten by the one it corrects',
+      );
+      expect(saved.foodId, isNull);
+    });
+
+    test('and a tombstone does not take one either', () async {
+      await seedOil();
+      final HearthDatabase db = database();
+      final PendingWriteStore queue = PendingWriteStore(db);
+
+      const String derived = 'derived-id';
+      await db
+          .into(db.ingredientMatches)
+          .insert(
+            IngredientMatchesCompanion.insert(
+              id: derived,
+              householdId: 'household-1',
+              ingredientString: 'evoo',
+              foodId: const Value<String?>('food-oil'),
+              updatedAt: DateTime.utc(2026, 9, 1),
+            ),
+          );
+      await queue.enqueue(
+        entityTable: 'ingredient_matches',
+        entityId: derived,
+        operation: WriteOperation.upsert,
+        payload: const <String, Object?>{'id': derived},
+        queuedAt: DateTime.utc(2026, 9, 1),
+      );
+
+      await RemoteRows(db).applyIngredientMatch(<String, Object?>{
+        ...row(id: 'old-random'),
+        'is_deleted': true,
+      }, hasPendingWrite: queue.hasPendingFor);
+
+      expect(
+        await db.select(db.ingredientMatches).get(),
+        hasLength(1),
+        reason: 'a forget from before this answer must not erase it unsent',
+      );
+    });
+
     test('a wording that normalises to nothing is ignored', () async {
-      await RemoteRows(database()).applyIngredientMatch(row(wording: '  '));
+      await RemoteRows(database()).applyIngredientMatch(
+        row(wording: '  '),
+        hasPendingWrite: _nothingPending,
+      );
       expect(
         await database().select(database().ingredientMatches).get(),
         isEmpty,

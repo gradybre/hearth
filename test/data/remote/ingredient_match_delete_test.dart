@@ -61,6 +61,57 @@ void main() {
     });
   });
 
+  group('and a delete queued by the build before this one', () {
+    // The upgrade case, and the one that can take a whole device's sync with
+    // it. A `forget` queued by the installed build carries an id and nothing
+    // else; it is already in the queue when the new build starts, and the new
+    // build filters on columns that payload has never heard of.
+    test('still deletes, by the id it does carry', () {
+      expect(
+        SupabaseRemoteGateway.deleteFilter(
+          'ingredient_matches',
+          'derived-id',
+          const <String, Object?>{'id': 'derived-id'},
+        ),
+        <String, Object?>{'id': 'derived-id'},
+        reason:
+            'an older payload has to keep working: filtering on the id is '
+            'what it did before the upgrade, and it is narrower, not wider',
+      );
+    });
+
+    test('and a payload with the pair uses the pair', () {
+      expect(
+        SupabaseRemoteGateway.deleteFilter(
+          'ingredient_matches',
+          'derived-id',
+          const <String, Object?>{
+            'id': 'derived-id',
+            'household_id': 'house-1',
+            'ingredient_string': 'evoo',
+          },
+        ),
+        <String, Object?>{
+          'household_id': 'house-1',
+          'ingredient_string': 'evoo',
+        },
+      );
+    });
+
+    test('and one naming nothing at all is refused, never widened', () {
+      // Refusing beats guessing: a delete with no filter matches every row
+      // the policy allows.
+      expect(
+        () => SupabaseRemoteGateway.deleteFilter(
+          'recipe_favorites',
+          'user-1/recipe-1',
+          const <String, Object?>{'user_id': 'user-1'},
+        ),
+        throwsA(isA<Exception>()),
+      );
+    });
+  });
+
   test('and the queued delete carries what that filter needs', () async {
     // The half that matters, and the half a map on its own cannot show: the
     // gateway refuses a delete whose key is missing rather than guessing,

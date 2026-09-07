@@ -65,7 +65,15 @@ class RecordSync {
           (table: 'plan_templates', apply: _rows.applyPlanTemplate),
           // After foods: a match points at one, and a foreign key does not
           // care that the food arrived two milliseconds earlier.
-          (table: 'ingredient_matches', apply: _rows.applyIngredientMatch),
+          (
+            table: 'ingredient_matches',
+            // This table's guard needs the queue as well as the row, and for
+            // the same reason macro_targets does: see applyIngredientMatch.
+            apply: (Map<String, Object?> json) => _rows.applyIngredientMatch(
+              json,
+              hasPendingWrite: _queue.hasPendingFor,
+            ),
+          ),
           // The list before its lines, for the foreign key.
           (table: 'shopping_lists', apply: _rows.applyShoppingList),
           (table: 'shopping_list_items', apply: _rows.applyShoppingItem),
