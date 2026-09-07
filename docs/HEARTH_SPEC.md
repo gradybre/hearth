@@ -234,9 +234,10 @@ belongs to the Nutrition section.
 - **Changing a portion is visible, not a gesture you have to know.** Each
   meal row carries a way in to Edit portion and Remove. Long press stays as a
   shortcut for those who know it, and one tap still logs and unlogs — but a
-  long press is not an affordance: nothing on the row said it was there, and
-  it is not discoverable at all by anyone driving the app with a screen
-  reader, switch control or voice.
+  long press is not an affordance: nothing on the row drew it or said it was
+  there, so it was something you knew or you did not. (The gesture *was*
+  exposed as a semantics action, so a screen reader could reach it; what was
+  missing was any indication that there was anything to reach.)
 - **Log in the food's own servings.** A food knows several — "170 g pot",
   "100 g" — and the portion can be *entered* in whichever of them suits, so
   half a pot is half a pot rather than something to work out as a multiple of

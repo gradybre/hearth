@@ -698,7 +698,14 @@ class _EntryRow extends ConsumerWidget {
                     child: InkWell(
                       onTap: () => _toggleLogged(ref),
                       onLongPress: () => _showOptions(context, ref),
-                      borderRadius: BorderRadius.circular(HearthRadius.md),
+                      // Rounded on the left, where the card is, and square on
+                      // the right, where the button begins. A full radius
+                      // here clipped the ink to this box's own corners, so
+                      // pressing the row drew two rounded edges in the middle
+                      // of it and nothing under the calories or the button.
+                      borderRadius: const BorderRadius.horizontal(
+                        left: Radius.circular(HearthRadius.md),
+                      ),
                       child: Padding(
                         padding: const EdgeInsets.all(HearthSpacing.md),
                         child: Row(
@@ -746,15 +753,13 @@ class _EntryRow extends ConsumerWidget {
                 Padding(
                   padding: const EdgeInsets.only(right: HearthSpacing.xs),
                   child: IconButton(
-                    // The label on the icon, not only on the tooltip: a
-                    // tooltip is a tooltip property, which not every screen
-                    // reader announces, and this is the affordance that
-                    // exists so the gesture is not the only way in.
-                    icon: Icon(
-                      Icons.more_vert,
-                      size: 20,
-                      semanticLabel: 'Edit ${entry.label}',
-                    ),
+                    icon: const Icon(Icons.more_vert, size: 20),
+                    // The tooltip alone, as every other icon button here
+                    // does. It is not merely a hover hint: iOS appends it to
+                    // the accessibility label and Android sets it as the
+                    // tooltip text, so both read it — and setting a matching
+                    // `semanticLabel` as well had VoiceOver say the name
+                    // twice.
                     tooltip: 'Edit ${entry.label}',
                     // Material's default is 40, which is under the floor a
                     // thumb needs (§6.3). Stated rather than inherited.

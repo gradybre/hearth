@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
@@ -27,8 +28,12 @@ void main() {
 
   const Macros eaten = Macros(kcal: 170, proteinG: 17);
 
-  Future<void> openDay(WidgetTester tester, {double scale = 1.0}) async {
-    await pumpHearthApp(
+  Future<HearthDatabase> openDay(
+    WidgetTester tester, {
+    double scale = 1.0,
+    bool logged = true,
+  }) async {
+    final HearthDatabase db = await pumpHearthApp(
       tester,
       textScale: scale,
       foods: <Food>[
@@ -46,24 +51,35 @@ void main() {
         ),
       ],
       entries: <MealPlanEntry>[
-        const MealPlanEntry(
-          id: 'e-yog',
-          dayId: 'day-1',
-          slot: MealSlot.breakfast,
-          refType: PlanRefType.food,
-          refId: 'f-yoghurt',
-          servings: 1,
-        ).log(
-          liveMacros: eaten,
-          at: DateTime.utc(2026, 9, 7, 8),
-          label: 'Greek yoghurt',
-          coverage: NutrientCoverage.ofOne(eaten),
-        ),
+        if (logged)
+          const MealPlanEntry(
+            id: 'e-yog',
+            dayId: 'day-1',
+            slot: MealSlot.breakfast,
+            refType: PlanRefType.food,
+            refId: 'f-yoghurt',
+            servings: 1,
+          ).log(
+            liveMacros: eaten,
+            at: DateTime.utc(2026, 9, 7, 8),
+            label: 'Greek yoghurt',
+            coverage: NutrientCoverage.ofOne(eaten),
+          )
+        else
+          const MealPlanEntry(
+            id: 'e-yog',
+            dayId: 'day-1',
+            slot: MealSlot.breakfast,
+            refType: PlanRefType.food,
+            refId: 'f-yoghurt',
+            servings: 1,
+          ),
       ],
       targets: targets,
     );
     await tester.tap(find.text('Plan').last);
     await pumpFrames(tester, frames: 12);
+    return db;
   }
 
   testWidgets('the meal row offers a way in that can be seen', (
@@ -87,17 +103,24 @@ void main() {
     final SemanticsHandle semantics = tester.ensureSemantics();
     await openDay(tester);
 
-    // Asserted on the node itself. A tooltip alone sets `tooltip`, which not
-    // every screen reader announces; this is the affordance that exists so
-    // the gesture is not the only way in, so it needs a label.
+    // Asserted on the node itself, and on `tooltip` rather than `label`:
+    // that is where the name lives for an icon button, and it is what both
+    // platforms read — iOS appends it to the accessibility label, Android
+    // sets it as the tooltip text. Setting a matching `semanticLabel` too
+    // made VoiceOver say the name twice.
     final SemanticsNode node = tester.getSemantics(
       find.byTooltip('Edit Greek yoghurt'),
     );
 
     expect(
-      node.label,
+      node.tooltip,
       'Edit Greek yoghurt',
       reason: 'the way in is not announced to anyone listening',
+    );
+    expect(
+      node.label,
+      isEmpty,
+      reason: 'a label as well as the tooltip is the name said twice',
     );
     expect(node.flagsCollection.isButton, isTrue);
     semantics.dispose();
@@ -114,22 +137,27 @@ void main() {
     expect(find.text('Edit portion'), findsOneWidget);
   });
 
-  testWidgets('and a plain tap still belongs to the row', (
+  testWidgets('and a plain tap still logs the meal', (
     WidgetTester tester,
   ) async {
-    // The row's own job is one-tap logging, and the button beside it must not
-    // take that over. Asserted as "the sheet did not open" rather than as the
-    // row's new state: the harness serves the day's entries from a fixed
-    // override, so a toggle does not come back through it.
-    await openDay(tester);
-
-    await tester.tap(find.text('Greek yoghurt').last);
-    await pumpFrames(tester, frames: 12);
+    // The row's own job, and the half of U06 that says a visible button must
+    // not cost you one-tap logging. Asserted against the row in the database:
+    // "the options sheet did not open" was true of a tap that did nothing at
+    // all, and stayed green with one-tap logging deleted outright.
+    final HearthDatabase db = await openDay(tester, logged: false);
 
     expect(
-      find.text('Edit portion'),
-      findsNothing,
-      reason: 'tapping the row opened the options instead of logging',
+      (await db.select(db.mealPlanEntries).get()).single.isLogged,
+      isFalse,
+    );
+
+    await tester.tap(find.text('Greek yoghurt').last);
+    await pumpFrames(tester, frames: 20);
+
+    expect(
+      (await db.select(db.mealPlanEntries).get()).single.isLogged,
+      isTrue,
+      reason: 'tapping the row no longer logs the meal',
     );
   });
 
