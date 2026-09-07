@@ -238,6 +238,14 @@ belongs to the Nutrition section.
   there, so it was something you knew or you did not. (The gesture *was*
   exposed as a semantics action, so a screen reader could reach it; what was
   missing was any indication that there was anything to reach.)
+- **The app can open on today.** *Opens on* offers the home screen, Today,
+  and each built section. A section opens on its first destination — which for
+  Nutrition is the recipe library — so someone who opens Hearth to log lunch
+  had no way to ask for the day itself. The stored value carries no date: what
+  "today" means is resolved when the app opens, since a stored
+  `/plan/2026-09-07` would open on the seventh for ever. Choices already
+  stored keep their meaning, and anything unrecognised still opens on the home
+  screen.
 - **A portion correction is costed on the basis the meal was logged on.** The
   snapshot holds the total and the portion it was for, so one serving's worth
   is the one divided by the other — never what the food says today. This is
