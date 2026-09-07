@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/providers.dart';
 import '../../app/shell/sections.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
@@ -120,7 +122,7 @@ class _Masthead extends StatelessWidget {
 }
 
 /// One room, and the way into it.
-class _SectionCard extends StatelessWidget {
+class _SectionCard extends ConsumerWidget {
   const _SectionCard({required this.section});
 
   /// Built, because the card's whole job is to be the way in. A room that is
@@ -128,13 +130,16 @@ class _SectionCard extends StatelessWidget {
   final BuiltSection section;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final HearthColors colors = context.colors;
 
     return Semantics(
       button: true,
       label: section.semanticLabel,
-      onTap: () => context.go(section.path),
+      // Back where you were in it, not to its first tab (U08).
+      onTap: () => context.go(
+        ref.read(lastDestinationProvider.notifier).pathFor(section),
+      ),
       container: true,
       excludeSemantics: true,
       child: DecoratedBox(
@@ -150,7 +155,10 @@ class _SectionCard extends StatelessWidget {
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: () => context.go(section.path),
+              // Back where you were in it, not to its first tab (U08).
+              onTap: () => context.go(
+                ref.read(lastDestinationProvider.notifier).pathFor(section),
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(HearthSpacing.lg),
                 child: Row(
