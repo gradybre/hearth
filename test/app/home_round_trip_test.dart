@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/app/providers.dart';
+import 'package:hearth/app/shell/sections.dart';
 import 'package:hearth/domain/models/recipe.dart';
 
 import '../support/app_harness.dart';
@@ -69,6 +72,34 @@ void main() {
       find.text('Butter beans'),
       findsNothing,
       reason: 'the search was forgotten on the way out',
+    );
+  });
+
+  test('and a different account does not inherit where you were', () async {
+    // Claimed in the doc comment and asserted nowhere, which is how a
+    // sentence becomes untrue. Which screen someone was reading is theirs.
+    String who = 'user-a';
+    final ProviderContainer container = ProviderContainer(
+      overrides: [currentUserIdProvider.overrideWith((Ref ref) => who)],
+    );
+    addTearDown(container.dispose);
+
+    final BuiltSection nutrition = builtSections.first;
+    container
+        .read(lastDestinationProvider.notifier)
+        .remember(section: nutrition.id, path: '/plan');
+    expect(
+      container.read(lastDestinationProvider.notifier).pathFor(nutrition),
+      '/plan',
+    );
+
+    who = 'user-b';
+    container.invalidate(currentUserIdProvider);
+
+    expect(
+      container.read(lastDestinationProvider.notifier).pathFor(nutrition),
+      nutrition.path,
+      reason: "the next account opened on the last one's screen",
     );
   });
 }

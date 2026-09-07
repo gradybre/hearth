@@ -253,6 +253,12 @@ class _ShellHost extends ConsumerWidget {
     // this build rather than an input to it.
     if (index >= 0) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Still here, before touching `ref`. A frame callback runs after the
+        // frame that scheduled it, and a redirect or a fast second tap can
+        // unmount this shell in between — at which point reading a provider
+        // through a dead element throws, and the app dies on its way
+        // somewhere perfectly ordinary.
+        if (!context.mounted) return;
         ref
             .read(lastDestinationProvider.notifier)
             .remember(section: section.id, path: location);
