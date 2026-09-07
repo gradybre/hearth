@@ -231,6 +231,16 @@ belongs to the Nutrition section.
 ### 5.6 Daily / Weekly Planner + Logging
 - **Combined plan + track in one view.** Each day/slot supports a *planned* state and a *logged* (actually eaten) state.
 - **Meal slots:** breakfast, lunch, dinner, snack.
+- **A portion correction is costed on the basis the meal was logged on.** The
+  snapshot holds the total and the portion it was for, so one serving's worth
+  is the one divided by the other — never what the food says today. This is
+  the one screen that writes a new snapshot over an old meal, so it is the one
+  place rule 3 can be broken from the inside: a pot logged at 170 kcal, its
+  food corrected to 200 months later, became 200 when its portion was touched,
+  and half of it became 100 rather than 85. Coverage comes from the snapshot
+  for the same reason — how much of the day those numbers spoke for is part of
+  what was recorded. A *planned* entry still costs what its food costs today,
+  which is the point of a plan.
 - **Log in the food's own servings.** A food knows several — "170 g pot",
   "100 g" — and the portion can be *entered* in whichever of them suits, so
   half a pot is half a pot rather than something to work out as a multiple of
