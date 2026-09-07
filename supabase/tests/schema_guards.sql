@@ -1458,3 +1458,62 @@ begin
   raise notice 'resurrection guards passed';
 end;
 $$;
+
+-- ── Two phones can set the same week's targets (spec §7.1) ─────────────────
+--
+-- `macro_targets` is unique on (user_id, week_start_date) and keyed on the
+-- id. Both phones in a household decide this week's targets on their own,
+-- offline, and each used to mint its own id for the same constrained pair —
+-- so the second to reach the server was refused by the unique key, for ever,
+-- because retrying carries the same id it was refused for.
+--
+-- New rows derive their id from the pair now, but a row written before that
+-- still carries a random one, and the two have to be able to meet.
+do $$
+declare
+  v_user uuid := gen_random_uuid();
+  v_rows integer;
+  v_kcal numeric;
+begin
+  insert into auth.users (
+    id, instance_id, aud, role, email, encrypted_password,
+    email_confirmed_at, created_at, updated_at
+  )
+  values (
+    v_user, '00000000-0000-0000-0000-000000000000', 'authenticated',
+    'authenticated', v_user || '@targets-guard.test', 'x', now(), now(), now()
+  );
+
+  insert into public.macro_targets (
+    id, user_id, week_start_date, kcal, protein_g, carb_g, fat_g
+  )
+  values (gen_random_uuid(), v_user, date '2026-09-07', 2000, 150, 200, 70);
+
+  -- The other phone, with an id of its own, resolving on the pair the key is
+  -- on — which is what the client asks PostgREST to do.
+  insert into public.macro_targets (
+    id, user_id, week_start_date, kcal, protein_g, carb_g, fat_g
+  )
+  values (gen_random_uuid(), v_user, date '2026-09-07', 2200, 150, 200, 70)
+  on conflict (user_id, week_start_date) do update
+    set id = excluded.id, kcal = excluded.kcal;
+
+  select count(*), max(kcal) into v_rows, v_kcal
+  from public.macro_targets where user_id = v_user;
+
+  if v_rows <> 1 then
+    raise exception 'one week, two rows: %', v_rows;
+  end if;
+  if v_kcal <> 2200 then
+    raise exception 'the later write did not win: %', v_kcal;
+  end if;
+
+  -- Only what this guard made. A new user arrives with a household and a
+  -- profile attached by trigger, and unpicking those is not this guard's
+  -- business — the database it runs against is reset, and the other guards
+  -- in this file leave their fixtures behind for the same reason.
+  delete from public.macro_targets where user_id = v_user;
+
+  raise notice 'macro target guards passed';
+end;
+$$;

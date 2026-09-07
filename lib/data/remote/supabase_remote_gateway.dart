@@ -67,6 +67,15 @@ class SupabaseRemoteGateway implements RemoteGateway {
   /// updating the row already there.
   static const Map<String, String> upsertConflictTargets = <String, String>{
     'ingredient_matches': 'household_id,ingredient_string',
+    // Same shape, same reason. `macro_targets` is unique on (user, week) and
+    // keyed on the id, and two phones setting this week's targets offline
+    // each minted their own — so the second to arrive was refused by the
+    // unique key rather than updating the row that was already there.
+    //
+    // New rows derive their id now (see `PlanStore.idFor`), but a row written
+    // before that, or by an older build, still carries a random one. Resolving
+    // on the pair the key is on is what lets those meet.
+    'macro_targets': 'user_id,week_start_date',
   };
 
   /// What identifies a row on the way *in*, when it is not `id`.

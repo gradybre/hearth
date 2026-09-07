@@ -113,7 +113,7 @@ void main() {
         'carb_g': 200,
         'fat_g': 73,
         'updated_at': t0.toIso8601String(),
-      });
+      }, hasPendingWrite: nothingPending);
 
       final MacroTargetRow stored =
           (await db.select(db.macroTargets).get()).single;

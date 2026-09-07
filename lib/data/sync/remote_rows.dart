@@ -90,23 +90,70 @@ class RemoteRows {
         );
   }
 
-  Future<void> applyTargets(Map<String, Object?> json) => _db
-      .into(_db.macroTargets)
-      .insertOnConflictUpdate(
-        MacroTargetRow(
-          id: '${json['id']}',
-          userId: '${json['user_id']}',
-          weekStartDate: _date(json['week_start_date']),
-          kcal: _double(json['kcal']) ?? 0,
-          proteinG: _double(json['protein_g']) ?? 0,
-          carbG: _double(json['carb_g']) ?? 0,
-          fatG: _double(json['fat_g']) ?? 0,
-          fiberG: _double(json['fiber_g']),
-          sodiumMg: _double(json['sodium_mg']),
-          cholesterolMg: _double(json['cholesterol_mg']),
-          updatedAt: _time(json['updated_at']),
-        ),
-      );
+  /// A week's targets arriving from another device.
+  ///
+  /// Resolved on (user, week) rather than on the id. The table is unique on
+  /// that pair, and a row written on the other phone carries that phone's own
+  /// id — so conflicting on the primary key means an insert, which the unique
+  /// key then refuses, and the exception takes the whole table's pull down
+  /// with it. New rows derive their id from the pair now, but rows written
+  /// before that, or by an older build, still carry a random one.
+  Future<void> applyTargets(
+    Map<String, Object?> json, {
+    required Future<bool> Function(String entityId) hasPendingWrite,
+  }) async {
+    final String incomingId = '${json['id']}';
+    final String userId = '${json['user_id']}';
+    final DateTime week = _date(json['week_start_date']);
+
+    final MacroTargetRow? local =
+        await (_db.select(_db.macroTargets)..where(
+              ($MacroTargetsTable t) =>
+                  t.userId.equals(userId) & t.weekStartDate.equals(week),
+            ))
+            .getSingleOrNull();
+
+    // The pull's own guard asks whether the *incoming* id has an unsent write,
+    // and on this table the incoming id is the other phone's — so it cannot
+    // see that this phone has its own unsent change to the same week under an
+    // id of its own. Resolving on the pair without checking would make that
+    // change disappear, which is the one thing the queue exists to prevent.
+    if (local != null &&
+        local.id != incomingId &&
+        await hasPendingWrite(local.id)) {
+      return;
+    }
+
+    final MacroTargetsCompanion row = MacroTargetsCompanion(
+      id: Value<String>(incomingId),
+      userId: Value<String>(userId),
+      weekStartDate: Value<DateTime>(week),
+      kcal: Value<double>(_double(json['kcal']) ?? 0),
+      proteinG: Value<double>(_double(json['protein_g']) ?? 0),
+      carbG: Value<double>(_double(json['carb_g']) ?? 0),
+      fatG: Value<double>(_double(json['fat_g']) ?? 0),
+      fiberG: Value<double?>(_double(json['fiber_g'])),
+      sodiumMg: Value<double?>(_double(json['sodium_mg'])),
+      cholesterolMg: Value<double?>(_double(json['cholesterol_mg'])),
+      updatedAt: Value<DateTime>(_time(json['updated_at'])),
+    );
+
+    // The same values for the insert and for the update. Written twice, a
+    // column added later would land on the way in and never be updated after
+    // — a value that silently stops changing.
+    await _db
+        .into(_db.macroTargets)
+        .insert(
+          row,
+          onConflict: DoUpdate<$MacroTargetsTable, MacroTargetRow>(
+            ($MacroTargetsTable _) => row,
+            target: <Column<Object>>[
+              _db.macroTargets.userId,
+              _db.macroTargets.weekStartDate,
+            ],
+          ),
+        );
+  }
 
   Future<void> applyFoodProfile(Map<String, Object?> json) => _db
       .into(_db.foodProfiles)
