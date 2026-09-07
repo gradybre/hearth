@@ -541,6 +541,13 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
   pass is running coalesce into exactly one rerun — not none, which left a
   write waiting for whatever happened to trigger the next pass, and not one
   each, which would have a recipe save chase its own tail.
+- **A delete finds a row the same way its write does.** A table addressed by
+  a pair — a household and a wording, a user and a week — is written by that
+  pair and must be deleted by it too. Filtering the delete on the id instead
+  misses any row written before the id was derived: the update matches
+  nothing, PostgREST answers 204, the queue clears, and the row goes on
+  answering. Every layer reports success and only the row disagrees, which is
+  why this one could only be caught against a real server.
 - **The live suite has a fixture to sign in as.** `HEARTH_LIVE=1 flutter test
   --tags live test/integration` is the only place sync is exercised against a
   real Postgres, PostgREST and GoTrue rather than against fakes, and every one

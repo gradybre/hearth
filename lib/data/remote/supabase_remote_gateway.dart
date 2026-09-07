@@ -35,6 +35,26 @@ class SupabaseRemoteGateway implements RemoteGateway {
   static const Map<String, List<String>> deleteKeys = <String, List<String>>{
     'recipe_favorites': <String>['user_id', 'recipe_id'],
     'recipe_collections': <String>['collection_id', 'recipe_id'],
+    // The pair its upsert resolves on, and for the same reason: a row written
+    // by an older build carries a random id rather than the derived one, so
+    // filtering a delete on the id misses it. The write then succeeds against
+    // nothing, the queue clears, and the wording stays on the other phone —
+    // still answering something the household said to stop answering.
+    'ingredient_matches': <String>['household_id', 'ingredient_string'],
+  };
+
+  /// What a table is sorted and paged by, when it is not `(updated_at, id)`.
+  ///
+  /// Its own map rather than [deleteKeys], which it used to read. Those two
+  /// happen to agree for the join tables and have no reason to in general —
+  /// and while they were one map, giving a table a delete filter silently
+  /// re-sorted its pull. Keyset paging wants an order ending in something
+  /// unique where a row written mid-pull sorts to the end (#18); a delete
+  /// wants whatever identifies the row. Different questions.
+  static const Map<String, List<String>> pageOrders = <String, List<String>>{
+    // No timestamp at all on these two, so the pair is all they have.
+    'recipe_favorites': <String>['user_id', 'recipe_id'],
+    'recipe_collections': <String>['collection_id', 'recipe_id'],
   };
 
   /// Tables that record a deletion rather than removing the row (spec §7.1).
@@ -188,7 +208,7 @@ class SupabaseRemoteGateway implements RemoteGateway {
   /// join tables carry no timestamp at all, so they page by their pair — the
   /// same columns that identify them for a delete.
   static List<String> pageOrderFor(String entityTable) =>
-      deleteKeys[entityTable] ??
+      pageOrders[entityTable] ??
       <String>['updated_at', keyColumns[entityTable] ?? 'id'];
 
   @override
