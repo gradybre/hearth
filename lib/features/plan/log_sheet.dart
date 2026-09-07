@@ -136,10 +136,32 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     super.dispose();
   }
 
+  /// The basis a logged meal was frozen on, per serving.
+  ///
+  /// The snapshot stores the total and the portion it was for, so one
+  /// serving's worth is the one divided by the other. Null for a planned
+  /// entry, which has no snapshot and should cost what the food costs today.
+  Macros? get _frozenPerServing {
+    final MealPlanEntry? entry = widget.existing?.entry;
+    if (entry == null || !entry.isLogged) return null;
+    final MacroSnapshot? snapshot = entry.macroSnapshot;
+    if (snapshot == null || snapshot.servings <= 0) return null;
+    return snapshot.macros.scaledBy(1 / snapshot.servings);
+  }
+
   Macros _perServing({
     required Map<String, Food> foods,
     required Map<String, Recipe> recipes,
   }) {
+    // A meal that has already been logged is corrected against what it was
+    // logged as, never against what its food says today (spec §4, rule 3).
+    //
+    // `ResolvedEntry.perServing` is built from the food as it stands now —
+    // right for a planned meal, which has not happened yet, and wrong for one
+    // that has. Correcting the portion is the one screen that writes a new
+    // snapshot over an old meal, so it is the one place an edit made months
+    // later can reach back and change what was eaten.
+    if (_frozenPerServing case final Macros frozen) return frozen;
     if (widget.existing != null) return widget.existing!.perServing;
     if (_recipe != null) {
       return MacroCalculator.forRecipe(_recipe!, foods: foods).perServing;
@@ -157,6 +179,12 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     required Map<String, Food> foods,
     required Map<String, Recipe> recipes,
   }) {
+    // Frozen alongside the numbers, and for the same reason: how much of the
+    // day those numbers spoke for is part of what was recorded.
+    if (widget.existing?.entry.macroSnapshot case final MacroSnapshot snap
+        when widget.existing!.entry.isLogged) {
+      return snap.coverage;
+    }
     if (widget.existing != null) return widget.existing!.liveCoverage;
     if (_recipe != null) {
       return MacroCalculator.forRecipe(_recipe!, foods: foods).coverage;
