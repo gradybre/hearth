@@ -16,6 +16,7 @@ import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
 import '../../domain/planning/recent_log.dart';
 import '../../domain/recipes/macro_calculator.dart';
+import '../../domain/units/quantity.dart';
 import '../foods/external_food_results.dart';
 import '../foods/food_search_controller.dart';
 import 'day_picker_sheet.dart';
@@ -58,6 +59,73 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   Recipe? _recipe;
   Food? _food;
   late double _servings = widget.existing?.entry.servings ?? 1;
+
+  /// Which of the food's servings the portion is *entered* in (spec §5.6).
+  ///
+  /// Only that. `_servings`, and the `servings` column behind it, have always
+  /// meant multiples of the food's default serving — `EntryResolver` rebuilds
+  /// a logged meal's macros from `defaultServing` — so storing a count in any
+  /// other unit reinterprets it everywhere later: correcting a portion,
+  /// projecting a planned meal, repeating a recent one. The first version of
+  /// this did exactly that, and re-opening a meal logged as 1.7 x 100 g and
+  /// pressing Update turned 170 kcal into 289 without a keystroke.
+  ///
+  /// So this changes the number under your thumb, never the number in the
+  /// row. Half a pot is still half a pot to everything downstream.
+  ServingOption? _serving;
+
+  /// [_servings], in whatever serving is being entered in.
+  double get _displayCount => _inServing(_servings, _serving);
+
+  /// Converts a count of default servings into a count of [option].
+  double _inServing(double servings, ServingOption? option) {
+    final Quantity? unit = option?.amount;
+    final Quantity? standard = _food?.defaultServing?.amount;
+    if (unit == null ||
+        standard == null ||
+        unit.kind != standard.kind ||
+        unit.canonicalAmount <= 0) {
+      return servings;
+    }
+    final double converted =
+        servings * standard.canonicalAmount / unit.canonicalAmount;
+    return converted.isFinite && converted > 0 ? converted : servings;
+  }
+
+  /// And back again, which is what actually gets stored.
+  double _inDefaultServings(double count, ServingOption? option) {
+    final Quantity? unit = option?.amount;
+    final Quantity? standard = _food?.defaultServing?.amount;
+    if (unit == null ||
+        standard == null ||
+        unit.kind != standard.kind ||
+        standard.canonicalAmount <= 0) {
+      return count;
+    }
+    final double converted =
+        count * unit.canonicalAmount / standard.canonicalAmount;
+    return converted.isFinite && converted > 0 ? converted : count;
+  }
+
+  /// The servings this food can be entered in.
+  ///
+  /// Only those that can be expressed as a multiple of the default one — the
+  /// same kind, so the two are directly comparable. A volume cannot be
+  /// written as a multiple of a mass without a density the food does not
+  /// carry, and §5.5's rule is that a figure nobody stated is not invented.
+  /// An option that cannot be converted is not offered rather than offered
+  /// and mis-stored.
+  List<ServingOption> get _enterableServings {
+    final ServingOption? standard = _food?.defaultServing;
+    if (standard == null) return const <ServingOption>[];
+    return <ServingOption>[
+      for (final ServingOption option in _food!.servingOptions)
+        if (option.amount.kind == standard.amount.kind &&
+            option.amount.canonicalAmount > 0)
+          option,
+    ];
+  }
+
   bool _busy = false;
 
   bool get _isExisting => widget.existing != null;
@@ -264,7 +332,10 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   Future<void> _useSavedFood(String foodId) async {
     final Food? food = await ref.read(foodRepositoryProvider).byId(foodId);
     if (!mounted || food == null) return;
-    setState(() => _food = food);
+    setState(() {
+      _food = food;
+      _serving = food.defaultServing;
+    });
   }
 
   Future<void> _remove() async {
@@ -376,9 +447,36 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
             style: context.text.metadata.copyWith(color: colors.textMuted),
           ),
           const SizedBox(height: HearthSpacing.lg),
+          // Which serving the portion is entered in, before how many of it.
+          if (_enterableServings.length > 1) ...<Widget>[
+            _ServingPicker(
+              options: _enterableServings,
+              chosen: _serving ?? _food?.defaultServing,
+              onChanged: (ServingOption option) => setState(() {
+                // The field is rewritten underneath, so the focus has to go
+                // — otherwise the stepper keeps what was typed, and the next
+                // unfocus commits that stale number over the conversion.
+                FocusScope.of(context).unfocus();
+                _serving = option;
+              }),
+            ),
+            const SizedBox(height: HearthSpacing.md),
+          ] else if (_food?.defaultServing case final ServingOption only)
+            // One serving still needs saying. "1" on its own could be a
+            // slice, a loaf or 100 g (§8.2 asks for a labelled amount).
+            Padding(
+              padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
+              child: Text(
+                'Serving: ${only.label}',
+                style: context.text.metadata.copyWith(
+                  color: colors.textSecondary,
+                ),
+              ),
+            ),
           _PortionStepper(
-            servings: _servings,
-            onChanged: (double value) => setState(() => _servings = value),
+            servings: _displayCount,
+            onChanged: (double value) =>
+                setState(() => _servings = _inDefaultServings(value, _serving)),
           ),
           const SizedBox(height: HearthSpacing.lg),
           if (!_isExisting) ...<Widget>[
@@ -596,7 +694,10 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
                         ? 'no serving size'
                         : '${food.defaultServing!.macros.kcal.round()} kcal '
                               'per ${food.defaultServing!.label}',
-                    onTap: () => setState(() => _food = food),
+                    onTap: () => setState(() {
+                      _food = food;
+                      _serving = food.defaultServing;
+                    }),
                   ),
                 // Only ever about what the household already has: results
                 // from further afield may well be listed directly underneath,
@@ -638,6 +739,52 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
 /// The number between them is a field, not a label: a third of a batch is
 /// three taps of a minus button and a tenth is not reachable at all, and
 /// "how much did you eat" is a question with an answer, not a slider.
+/// Which of a food's servings the portion counts (spec §5.6).
+///
+/// Chips rather than a dropdown: they are all visible at once, they reflow at
+/// large text instead of opening a menu over the sheet, and the labels are
+/// the food's own words — "170 g pot", "1 tbsp" — rather than a unit the app
+/// decided on its behalf.
+class _ServingPicker extends StatelessWidget {
+  const _ServingPicker({
+    required this.options,
+    required this.chosen,
+    required this.onChanged,
+  });
+
+  final List<ServingOption> options;
+  final ServingOption? chosen;
+  final ValueChanged<ServingOption> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      Text(
+        'Serving',
+        style: context.text.metadata.copyWith(
+          color: context.colors.textSecondary,
+        ),
+      ),
+      const SizedBox(height: HearthSpacing.xs),
+      Wrap(
+        spacing: HearthSpacing.sm,
+        runSpacing: HearthSpacing.sm,
+        children: <Widget>[
+          for (final ServingOption option in options)
+            ChoiceChip(
+              label: Text(option.label),
+              selected: option.id == chosen?.id,
+              onSelected: (bool picked) {
+                if (picked) onChanged(option);
+              },
+            ),
+        ],
+      ),
+    ],
+  );
+}
+
 class _PortionStepper extends StatefulWidget {
   const _PortionStepper({required this.servings, required this.onChanged});
 
@@ -698,7 +845,9 @@ class _PortionStepperState extends State<_PortionStepper> {
   /// rather than silently logging a number nobody chose.
   void _commit() {
     final double? typed = parseAmount(_field.text);
-    if (typed == null || typed <= 0) {
+    // Not finite is not a portion either: "1e999" parses to infinity, and
+    // infinity is neither caught by `<= 0` nor anything you can eat.
+    if (typed == null || !typed.isFinite || typed <= 0) {
       _field.text = writeAmount(widget.servings);
       return;
     }

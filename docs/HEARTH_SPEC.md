@@ -231,6 +231,22 @@ belongs to the Nutrition section.
 ### 5.6 Daily / Weekly Planner + Logging
 - **Combined plan + track in one view.** Each day/slot supports a *planned* state and a *logged* (actually eaten) state.
 - **Meal slots:** breakfast, lunch, dinner, snack.
+- **Log in the food's own servings.** A food knows several — "170 g pot",
+  "100 g" — and the portion can be *entered* in whichever of them suits, so
+  half a pot is half a pot rather than something to work out as a multiple of
+  something else in a kitchen. A 170 g pot read as 100 g units is 1.7 of them,
+  the same food either way.
+  - **What is stored is always a count of the default serving**, whatever it
+    was typed in. That is what `servings` has always meant — a logged meal's
+    macros are rebuilt from `defaultServing` when it is corrected, projected
+    or repeated — so a count stored in any other unit is reinterpreted later.
+    An early version of this stored the typed unit, and re-opening a meal
+    logged as 1.7 × 100 g and pressing Update turned 170 kcal into 289 with no
+    keystroke, which is rule 3 broken from the inside.
+  - A serving that cannot be written as a multiple of the default one — a
+    volume against a mass, with no density the food carries — is **not
+    offered**, rather than offered and mis-stored (§5.5: a figure nobody
+    stated is not invented). Recipes stay servings-based.
 - **The day opens on its meals, not on a picture of them.** The summary is
   compact by default — calories against the target with what is left or over,
   the three macros, and all three minor nutrients. It keeps the distinctions
