@@ -12,10 +12,28 @@ import 'app_harness.dart';
 /// swept surface silently, because a sweep cannot miss what it was never told
 /// about.
 ///
-/// So the list is declared here and `every_surface_is_swept_test.dart` reads
+/// So the list is declared here, and `every_surface_is_swept_test.dart` reads
 /// the source of `lib/` and fails when something opens a sheet or a dialog
-/// that this list does not mention. Forgetting is the failure now, rather
-/// than the thing that goes unnoticed.
+/// that this list does not mention.
+///
+/// **What that guard can and cannot see.** It finds sheets and dialogs,
+/// because those are a call it can recognise. It cannot find a surface that
+/// is a *branch* — the rings behind Details are `if (expanded)` inside a
+/// card, and the log sheet's confirm view is the other side of a ternary in
+/// a builder. Two of the three misses that prompted this were exactly that
+/// shape, and no amount of reading the source would have caught them.
+///
+/// So the guard closes one door and this list is the other. Anything reached
+/// by a tap, a long press, or a toggle belongs here whether or not the guard
+/// could have asked for it.
+///
+/// **And the doors are not the same strength.** Delete a sheet-backed surface
+/// from this list and the guard notices, because its file goes unaccounted
+/// for. Delete a *branch* surface and nothing fails — the sweep simply runs
+/// fewer cases. That happened in the very change that introduced this file:
+/// the expanded day summary was covered before it and not after, and only
+/// comparing the two lists by hand found it. A shorter list is not a smaller
+/// app.
 @immutable
 class SweptSurface {
   const SweptSurface({
@@ -163,6 +181,19 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
       await pumpFrames(tester, frames: 12);
     },
     arrived: find.text('Edit portion'),
+  ),
+  SweptSurface(
+    // Not a sheet: a branch inside the day's summary card. The guard cannot
+    // find this one by reading the source, which is exactly why the list is
+    // written by hand rather than generated from it.
+    name: 'the expanded day summary',
+    opensFrom: 'lib/features/plan/day_screen.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Plan');
+      await tools.reach(find.text('Details'));
+    },
+    arrived: find.text('Less'),
+    farEnd: find.text('Cholesterol'),
   ),
   SweptSurface(
     name: 'the ways to add a recipe',

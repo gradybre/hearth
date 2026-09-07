@@ -75,6 +75,32 @@ void main() {
     );
   });
 
+  test('and nothing is both swept and excused', () {
+    // A file in both lists claims coverage and pleads its absence at once.
+    // Whichever is true, one of the two entries is a lie.
+    final Set<String> swept = <String>{
+      for (final SweptSurface surface in sweptSurfaces) surface.opensFrom,
+    };
+
+    expect(
+      swept.intersection(notSweptYet.keys.toSet()),
+      isEmpty,
+      reason: 'these are listed as swept and as not-yet-swept',
+    );
+  });
+
+  test('and every excuse actually says something', () {
+    // An empty reason satisfies the map and tells the next reader nothing,
+    // which is the state this list exists to replace.
+    for (final MapEntry<String, String> entry in notSweptYet.entries) {
+      expect(
+        entry.value.trim().length,
+        greaterThan(20),
+        reason: '${entry.key} is excused without a reason worth reading',
+      );
+    }
+  });
+
   test('every swept surface says how to tell it arrived', () {
     // "No exception" is equally true of a journey that never left the screen
     // it started on. Three of this sweep's first flows reported success from
