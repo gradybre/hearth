@@ -36,6 +36,24 @@ class LaunchTarget {
     icon: Icons.cottage_outlined,
   );
 
+  /// Straight to the day you are in.
+  ///
+  /// Not a section: a section opens on its first destination, which for
+  /// Nutrition is the recipe library. Someone who opens Hearth to log lunch
+  /// wants the day, and there was no way to ask for it.
+  ///
+  /// The path carries no date. `selectedDateProvider` resolves the local
+  /// current day when it is built, so what "today" means is decided at launch
+  /// rather than written into a preference — a stored `/plan/2026-09-07`
+  /// would open on the seventh for ever.
+  static const LaunchTarget today = LaunchTarget._(
+    stored: 'today',
+    path: '/plan',
+    label: 'Today',
+    blurb: 'The day you are in, ready to log against.',
+    icon: Icons.today_outlined,
+  );
+
   /// Straight into a section, skipping the home screen.
   ///
   /// Takes a [BuiltSection], so a room that is only named cannot be handed to
@@ -51,6 +69,7 @@ class LaunchTarget {
   /// Everywhere the app can be told to open, in the order they are offered.
   static List<LaunchTarget> get options => <LaunchTarget>[
     home,
+    today,
     for (final BuiltSection section in builtSections)
       LaunchTarget.section(section),
   ];
@@ -76,6 +95,7 @@ class LaunchTarget {
   /// screen is always a defensible answer; failing to open is not.
   static LaunchTarget parse(String? stored) {
     if (stored == null || stored == home.stored) return home;
+    if (stored == today.stored) return today;
     const String prefix = 'section:';
     if (!stored.startsWith(prefix)) return home;
     final BuiltSection? section = sectionById(stored.substring(prefix.length));
