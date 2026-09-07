@@ -238,6 +238,17 @@ belongs to the Nutrition section.
   there, so it was something you knew or you did not. (The gesture *was*
   exposed as a semantics action, so a screen reader could reach it; what was
   missing was any indication that there was anything to reach.)
+- **A sweep cannot miss what it was never told about.** The surfaces the
+  accessibility sweep visits are declared in one list, and a guard reads the
+  source and fails when anything opens a sheet or a dialog the list does not
+  mention — either as swept, or as not-yet-swept with a reason. What is
+  uncovered is written down rather than unknown.
+  - The guard finds **sheets and dialogs**, because those are a call it can
+    recognise. It cannot find a surface that is a *branch* — rings behind a
+    Details toggle, or the far side of a ternary in a builder — and two of the
+    three misses that prompted this were exactly that shape. Those depend on
+    the list being written by hand, and deleting one from it fails nothing.
+    A shorter list is not a smaller app.
 - **One labelled way in, not a stack of icons.** *Add recipe* opens the four
   ways a recipe gets into the library: write one, import one, build what you
   ate out, or have Hearth generate one. Three of the four used to be icon-only
