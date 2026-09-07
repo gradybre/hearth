@@ -19,6 +19,7 @@
 do $$
 declare
   v_user uuid := '9e5c1f10-0000-4000-8000-00000000ac01';
+  v_house uuid;
 begin
   -- Fixed id rather than random: a test that wants to write a row owned by
   -- this user can name the owner without first asking who it is. Not
@@ -94,23 +95,26 @@ begin
     now()
   )
   on conflict do nothing;
-end;
-$$;
 
--- The library that user is expected to already have.
---
--- `library_sync_live_test` signs in and asserts that a pull brings something
--- down — "the seeded recipe should have arrived" — naming this id. Without it
--- the suite gets past authentication and fails one line later, which is not
--- an improvement worth having.
-do $$
-declare
-  v_user uuid := '9e5c1f10-0000-4000-8000-00000000ac01';
-  v_house uuid;
-begin
+  -- The library that account is expected to already have.
+  --
+  -- `library_sync_live_test` signs in and asserts that a pull brings
+  -- something down — "the seeded recipe should have arrived" — naming this
+  -- id. Without it the suite gets past authentication and fails one line
+  -- later, which is not an improvement worth having.
+  --
+  -- In the same block as the account on purpose: two blocks each declaring
+  -- the id is two things to keep in step.
+
   -- Whatever household the new account was given. A trigger makes one; this
   -- does not assume its id, only that the account owns it.
-  select id into v_house from public.households where owner_id = v_user;
+  select id into v_house
+  from public.households
+  where owner_id = v_user
+  -- Oldest first, so this cannot depend on the order rows happen to come
+  -- back in if the account ever owns more than one.
+  order by created_at, id
+  limit 1;
   if v_house is null then
     raise exception 'the fixture account has no household to put a recipe in';
   end if;
