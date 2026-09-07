@@ -424,7 +424,7 @@ void main() {
       await pumpHearthApp(tester, recipeIcon: source);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('New recipe'));
+      await addRecipeVia(tester, 'Write a recipe');
       await pumpFrames(tester);
       await tester.enterText(find.byType(TextField).first, 'Pumpkin muffins');
       await pumpFrames(tester);

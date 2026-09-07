@@ -63,7 +63,7 @@ Future<void> openIngredientPicker(
     photoPicker: FakeCamera(),
   );
 
-  await tester.tap(find.text('New recipe'));
+  await addRecipeVia(tester, 'Write a recipe');
   await pumpFrames(tester);
 
   // The visible label sits above the field, so the field is found by its hint.

@@ -238,6 +238,15 @@ belongs to the Nutrition section.
   there, so it was something you knew or you did not. (The gesture *was*
   exposed as a semantics action, so a screen reader could reach it; what was
   missing was any indication that there was anything to reach.)
+- **One labelled way in, not a stack of icons.** *Add recipe* opens the four
+  ways a recipe gets into the library: write one, import one, build what you
+  ate out, or have Hearth generate one. Three of the four used to be icon-only
+  buttons stacked up the corner of the screen, so what they did lived in a
+  tooltip — a hover, on a device with no pointer — and the stack grew by one
+  every time another way in was built. Nothing in the sheet is hidden or
+  disabled when the server is unreachable: each destination explains its own
+  unavailability in its own words, and a greyed-out row with no reason is
+  worse than one that tells you why when you press it.
 - **A meal built from a menu lands on the meal it was built for.** The
   restaurant builder starts on the day screen — a particular day, a particular
   slot — and ends three screens later in the recipe editor. A typed intent

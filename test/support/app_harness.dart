@@ -338,3 +338,16 @@ class _NoPdf implements PdfPages {
   @override
   Future<RenderedPdf?> pick({int maxPages = 6}) async => null;
 }
+
+/// Opens the library's Add recipe menu and takes one of the ways in.
+///
+/// The four ways used to be four buttons stacked in the corner, so tests
+/// tapped them directly. They are rows in one sheet now (U05), and going
+/// through it is what a person does — a test that reached past it would stop
+/// noticing if the sheet broke.
+Future<void> addRecipeVia(WidgetTester tester, String way) async {
+  await tester.tap(find.text('Add recipe'));
+  await pumpFrames(tester, frames: 12);
+  await tester.tap(find.text(way));
+  await pumpFrames(tester, frames: 16);
+}

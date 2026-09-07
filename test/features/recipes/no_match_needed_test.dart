@@ -11,7 +11,7 @@ import '../../support/app_harness.dart';
 /// always on stops being read.
 Future<void> openEditorWith(WidgetTester tester, String lines) async {
   await pumpHearthApp(tester);
-  await tester.tap(find.text('New recipe'));
+  await addRecipeVia(tester, 'Write a recipe');
   await pumpFrames(tester);
   await tester.enterText(
     find.byWidgetPredicate(
@@ -89,7 +89,7 @@ void main() {
       WidgetTester tester,
     ) async {
       final HearthDatabase db = await pumpHearthApp(tester);
-      await tester.tap(find.text('New recipe'));
+      await addRecipeVia(tester, 'Write a recipe');
       await pumpFrames(tester);
       await tester.enterText(
         find.byWidgetPredicate(
@@ -122,7 +122,7 @@ void main() {
     ) async {
       // A built-in would simply reapply itself if this only deleted the row.
       final HearthDatabase db = await pumpHearthApp(tester);
-      await tester.tap(find.text('New recipe'));
+      await addRecipeVia(tester, 'Write a recipe');
       await pumpFrames(tester);
       await tester.enterText(
         find.byWidgetPredicate(

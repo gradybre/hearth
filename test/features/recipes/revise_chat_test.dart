@@ -23,7 +23,7 @@ void main() {
 
   Future<FakeAi> openEditorViaImport(WidgetTester tester, FakeAi ai) async {
     await pumpHearthApp(tester, recipeAi: ai, photoPicker: FakePicker());
-    await tester.tap(find.byIcon(Icons.document_scanner_outlined));
+    await addRecipeVia(tester, 'Import a recipe');
     await pumpFrames(tester);
     await tester.tap(find.text('Choose pictures'));
     await pumpFrames(tester);
@@ -63,7 +63,7 @@ void main() {
     // The reader cannot know from the page which end of a range was meant.
     final FakeAi ai = FakeAi(answer: ribs());
     await pumpHearthApp(tester, recipeAi: ai, photoPicker: FakePicker());
-    await tester.tap(find.byIcon(Icons.document_scanner_outlined));
+    await addRecipeVia(tester, 'Import a recipe');
     await pumpFrames(tester);
     await tester.tap(find.text('Choose pictures'));
     await pumpFrames(tester);
@@ -145,7 +145,7 @@ void main() {
     // Same rule as every other AI surface: a box that leads nowhere is worse
     // than no box.
     await pumpHearthApp(tester);
-    await tester.tap(find.text('New recipe'));
+    await addRecipeVia(tester, 'Write a recipe');
     await pumpFrames(tester);
 
     expect(find.text('Ask for a change'), findsNothing);

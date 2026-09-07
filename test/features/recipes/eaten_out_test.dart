@@ -112,7 +112,7 @@ void main() {
     final HearthDatabase db = await pumpHearthApp(tester);
     await tester.tap(find.text('Recipes').last);
     await pumpFrames(tester);
-    await tester.tap(find.text('New recipe'));
+    await addRecipeVia(tester, 'Write a recipe');
     await pumpFrames(tester);
 
     await tester.enterText(find.byType(TextField).first, 'My usual bowl');
@@ -201,7 +201,7 @@ void main() {
     await pumpHearthApp(tester, foods: chipotleMenu());
     await tester.tap(find.text('Recipes').last);
     await pumpFrames(tester);
-    await tester.tap(find.text('New recipe'));
+    await addRecipeVia(tester, 'Write a recipe');
     await pumpFrames(tester);
 
     await typeIngredients(
@@ -228,7 +228,7 @@ void main() {
     await pumpHearthApp(tester, foods: chipotleMenu());
     await tester.tap(find.text('Recipes').last);
     await pumpFrames(tester);
-    await tester.tap(find.text('New recipe'));
+    await addRecipeVia(tester, 'Write a recipe');
     await pumpFrames(tester);
 
     await typeIngredients(tester, '4 oz chicken');
@@ -266,7 +266,7 @@ void main() {
     );
     await tester.tap(find.text('Recipes').last);
     await pumpFrames(tester);
-    await tester.tap(find.text('New recipe'));
+    await addRecipeVia(tester, 'Write a recipe');
     await pumpFrames(tester);
     await tester.enterText(
       find.byWidgetPredicate(
