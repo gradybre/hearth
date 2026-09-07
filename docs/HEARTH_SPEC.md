@@ -274,6 +274,20 @@ belongs to the Nutrition section.
     stays open, and it says so — that is the retry. The editor remembers the
     recipe it just saved, or the retry would mint a fresh id and leave two
     copies of the same restaurant meal in the library.
+- **Leaving a section and coming back lands where you were.** The shell
+  remembers which destination was open in each section, so Home → Nutrition
+  returns to the plan you were reading rather than to the recipe library.
+  Session-only and cleared when the account changes: where you were three days
+  ago is not where you want to be on a cold start, and the launch choice is
+  what answers that.
+  - Search and filter choices already survived, because they live in
+    providers rather than in the widget tree. Worth checking rather than
+    rebuilding.
+  - **Scroll position does not survive, and is not yet addressed.** The tabs
+    live in an `IndexedStack` that is disposed when the shell route is left,
+    and the route's storage bucket goes with it — so keeping offsets means
+    holding them in a provider and restoring them in every scrollable, on
+    five screens. Its own change.
 - **The app can open on today.** *Opens on* offers the home screen, Today,
   and each built section. A section opens on its first destination — which for
   Nutrition is the recipe library — so someone who opens Hearth to log lunch

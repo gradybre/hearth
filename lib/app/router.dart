@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../data/adapters/label_reader.dart';
@@ -21,6 +22,7 @@ import '../features/recipes/recipe_editor_args.dart';
 import '../features/recipes/recipe_editor_screen.dart';
 import '../features/recipes/recipe_import_controller.dart';
 import '../features/recipes/recipe_import_screen.dart';
+import 'providers.dart';
 import 'shell/app_shell.dart';
 import 'shell/destinations.dart';
 import 'shell/sections.dart';
@@ -228,11 +230,11 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
 /// Knows nothing about Recipes or Plan by name: it asks which section owns the
 /// current path and builds whatever that section says its tabs are. Adding
 /// Fitness is a matter of adding it to the registry (spec §6.2).
-class _ShellHost extends StatelessWidget {
+class _ShellHost extends ConsumerWidget {
   const _ShellHost();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final String location = GoRouterState.of(context).uri.path;
     // Never null in practice — the route above redirects anything unmatched
     // home — but a section that has been taken out should land somewhere real
@@ -241,6 +243,21 @@ class _ShellHost extends StatelessWidget {
         sectionForPath(location) ?? builtSections.first;
     final List<AppDestination> tabs = section.destinations;
     final int index = tabs.indexWhere((AppDestination d) => d.path == location);
+
+    // Remembered as you move, so leaving the section and coming back lands
+    // where you were rather than on its first tab (U08). This is the one
+    // place that knows both the section and the destination inside it.
+    //
+    // After the frame, not during it: writing to a provider while building
+    // is the thing Riverpod refuses, and a tab change is a consequence of
+    // this build rather than an input to it.
+    if (index >= 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref
+            .read(lastDestinationProvider.notifier)
+            .remember(section: section.id, path: location);
+      });
+    }
 
     return AppShell(
       section: section,

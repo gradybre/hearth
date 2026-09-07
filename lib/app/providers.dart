@@ -83,6 +83,7 @@ import '../domain/recipes/macro_calculator.dart';
 import '../domain/recipes/recipe_query.dart';
 import 'cook_timers.dart';
 import 'shell/launch_target.dart';
+import 'shell/sections.dart';
 import 'sync_controller.dart';
 import 'theme/theme_choice.dart';
 
@@ -737,6 +738,35 @@ themeChoiceProvider = AsyncNotifierProvider<ThemeChoiceNotifier, ThemeChoice>(
 final Provider<ThemeChoice?> launchThemeChoiceProvider = Provider<ThemeChoice?>(
   (Ref ref) => null,
 );
+
+/// The destination last open in each section, so leaving and coming back
+/// lands where you were (spec §6.2, U08).
+///
+/// Session-only and deliberately not stored: where you were three days ago is
+/// not where you want to be on a cold start, and the launch choice is what
+/// answers that question. Cleared when the account changes, because which
+/// screen someone was reading is theirs.
+final NotifierProvider<LastDestination, Map<String, String>>
+lastDestinationProvider =
+    NotifierProvider<LastDestination, Map<String, String>>(LastDestination.new);
+
+class LastDestination extends Notifier<Map<String, String>> {
+  @override
+  Map<String, String> build() {
+    // A different account is a different set of screens. Watched rather than
+    // read so that signing in clears what the last person was looking at.
+    ref.watch(currentUserIdProvider);
+    return const <String, String>{};
+  }
+
+  void remember({required String section, required String path}) {
+    if (state[section] == path) return;
+    state = <String, String>{...state, section: path};
+  }
+
+  /// Where to go for [section], or its first destination if nowhere yet.
+  String pathFor(BuiltSection section) => state[section.id] ?? section.path;
+}
 
 /// Whether the day's summary is showing its rings and bars (spec §5.6).
 ///
