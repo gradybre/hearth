@@ -231,6 +231,13 @@ belongs to the Nutrition section.
 ### 5.6 Daily / Weekly Planner + Logging
 - **Combined plan + track in one view.** Each day/slot supports a *planned* state and a *logged* (actually eaten) state.
 - **Meal slots:** breakfast, lunch, dinner, snack.
+- **Changing a portion is visible, not a gesture you have to know.** Each
+  meal row carries a way in to Edit portion and Remove. Long press stays as a
+  shortcut for those who know it, and one tap still logs and unlogs — but a
+  long press is not an affordance: nothing on the row drew it or said it was
+  there, so it was something you knew or you did not. (The gesture *was*
+  exposed as a semantics action, so a screen reader could reach it; what was
+  missing was any indication that there was anything to reach.)
 - **A portion correction is costed on the basis the meal was logged on.** The
   snapshot holds the total and the portion it was for, so one serving's worth
   is the one divided by the other — never what the food says today. This is

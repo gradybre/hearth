@@ -671,63 +671,106 @@ class _EntryRow extends ConsumerWidget {
         name: entry.label,
         onDelete: () => _remove(ref),
         onRestore: () => _restore(ref),
-        child: Semantics(
-          button: true,
-          label:
-              '${entry.label}. ${_detail(entry, logged)}. '
-              '${logged ? 'Tap to unlog' : 'Tap to log'}.',
-          onTap: () => _toggleLogged(ref),
-          onLongPress: () => _showOptions(context, ref),
-          excludeSemantics: true,
-          child: Material(
-            color: colors.surface,
-            borderRadius: BorderRadius.circular(HearthRadius.md),
-            child: InkWell(
-              onTap: () => _toggleLogged(ref),
-              onLongPress: () => _showOptions(context, ref),
+        // The row's own semantics cover the part that logs; the button beside
+        // it has its own. It sits outside them deliberately — the row
+        // excludes its descendants, so a button placed inside would be
+        // invisible to a screen reader, which is the opposite of the point.
+        child: Material(
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(HearthRadius.md),
+          child: Container(
+            decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(HearthRadius.md),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(HearthRadius.md),
-                  border: Border.all(color: colors.outline),
-                ),
-                padding: const EdgeInsets.all(HearthSpacing.md),
-                child: Row(
-                  children: <Widget>[
-                    // Logged versus planned is carried by an icon and a word,
-                    // not by colour alone (spec §6.3).
-                    Icon(
-                      logged
-                          ? Icons.check_circle
-                          : Icons.radio_button_unchecked,
-                      size: 20,
-                      color: logged ? colors.accent : colors.textMuted,
-                    ),
-                    const SizedBox(width: HearthSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(entry.label, style: text.ingredient),
-                          const SizedBox(height: HearthSpacing.xxs),
-                          Text(
-                            _detail(entry, logged),
-                            style: text.metadata.copyWith(
-                              color: colors.textMuted,
+              border: Border.all(color: colors.outline),
+            ),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    label:
+                        '${entry.label}. ${_detail(entry, logged)}. '
+                        '${logged ? 'Tap to unlog' : 'Tap to log'}.',
+                    onTap: () => _toggleLogged(ref),
+                    // Kept as a shortcut, not as the only way in (U06).
+                    onLongPress: () => _showOptions(context, ref),
+                    excludeSemantics: true,
+                    child: InkWell(
+                      onTap: () => _toggleLogged(ref),
+                      onLongPress: () => _showOptions(context, ref),
+                      // Rounded on the left, where the card is, and square on
+                      // the right, where the button begins. A full radius
+                      // here clipped the ink to this box's own corners, so
+                      // pressing the row drew two rounded edges in the middle
+                      // of it and nothing under the calories or the button.
+                      borderRadius: const BorderRadius.horizontal(
+                        left: Radius.circular(HearthRadius.md),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(HearthSpacing.md),
+                        child: Row(
+                          children: <Widget>[
+                            // Logged versus planned is carried by an icon and a word,
+                            // not by colour alone (spec §6.3).
+                            Icon(
+                              logged
+                                  ? Icons.check_circle
+                                  : Icons.radio_button_unchecked,
+                              size: 20,
+                              color: logged ? colors.accent : colors.textMuted,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: HearthSpacing.md),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Text(entry.label, style: text.ingredient),
+                                  const SizedBox(height: HearthSpacing.xxs),
+                                  Text(
+                                    _detail(entry, logged),
+                                    style: text.metadata.copyWith(
+                                      color: colors.textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '${entry.contribution.kcal.round()}',
+                              style: text.ingredient.copyWith(
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    Text(
-                      '${entry.contribution.kcal.round()}',
-                      style: text.ingredient.copyWith(
-                        color: colors.textSecondary,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+                // Visible, because a long press is not an affordance: nothing
+                // on the row said the portion could be changed, so the way to
+                // change it was something you either knew or did not (U06).
+                Padding(
+                  padding: const EdgeInsets.only(right: HearthSpacing.xs),
+                  child: IconButton(
+                    icon: const Icon(Icons.more_vert, size: 20),
+                    // The tooltip alone, as every other icon button here
+                    // does. It is not merely a hover hint: iOS appends it to
+                    // the accessibility label and Android sets it as the
+                    // tooltip text, so both read it — and setting a matching
+                    // `semanticLabel` as well had VoiceOver say the name
+                    // twice.
+                    tooltip: 'Edit ${entry.label}',
+                    // Material's default is 40, which is under the floor a
+                    // thumb needs (§6.3). Stated rather than inherited.
+                    constraints: const BoxConstraints(
+                      minWidth: HearthTouch.minTarget,
+                      minHeight: HearthTouch.minTarget,
+                    ),
+                    onPressed: () => _showOptions(context, ref),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
