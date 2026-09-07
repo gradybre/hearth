@@ -238,15 +238,30 @@ belongs to the Nutrition section.
   there, so it was something you knew or you did not. (The gesture *was*
   exposed as a semantics action, so a screen reader could reach it; what was
   missing was any indication that there was anything to reach.)
+- **A portion correction is costed on the basis the meal was logged on.** The
+  snapshot holds the total and the portion it was for, so one serving's worth
+  is the one divided by the other — never what the food says today. This is
+  the one screen that writes a new snapshot over an old meal, so it is the one
+  place rule 3 can be broken from the inside: a pot logged at 170 kcal, its
+  food corrected to 200 months later, became 200 when its portion was touched,
+  and half of it became 100 rather than 85. Coverage comes from the snapshot
+  for the same reason — how much of the day those numbers spoke for is part of
+  what was recorded. So are its name and the moment it was eaten: a correction
+  that renamed a June meal to whatever its food is called today, and stamped
+  it with today's clock, would move it above today's meals in the recents list
+  — which orders by exactly that — and have the export say it was eaten in
+  September. A *planned* entry still costs what its food costs today, which is
+  the point of a plan.
 - **Log in the food's own servings.** A food knows several — "170 g pot",
   "100 g" — and the portion can be *entered* in whichever of them suits, so
   half a pot is half a pot rather than something to work out as a multiple of
   something else in a kitchen. A 170 g pot read as 100 g units is 1.7 of them,
   the same food either way.
   - **What is stored is always a count of the default serving**, whatever it
-    was typed in. That is what `servings` has always meant — a logged meal's
-    macros are rebuilt from `defaultServing` when it is corrected, projected
-    or repeated — so a count stored in any other unit is reinterpreted later.
+    was typed in. That is what `servings` has always meant — a meal's macros
+    are rebuilt from `defaultServing` when it is projected or repeated (a
+    *correction* is costed on the frozen basis, see above) — so a count stored
+    in any other unit is reinterpreted later.
     An early version of this stored the typed unit, and re-opening a meal
     logged as 1.7 × 100 g and pressing Update turned 170 kcal into 289 with no
     keystroke, which is rule 3 broken from the inside.

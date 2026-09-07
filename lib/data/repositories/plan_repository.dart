@@ -195,9 +195,16 @@ class PlanRepository {
       final MealPlanEntry? existing = await _store.entryById(entryId);
       if (existing == null) return null;
 
+      // A correction keeps the moment it was eaten. `log` stamps both
+      // `loggedAt` and the snapshot's `capturedAt` with the time it is
+      // called, which is right for a meal being logged and wrong for one
+      // being corrected: it would move a June meal to today, promote it above
+      // today's meals in the recents list — which orders by exactly this —
+      // and have the export say it was eaten in September. `restore` goes out
+      // of its way to preserve this; correcting a portion has to as well.
       final MealPlanEntry logged = existing.log(
         liveMacros: liveMacros,
-        at: now,
+        at: existing.loggedAt ?? now,
         label: label,
         portion: portion,
         coverage: liveCoverage,

@@ -64,11 +64,15 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   ///
   /// Only that. `_servings`, and the `servings` column behind it, have always
   /// meant multiples of the food's default serving — `EntryResolver` rebuilds
-  /// a logged meal's macros from `defaultServing` — so storing a count in any
-  /// other unit reinterprets it everywhere later: correcting a portion,
-  /// projecting a planned meal, repeating a recent one. The first version of
-  /// this did exactly that, and re-opening a meal logged as 1.7 x 100 g and
-  /// pressing Update turned 170 kcal into 289 without a keystroke.
+  /// from `defaultServing` — so storing a count in any other unit
+  /// reinterprets it everywhere later: projecting a planned meal, repeating a
+  /// recent one. The first version of this did exactly that, and re-opening a
+  /// meal logged as 1.7 x 100 g and pressing Update turned 170 kcal into 289
+  /// without a keystroke.
+  ///
+  /// (Correcting a portion no longer re-costs from `defaultServing` — see
+  /// `_frozenPerServing` — but the invariant still holds everywhere else, and
+  /// a count stored in the wrong unit would still be wrong there.)
   ///
   /// So this changes the number under your thumb, never the number in the
   /// row. Half a pot is still half a pot to everything downstream.
@@ -136,10 +140,39 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     super.dispose();
   }
 
+  /// The basis a logged meal was frozen on, per serving.
+  ///
+  /// The snapshot stores the total and the portion it was for, so one
+  /// serving's worth is the one divided by the other. Null for a planned
+  /// entry, which has no snapshot and should cost what the food costs today.
+  Macros? get _frozenPerServing {
+    final MealPlanEntry? entry = widget.existing?.entry;
+    if (entry == null || !entry.isLogged) return null;
+    final MacroSnapshot? snapshot = entry.macroSnapshot;
+    if (snapshot == null) return null;
+    // The row's own count as a fallback divisor. Nothing writes a snapshot
+    // with a zero portion — the stepper refuses one — but dividing by it
+    // would fall back to the live food, which is the bug this exists to fix.
+    final double portion = snapshot.servings > 0
+        ? snapshot.servings
+        : entry.servings;
+    if (portion <= 0) return null;
+    return snapshot.macros.scaledBy(1 / portion);
+  }
+
   Macros _perServing({
     required Map<String, Food> foods,
     required Map<String, Recipe> recipes,
   }) {
+    // A meal that has already been logged is corrected against what it was
+    // logged as, never against what its food says today (spec §4, rule 3).
+    //
+    // `ResolvedEntry.perServing` is built from the food as it stands now —
+    // right for a planned meal, which has not happened yet, and wrong for one
+    // that has. Correcting the portion is the one screen that writes a new
+    // snapshot over an old meal, so it is the one place an edit made months
+    // later can reach back and change what was eaten.
+    if (_frozenPerServing case final Macros frozen) return frozen;
     if (widget.existing != null) return widget.existing!.perServing;
     if (_recipe != null) {
       return MacroCalculator.forRecipe(_recipe!, foods: foods).perServing;
@@ -157,6 +190,12 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     required Map<String, Food> foods,
     required Map<String, Recipe> recipes,
   }) {
+    // Frozen alongside the numbers, and for the same reason: how much of the
+    // day those numbers spoke for is part of what was recorded.
+    if (widget.existing?.entry.macroSnapshot case final MacroSnapshot snap
+        when widget.existing!.entry.isLogged) {
+      return snap.coverage;
+    }
     if (widget.existing != null) return widget.existing!.liveCoverage;
     if (_recipe != null) {
       return MacroCalculator.forRecipe(_recipe!, foods: foods).coverage;
@@ -167,8 +206,17 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
         : NutrientCoverage.ofOne(serving.macros);
   }
 
+  /// What this meal is called.
+  ///
+  /// For one already logged, the name it was logged under — not what its food
+  /// is called today. `ResolvedEntry.label` reads the live food, so a
+  /// correction would rename a June meal to whatever the food has since been
+  /// renamed to, which is the thing `MacroSnapshot.label` exists to prevent:
+  /// once the food is soft-deleted, that name is all the row has left.
   String get _label =>
-      widget.existing?.label ?? _recipe?.title ?? _food?.name ?? '';
+      widget.existing?.entry.macroSnapshot?.label.isNotEmpty ?? false
+      ? widget.existing!.entry.macroSnapshot!.label
+      : widget.existing?.label ?? _recipe?.title ?? _food?.name ?? '';
 
   Future<void> _log({
     required Map<String, Food> foods,
