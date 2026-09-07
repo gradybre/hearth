@@ -541,6 +541,15 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
   pass is running coalesce into exactly one rerun — not none, which left a
   write waiting for whatever happened to trigger the next pass, and not one
   each, which would have a recipe save chase its own tail.
+- **The live suite has a fixture to sign in as.** `HEARTH_LIVE=1 flutter test
+  --tags live test/integration` is the only place sync is exercised against a
+  real Postgres, PostgREST and GoTrue rather than against fakes, and every one
+  of those tests signs in as one account — which existed nowhere: not in the
+  repository, not in the database, not in any setup step. The suite failed on
+  its first line and, as far as this repository can tell, had never run.
+  `supabase/seed.sql` provisions it, along with the household library those
+  tests read back. Seeds run on `db reset` and never on `db push`, so it
+  reaches the local container and nothing else.
 - **An id both phones can work out for themselves.** Anything a household can
   decide independently on two devices — a week's macro targets, a remembered
   ingredient answer, a shopping line — derives its row id from whatever the

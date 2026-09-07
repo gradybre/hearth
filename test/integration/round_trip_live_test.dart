@@ -23,6 +23,7 @@ import 'package:hearth/data/sync/sync_scope.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/nutrient_coverage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../support/fixtures.dart';
@@ -160,6 +161,11 @@ void main() {
       refId: recipeId,
       servings: 2,
       loggedMacros: const Macros(kcal: 400, proteinG: 30, carbG: 20, fatG: 15),
+      // Stated, because a recipe's total is non-null whenever any one
+      // ingredient knows — so `add` refuses to infer it (spec §5.6). The
+      // assert that says so landed while this suite could not run, and this
+      // call has been tripping it ever since without anyone seeing.
+      loggedCoverage: const NutrientCoverage.notRecorded(),
       label: 'Logged offline',
     );
 
@@ -323,6 +329,8 @@ void main() {
               carbG: 10,
               fatG: 8,
             ),
+            // Stated, for the same reason as above.
+            loggedCoverage: const NutrientCoverage.notRecorded(),
             label: 'Half a portion',
           );
 

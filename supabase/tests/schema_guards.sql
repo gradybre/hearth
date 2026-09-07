@@ -1517,3 +1517,71 @@ begin
   raise notice 'macro target guards passed';
 end;
 $$;
+
+-- ── The live suite still has an account to sign in as (spec §9.3) ──────────
+--
+-- The integration suite is the only place sync meets a real Postgres,
+-- PostgREST and GoTrue, and it signs in as one seeded account. That account
+-- did not exist for the whole life of this repository, so the suite failed on
+-- its first line and nobody saw — because the suite is not in CI, and cannot
+-- be: it needs the local stack running.
+--
+-- These guards are in CI. So this is where the fixture gets watched: if the
+-- seed stops producing something that can authenticate, this says so on the
+-- next run rather than the next time somebody happens to try the live tests.
+do $$
+declare
+  v_user uuid;
+  v_recipe uuid := '11111111-1111-4111-8111-111111111111';
+begin
+  select id into v_user from auth.users where email = 'pull@hearth.test';
+  if v_user is null then
+    raise exception 'the live suite has no account to sign in as';
+  end if;
+
+  -- A password GoTrue can actually check. `crypt` returns the same hash for
+  -- the right password and the stored salt, and something else for anything
+  -- else — so this is the sign-in, in one line.
+  if not exists (
+    select 1 from auth.users
+    where id = v_user
+      and encrypted_password =
+          extensions.crypt('HearthPull2026a', encrypted_password)
+  ) then
+    raise exception 'the fixture password would not authenticate';
+  end if;
+
+  -- Unconfirmed, and GoTrue refuses the sign-in.
+  if not exists (
+    select 1 from auth.users where id = v_user and email_confirmed_at is not null
+  ) then
+    raise exception 'the fixture account is not confirmed';
+  end if;
+
+  -- No identity, and there is nothing for email sign-in to match against.
+  if not exists (
+    select 1 from auth.identities where user_id = v_user and provider = 'email'
+  ) then
+    raise exception 'the fixture account has no email identity';
+  end if;
+
+  -- And the library the suite reads back, with the children it checks: a
+  -- recipe row alone would prove it arrived and nothing about whether its
+  -- ingredients and steps came with it.
+  if not exists (select 1 from public.recipes where id = v_recipe) then
+    raise exception 'the seeded recipe the live suite looks for is gone';
+  end if;
+  if (select count(*) from public.recipe_ingredients where recipe_id = v_recipe)
+     <> 2 then
+    raise exception 'the seeded recipe no longer has the two ingredients';
+  end if;
+  if not exists (
+    select 1 from public.recipe_steps
+    where recipe_id = v_recipe and timer_seconds = 120
+  ) then
+    raise exception 'the seeded step lost its timer';
+  end if;
+
+  raise notice 'live fixture guards passed';
+end;
+$$;
