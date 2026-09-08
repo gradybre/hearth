@@ -7,6 +7,7 @@ import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
 import '../local/food_store.dart';
 import '../local/hearth_database.dart';
+import '../local/pending_write_store.dart';
 import '../local/recipe_store.dart';
 import '../mappers/food_mapper.dart';
 import '../mappers/plan_mapper.dart';
@@ -55,7 +56,11 @@ class DataExport {
        _now = clock ?? DateTime.now;
 
   /// Bumped when the shape changes in a way a reader would care about.
-  static const int formatVersion = 1;
+  ///
+  /// 2 adds the manifest, the referenced global definitions, the three minor
+  /// targets and the saved weeks — all of which a v1 reader simply will not
+  /// find, which is the whole reason this is a number rather than a habit.
+  static const int formatVersion = 2;
 
   final HearthDatabase _db;
   final RecipeStore _recipes;
@@ -83,7 +88,17 @@ class DataExport {
   }
 
   /// The export as a map, which is the part worth testing.
+  ///
+  /// Read inside one transaction. Every section used to be its own query, so
+  /// a sync pass landing halfway through could leave the file holding an
+  /// entry whose day had not been written yet — a file that fails its own
+  /// reference check for no reason anybody could reconstruct afterwards.
   Future<Map<String, Object?>> asJson({
+    required String householdId,
+    required String userId,
+  }) => _db.transaction(() => _read(householdId: householdId, userId: userId));
+
+  Future<Map<String, Object?>> _read({
     required String householdId,
     required String userId,
   }) async {
@@ -97,11 +112,24 @@ class DataExport {
       householdId: householdId,
       includeDeleted: true,
     );
-    final List<Food> foods = await _foods.all(
+    // Every food the household owns, and — separately — the ones it merely
+    // points at.
+    //
+    // A restaurant's published food is *global*: world-readable, written
+    // server-side, and not in anybody's library. Leaving those out meant a
+    // logged burrito bowl resolved to nothing at all, under a sentence
+    // claiming everything was here. They come along now, marked as somebody
+    // else's definition — but only the ones something in the file refers to.
+    // Closure, not a copy of the world: the catalogue would dwarf what is
+    // actually yours, and exporting it would not make it yours either.
+    final List<Food> everyFood = await _foods.all(
       householdId: householdId,
       includeDeleted: true,
-      includeGlobal: false,
     );
+    final List<Food> owned = <Food>[
+      for (final Food food in everyFood)
+        if (!food.isGlobal) food,
+    ];
 
     final List<MealPlanDayRow> days =
         await (_db.select(_db.mealPlanDays)
@@ -114,9 +142,108 @@ class DataExport {
       for (final MealPlanDayRow d in days) d.id,
     };
 
-    final List<MealPlanEntryRow> entries = await _db
-        .select(_db.mealPlanEntries)
-        .get();
+    final List<MealPlanEntryRow> entries = <MealPlanEntryRow>[
+      for (final MealPlanEntryRow entry
+          in await _db.select(_db.mealPlanEntries).get())
+        if (dayIds.contains(entry.dayId)) entry,
+    ];
+
+    final List<PlanTemplateRow> templates = await (_db.select(
+      _db.planTemplates,
+    )..where(($PlanTemplatesTable t) => t.userId.equals(userId))).get();
+
+    final List<CollectionRow> collections = await (_db.select(
+      _db.collections,
+    )..where(($CollectionsTable c) => c.householdId.equals(householdId))).get();
+    final Map<String, List<String>> collectionRecipes =
+        <String, List<String>>{};
+    for (final RecipeCollectionRow m
+        in await _db.select(_db.recipeCollections).get()) {
+      (collectionRecipes[m.collectionId] ??= <String>[]).add(m.recipeId);
+    }
+
+    final List<IngredientMatchRow> matches =
+        await (_db.select(_db.ingredientMatches)..where(
+              ($IngredientMatchesTable m) => m.householdId.equals(householdId),
+            ))
+            .get();
+
+    final List<String> favorites = <String>[
+      for (final RecipeFavoriteRow row in await (_db.select(
+        _db.recipeFavorites,
+      )..where(($RecipeFavoritesTable f) => f.userId.equals(userId))).get())
+        row.recipeId,
+    ];
+
+    final List<MacroTargetRow> targets = await (_db.select(
+      _db.macroTargets,
+    )..where(($MacroTargetsTable t) => t.userId.equals(userId))).get();
+
+    // Which food definitions the file points at, from every direction it can
+    // point from. A referenced global joins the export; a reference to
+    // nothing at all is named in the manifest rather than left to be
+    // discovered by whatever tries to read the file next.
+    final Set<String> foodRefs = <String>{
+      for (final Recipe recipe in recipes)
+        for (final RecipeSection section in recipe.sections)
+          for (final RecipeIngredient ingredient in section.ingredients)
+            if (ingredient.foodId case final String id) id,
+      for (final MealPlanEntryRow entry in entries)
+        if (entry.refType == 'food') entry.refId,
+      for (final IngredientMatchRow match in matches)
+        if (match.foodId case final String id) id,
+      for (final PlanTemplateRow template in templates)
+        ..._refsIn(template.entries, 'food'),
+    };
+    final Set<String> recipeRefs = <String>{
+      for (final MealPlanEntryRow entry in entries)
+        if (entry.refType == 'recipe') entry.refId,
+      for (final List<String> ids in collectionRecipes.values) ...ids,
+      ...favorites,
+      for (final PlanTemplateRow template in templates)
+        ..._refsIn(template.entries, 'recipe'),
+    };
+
+    final List<Food> exportedFoods = <Food>[
+      ...owned,
+      for (final Food food in everyFood)
+        if (food.isGlobal && foodRefs.contains(food.id)) food,
+    ];
+
+    final Set<String> exportedFoodIds = <String>{
+      for (final Food food in exportedFoods) food.id,
+    };
+    final Set<String> exportedRecipeIds = <String>{
+      for (final Recipe recipe in recipes) recipe.id,
+    };
+    final List<String> missing = <String>[
+      for (final String id
+          in foodRefs.difference(exportedFoodIds).toList()..sort())
+        'food $id',
+      for (final String id
+          in recipeRefs.difference(exportedRecipeIds).toList()..sort())
+        'recipe $id',
+    ];
+
+    // A queue with anything in it is proof the server does not have
+    // everything this file does — which makes "everything Hearth holds" a
+    // claim about a phone rather than about an account, and worth saying out
+    // loud rather than leaving to be assumed.
+    final int unsent = await PendingWriteStore(_db).count();
+
+    final List<ShoppingListRow> lists =
+        await (_db.select(_db.shoppingLists)..where(
+              ($ShoppingListsTable l) => l.householdId.equals(householdId),
+            ))
+            .get();
+    final Set<String> listIds = <String>{
+      for (final ShoppingListRow list in lists) list.id,
+    };
+    final List<ShoppingItemRow> shoppingItems = <ShoppingItemRow>[
+      for (final ShoppingItemRow item
+          in await _db.select(_db.shoppingListItems).get())
+        if (listIds.contains(item.listId)) item,
+    ];
 
     return <String, Object?>{
       'format': 'hearth-export',
@@ -125,28 +252,33 @@ class DataExport {
       'household_id': householdId,
       'user_id': userId,
       'note':
-          'Recipe photos are not included. Everything else Hearth holds is '
-          'here.',
+          'Recipe photos are not included. See the manifest for what else is '
+          'not, and for whether this device had sent everything when the file '
+          'was made.',
       'recipes': <Map<String, Object?>>[
         for (final Recipe recipe in recipes)
           RecipeMapper.toJson(recipe, updatedAt: recipe.updatedAt ?? at),
       ],
       'foods': <Map<String, Object?>>[
-        for (final Food food in foods)
-          FoodMapper.toJson(food, updatedAt: food.updatedAt ?? at),
+        for (final Food food in exportedFoods)
+          <String, Object?>{
+            ...FoodMapper.toJson(food, updatedAt: food.updatedAt ?? at),
+            // Somebody else's definition, included because this file points
+            // at it. Holding a copy is not authority to edit the original,
+            // and a reader that treats it as the household's own would be
+            // wrong about who it belongs to.
+            'is_global': food.isGlobal,
+          },
       ],
       'meal_plan_days': <Map<String, Object?>>[
         for (final MealPlanDayRow day in days)
           PlanMapper.dayToJson(day: day, userId: userId),
       ],
       'meal_plan_entries': <Map<String, Object?>>[
-        for (final MealPlanEntryRow entry in entries)
-          if (dayIds.contains(entry.dayId)) _entry(entry),
+        for (final MealPlanEntryRow entry in entries) _entry(entry),
       ],
       'macro_targets': <Map<String, Object?>>[
-        for (final MacroTargetRow row in await (_db.select(
-          _db.macroTargets,
-        )..where(($MacroTargetsTable t) => t.userId.equals(userId))).get())
+        for (final MacroTargetRow row in targets)
           <String, Object?>{
             'id': row.id,
             'week_start_date': _dateOnly(row.weekStartDate),
@@ -154,42 +286,39 @@ class DataExport {
             'protein_g': row.proteinG,
             'carb_g': row.carbG,
             'fat_g': row.fatG,
+            // All seven. Fibre, sodium and cholesterol were lifted out of the
+            // deferred list deliberately (§5.6), and dropping them here loses
+            // a decision somebody made — silently, and only noticeably later.
+            // Null is a real answer: it means the Daily Value, not "no
+            // target", so it is written rather than omitted.
+            'fiber_g': row.fiberG,
+            'sodium_mg': row.sodiumMg,
+            'cholesterol_mg': row.cholesterolMg,
+          },
+      ],
+      // A week somebody built and kept. Not exported at all before this.
+      'plan_templates': <Map<String, Object?>>[
+        for (final PlanTemplateRow row in templates)
+          <String, Object?>{
+            'id': row.id,
+            'name': row.name,
+            // Decoded, like the frozen snapshot below: this is a file a
+            // person may open, and a string holding JSON is not readable.
+            'entries': _decodeList(row.entries),
           },
       ],
       'collections': <Map<String, Object?>>[
-        for (final CollectionRow row
-            in await (_db.select(_db.collections)..where(
-                  ($CollectionsTable c) => c.householdId.equals(householdId),
-                ))
-                .get())
+        for (final CollectionRow row in collections)
           <String, Object?>{
             'id': row.id,
             'name': row.name,
             'sort_order': row.sortOrder,
-            'recipe_ids': <String>[
-              for (final RecipeCollectionRow m
-                  in await (_db.select(_db.recipeCollections)..where(
-                        ($RecipeCollectionsTable r) =>
-                            r.collectionId.equals(row.id),
-                      ))
-                      .get())
-                m.recipeId,
-            ],
+            'recipe_ids': collectionRecipes[row.id] ?? const <String>[],
           },
       ],
-      'favorite_recipe_ids': <String>[
-        for (final RecipeFavoriteRow row in await (_db.select(
-          _db.recipeFavorites,
-        )..where(($RecipeFavoritesTable f) => f.userId.equals(userId))).get())
-          row.recipeId,
-      ],
+      'favorite_recipe_ids': favorites,
       'ingredient_matches': <Map<String, Object?>>[
-        for (final IngredientMatchRow row
-            in await (_db.select(_db.ingredientMatches)..where(
-                  ($IngredientMatchesTable m) =>
-                      m.householdId.equals(householdId),
-                ))
-                .get())
+        for (final IngredientMatchRow row in matches)
           <String, Object?>{
             'ingredient_string': row.ingredientString,
             'food_id': row.foodId,
@@ -198,24 +327,92 @@ class DataExport {
       ],
       'food_profile': await _profile(userId),
       'shopping_lists': <Map<String, Object?>>[
-        for (final ShoppingListRow list
-            in await (_db.select(_db.shoppingLists)..where(
-                  ($ShoppingListsTable l) => l.householdId.equals(householdId),
-                ))
-                .get())
+        for (final ShoppingListRow list in lists)
           <String, Object?>{
             ...ShoppingMapper.listToJson(list),
             'items': <Map<String, Object?>>[
-              for (final ShoppingItemRow item
-                  in await (_db.select(_db.shoppingListItems)..where(
-                        ($ShoppingListItemsTable i) => i.listId.equals(list.id),
-                      ))
-                      .get())
-                ShoppingMapper.itemToJson(item),
+              for (final ShoppingItemRow item in shoppingItems)
+                if (item.listId == list.id) ShoppingMapper.itemToJson(item),
             ],
           },
       ],
+      // What is in the file, what is not, and whether it is all of it.
+      //
+      // The file used to open with "everything else Hearth holds is here",
+      // which was false in five separate ways at once and was the first thing
+      // a reader saw. A count somebody can check against beats a sentence
+      // nobody can.
+      'manifest': <String, Object?>{
+        'schema_version': formatVersion,
+        'exported_at': at.toUtc().toIso8601String(),
+        'scope': <String, Object?>{
+          'household_id': householdId,
+          'user_id': userId,
+        },
+        'counts': <String, Object?>{
+          'recipes': recipes.length,
+          'foods': exportedFoods.length,
+          'global_foods_referenced': exportedFoods.length - owned.length,
+          'meal_plan_days': days.length,
+          'meal_plan_entries': entries.length,
+          'macro_targets': targets.length,
+          'plan_templates': templates.length,
+          'collections': collections.length,
+          'favorite_recipes': favorites.length,
+          'ingredient_matches': matches.length,
+          'shopping_lists': lists.length,
+          'shopping_items': shoppingItems.length,
+        },
+        'excluded': <String>[
+          'Recipe photos. The file names them where a recipe has one, which '
+              'is a reference and not a backup.',
+          'The global food catalogue, apart from the definitions this file '
+              'points at.',
+          'Anybody else\'s plans, logs, targets, favourites or food profile.',
+        ],
+        // Named rather than hidden. A reference to something that is not here
+        // is a fact about the file, and the alternative is a file that looks
+        // whole and is not.
+        'missing_references': missing,
+        // A claim about an account, not about a phone. Anything still in the
+        // outbox means the server has less than this file does, so this file
+        // cannot be called complete without saying which way it is wrong.
+        'complete': unsent == 0 && missing.isEmpty,
+        'note': unsent == 0
+            ? (missing.isEmpty
+                  ? 'This device had sent everything it had when the file was '
+                        'made.'
+                  : 'Some records point at things this device does not hold. '
+                        'They are listed above.')
+            : '\$unsent ${unsent == 1 ? 'change has' : 'changes have'} not '
+                  'been sent to '
+                  'the server when this file was made, so the server holds '
+                  'less than this file does.',
+      },
     };
+  }
+
+  /// A stored JSON list, decoded, or an empty list if it is not one.
+  ///
+  /// Tolerant on purpose: a template written by an older build is still
+  /// somebody's saved week, and refusing the whole export over one row that
+  /// will not parse would be the wrong trade by a distance.
+  static List<Object?> _decodeList(String raw) {
+    try {
+      final Object? decoded = jsonDecode(raw);
+      return decoded is List ? decoded : const <Object?>[];
+    } on FormatException {
+      return const <Object?>[];
+    }
+  }
+
+  /// The ids a saved week points at, of one kind.
+  static Iterable<String> _refsIn(String entries, String kind) sync* {
+    for (final Object? entry in _decodeList(entries)) {
+      if (entry is! Map) continue;
+      if ('${entry['ref_type']}' != kind) continue;
+      if (entry['ref_id'] case final String id) yield id;
+    }
   }
 
   /// A logged entry carries its frozen snapshot **verbatim**.

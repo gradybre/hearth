@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/data/adapters/data_export.dart';
@@ -214,5 +215,257 @@ void main() {
     // Indented, because a person may open it.
     expect(file.contents, contains('\n  "version"'));
     expect(file.bytes, greaterThan(0));
+  });
+
+  group('what the export claims about itself (spec §7.4, R12)', () {
+    test('a food it points at comes with it, global or not', () async {
+      // Referential closure, and the case that breaks it: a restaurant's
+      // published food is *global* — world-readable, written server-side —
+      // so it is not in the household's library and was left out. A log
+      // entry pointing at one then resolved to nothing at all, and the file
+      // said "everything else Hearth holds is here" over the top of it.
+      await foods.upsert(
+        const Food(
+          id: 'chipotle-bowl',
+          name: 'Burrito bowl',
+          brand: 'Chipotle',
+          source: FoodSource.restaurant,
+          servingOptions: <ServingOption>[],
+        ),
+        updatedAt: clock,
+      );
+      await plans.add(
+        date: clock,
+        slot: MealSlot.lunch,
+        refType: PlanRefType.food,
+        refId: 'chipotle-bowl',
+        servings: 1,
+        loggedMacros: const Macros(
+          kcal: 700,
+          proteinG: 30,
+          carbG: 80,
+          fatG: 25,
+        ),
+        loggedCoverage: const NutrientCoverage.notRecorded(),
+      );
+
+      final List<Object?> out = (await run())['foods']! as List<Object?>;
+      final Iterable<Map<String, Object?>> byId = out
+          .cast<Map<String, Object?>>()
+          .where((Map<String, Object?> f) => f['id'] == 'chipotle-bowl');
+
+      expect(
+        byId,
+        hasLength(1),
+        reason: 'a log pointing at a food nobody exported resolves to nothing',
+      );
+      expect(
+        byId.single['is_global'],
+        isTrue,
+        reason: 'marked as somebody else\'s definition, not the household\'s',
+      );
+    });
+
+    test('and one a recipe is matched to, the same way', () async {
+      await foods.upsert(
+        const Food(
+          id: 'global-beef',
+          name: 'Ground beef',
+          source: FoodSource.manual,
+          servingOptions: <ServingOption>[],
+        ),
+        updatedAt: clock,
+      );
+      await recipes.upsert(
+        aRecipe(
+          id: 'recipe-1',
+          title: 'Chilli',
+          ingredients: <RecipeIngredient>[
+            anIngredient('ground beef', amount: 1, foodId: 'global-beef'),
+          ],
+        ),
+        updatedAt: clock,
+      );
+
+      final List<Object?> out = (await run())['foods']! as List<Object?>;
+      expect(
+        out.cast<Map<String, Object?>>().map(
+          (Map<String, Object?> f) => f['id'],
+        ),
+        contains('global-beef'),
+      );
+    });
+
+    test('but the rest of the catalogue stays where it is', () async {
+      // Closure, not a copy of the world. A global food nothing points at is
+      // not the household's data and would dwarf what is.
+      await foods.upsert(
+        const Food(
+          id: 'unreferenced',
+          name: 'Generic apple',
+          source: FoodSource.manual,
+          servingOptions: <ServingOption>[],
+        ),
+        updatedAt: clock,
+      );
+
+      final List<Object?> out = (await run())['foods']! as List<Object?>;
+      expect(out, isEmpty);
+    });
+
+    test('all seven targets, not the four that fit on a ring', () async {
+      // Fibre, sodium and cholesterol were lifted out of the deferred list
+      // deliberately (§5.6). An export that drops them loses a decision
+      // somebody made, silently.
+      await db
+          .into(db.macroTargets)
+          .insert(
+            MacroTargetsCompanion.insert(
+              id: 'targets-1',
+              userId: 'user-1',
+              weekStartDate: DateTime.utc(2026, 8, 31),
+              kcal: 2400,
+              proteinG: 180,
+              carbG: 240,
+              fatG: 80,
+              fiberG: const Value<double?>(30),
+              sodiumMg: const Value<double?>(2300),
+              cholesterolMg: const Value<double?>(300),
+              updatedAt: clock,
+            ),
+          );
+
+      final Map<String, Object?> targets =
+          ((await run())['macro_targets']! as List<Object?>).single!
+              as Map<String, Object?>;
+
+      expect(targets['fiber_g'], 30);
+      expect(targets['sodium_mg'], 2300);
+      expect(targets['cholesterol_mg'], 300);
+    });
+
+    test('a saved week is in it', () async {
+      // Templates are somebody's work — a week they built and kept. They were
+      // not exported at all.
+      await db
+          .into(db.planTemplates)
+          .insert(
+            PlanTemplatesCompanion.insert(
+              id: 'template-1',
+              userId: 'user-1',
+              name: 'Usual week',
+              entries: const Value<String>(
+                '[{"slot":"dinner","ref_type":"recipe","ref_id":"recipe-1"}]',
+              ),
+              updatedAt: clock,
+            ),
+          );
+
+      final List<Object?> saved =
+          (await run())['plan_templates']! as List<Object?>;
+      final Map<String, Object?> template =
+          saved.single! as Map<String, Object?>;
+
+      expect(template['name'], 'Usual week');
+      expect(
+        template['entries'],
+        isA<List<Object?>>(),
+        reason: 'real JSON, not a string holding JSON — the file is read',
+      );
+    });
+
+    test('and not somebody else\'s saved week', () async {
+      await db
+          .into(db.planTemplates)
+          .insert(
+            PlanTemplatesCompanion.insert(
+              id: 'template-2',
+              userId: 'user-2',
+              name: 'Their week',
+              updatedAt: clock,
+            ),
+          );
+
+      expect((await run())['plan_templates'], isEmpty);
+    });
+
+    test('the manifest counts what is in the file', () async {
+      final Map<String, Object?> json = await run();
+      final Map<String, Object?> manifest =
+          json['manifest']! as Map<String, Object?>;
+      final Map<String, Object?> counts =
+          manifest['counts']! as Map<String, Object?>;
+
+      expect(counts['recipes'], 1);
+      expect(
+        counts.keys,
+        containsAll(<String>['foods', 'meal_plan_entries', 'plan_templates']),
+        reason: 'a section with no count is a section nobody can check',
+      );
+    });
+
+    test('and names what it left out rather than implying nothing', () async {
+      final Map<String, Object?> manifest =
+          (await run())['manifest']! as Map<String, Object?>;
+
+      expect(
+        (manifest['excluded']! as List<Object?>).join(' '),
+        contains('photo'),
+      );
+      expect(
+        manifest['complete'],
+        isNotNull,
+        reason: 'whether this is all of it is a fact, not an implication',
+      );
+    });
+
+    test('an unsent change makes the file say it may be behind', () async {
+      // "Everything Hearth holds" is a claim about the server as well as this
+      // phone, and a queue with something in it is proof it is not true yet.
+      await PendingWriteStore(db).enqueue(
+        entityTable: 'recipes',
+        entityId: 'recipe-1',
+        operation: WriteOperation.upsert,
+        payload: const <String, Object?>{'id': 'recipe-1'},
+        queuedAt: clock,
+      );
+
+      final Map<String, Object?> manifest =
+          (await run())['manifest']! as Map<String, Object?>;
+
+      expect(manifest['complete'], isFalse);
+      expect('${manifest['note']}', contains('not been sent'));
+    });
+
+    test('a reference it could not resolve is named, not hidden', () async {
+      // A recipe deleted from under a log, on a device that has not caught
+      // up. Saying so beats a file that looks whole and is not.
+      await plans.add(
+        date: clock,
+        slot: MealSlot.breakfast,
+        refType: PlanRefType.recipe,
+        refId: 'recipe-that-never-arrived',
+        servings: 1,
+        loggedMacros: const Macros(kcal: 100, proteinG: 1, carbG: 1, fatG: 1),
+        loggedCoverage: const NutrientCoverage.notRecorded(),
+      );
+
+      final Map<String, Object?> manifest =
+          (await run())['manifest']! as Map<String, Object?>;
+
+      expect(
+        (manifest['missing_references']! as List<Object?>).join(' '),
+        contains('recipe-that-never-arrived'),
+      );
+    });
+
+    test('it no longer claims to hold everything', () async {
+      // The sentence this whole change is about. It was false in five
+      // separate ways and it was the first thing a reader saw.
+      expect(
+        '${(await run())['note']}',
+        isNot(contains('Everything else Hearth holds is here')),
+      );
+    });
   });
 }
