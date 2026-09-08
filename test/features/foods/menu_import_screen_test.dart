@@ -412,6 +412,215 @@ void main() {
       expect(await db.select(db.foods).get(), isEmpty);
     });
   });
+
+  group('reading a nutrition guide a batch at a time (spec §5.2, R11)', () {
+    // Every page is an image sent to the model, so a long guide is read in
+    // batches. It always was — six pages, silently, with the other twelve
+    // discarded and no way to know they existed. What is new is that the
+    // screen says how long the document is, which pages it read, which it
+    // could not, and offers the rest rather than deciding for you.
+    MenuReading oneRow(String name) => MenuReading(
+      rows: <MenuRow>[
+        MenuRow(
+          name: name,
+          portion: '1 serving',
+          macros: const Macros(kcal: 350, proteinG: 6, carbG: 24, fatG: 26),
+        ),
+      ],
+    );
+
+    testWidgets('six of eighteen is said to be six of eighteen', (
+      WidgetTester tester,
+    ) async {
+      final FakePdf pdf = FakePdf(pageCount: 18);
+      await pumpHearthApp(
+        tester,
+        pdfPages: pdf,
+        menuReader: _FakeMenuReader(oneRow('Falafel')),
+      );
+      await openImporter(tester);
+
+      await tester.tap(find.text('Read from a PDF'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(pdf.asked.single, <int>[1, 2, 3, 4, 5, 6]);
+      expect(
+        find.textContaining('Pages 1–6 of 18 read'),
+        findsOneWidget,
+        reason: 'the count is the whole point: six pages is not the document',
+      );
+      expect(find.textContaining('12 not read yet'), findsOneWidget);
+    });
+
+    testWidgets('and the rest is offered, one batch at a time', (
+      WidgetTester tester,
+    ) async {
+      // Offered, not taken. A forty-page guide read whole without being asked
+      // is a bill nobody agreed to.
+      final FakePdf pdf = FakePdf(pageCount: 18);
+      await pumpHearthApp(
+        tester,
+        pdfPages: pdf,
+        menuReader: _FakeMenuReader(oneRow('Falafel')),
+      );
+      await openImporter(tester);
+
+      await tester.tap(find.text('Read from a PDF'));
+      await pumpFrames(tester, frames: 20);
+
+      await tester.tap(find.textContaining('Read pages 7–12 of 18'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(pdf.asked, <List<int>>[
+        <int>[1, 2, 3, 4, 5, 6],
+        <int>[7, 8, 9, 10, 11, 12],
+      ], reason: 'the second read asks for the next pages, not the same six');
+      expect(find.textContaining('Pages 7–12 of 18 read'), findsOneWidget);
+    });
+
+    testWidgets('a short document is read whole and offers nothing more', (
+      WidgetTester tester,
+    ) async {
+      final FakePdf pdf = FakePdf(pageCount: 2);
+      await pumpHearthApp(
+        tester,
+        pdfPages: pdf,
+        menuReader: _FakeMenuReader(oneRow('Falafel')),
+      );
+      await openImporter(tester);
+
+      await tester.tap(find.text('Read from a PDF'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(pdf.asked.single, <int>[1, 2]);
+      expect(find.textContaining('Pages 1–2 of 2 read'), findsOneWidget);
+      expect(
+        find.textContaining('Read pages'),
+        findsNothing,
+        reason: 'there is nothing left to offer',
+      );
+      expect(find.textContaining('not read yet'), findsNothing);
+    });
+
+    testWidgets('a page that will not render is named, not dropped', (
+      WidgetTester tester,
+    ) async {
+      // The silent one. A page that would not render used to vanish from the
+      // batch without a word, so a guide came back missing a section and
+      // looked complete — and nobody goes looking for an item they were never
+      // told was missing.
+      final FakePdf pdf = FakePdf(pageCount: 6, wontRender: <int>{3});
+      await pumpHearthApp(
+        tester,
+        pdfPages: pdf,
+        menuReader: _FakeMenuReader(oneRow('Falafel')),
+      );
+      await openImporter(tester);
+
+      await tester.tap(find.text('Read from a PDF'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(
+        find.textContaining('Page 3 of 6 would not render'),
+        findsOneWidget,
+      );
+      // And what it claims to have read excludes it, rather than saying 1–6.
+      expect(
+        find.textContaining('Pages 1, 2, 4, 5 and 6 of 6 read'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and comes round again rather than being skipped for ever', (
+      WidgetTester tester,
+    ) async {
+      final FakePdf pdf = FakePdf(pageCount: 6, wontRender: <int>{3});
+      await pumpHearthApp(
+        tester,
+        pdfPages: pdf,
+        menuReader: _FakeMenuReader(oneRow('Falafel')),
+      );
+      await openImporter(tester);
+
+      await tester.tap(find.text('Read from a PDF'));
+      await pumpFrames(tester, frames: 20);
+
+      await tester.tap(find.textContaining('Read page 3 of 6'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(pdf.asked.last, <int>[3]);
+    });
+
+    testWidgets('a whole batch that fails says so rather than going quiet', (
+      WidgetTester tester,
+    ) async {
+      final FakePdf pdf = FakePdf(pageCount: 2, wontRender: <int>{1, 2});
+      await pumpHearthApp(
+        tester,
+        pdfPages: pdf,
+        menuReader: _FakeMenuReader(oneRow('Falafel')),
+      );
+      await openImporter(tester);
+
+      await tester.tap(find.text('Read from a PDF'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(
+        find.textContaining('would not render'),
+        findsWidgets,
+        reason: 'silence here is indistinguishable from backing out',
+      );
+    });
+
+    testWidgets('backing out of the dialog changes nothing on screen', (
+      WidgetTester tester,
+    ) async {
+      // Cancelling is not an error and must not cost review work. It used to:
+      // the doubts from an earlier read were cleared on the way *to* the
+      // picker, so opening the dialog and changing your mind left rows on
+      // screen with the warnings that belonged to them gone.
+      await pumpHearthApp(
+        tester,
+        photoPicker: _OnePhoto(),
+        pdfPages: FakePdf(picks: false),
+        menuReader: _FakeMenuReader(
+          const MenuReading(
+            rows: <MenuRow>[
+              MenuRow(
+                name: 'Falafel',
+                portion: '1 serving',
+                macros: Macros(kcal: 350, proteinG: 6, carbG: 24, fatG: 26),
+              ),
+            ],
+            uncertain: <AiUncertainty>[
+              AiUncertainty(
+                field: 'Falafel',
+                note: 'the carbs column was cut off',
+              ),
+            ],
+          ),
+        ),
+      );
+      await openImporter(tester);
+
+      await tester.tap(find.text('Read from screenshots'));
+      await pumpFrames(tester, frames: 20);
+      expect(
+        find.textContaining('the carbs column was cut off'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Read from a PDF'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(
+        find.textContaining('the carbs column was cut off'),
+        findsOneWidget,
+        reason: 'the rows are still there, so their doubts must be too',
+      );
+      expect(find.textContaining('would not render'), findsNothing);
+    });
+  });
 }
 
 /// Answers with one prepared reading, however many pictures it is given.
