@@ -12,6 +12,14 @@ on:
   push:
     branches: [main]
 
+# Least privilege, set once at the top so a job cannot quietly have more.
+#
+# The default token can write to the repository. Nothing here needs to: these
+# jobs read the code and run checks. A workflow that can push is a workflow an
+# untrusted change could use to push, and the cost of saying so is one line.
+permissions:
+  contents: read
+
 # A second push to a PR makes the first run pointless.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -26,6 +34,10 @@ jobs:
   dart:
     name: Analyze and test
     runs-on: ubuntu-latest
+    # The suite takes about twelve minutes. Twenty-five leaves room for a slow
+    # runner and still ends a hung job rather than letting it hold the queue
+    # for six hours, which is the default and is not a gate — it is a wait.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -60,6 +72,7 @@ jobs:
   functions:
     name: Edge functions
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -77,6 +90,7 @@ jobs:
   schema:
     name: Migrations and guards
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 

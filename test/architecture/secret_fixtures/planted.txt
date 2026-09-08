@@ -1,0 +1,19 @@
+Planted strings, one per rule in no_secrets_committed_test.dart.
+
+None of these is real. They exist so the scanner can be shown to notice
+something, because a scanner whose patterns have quietly stopped matching
+passes exactly as loudly as one that found nothing — and this repository has
+already been bitten twice by a test that could only pass.
+
+Each is assembled to be obviously synthetic while still matching: the same
+shape as the real thing, and a body that is plainly typed by a person.
+
+sb_secret_NOT_A_REAL_KEY_planted_for_the_scanner
+sk-ant-NOT_A_REAL_KEY_planted_for_the_scanner
+{"role":"service_role"}
+-----BEGIN RSA PRIVATE KEY-----
+AKIAZZZZZZZZZZZZZZZZ
+
+If a rule is added to the scanner, add a line here too — the test that reads
+this file fails until every rule matches something, which is what stops a new
+rule being written wrong and nobody finding out.

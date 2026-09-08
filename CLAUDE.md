@@ -101,6 +101,11 @@ Kitchen-first legibility in cook-along and logging. (§6.1)
 - `sb_secret_…`, the Claude API key, and USDA keys go in Edge Function secrets
   (`supabase secrets set`) and nowhere else — never in `config/`, never in the repo.
 - Never paste a real key into a commit, a test fixture, a log line, or a chat message.
+  A test scans every tracked file for the shapes a real one takes and fails the
+  suite on a match — naming the file and line, never the match, because a
+  scanner that echoes a key into a public log has published it twice. A
+  placeholder has to *say* it is one (`EXAMPLE`, `NOT_A_REAL`, and the rest in
+  `test/architecture/no_secrets_committed_test.dart`).
 - If a secret ever lands in a commit or a bundle: say so immediately and rotate it. Do not
   quietly amend the history and move on.
 
