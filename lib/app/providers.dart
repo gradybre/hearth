@@ -919,6 +919,17 @@ final Provider<CookSessionStore> cookSessionStoreProvider =
 
 // ── Taking your data with you (spec §7.4) ────────────────────────────────────
 
+/// When this device and the server were last in step (handoff §12.3).
+///
+/// Re-read whenever the sync status changes, which is what makes it move
+/// without a timer: a pass that finishes writes the fact, and finishing is
+/// itself a status change.
+final FutureProvider<DateTime?> lastFullSyncProvider =
+    FutureProvider<DateTime?>((Ref ref) {
+      ref.watch(syncControllerProvider);
+      return ref.watch(syncCheckpointsProvider).lastFullPass();
+    });
+
 final Provider<DataExport> dataExportProvider = Provider<DataExport>(
   (Ref ref) => DataExport(
     database: ref.watch(databaseProvider),

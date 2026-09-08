@@ -109,6 +109,29 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
 
       final bool abandoned = library.abandonedScope || records.abandonedScope;
 
+      // The one moment this device and the server are known to agree: the
+      // queue drained, both halves of the pull came down, and nothing was
+      // abandoned or cut short by a lost connection. Recorded here rather
+      // than per table, because "each table is up to some date or other" is
+      // not an answer to "when was I last in step?".
+      if (!abandoned &&
+          result.isFullyDrained &&
+          !result.stoppedBecauseOffline &&
+          !library.stoppedBecauseOffline &&
+          !records.stoppedBecauseOffline) {
+        try {
+          await ref
+              .read(syncCheckpointsProvider)
+              .recordFullPass(DateTime.now().toUtc());
+        } on Object {
+          // Swallowed on purpose, and this is the only place in the pass
+          // where that is right: a full disk failing to write a *note about*
+          // a sync must not turn the sync that just succeeded into a reported
+          // failure. The worst case is a stale line in Settings; the
+          // alternative is a red panel over a green pass.
+        }
+      }
+
       state = SyncStatus.done(
         result,
         pulled: PullResult(

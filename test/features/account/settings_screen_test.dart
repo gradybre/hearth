@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/native.dart';
@@ -8,6 +9,7 @@ import 'package:hearth/app/providers.dart';
 import 'package:hearth/app/shell/launch_target.dart';
 import 'package:hearth/app/theme/hearth_theme.dart';
 import 'package:hearth/app/theme/theme_choice.dart';
+import 'package:hearth/core/build_info.dart';
 import 'package:hearth/data/adapters/data_export.dart';
 import 'package:hearth/data/auth/auth_gateway.dart';
 import 'package:hearth/data/local/hearth_database.dart';
@@ -34,6 +36,12 @@ Future<SettingsHarness> pumpSettings(
   FileShare? fileShare,
   PreferenceStore? preferences,
   HearthAccount? account = FakeAuthGateway.anAccount,
+
+  /// The answer to "when were we last in step?", as a future the test
+  /// controls. A real read resolves inside the first pump here, so without a
+  /// seam the loading frame is not observable — and a branch no test can
+  /// reach is a branch nothing holds.
+  Future<DateTime?>? lastFullSync,
 }) async {
   // Tall enough for the whole screen: it is a ListView, so anything below the
   // fold is simply not built, and a finder cannot scroll to what does not
@@ -70,6 +78,8 @@ Future<SettingsHarness> pumpSettings(
           preferenceStoreProvider.overrideWithValue(store),
         if (fileShare case final FileShare share)
           fileShareProvider.overrideWithValue(share),
+        if (lastFullSync case final Future<DateTime?> answer)
+          lastFullSyncProvider.overrideWith((Ref ref) => answer),
       ],
       child: MaterialApp(
         theme: HearthTheme.light(),
@@ -119,6 +129,69 @@ void main() {
       ]) {
         expect(find.text(section), findsOneWidget, reason: 'missing $section');
       }
+    });
+
+    group('the diagnostics line (handoff §12.3)', () {
+      // What a bug report needs and what the panel could not say. Everything
+      // else in Syncing describes the *last attempt*; a device that has not
+      // managed a full pass since Tuesday looks identical to one that synced a
+      // minute ago, because the last attempt failed the same way both times.
+
+      testWidgets('says which build is asking', (WidgetTester tester) async {
+        await pumpSettings(tester);
+        await tester.scrollUntilVisible(
+          find.textContaining('Hearth ${BuildInfo.appVersion}'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+
+        expect(
+          find.textContaining('Hearth ${BuildInfo.appVersion}'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('data ${BuildInfo.schemaVersion}'),
+          findsOneWidget,
+          reason:
+              'the app version and the schema version come apart — a build that '
+              'failed to migrate is the same app on an older schema, which is '
+              'exactly the state somebody would be reporting',
+        );
+      });
+
+      testWidgets('but says nothing about it while it is still being read', (
+        WidgetTester tester,
+      ) async {
+        // Loading is not the same answer as "never". Reported as one, a device
+        // that syncs hourly says "no full sync yet" for the frame somebody
+        // screenshots — this panel telling the exact kind of lie it exists to
+        // prevent.
+        // A read that has not answered, held open on purpose. A real one
+        // resolves inside the first pump, so the frame that matters is not
+        // otherwise reachable from a test.
+        await pumpSettings(tester, lastFullSync: Completer<DateTime?>().future);
+
+        expect(
+          find.textContaining('No full sync yet'),
+          findsNothing,
+          reason: 'it answered before it had read the answer',
+        );
+      });
+
+      testWidgets('and says plainly when there has never been a full sync', (
+        WidgetTester tester,
+      ) async {
+        // The honest answer on a device that has never managed one, and the
+        // one a blank would hide.
+        await pumpSettings(tester);
+        await tester.scrollUntilVisible(
+          find.textContaining('No full sync yet'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+
+        expect(find.textContaining('No full sync yet'), findsOneWidget);
+      });
     });
 
     testWidgets('sections are headings, so they can be jumped between', (

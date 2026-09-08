@@ -102,4 +102,33 @@ class SyncCheckpoints {
         pass.scope.watermarkKeyFor(table),
         upTo.toIso8601String(),
       );
+
+  /// Records that a whole pass finished with the server reachable throughout.
+  ///
+  /// Not the same fact as any per-table watermark, which is why it is stored
+  /// separately: a watermark says how far one table was read, and moves even
+  /// when three other tables never got asked. What somebody looking at a
+  /// diagnostics panel wants to know is when this device and the server were
+  /// last *in agreement* — and "each table is up to some date or other" is
+  /// not an answer to that.
+  ///
+  /// Scoped like everything else here, so signing into another account does
+  /// not inherit the first one's good news.
+  ///
+  /// Takes no [SyncPass], deliberately. It would have to be one begun *after*
+  /// the sync finished — the controller has none of its own, the two pull
+  /// halves each begin their own — and a pass created afterwards pins nothing
+  /// about when the work started while looking exactly as though it does. The
+  /// current scope is what this is a fact about, and the caller only reaches
+  /// here when the pass it ran was not abandoned, which is the check that
+  /// actually rules out an account change.
+  Future<void> recordFullPass(DateTime at) =>
+      _preferences.write(_scope().lastFullPassKey, at.toIso8601String());
+
+  /// When this device and the server were last in agreement, or null if they
+  /// never have been under this account.
+  Future<DateTime?> lastFullPass() async {
+    final String? raw = await _preferences.read(_scope().lastFullPassKey);
+    return raw == null ? null : DateTime.tryParse(raw);
+  }
 }

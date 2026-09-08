@@ -10,6 +10,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/theme_choice.dart';
+import '../../core/build_info.dart';
 import '../../data/adapters/data_export.dart';
 import '../../data/auth/auth_gateway.dart';
 import '../../data/sync/sync_engine.dart';
@@ -1023,6 +1024,39 @@ class _SyncPanel extends ConsumerWidget {
             ],
           ),
         ),
+        // The two facts a bug report needs and neither of which was here: when
+        // this device and the server were last in step, and which build is
+        // asking. Everything above says what the *last attempt* did; a device
+        // that has not managed a full pass since Tuesday looks identical to
+        // one that synced a minute ago, because the last attempt failed the
+        // same way both times.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            HearthSpacing.md,
+            0,
+            HearthSpacing.md,
+            HearthSpacing.md,
+          ),
+          child: Text(
+            <String>[
+              // Loading is not the same answer as "never", and saying it is
+              // would be this panel telling the exact kind of lie it exists
+              // to prevent: a device that syncs hourly reporting "no full
+              // sync yet" for the frame somebody screenshots. While the
+              // answer is still being read, it says nothing about it.
+              ?switch (ref.watch(lastFullSyncProvider)) {
+                AsyncValue<DateTime?>(:final DateTime value) =>
+                  'Last full sync ${_ago(value)}',
+                AsyncValue<DateTime?>(isLoading: true) => null,
+                _ => 'No full sync yet on this device',
+              },
+              'Hearth ${BuildInfo.appVersion}',
+              'data ${BuildInfo.schemaVersion}',
+              'export ${BuildInfo.exportFormatVersion}',
+            ].join(' · '),
+            style: context.text.metadata.copyWith(color: colors.textMuted),
+          ),
+        ),
         SettingsActionRow(
           icon: Icons.sync,
           title: 'Sync now',
@@ -1049,6 +1083,24 @@ class _SyncPanel extends ConsumerWidget {
           ),
       ],
     );
+  }
+
+  /// Rough on purpose.
+  ///
+  /// A timestamp to the second invites somebody to compare two devices'
+  /// clocks, which is a question this answers badly — the phones disagree by
+  /// seconds anyway. "About an hour ago" is the resolution the fact actually
+  /// has, and the resolution somebody deciding whether to worry needs.
+  static String _ago(DateTime at) {
+    final Duration since = DateTime.now().toUtc().difference(at.toUtc());
+    if (since.inMinutes < 1) return 'just now';
+    if (since.inMinutes < 60) {
+      return '${since.inMinutes} min ago';
+    }
+    if (since.inHours < 24) {
+      return since.inHours == 1 ? 'an hour ago' : '${since.inHours} hours ago';
+    }
+    return since.inDays == 1 ? 'yesterday' : '${since.inDays} days ago';
   }
 
   static String _describe(SyncStatus status, int queued) {
