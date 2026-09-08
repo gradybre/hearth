@@ -198,23 +198,11 @@ class SupabaseAuthGateway implements AuthGateway {
   @override
   Future<void> signOut() => _client.auth.signOut();
 
-  /// Sends the reset email (spec §8.3 — Supabase Auth owns the credential).
+  /// Sets the password of whichever session is signed in (spec §8.3).
   ///
-  /// **No `redirectTo` on purpose.** The link therefore lands on whatever the
-  /// project has as its Site URL, in a browser. Passing a deep link Hearth
-  /// cannot yet answer — nothing listens for
-  /// `AuthChangeEvent.passwordRecovery`, and no scheme is registered outside
-  /// iOS — would produce a link that looks right and goes nowhere, which is
-  /// worse than one that plainly goes to the project's own page. Both screens
-  /// say as much rather than promising an in-app step that does not exist.
-  /// Finishing the loop in-app means: allow-listing a redirect in the
-  /// Supabase dashboard, registering the scheme on macOS and Windows, and a
-  /// screen that calls `updateUser(password:)` on the recovery session.
-  ///
-  /// A missing account is not an error here, by design: Supabase answers an
-  /// unknown address with an early 200, so nothing this returns says whether
-  /// an address is registered. See [readableResetFailure] for what that costs
-  /// on the signed-out path, and for the one channel it does not close.
+  /// In practice that is the session a recovery link opened, because the
+  /// screen that calls this is the only screen such a session can reach.
+  /// Supabase still owns the credential; this hands it a string.
   @override
   Future<void> setPassword(String password) async {
     try {
@@ -231,6 +219,26 @@ class SupabaseAuthGateway implements AuthGateway {
     // would be ceremony, not security.
   }
 
+  /// Sends the reset email (spec §8.3 — Supabase Auth owns the credential).
+  ///
+  /// **`redirectTo` only when one is configured.** Unset — which is what a
+  /// build ships as — the link lands on whatever the project has as its Site
+  /// URL, in a browser, and both screens say so rather than promising an
+  /// in-app step. Passing a deep link the project has not been told to allow
+  /// would produce a link that looks right and goes nowhere, which is worse
+  /// than one that plainly goes elsewhere; so the app's value and the
+  /// dashboard's allow-list entry are two halves of one switch, and
+  /// `docs/SUPABASE_SETUP.md` names both.
+  ///
+  /// When it *is* configured the loop finishes in-app: `passwordRecovery` is
+  /// listened for (see the constructor), the scheme is registered on iOS and
+  /// macOS but not Windows, and [setPassword] is what the resulting screen
+  /// calls.
+  ///
+  /// A missing account is not an error here, by design: Supabase answers an
+  /// unknown address with an early 200, so nothing this returns says whether
+  /// an address is registered. See [readableResetFailure] for what that costs
+  /// on the signed-out path, and for the one channel it does not close.
   @override
   Future<void> sendPasswordReset(
     String email, {

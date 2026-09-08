@@ -1028,14 +1028,21 @@ final Provider<PasswordRecovery> passwordRecoveryProvider =
 final StreamProvider<bool> passwordRecoveryPendingProvider =
     StreamProvider<bool>((Ref ref) {
       final PasswordRecovery recovery = ref.watch(passwordRecoveryProvider);
-      // The current value first: the event that started recovery may have
-      // fired before anything was listening — a cold start on a link is
-      // exactly that — and a stream with no initial value would leave the gate
-      // showing the meal plan until something else changed.
-      return () async* {
-        yield recovery.isPending;
-        yield* recovery.watch();
-      }();
+      // Subscribed *before* the current value is read, which is the whole
+      // shape of this. An async generator that yielded `isPending` and then
+      // subscribed leaves a gap: the stream is a broadcast one, so an event
+      // arriving in that gap goes to nobody, and the value already read was
+      // the one from before it. A recovery link handled during startup is
+      // exactly when that gap is open, and the cost of losing it is the gate
+      // never closing — the meal plan, on a session minted by an email.
+      final StreamController<bool> pending = StreamController<bool>();
+      final StreamSubscription<bool> sub = recovery.watch().listen(pending.add);
+      pending.add(recovery.isPending);
+      ref.onDispose(() {
+        unawaited(sub.cancel());
+        unawaited(pending.close());
+      });
+      return pending.stream;
     });
 
 /// Where a recovery link should land.

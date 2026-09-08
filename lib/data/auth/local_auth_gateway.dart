@@ -47,6 +47,9 @@ class LocalAuthGateway implements AuthGateway {
   @override
   Future<void> signOut() async {}
 
+  /// Nothing to set. A build with no backend has no credential and no
+  /// recovery link, so the screen that calls this is unreachable — the gate
+  /// that shows it sits behind `supabaseReadyProvider`.
   @override
   Future<void> setPassword(String password) async {}
 

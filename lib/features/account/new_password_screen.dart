@@ -7,6 +7,7 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/widgets/centred_message.dart';
 import '../../data/auth/auth_gateway.dart';
+import '../../data/auth/password_recovery.dart';
 
 /// Setting a new password, on the session a recovery link opened (spec §8.3).
 ///
@@ -97,14 +98,21 @@ class _NewPasswordScreenState extends ConsumerState<NewPasswordScreen> {
   /// recovery is not a session anybody asked for, and leaving it standing
   /// would mean a link out of an email had quietly logged somebody in.
   Future<void> _cancel() async {
+    // Both read before the await rather than after it. `ref` on a State that
+    // has gone away throws, and the flag must drop whether this screen is
+    // still on the tree or not — reading it afterwards makes those two
+    // outcomes the same call.
+    final AuthGateway auth = ref.read(authGatewayProvider);
+    final PasswordRecovery recovery = ref.read(passwordRecoveryProvider);
+
     setState(() => _busy = true);
     try {
-      await ref.read(authGatewayProvider).signOut();
+      await auth.signOut();
     } on Object {
       // Already gone, or no connection. Either way the flag below is what
       // decides which screen is shown, and it is dropped regardless.
     }
-    ref.read(passwordRecoveryProvider).end();
+    recovery.end();
   }
 
   @override

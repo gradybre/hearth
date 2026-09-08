@@ -98,7 +98,14 @@ class _HearthAppState extends ConsumerState<HearthApp> {
     // be standing in their meal plan holding a session minted by an email.
     // Until the password is set, the only screen that session may reach is
     // the one that sets it (spec §8.3).
-    if (ref.watch(passwordRecoveryPendingProvider).value ?? false) {
+    // The stream is the change signal; the object is the current truth. Read
+    // through the stream alone, the first frame has no value yet and the app
+    // shows the meal plan for that frame — a flash of exactly the screen this
+    // gate exists to keep a recovery session out of.
+    final bool recovering =
+        ref.watch(passwordRecoveryPendingProvider).value ??
+        ref.watch(passwordRecoveryProvider).isPending;
+    if (recovering) {
       return _plain(const NewPasswordScreen(), themeMode);
     }
 

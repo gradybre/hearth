@@ -189,6 +189,40 @@ void main() {
     });
   });
 
+  group('a recovery that arrives before anything is listening', () {
+    test('is not lost between reading the value and subscribing', () async {
+      // The gap an async generator leaves: yield the current value, then
+      // subscribe. The stream is a broadcast one, so an event arriving in
+      // between goes to nobody — and the value already read was the one from
+      // before it. A link handled during startup is exactly when that gap is
+      // open, and the cost is the gate never closing.
+      final PasswordRecovery flag = PasswordRecovery();
+      addTearDown(flag.dispose);
+      flag.begin();
+
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Object>[passwordRecoveryProvider.overrideWithValue(flag)]
+            .cast(),
+      );
+      addTearDown(container.dispose);
+
+      final List<bool> seen = <bool>[];
+      container.listen(passwordRecoveryPendingProvider, (
+        AsyncValue<bool>? _,
+        AsyncValue<bool> next,
+      ) {
+        if (next.value case final bool value) seen.add(value);
+      }, fireImmediately: true);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        seen.first,
+        isTrue,
+        reason: 'the recovery that had already started was never reported',
+      );
+    });
+  });
+
   group('the fact itself', () {
     test('starts false, and a link turns it on', () {
       final PasswordRecovery flag = PasswordRecovery();
