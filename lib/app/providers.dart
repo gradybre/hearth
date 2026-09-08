@@ -34,6 +34,7 @@ import '../data/adapters/usda_nutrition_source.dart';
 import '../data/auth/account_cache.dart';
 import '../data/auth/auth_gateway.dart';
 import '../data/auth/local_auth_gateway.dart';
+import '../data/auth/password_recovery.dart';
 import '../data/auth/supabase_auth_gateway.dart';
 import '../data/local/collection_store.dart';
 import '../data/local/cook_session_store.dart';
@@ -1011,6 +1012,51 @@ final FutureProvider<Directory> recipePhotoDirectoryProvider =
 /// no `config/local.json`, which is a supported way to run — offline, alone.
 final Provider<bool> supabaseReadyProvider = Provider<bool>((Ref ref) => false);
 
+/// Whether a recovery link has opened a session that has not set a password
+/// yet (spec §8.3).
+///
+/// Its own provider so the gate in `main.dart` and the screen that clears it
+/// are looking at one fact rather than two copies of it.
+final Provider<PasswordRecovery> passwordRecoveryProvider =
+    Provider<PasswordRecovery>((Ref ref) {
+      final PasswordRecovery recovery = PasswordRecovery();
+      ref.onDispose(recovery.dispose);
+      return recovery;
+    });
+
+/// Whether recovery is pending, as a stream the gate can rebuild on.
+final StreamProvider<bool> passwordRecoveryPendingProvider =
+    StreamProvider<bool>((Ref ref) {
+      final PasswordRecovery recovery = ref.watch(passwordRecoveryProvider);
+      // Subscribed *before* the current value is read, which is the whole
+      // shape of this. An async generator that yielded `isPending` and then
+      // subscribed leaves a gap: the stream is a broadcast one, so an event
+      // arriving in that gap goes to nobody, and the value already read was
+      // the one from before it. A recovery link handled during startup is
+      // exactly when that gap is open, and the cost of losing it is the gate
+      // never closing — the meal plan, on a session minted by an email.
+      final StreamController<bool> pending = StreamController<bool>();
+      final StreamSubscription<bool> sub = recovery.watch().listen(pending.add);
+      pending.add(recovery.isPending);
+      ref.onDispose(() {
+        unawaited(sub.cancel());
+        unawaited(pending.close());
+      });
+      return pending.stream;
+    });
+
+/// Where a recovery link should land.
+///
+/// Empty is the shipped default and means the project's own page: a
+/// `redirectTo` the Supabase dashboard has not been told to allow produces a
+/// link that looks right and goes nowhere, which is worse than one that
+/// plainly goes elsewhere. Setting it is two changes that have to happen
+/// together — this value, and the allow-list entry — and
+/// `docs/SUPABASE_SETUP.md` says so.
+const String recoveryRedirect = String.fromEnvironment(
+  'SUPABASE_RECOVERY_REDIRECT',
+);
+
 final Provider<AuthGateway> authGatewayProvider = Provider<AuthGateway>((
   Ref ref,
 ) {
@@ -1020,6 +1066,8 @@ final Provider<AuthGateway> authGatewayProvider = Provider<AuthGateway>((
     // Lets a cold start with no signal get in on a session that is already in
     // the Keychain (spec §5.1's offline-first promise).
     cache: AccountCache(ref.watch(preferenceStoreProvider)),
+    recovery: ref.watch(passwordRecoveryProvider),
+    recoveryRedirect: recoveryRedirect.isEmpty ? null : recoveryRedirect,
   );
   ref.onDispose(gateway.dispose);
   return gateway;

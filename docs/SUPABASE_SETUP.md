@@ -212,3 +212,75 @@ local stack via `config/local.json` and need none of this.
 - **Joining carries the joiner's library with them.** §5.1 covers the reverse
   direction only, so this was a judgement call — flagged for confirmation in
   `20260827190500_household_join.sql`.
+
+---
+
+## Password recovery (spec §8.3, R13)
+
+The app half is built and tested. The project half is not, and cannot be done
+from here — it needs the dashboard.
+
+### What the app does now
+
+`Forgot password?` and Settings → Reset password both ask Supabase to mail a
+link. **No `redirectTo` is sent unless one is configured**, so out of the box
+the link lands on the project's own page in a browser, exactly as it always
+has. Both screens say so rather than promising an in-app step.
+
+That default is deliberate. A `redirectTo` the dashboard has not been told to
+allow produces a link that *looks* right and goes nowhere, which is worse than
+one that plainly goes elsewhere.
+
+### Turning the in-app flow on
+
+Two changes that must happen together. Either one alone is worse than neither.
+
+1. **In the Supabase dashboard** — Authentication → URL Configuration → 
+   Redirect URLs — add `hearth://recovery`. This is Brendan's to do: it is a
+   change to a live project, and the destination is a decision about what the
+   household owns, not something to invent here.
+
+2. **In the app's config**, pass the same value:
+
+   ```
+   --dart-define=SUPABASE_RECOVERY_REDIRECT=hearth://recovery
+   ```
+
+   Add it to `config/local.json` alongside `SUPABASE_URL` and the publishable
+   key. It is not a secret — it is a scheme name that ships in the bundle
+   anyway.
+
+Once both are set, a recovery link opens the app, `passwordRecovery` fires,
+and the app shows the new-password screen and **nothing else** until the
+password is set — a recovery session is signed in, so without that gate the
+app would open on the meal plan holding a session minted by an email.
+
+### Where the scheme is registered
+
+| Platform | Registered | Notes |
+|---|---|---|
+| iOS | yes | `ios/Runner/Info.plist`, shared with the share extension |
+| macOS | yes | `macos/Runner/Info.plist` |
+| Windows | **no** | Needs a registry protocol handler at install time; not done, and not pretended otherwise |
+
+Windows recovery therefore still lands on the project's web page even with the
+redirect configured. That is a gap, it is named here, and it is the reason the
+redirect is opt-in rather than assumed.
+
+### What has not been verified
+
+Honestly, because the release gate in the handoff asks for exactly this and
+none of it can be done from a development machine without the hosted project:
+
+- A real reset email received, and its link completing the flow.
+- Whether a link opened on a **different device** from the one that asked can
+  complete it. Same-device recovery working says nothing about this — it
+  depends on the SDK's PKCE behaviour, and assuming it is the failure the
+  handoff calls out by name.
+- The project's own password policy, which the app deliberately does not
+  duplicate: it shows what the server says rather than guessing the rule.
+- Old-password behaviour after a reset, and signing in fresh with the new one.
+
+Until those are done against the hosted project, **production recovery is
+unfinished** regardless of what the tests say. The tests cover the app's
+behaviour given a recovery session; they cannot cover an email arriving.
