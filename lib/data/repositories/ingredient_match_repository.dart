@@ -92,6 +92,12 @@ class IngredientMatchRepository {
         operation: WriteOperation.delete,
         payload: <String, Object?>{
           'id': IngredientMatchStore.idFor(_householdId, key),
+          // The pair the delete is filtered on, because the id alone misses a
+          // row written before the id was derived — and the gateway refuses a
+          // delete whose key is missing rather than matching every row it is
+          // allowed to see.
+          'household_id': _householdId,
+          'ingredient_string': key,
           // Stated, not left to the server: the tombstone records the deleting
           // writer's own clock, so an Undo from this same device is always
           // newer than the deletion it undoes (spec §7.1).

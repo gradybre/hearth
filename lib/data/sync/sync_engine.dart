@@ -106,7 +106,16 @@ class SyncEngine {
         // the write. Leave the queue untouched and try again later.
         offline = true;
         break;
-      } on Exception catch (error) {
+      } on Object catch (error) {
+        // Object, not Exception, and for a sharper reason than the controller's
+        // (which is only about not losing the pass): an Error thrown here —
+        // a payload from an older build missing something the request now
+        // needs, a type error decoding one — would escape this loop without
+        // the write ever being marked. It would not back off, would not
+        // strand, and would be the first thing tried on every later pass. One
+        // unsendable write would stop the queue draining and stop the pull
+        // that runs after it, for good, on a device that has done nothing
+        // wrong.
         await _queue.markFailed(write.sequence, error.toString(), now: now);
         failed++;
       }

@@ -319,7 +319,7 @@ void main() {
         'ingredient_string': 'olive oil',
         'is_deleted': true,
         'updated_at': t0.toIso8601String(),
-      });
+      }, hasPendingWrite: (String _) async => false);
 
       expect(await db.select(db.ingredientMatches).get(), isEmpty);
     });
