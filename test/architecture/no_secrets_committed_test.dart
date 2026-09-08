@@ -16,6 +16,13 @@ import 'package:test/test.dart';
 /// locally and in CI, it reads an exit code rather than a tail, and it needs
 /// no tool nobody has installed.
 ///
+/// **What it does not cover, said here rather than assumed.** Committed text
+/// only: not a built app bundle, which is where CLAUDE.md's first rule
+/// actually lands ("never in the app bundle"). Scanning one needs a build,
+/// which the unit suite cannot do, so it belongs with the platform build jobs
+/// and is not pretended to be here. Binary files are skipped too — a key
+/// hidden in a PNG is not the threat this is for.
+///
 /// **It never prints what it matched.** A scanner that echoes the secret into
 /// a public build log has published it a second time, which is the one thing
 /// a scanner must not do. File and line and the name of the rule are enough
@@ -97,7 +104,6 @@ void main() {
   /// Listed rather than pattern-matched: an allow-list that grows by wildcard
   /// stops being one.
   const Set<String> mayMatch = <String>{
-    'test/architecture/no_secrets_committed_test.dart',
     'test/architecture/secret_fixtures/planted.txt',
   };
 
@@ -204,17 +210,31 @@ void main() {
     // and one that does not is caught wherever it sits. Without this, loosening
     // `obviouslyFake` until it matched everything would go unnoticed.
     final RegExp secret = rules['a Supabase secret key']!.pattern;
-    const String planted =
-        'sb'
-        '_secret_9f2Kd8xQmZ1pLrT4vB6nC0';
-
-    expect(secret.hasMatch(planted), isTrue);
-    expect(looksPlanted(planted), isFalse, reason: 'it reads as a real one');
+    // Read from the fixture rather than written here. No key-shaped string
+    // is spelled in Dart source at all: two adjacent literals are something a
+    // formatter may one day fold into one, and the day it does, this file
+    // starts matching its own pattern and the scanner fails on itself for a
+    // reason nobody would guess.
+    final String planted = File('test/architecture/secret_fixtures/planted.txt')
+        .readAsLinesSync()
+        .firstWhere(
+          (String line) => secret.hasMatch(line) && !looksPlanted(line),
+          orElse: () => '',
+        );
     expect(
-      looksPlanted(
-        'sb'
-        '_secret_EXAMPLE_only',
-      ),
+      planted,
+      isNotEmpty,
+      reason: 'the fixture has no marker-free key left to test with',
+    );
+
+    final String marked = File('test/architecture/secret_fixtures/planted.txt')
+        .readAsLinesSync()
+        .firstWhere(
+          (String line) => secret.hasMatch(line) && looksPlanted(line),
+        );
+
+    expect(
+      looksPlanted(marked),
       isTrue,
       reason:
           'a placeholder that says so has to be allowed, or nobody can '

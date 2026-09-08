@@ -9,10 +9,18 @@ Each is assembled to be obviously synthetic while still matching: the same
 shape as the real thing, and a body that is plainly typed by a person.
 
 sb_secret_NOT_A_REAL_KEY_planted_for_the_scanner
+sb_secret_9f2Kd8xQmZ1pLrT4vB6nC0
 sk-ant-NOT_A_REAL_KEY_planted_for_the_scanner
 {"role":"service_role"}
 -----BEGIN RSA PRIVATE KEY-----
 AKIAZZZZZZZZZZZZZZZZ
+
+The second line above carries no marker word on purpose: it is what a real one
+would look like, and the scanner's own tests use it to show that a key without
+a placeholder word in it is still caught. Both live here rather than in the
+test file so that no key-shaped string is written in Dart source at all — a
+formatter that folded two adjacent literals into one would otherwise make the
+scanner start matching itself.
 
 If a rule is added to the scanner, add a line here too — the test that reads
 this file fails until every rule matches something, which is what stops a new
