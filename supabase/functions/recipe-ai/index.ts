@@ -23,6 +23,8 @@
 // verify_jwt is on (the default), so only a signed-in Hearth user can spend
 // this project's quota.
 
+import { fetchGuarded, UrlRefused } from './url_guard.ts';
+
 const ANTHROPIC = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 
@@ -756,6 +758,11 @@ Deno.serve(async (request: Request): Promise<Response> => {
     // and "you sent no photo" is not, so the app offered a retry that could
     // only fail the same way.
     const message = error instanceof Error ? error.message : `${error}`;
+    // A refused link is the client's to fix and already reads as a sentence,
+    // so it goes back as one rather than through the prefix dance below. A
+    // 502 would offer a retry that can only fail the same way, and would put
+    // "Error: UrlRefused" in front of somebody who pasted a link.
+    if (error instanceof UrlRefused) return json({ error: message }, 400);
     // A bad request from the client is a 400 it can act on; anything else is
     // upstream, and the app offers a retry rather than losing the input.
     const status = message.startsWith('bad request:') ? 400 : 502;
@@ -1041,27 +1048,42 @@ function shapeShopping(input: Record<string, unknown>): Record<string, unknown> 
 /// real HTML parse or a JSON-LD reader would be better and is a redeploy away,
 /// but recipe sites disagree about their own markup often enough that the
 /// model reading the visible words is the more reliable floor.
+/// The addresses a hostname answers with.
+///
+/// Both families asked for, and a failure in one is not a failure in both: a
+/// site with only an A record must not be refused because it has no AAAA.
+async function resolveHost(host: string): Promise<string[]> {
+  // Named rather than assumed. If the deployed runtime does not expose a
+  // resolver, every hostname becomes uncheckable — and an uncheckable
+  // hostname is refused, not waved through, so URL import would stop working
+  // rather than stop being guarded. Saying which of the two happened is the
+  // difference between a five-minute diagnosis and an afternoon.
+  if (typeof Deno.resolveDns !== 'function') {
+    throw new Error(
+      'this runtime has no DNS resolver, so no hostname can be checked',
+    );
+  }
+
+  const answers = await Promise.allSettled([
+    Deno.resolveDns(host, 'A'),
+    Deno.resolveDns(host, 'AAAA'),
+  ]);
+  const addresses = answers.flatMap((a) =>
+    a.status === 'fulfilled' ? a.value : []
+  );
+  if (addresses.length === 0) {
+    // Both lookups failed, which is a lookup failure rather than a name with
+    // no addresses. Said as one, so the guard refuses rather than allows.
+    throw new Error(`${host} did not resolve`);
+  }
+  return addresses;
+}
+
 async function fetchPage(url: string): Promise<string> {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw new Error('bad request: that is not a url');
-  }
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    throw new Error('bad request: only http and https urls');
-  }
-
-  const response = await fetch(parsed, {
-    headers: { 'user-agent': 'Hearth/1.0 (household recipe app)' },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!response.ok) {
-    throw new Error(`that page returned ${response.status}`);
-  }
-
-  const html = (await response.text()).slice(0, MAX_URL_BYTES);
+  const html = await fetchGuarded(url, {
+    fetch: globalThis.fetch,
+    resolve: resolveHost,
+  }, { maxBytes: MAX_URL_BYTES });
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')

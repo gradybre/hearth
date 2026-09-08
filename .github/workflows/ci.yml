@@ -51,6 +51,29 @@ jobs:
       - name: Test
         run: flutter test
 
+  # The Edge Function had neither a type check nor a test in CI, which is a
+  # large part of how R14 got in: 1,400 lines of TypeScript that nothing read.
+  # `deno check` is the cheap half and would have caught real mistakes on its
+  # own; the guard's tests are the half that matters, and they run without a
+  # network by design — the way to find out whether this function will connect
+  # to the metadata service is not to point it at the metadata service.
+  functions:
+    name: Edge functions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          # Pinned for the same reason Flutter and the Supabase CLI are.
+          deno-version: v2.9.6
+
+      - name: Check types
+        run: deno check --allow-import supabase/functions/recipe-ai/index.ts
+
+      - name: Test
+        run: deno test supabase/functions/recipe-ai/
+
   schema:
     name: Migrations and guards
     runs-on: ubuntu-latest
