@@ -165,11 +165,13 @@ void main() {
     // growing and the layout gives way around them. A ring is the hardest
     // case, because the numbers live *inside* it — an 88pt ring clipped them
     // at default size, which is how this test came to exist.
-    // The two thresholds A11y.macroColumns reflows at, and the default.
-    // Larger scales are worth checking too, but the Recipes empty state
-    // clips at 3.0 and is rendered before this test can reach the Plan tab —
-    // a real defect, and a separate one.
-    for (final double scale in <double>[1.0, 1.4, 2.0]) {
+    // The two thresholds A11y.macroColumns reflows at, the default, and the
+    // top of the range. 3.0 used to be unreachable from here: the Recipes
+    // empty state is rendered on the way to the Plan tab and clipped at that
+    // size, so this loop stopped at 2.0 and said so. That defect is fixed —
+    // see the width cap in `CentredMessage` — and this rung is worth having
+    // rather than a comment explaining its absence.
+    for (final double scale in <double>[1.0, 1.4, 2.0, 3.0]) {
       testWidgets('at text scale $scale nothing is clipped', (
         WidgetTester tester,
       ) async {

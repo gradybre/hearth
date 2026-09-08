@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../theme/hearth_spacing.dart';
 
@@ -40,8 +43,8 @@ class CentredMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Widget content = ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: maxWidth),
+    final Widget content = _CappedWidth(
+      maxWidth: maxWidth,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -84,5 +87,95 @@ class CentredMessage extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+/// A width cap that is honoured when the height is *measured*, not only when
+/// it is laid out.
+///
+/// A `ConstrainedBox` would be the obvious way to say "no wider than this",
+/// and it is wrong here in a way that only shows up on a wide window at a
+/// large text size. Its intrinsic methods pass the incoming width straight
+/// to the child (`RenderConstrainedBox.computeMaxIntrinsicHeight` calls
+/// `super` with the unclamped width), so a caller asking "how tall are you at
+/// 950 points across?" is answered for text that will then be laid out at
+/// 380 and wrap two and a half times taller.
+///
+/// The caller doing the asking is
+/// `SliverFillRemaining(hasScrollBody: false)`, which sizes itself from that
+/// answer. On a desktop window at 3x type it sized the Recipes empty state
+/// from a measurement 318 points short, and the sentence explaining how to
+/// add a first recipe was cut off — on the one screen that exists to explain
+/// it, to the reader least able to guess what was missing.
+class _CappedWidth extends SingleChildRenderObjectWidget {
+  const _CappedWidth({required this.maxWidth, required Widget super.child});
+
+  final double maxWidth;
+
+  @override
+  _RenderCappedWidth createRenderObject(BuildContext context) =>
+      _RenderCappedWidth(maxWidth);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderCappedWidth renderObject,
+  ) {
+    renderObject.maxWidth = maxWidth;
+  }
+}
+
+class _RenderCappedWidth extends RenderProxyBox {
+  _RenderCappedWidth(this._maxWidth);
+
+  double _maxWidth;
+  double get maxWidth => _maxWidth;
+  set maxWidth(double value) {
+    if (_maxWidth == value) return;
+    _maxWidth = value;
+    markNeedsLayout();
+  }
+
+  /// The one place the cap is applied, so measuring and laying out cannot
+  /// disagree — which is the entire bug this widget exists for.
+  BoxConstraints _cap(BoxConstraints constraints) =>
+      constraints.copyWith(maxWidth: math.min(constraints.maxWidth, _maxWidth));
+
+  @override
+  double computeMinIntrinsicWidth(double height) =>
+      math.min(super.computeMinIntrinsicWidth(height), _maxWidth);
+
+  @override
+  double computeMaxIntrinsicWidth(double height) =>
+      math.min(super.computeMaxIntrinsicWidth(height), _maxWidth);
+
+  @override
+  double computeMinIntrinsicHeight(double width) =>
+      super.computeMinIntrinsicHeight(math.min(width, _maxWidth));
+
+  @override
+  double computeMaxIntrinsicHeight(double width) =>
+      super.computeMaxIntrinsicHeight(math.min(width, _maxWidth));
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) => child == null
+      ? _cap(constraints).smallest
+      : child!.getDryLayout(_cap(constraints));
+
+  @override
+  double? computeDryBaseline(
+    BoxConstraints constraints,
+    TextBaseline baseline,
+  ) => child?.getDryBaseline(_cap(constraints), baseline);
+
+  @override
+  void performLayout() {
+    final RenderBox? child = this.child;
+    if (child == null) {
+      size = _cap(constraints).smallest;
+      return;
+    }
+    child.layout(_cap(constraints), parentUsesSize: true);
+    size = child.size;
   }
 }
