@@ -624,6 +624,12 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
 
 ### 7.4 Backup & export
 - **Full data export** (JSON/CSV) so the user is never locked in — cheap insurance and on-brand for a personal tool. Covers recipes, foods, logs, plans.
+- **The file says what it is, and it is counted.** Every export carries a manifest: schema version, when it was taken, whose data it is, a count per section, what was deliberately left out, and whether it is complete. A count somebody can check against beats a sentence nobody can — and the sentence it replaced ("everything else Hearth holds is here") was false in five separate ways while being the first thing a reader saw.
+- **Whatever it points at, it carries.** A file whose log entries name a food it does not contain is not an export, it is a puzzle. That includes **global definitions** — a restaurant's published food belongs to nobody's household, so it was left out and every eaten-out log resolved to nothing. Referenced global rows travel with the file, marked as somebody else's definition: holding a copy is not authority to edit the original, and it is closure rather than a copy of the catalogue, which would dwarf what is actually yours without being yours either.
+- **A reference it cannot resolve is named.** In the manifest, by id. A file that looks whole and is not is worse than one that admits a gap.
+- **Complete is a claim about the account, not the phone.** Anything still in the outbox means the server holds less than the file does, so the file says so and does not call itself complete. An export taken offline is still worth having; it is not still worth trusting as a picture of everything.
+- **Read in one transaction.** Section-by-section reads meant a sync pass landing halfway through could produce a file whose entries point at a day it does not contain — a broken export nobody could reproduce afterwards.
+- **Never anybody else's.** Plans, logs, targets, favourites and the food profile are per-user (§4), and an export is one person's. The household's shared records — recipes, foods, collections, shopping, ingredient matches — are the household's, and travel.
 
 ---
 

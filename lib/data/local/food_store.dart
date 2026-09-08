@@ -32,6 +32,27 @@ class FoodStore {
     return assembled.single;
   }
 
+  /// The foods with these ids, whoever they belong to.
+  ///
+  /// One query rather than one per id, and — the reason it exists — a way to
+  /// reach a handful of named global definitions without loading the
+  /// catalogue they sit in. Menus are seeded globally (§5.2), so that
+  /// catalogue is expected to be large and is somebody else's besides.
+  ///
+  /// Rows that are not there are simply absent; a missing definition is a
+  /// fact for the caller to report, not an error to throw.
+  Future<List<Food>> byIds(Set<String> ids) async {
+    if (ids.isEmpty) return const <Food>[];
+    final List<FoodRow> rows =
+        await (_db.select(_db.foods)
+              ..where(($FoodsTable f) => f.id.isIn(ids))
+              ..orderBy(<OrderClauseGenerator<$FoodsTable>>[
+                ($FoodsTable f) => OrderingTerm.asc(f.name),
+              ]))
+            .get();
+    return _assemble(rows);
+  }
+
   /// The household's foods, plus the global catalogue.
   ///
   /// Global foods have a null household and are readable by everyone
