@@ -74,6 +74,65 @@ Deno.test('172.15 and 172.32 are public — the private range is 16 to 31', () =
   assertEquals(isBlockedAddress('172.32.0.0'), false);
 });
 
+Deno.test('the legacy spellings of an address are refused too', async (t) => {
+  // Not by a second `inet_aton` here, which would eventually disagree with
+  // the real one, but by the URL parser having canonicalised the host before
+  // this file sees it. That is load-bearing and not obvious, so it is pinned
+  // over the real path rather than asserted in a comment.
+  for (const raw of [
+    'http://127.1/',
+    'http://0x7f000001/',
+    'http://2130706433/',
+    'http://017700000001/',
+  ]) {
+    await t.step(raw, async () => {
+      await assertRejects(
+        () =>
+          assertHostAllowed(
+            assertUrlShape(raw),
+            () => Promise.reject(new Error('should not be asked')),
+          ),
+        UrlRefused,
+      );
+    });
+  }
+});
+
+Deno.test('a NAT64 address is judged as the IPv4 address it reaches', () => {
+  // 64:ff9b::/96 is another spelling of an IPv4 address on any network that
+  // runs NAT64 — the same argument as ::ffff:, one prefix along.
+  assertEquals(isBlockedAddress('64:ff9b::7f00:1'), true);
+  assertEquals(isBlockedAddress('64:ff9b::a9fe:a9fe'), true);
+  assertEquals(isBlockedAddress('64:ff9b::5db8:d822'), false);
+});
+
+Deno.test('the whole redirect chain shares one deadline', async () => {
+  // Six hops of ten seconds each is a minute a hostile site can hold the
+  // function for, earned by redirecting slowly and nothing else.
+  const timeouts: number[] = [];
+  await assertRejects(
+    () =>
+      fetchGuarded('https://example.com/a', {
+        fetch: ((_input: string | URL | Request, init?: RequestInit) => {
+          const signal = init?.signal as AbortSignal & { _t?: number };
+          timeouts.push(Date.now());
+          void signal;
+          return Promise.resolve(
+            new Response(null, {
+              status: 302,
+              headers: { location: 'https://example.com/b' },
+            }),
+          );
+        }) as typeof fetch,
+        resolve: publicOnly,
+      }, { timeoutMs: 50 }),
+    UrlRefused,
+  );
+  // It stopped, one way or the other, rather than granting a fresh 50ms to
+  // every hop for ever.
+  assertEquals(timeouts.length <= MAX_HOPS + 1, true);
+});
+
 Deno.test('the shape of the link is checked before anything else', async (t) => {
   await t.step('a file scheme is refused', () => {
     assertThrows(() => assertUrlShape('file:///etc/passwd'), UrlRefused);
@@ -196,6 +255,32 @@ Deno.test('only something a recipe could be written in is read', async (t) => {
   await t.step('a missing type is allowed, being ordinary on small sites', () => {
     assertReadableType(new Response(''));
   });
+  await t.step('a refused type does not leave the connection open', async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([37, 80, 68, 70]));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    await assertRejects(
+      () =>
+        fetchGuarded('https://example.com/menu.pdf', {
+          fetch: (() =>
+            Promise.resolve(
+              new Response(body, {
+                headers: { 'content-type': 'application/pdf' },
+              }),
+            )) as typeof fetch,
+          resolve: publicOnly,
+        }),
+      UrlRefused,
+    );
+    assertEquals(cancelled, true, 'the body was left open behind the refusal');
+  });
+
   await t.step('a PDF is not', () => {
     assertThrows(
       () =>

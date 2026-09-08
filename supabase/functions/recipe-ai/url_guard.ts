@@ -101,8 +101,19 @@ function isBlockedIpv6(groups: number[]): boolean {
   );
 }
 
-/// The IPv4 address inside an IPv4-mapped or IPv4-compatible IPv6 address.
+/// The IPv4 address inside an IPv4-mapped, IPv4-compatible, or NAT64 address.
 function mappedIpv4(groups: number[]): number[] | null {
+  // 64:ff9b::/96, the well-known NAT64 prefix (RFC 6052). On a network that
+  // runs NAT64 this is simply another way to spell an IPv4 address, and
+  // `64:ff9b::7f00:1` is another way to spell the loopback — the same "one
+  // address, several names" argument as `::ffff:` above, one prefix along.
+  if (
+    groups[0] === 0x0064 && groups[1] === 0xff9b &&
+    groups[2] === 0 && groups[3] === 0 && groups[4] === 0 && groups[5] === 0
+  ) {
+    return [groups[6] >> 8, groups[6] & 0xff, groups[7] >> 8, groups[7] & 0xff];
+  }
+
   const leadingZero = groups.slice(0, 5).every((g) => g === 0);
   if (!leadingZero) return null;
   if (groups[5] !== 0xffff && groups[5] !== 0) return null;
@@ -116,14 +127,19 @@ function mappedIpv4(groups: number[]): number[] | null {
   ];
 }
 
-/// Dotted-quad only, deliberately.
+/// Dotted-quad only, deliberately — and safe to be, for a reason worth
+/// writing down because it is not obvious and it is load-bearing.
 ///
-/// The shortened forms (`127.1`, `0x7f000001`) are not accepted as addresses
-/// here — but they are not thereby allowed: they fall through to name
-/// resolution, which answers with the real address, which is then judged. A
-/// parser that tried to reproduce every legacy spelling would be a second
-/// implementation of `inet_aton` and would disagree with the real one
-/// somewhere, which is precisely the bug.
+/// The legacy spellings — `127.1`, `0x7f000001`, `2130706433`, `017700000001`
+/// — never reach here as themselves. The WHATWG URL parser canonicalises the
+/// host, so `new URL('http://0x7f000001/').hostname` is already the string
+/// `127.0.0.1` before this function is called. Writing a second
+/// `inet_aton` here would be a second implementation that eventually
+/// disagrees with the first, which is precisely the class of bug this file
+/// exists to close. There are tests over the real path for exactly this.
+///
+/// The contract, therefore: [isBlockedAddress] expects a host as a `URL`
+/// gives it, not as a person typed it.
 function parseIpv4(text: string): number[] | null {
   const parts = text.split('.');
   if (parts.length !== 4) return null;
@@ -325,15 +341,23 @@ export async function fetchGuarded(
 ): Promise<string> {
   let url = assertUrlShape(raw);
 
+  // One budget for the whole chain rather than one per hop. Six hops of ten
+  // seconds each is a minute a hostile site can hold the function for, and it
+  // gets that by doing nothing more clever than redirecting slowly.
+  const deadline = Date.now() + timeoutMs;
+
   for (let hop = 0; hop <= MAX_HOPS; hop++) {
     await assertHostAllowed(url, resolve);
+
+    const left = deadline - Date.now();
+    if (left <= 0) throw new UrlRefused('That link took too long to answer.');
 
     const response = await doFetch(url, {
       headers: { 'user-agent': 'Hearth/1.0 (household recipe app)' },
       // Manual, so the next hop comes back here to be checked rather than
       // being followed by the runtime on our behalf.
       redirect: 'manual',
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: AbortSignal.timeout(left),
     });
 
     if (response.status >= 300 && response.status < 400) {
@@ -357,7 +381,15 @@ export async function fetchGuarded(
       throw new UrlRefused(`That page returned ${response.status}.`);
     }
 
-    assertReadableType(response);
+    try {
+      assertReadableType(response);
+    } catch (refusal) {
+      // The socket is ours to close whether we read the body or not. Every
+      // other exit from this loop cancels; this one did not, so a site
+      // answering with a PDF left a connection open behind the refusal.
+      await response.body?.cancel().catch(() => {});
+      throw refusal;
+    }
     return await readCapped(response, maxBytes);
   }
 

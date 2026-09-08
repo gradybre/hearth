@@ -1053,6 +1053,17 @@ function shapeShopping(input: Record<string, unknown>): Record<string, unknown> 
 /// Both families asked for, and a failure in one is not a failure in both: a
 /// site with only an A record must not be refused because it has no AAAA.
 async function resolveHost(host: string): Promise<string[]> {
+  // Named rather than assumed. If the deployed runtime does not expose a
+  // resolver, every hostname becomes uncheckable — and an uncheckable
+  // hostname is refused, not waved through, so URL import would stop working
+  // rather than stop being guarded. Saying which of the two happened is the
+  // difference between a five-minute diagnosis and an afternoon.
+  if (typeof Deno.resolveDns !== 'function') {
+    throw new Error(
+      'this runtime has no DNS resolver, so no hostname can be checked',
+    );
+  }
+
   const answers = await Promise.allSettled([
     Deno.resolveDns(host, 'A'),
     Deno.resolveDns(host, 'AAAA'),
