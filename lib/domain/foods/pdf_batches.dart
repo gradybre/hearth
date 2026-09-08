@@ -29,16 +29,20 @@ class PdfBatches {
   /// unread would be a strange thing to put in front of somebody.
   ///
   /// Empty when there is nothing left, which is the signal to stop offering.
+  /// [batchSize] rather than `size`: a parameter named for the constant it
+  /// defaults to reads as though it defaults to itself, and the next person
+  /// to look has to work out which of the two `size` means before they can
+  /// trust the arithmetic underneath it.
   static List<int> next({
     required int pageCount,
     Set<int> alreadyRead = const <int>{},
-    int size = size,
+    int batchSize = size,
   }) {
-    if (pageCount <= 0 || size <= 0) return const <int>[];
+    if (pageCount <= 0 || batchSize <= 0) return const <int>[];
     return <int>[
       for (int page = 1; page <= pageCount; page++)
         if (!alreadyRead.contains(page)) page,
-    ].take(size).toList();
+    ].take(batchSize).toList();
   }
 
   /// How many pages of the document have not been read.

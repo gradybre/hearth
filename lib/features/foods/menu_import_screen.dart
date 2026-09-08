@@ -164,6 +164,17 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
     // Backed out of the dialog. Not an error, and nothing on screen changes.
     if (picked == null) return const <AiImage>[];
 
+    // A document with nothing in it asks for no pages, and a read with no
+    // pages in it is indistinguishable from backing out — so the button did
+    // nothing at all and said nothing at all, which is the silence this whole
+    // change is against, one layer down.
+    if (picked.pageCount <= 0) {
+      throw const RecipeAiException(
+        'That PDF has no pages to read. Try screenshots of it instead.',
+        isRetryable: false,
+      );
+    }
+
     setState(() {
       _pdfFile = picked;
       _pagesRead.clear();

@@ -572,6 +572,30 @@ void main() {
       );
     });
 
+    testWidgets('a document with no pages says so rather than doing nothing', (
+      WidgetTester tester,
+    ) async {
+      // The silent path this whole change is against, one layer down: with
+      // nothing to ask for, the read returned an empty batch, which the
+      // screen reads as "backed out of the picker" — so tapping the button
+      // did nothing at all and said nothing at all.
+      await pumpHearthApp(
+        tester,
+        pdfPages: FakePdf(pageCount: 0),
+        menuReader: _FakeMenuReader(oneRow('Falafel')),
+      );
+      await openImporter(tester);
+
+      await tester.tap(find.text('Read from a PDF'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(
+        find.textContaining('no pages'),
+        findsWidgets,
+        reason: 'a tap that does nothing has to say why',
+      );
+    });
+
     testWidgets('backing out of the dialog changes nothing on screen', (
       WidgetTester tester,
     ) async {
