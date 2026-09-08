@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/auth/auth_gateway.dart';
 
 import '../data/sync/photo_sync.dart';
+import '../data/sync/sync_checkpoints.dart';
 import '../data/sync/sync_engine.dart';
 import 'providers.dart';
 import 'sync_gate.dart';
@@ -108,6 +109,23 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
       }
 
       final bool abandoned = library.abandonedScope || records.abandonedScope;
+
+      // The one moment this device and the server are known to agree: the
+      // queue drained, both halves of the pull came down, and nothing was
+      // abandoned or cut short by a lost connection. Recorded here rather
+      // than per table, because "each table is up to some date or other" is
+      // not an answer to "when was I last in step?".
+      if (!abandoned &&
+          result.isFullyDrained &&
+          !result.stoppedBecauseOffline &&
+          !library.stoppedBecauseOffline &&
+          !records.stoppedBecauseOffline) {
+        final SyncCheckpoints checkpoints = ref.read(syncCheckpointsProvider);
+        await checkpoints.recordFullPass(
+          await checkpoints.begin(),
+          DateTime.now().toUtc(),
+        );
+      }
 
       state = SyncStatus.done(
         result,

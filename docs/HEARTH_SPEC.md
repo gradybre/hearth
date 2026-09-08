@@ -544,6 +544,7 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
   pass is running coalesce into exactly one rerun — not none, which left a
   write waiting for whatever happened to trigger the next pass, and not one
   each, which would have a recipe save chase its own tail.
+- **"When were we last in step?" is its own fact.** A per-table watermark says how far one table was read and moves even when three others were never asked, so a device that has not managed a whole pass since Tuesday looks identical to one that synced a minute ago — the last attempt failed the same way both times. A pass that drains the queue, brings both halves of the pull down and is neither abandoned nor cut short records itself, and Settings says when that last happened, alongside the app version, the schema version and the export format. A diagnostic that cannot distinguish those two devices is not one.
 - **A delete finds a row the same way its write does.** A table addressed by
   a pair — a household and a wording, a user and a week — is written by that
   pair and must be deleted by it too. Filtering the delete on the id instead

@@ -8,6 +8,7 @@ import 'package:hearth/app/providers.dart';
 import 'package:hearth/app/shell/launch_target.dart';
 import 'package:hearth/app/theme/hearth_theme.dart';
 import 'package:hearth/app/theme/theme_choice.dart';
+import 'package:hearth/core/build_info.dart';
 import 'package:hearth/data/adapters/data_export.dart';
 import 'package:hearth/data/auth/auth_gateway.dart';
 import 'package:hearth/data/local/hearth_database.dart';
@@ -119,6 +120,50 @@ void main() {
       ]) {
         expect(find.text(section), findsOneWidget, reason: 'missing $section');
       }
+    });
+
+    group('the diagnostics line (handoff §12.3)', () {
+      // What a bug report needs and what the panel could not say. Everything
+      // else in Syncing describes the *last attempt*; a device that has not
+      // managed a full pass since Tuesday looks identical to one that synced a
+      // minute ago, because the last attempt failed the same way both times.
+
+      testWidgets('says which build is asking', (WidgetTester tester) async {
+        await pumpSettings(tester);
+        await tester.scrollUntilVisible(
+          find.textContaining('Hearth ${BuildInfo.appVersion}'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+
+        expect(
+          find.textContaining('Hearth ${BuildInfo.appVersion}'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('data ${BuildInfo.schemaVersion}'),
+          findsOneWidget,
+          reason:
+              'the app version and the schema version come apart — a build that '
+              'failed to migrate is the same app on an older schema, which is '
+              'exactly the state somebody would be reporting',
+        );
+      });
+
+      testWidgets('and says plainly when there has never been a full sync', (
+        WidgetTester tester,
+      ) async {
+        // The honest answer on a device that has never managed one, and the
+        // one a blank would hide.
+        await pumpSettings(tester);
+        await tester.scrollUntilVisible(
+          find.textContaining('No full sync yet'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+
+        expect(find.textContaining('No full sync yet'), findsOneWidget);
+      });
     });
 
     testWidgets('sections are headings, so they can be jumped between', (

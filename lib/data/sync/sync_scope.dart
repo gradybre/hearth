@@ -31,6 +31,12 @@ class SyncScope {
   String watermarkKeyFor(String table) =>
       '${prefix}v2.$userId.$householdId.$table';
 
+  /// Where the last fully-successful pass is remembered. Scoped for the same
+  /// reason the watermarks are: it is a fact about this account on this
+  /// device, and inheriting it across a sign-in would be reporting somebody
+  /// else's sync as your own.
+  String get lastFullPassKey => '${prefix}v2.$userId.$householdId.full-pass';
+
   @override
   bool operator ==(Object other) =>
       other is SyncScope &&
