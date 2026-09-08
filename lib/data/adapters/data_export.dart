@@ -5,6 +5,8 @@ import 'package:meta/meta.dart';
 
 import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
+import '../../domain/planning/meal_plan.dart';
+import '../../domain/planning/week_template.dart';
 import '../local/food_store.dart';
 import '../local/hearth_database.dart';
 import '../local/pending_write_store.dart';
@@ -112,24 +114,15 @@ class DataExport {
       householdId: householdId,
       includeDeleted: true,
     );
-    // Every food the household owns, and — separately — the ones it merely
-    // points at.
-    //
-    // A restaurant's published food is *global*: world-readable, written
-    // server-side, and not in anybody's library. Leaving those out meant a
-    // logged burrito bowl resolved to nothing at all, under a sentence
-    // claiming everything was here. They come along now, marked as somebody
-    // else's definition — but only the ones something in the file refers to.
-    // Closure, not a copy of the world: the catalogue would dwarf what is
-    // actually yours, and exporting it would not make it yours either.
-    final List<Food> everyFood = await _foods.all(
+    // What the household owns. What it merely points at is fetched further
+    // down, by name, once there is a list of names — reading the whole global
+    // catalogue to keep six rows out of it would be loading somebody else's
+    // library, with its serving options, on every export.
+    final List<Food> owned = await _foods.all(
       householdId: householdId,
       includeDeleted: true,
+      includeGlobal: false,
     );
-    final List<Food> owned = <Food>[
-      for (final Food food in everyFood)
-        if (!food.isGlobal) food,
-    ];
 
     final List<MealPlanDayRow> days =
         await (_db.select(_db.mealPlanDays)
@@ -179,6 +172,16 @@ class DataExport {
       _db.macroTargets,
     )..where(($MacroTargetsTable t) => t.userId.equals(userId))).get();
 
+    // Decoded by the domain's own reader rather than by a second one written
+    // here. A parallel decoder knowing the key names is a decoder that stops
+    // knowing them: rename a field on `TemplateEntry` and this one yields
+    // nothing, silently, and the manifest quietly stops seeing every
+    // reference a saved week makes.
+    final List<TemplateEntry> templateEntries = <TemplateEntry>[
+      for (final PlanTemplateRow template in templates)
+        ...WeekTemplate.decodeEntries(template.entries),
+    ];
+
     // Which food definitions the file points at, from every direction it can
     // point from. A referenced global joins the export; a reference to
     // nothing at all is named in the manifest rather than left to be
@@ -192,22 +195,35 @@ class DataExport {
         if (entry.refType == 'food') entry.refId,
       for (final IngredientMatchRow match in matches)
         if (match.foodId case final String id) id,
-      for (final PlanTemplateRow template in templates)
-        ..._refsIn(template.entries, 'food'),
+      for (final TemplateEntry entry in templateEntries)
+        if (entry.refType == PlanRefType.food) entry.refId,
     };
     final Set<String> recipeRefs = <String>{
       for (final MealPlanEntryRow entry in entries)
         if (entry.refType == 'recipe') entry.refId,
-      for (final List<String> ids in collectionRecipes.values) ...ids,
+      // The collections this file actually contains, not every membership row
+      // the device happens to hold. A row left behind for a collection that
+      // is not in the export would otherwise be reported as a missing
+      // reference — a false alarm in the one field whose whole job is to be
+      // believed.
+      for (final CollectionRow collection in collections)
+        ...?collectionRecipes[collection.id],
       ...favorites,
-      for (final PlanTemplateRow template in templates)
-        ..._refsIn(template.entries, 'recipe'),
+      for (final TemplateEntry entry in templateEntries)
+        if (entry.refType == PlanRefType.recipe) entry.refId,
     };
 
+    // A referenced global joins the export, marked as somebody else's
+    // definition. Closure, not a copy of the world: an unreferenced global
+    // stays where it is, because the catalogue would dwarf what is actually
+    // yours and exporting it would not make it yours either.
+    final Set<String> ownedIds = <String>{
+      for (final Food food in owned) food.id,
+    };
     final List<Food> exportedFoods = <Food>[
       ...owned,
-      for (final Food food in everyFood)
-        if (food.isGlobal && foodRefs.contains(food.id)) food,
+      for (final Food food in await _foods.byIds(foodRefs.difference(ownedIds)))
+        if (food.isGlobal) food,
     ];
 
     final Set<String> exportedFoodIds = <String>{
@@ -403,15 +419,6 @@ class DataExport {
       return decoded is List ? decoded : const <Object?>[];
     } on FormatException {
       return const <Object?>[];
-    }
-  }
-
-  /// The ids a saved week points at, of one kind.
-  static Iterable<String> _refsIn(String entries, String kind) sync* {
-    for (final Object? entry in _decodeList(entries)) {
-      if (entry is! Map) continue;
-      if ('${entry['ref_type']}' != kind) continue;
-      if (entry['ref_id'] case final String id) yield id;
     }
   }
 

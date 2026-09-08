@@ -15,6 +15,7 @@ import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/nutrient_coverage.dart';
+import 'package:hearth/domain/planning/week_template.dart';
 import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
@@ -354,8 +355,24 @@ void main() {
               id: 'template-1',
               userId: 'user-1',
               name: 'Usual week',
-              entries: const Value<String>(
-                '[{"slot":"dinner","ref_type":"recipe","ref_id":"recipe-1"}]',
+              // A real entry, encoded the way the app encodes one. A shape
+              // invented here would be dropped by the domain's own reader,
+              // and the reference check below would then pass on nothing.
+              entries: Value<String>(
+                WeekTemplate(
+                  id: 'template-1',
+                  name: 'Usual week',
+                  entries: const <TemplateEntry>[
+                    TemplateEntry(
+                      weekday: 3,
+                      slot: MealSlot.dinner,
+                      refType: PlanRefType.recipe,
+                      refId: 'recipe-1',
+                      servings: 2,
+                    ),
+                  ],
+                  updatedAt: clock,
+                ).encodeEntries(),
               ),
               updatedAt: clock,
             ),
@@ -371,6 +388,47 @@ void main() {
         template['entries'],
         isA<List<Object?>>(),
         reason: 'real JSON, not a string holding JSON — the file is read',
+      );
+      // And what it points at counts as a reference — so the check below has
+      // something to be right about.
+      final Map<String, Object?> manifest =
+          (await run())['manifest']! as Map<String, Object?>;
+      expect(manifest['missing_references'], isEmpty);
+    });
+
+    test('a saved week naming a recipe that is gone says so', () async {
+      await db
+          .into(db.planTemplates)
+          .insert(
+            PlanTemplatesCompanion.insert(
+              id: 'template-3',
+              userId: 'user-1',
+              name: 'Old week',
+              entries: Value<String>(
+                WeekTemplate(
+                  id: 'template-3',
+                  name: 'Old week',
+                  entries: const <TemplateEntry>[
+                    TemplateEntry(
+                      weekday: 1,
+                      slot: MealSlot.lunch,
+                      refType: PlanRefType.recipe,
+                      refId: 'long-gone',
+                      servings: 1,
+                    ),
+                  ],
+                  updatedAt: clock,
+                ).encodeEntries(),
+              ),
+              updatedAt: clock,
+            ),
+          );
+
+      final Map<String, Object?> manifest =
+          (await run())['manifest']! as Map<String, Object?>;
+      expect(
+        (manifest['missing_references']! as List<Object?>).join(' '),
+        contains('long-gone'),
       );
     });
 
