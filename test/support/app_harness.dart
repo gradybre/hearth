@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -328,7 +329,8 @@ Future<void> pumpFrames(WidgetTester tester, {int frames = 5}) async {
   }
 }
 
-/// A device with no PDF support, which is what a widget test is.
+/// A device with no PDF support, which is what a widget test is unless it
+/// says otherwise.
 class _NoPdf implements PdfPages {
   const _NoPdf();
 
@@ -336,7 +338,69 @@ class _NoPdf implements PdfPages {
   bool get isSupported => false;
 
   @override
-  Future<RenderedPdf?> pick({int maxPages = 6}) async => null;
+  Future<PickedPdf?> pick() async => null;
+
+  @override
+  Future<RenderedPdf> render(PickedPdf pdf, {required List<int> pages}) async =>
+      const RenderedPdf(pages: <RenderedPage>[]);
+}
+
+/// A PDF of [pageCount] pages that renders every page but [wontRender]
+/// (spec §5.2).
+///
+/// A document rather than a canned batch, so the batching the screen does is
+/// exercised rather than stubbed: asking for pages 7–12 gets pages 7–12 back,
+/// and asking for a page that will not render gets it back in `failed` under
+/// its own number.
+class FakePdf implements PdfPages {
+  FakePdf({
+    this.pageCount = 18,
+    this.name = 'nutrition-guide.pdf',
+    this.wontRender = const <int>{},
+    this.picks = true,
+  });
+
+  final int pageCount;
+  final String name;
+  final Set<int> wontRender;
+
+  /// False for somebody who opens the dialog and changes their mind.
+  final bool picks;
+
+  /// Every batch that has been asked for, in order — so a test can show that
+  /// a second read asked for different pages rather than the same six again.
+  final List<List<int>> asked = <List<int>>[];
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<PickedPdf?> pick() async => picks
+      ? PickedPdf(
+          name: name,
+          pageCount: pageCount,
+          bytes: Uint8List.fromList(<int>[37]),
+        )
+      : null;
+
+  @override
+  Future<RenderedPdf> render(PickedPdf pdf, {required List<int> pages}) async {
+    asked.add(List<int>.unmodifiable(pages));
+    return RenderedPdf(
+      pages: <RenderedPage>[
+        for (final int number in pages)
+          if (!wontRender.contains(number))
+            RenderedPage(
+              number: number,
+              bytes: Uint8List.fromList(<int>[number]),
+            ),
+      ],
+      failed: <int>[
+        for (final int number in pages)
+          if (wontRender.contains(number)) number,
+      ],
+    );
+  }
 }
 
 /// Opens the library's Add recipe menu and takes one of the ways in.

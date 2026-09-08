@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -14,6 +12,7 @@ import '../../data/adapters/photo_picker.dart';
 import '../../data/adapters/recipe_ai.dart';
 import '../../data/repositories/food_repository.dart';
 import '../../domain/foods/menu_import.dart';
+import '../../domain/foods/pdf_batches.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/units/quantity.dart';
@@ -55,6 +54,26 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
 
   String? _readError;
 
+  /// The PDF being read, once one has been chosen.
+  ///
+  /// Held rather than re-picked so a second batch does not send somebody back
+  /// to the file dialog to find the same document again.
+  PickedPdf? _pdfFile;
+
+  /// Which of its pages have been read, by number.
+  ///
+  /// A set rather than a count, because a page that would not render is not
+  /// read and must come round again — a high-water mark would step over it
+  /// and never look back.
+  final Set<int> _pagesRead = <int>{};
+
+  /// What the last read of this document actually looked at, and what it
+  /// could not. Said afterwards in the same terms it was offered in, because
+  /// "read pages 7–12" and "read pages 7, 8, 10 and 11" are different facts
+  /// and only one of them is true.
+  String? _pagesReadSaid;
+  List<int> _pagesFailed = const <int>[];
+
   @override
   void dispose() {
     _restaurant.dispose();
@@ -81,19 +100,22 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
     setState(() {
       _reading = true;
       _readError = null;
-      // A doubt belongs to the rows it came with. Left standing over a new
-      // read, it points at an item no longer on the screen.
-      _uncertain = const <AiUncertainty>[];
     });
     try {
       final List<AiImage> images = await pages();
-      // Backing out of the picker. A file that produced no pages says so for
-      // itself, from the picker.
+      // Backing out of the picker. Not an error, and — the point of doing
+      // this here rather than above — not a reason to throw away the review
+      // work already on screen: opening a dialog and changing your mind used
+      // to clear the doubts belonging to rows still sitting in the box.
       if (images.isEmpty) return;
 
       final MenuReading reading = await reader.read(images);
       if (!mounted) return;
       setState(() {
+        // A doubt belongs to the rows it came with. Left standing over a new
+        // read, it points at an item no longer on the screen. Cleared here,
+        // where a read has actually happened, rather than on the way to one.
+        _uncertain = const <AiUncertainty>[];
         // Added to, not over. A guide is read a page at a time, and a
         // hand-typed correction sits in the same box — overwriting destroys
         // both, with no undo.
@@ -130,20 +152,82 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
     ];
   }
 
+  /// Chooses a PDF and reads its first batch of pages.
+  ///
+  /// Choosing and reading are two steps because they cost differently:
+  /// opening the file to count its pages is free, and every page rendered
+  /// after that is an image sent to the model. Knowing the length before
+  /// paying for six pages is what lets the screen offer the other twelve
+  /// instead of quietly calling six of eighteen "the menu".
   Future<List<AiImage>> _pdf() async {
-    final RenderedPdf? rendered = await ref.read(pdfPagesProvider).pick();
-    if (rendered == null) return const <AiImage>[];
-    // Chosen, but nothing came out of it. Silent here, this is
-    // indistinguishable from backing out of the dialog.
-    if (rendered.pages.isEmpty) {
+    final PickedPdf? picked = await ref.read(pdfPagesProvider).pick();
+    // Backed out of the dialog. Not an error, and nothing on screen changes.
+    if (picked == null) return const <AiImage>[];
+
+    // A document with nothing in it asks for no pages, and a read with no
+    // pages in it is indistinguishable from backing out — so the button did
+    // nothing at all and said nothing at all, which is the silence this whole
+    // change is against, one layer down.
+    if (picked.pageCount <= 0) {
       throw const RecipeAiException(
-        'None of that PDF would render. Try screenshots of it instead.',
+        'That PDF has no pages to read. Try screenshots of it instead.',
         isRetryable: false,
       );
     }
+
+    setState(() {
+      _pdfFile = picked;
+      _pagesRead.clear();
+      _pagesReadSaid = null;
+      _pagesFailed = const <int>[];
+    });
+    return _renderBatch(picked);
+  }
+
+  /// Reads the next unread pages of the PDF already chosen.
+  Future<List<AiImage>> _nextPdfBatch() {
+    final PickedPdf? picked = _pdfFile;
+    if (picked == null) return Future<List<AiImage>>.value(const <AiImage>[]);
+    return _renderBatch(picked);
+  }
+
+  Future<List<AiImage>> _renderBatch(PickedPdf picked) async {
+    final List<int> wanted = PdfBatches.next(
+      pageCount: picked.pageCount,
+      alreadyRead: _pagesRead,
+    );
+    if (wanted.isEmpty) return const <AiImage>[];
+
+    final RenderedPdf rendered = await ref
+        .read(pdfPagesProvider)
+        .render(picked, pages: wanted);
+
+    if (mounted) {
+      setState(() {
+        // Only what rendered counts as read. A page that failed stays unread
+        // so the next batch offers it again rather than stepping over it.
+        _pagesRead.addAll(rendered.numbers);
+        _pagesFailed = rendered.failed;
+        _pagesReadSaid = PdfBatches.describe(
+          rendered.numbers,
+          pageCount: picked.pageCount,
+        );
+      });
+    }
+
+    // Every page of the batch failed. Silent here, that is indistinguishable
+    // from backing out of the dialog — and it is the opposite fact.
+    if (rendered.pages.isEmpty) {
+      throw RecipeAiException(
+        'None of ${PdfBatches.describe(wanted, pageCount: picked.pageCount)} '
+        'would render. Try screenshots of those pages instead.',
+        isRetryable: false,
+      );
+    }
+
     return <AiImage>[
-      for (final Uint8List page in rendered.pages)
-        AiImage(bytes: page, mediaType: 'image/png'),
+      for (final RenderedPage page in rendered.pages)
+        AiImage(bytes: page.bytes, mediaType: 'image/png'),
     ];
   }
 
@@ -276,11 +360,84 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
                     OutlinedButton.icon(
                       onPressed: _reading ? null : () => _read(_pdf),
                       icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                      label: const Text('Read from a PDF'),
+                      label: Text(
+                        _pdfFile == null
+                            ? 'Read from a PDF'
+                            : 'Read a different PDF',
+                      ),
                     ),
+                  // The rest of the document, offered explicitly and one batch
+                  // at a time. Not automatic: every page is an image sent to
+                  // the model, and a forty-page guide read whole without being
+                  // asked is a bill nobody agreed to.
+                  if (_pdfFile case final PickedPdf picked)
+                    if (PdfBatches.next(
+                          pageCount: picked.pageCount,
+                          alreadyRead: _pagesRead,
+                        )
+                        case final List<int> next when next.isNotEmpty)
+                      OutlinedButton.icon(
+                        onPressed: _reading ? null : () => _read(_nextPdfBatch),
+                        icon: const Icon(Icons.more_horiz, size: 18),
+                        label: Text(
+                          'Read ${PdfBatches.describe(next, pageCount: picked.pageCount).toLowerCase()}',
+                        ),
+                      ),
                 ],
               ),
               const SizedBox(height: HearthSpacing.sm),
+              // What was read, in the document's own terms. The whole reason
+              // this is here: six pages of eighteen is a fine offer, and six
+              // pages of eighteen described as "the menu" is a wrong answer
+              // with no way to notice.
+              if (_pdfFile case final PickedPdf picked) ...<Widget>[
+                Text(
+                  <String>[
+                    picked.name,
+                    if (_pagesReadSaid case final String said)
+                      '$said read'
+                    else
+                      '${picked.pageCount} pages',
+                    if (PdfBatches.remaining(
+                          pageCount: picked.pageCount,
+                          alreadyRead: _pagesRead,
+                        )
+                        case final int left
+                        when left > 0 && _pagesRead.isNotEmpty)
+                      '$left not read yet',
+                  ].join(' · '),
+                  style: context.text.metadata.copyWith(
+                    color: colors.textMuted,
+                  ),
+                ),
+                if (_pagesFailed.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: HearthSpacing.xs),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      // An icon as well as the colour, never colour alone
+                      // (spec §6.3).
+                      Icon(
+                        Icons.report_problem_outlined,
+                        size: 18,
+                        color: colors.error,
+                      ),
+                      const SizedBox(width: HearthSpacing.xs),
+                      Expanded(
+                        child: Text(
+                          '${PdfBatches.describe(_pagesFailed, pageCount: picked.pageCount)} '
+                          'would not render, so nothing on it was read. It '
+                          'will be offered again, or screenshot it instead.',
+                          style: context.text.metadata.copyWith(
+                            color: colors.error,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: HearthSpacing.sm),
+              ],
               if (_readError case final String message) ...<Widget>[
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
