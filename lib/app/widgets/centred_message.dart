@@ -138,8 +138,18 @@ class _RenderCappedWidth extends RenderProxyBox {
 
   /// The one place the cap is applied, so measuring and laying out cannot
   /// disagree — which is the entire bug this widget exists for.
+  ///
+  /// `enforce` rather than `copyWith(maxWidth:)`, which is the same choice
+  /// `ConstrainedBox` makes and for a reason worth keeping: a parent that
+  /// hands down a *tight* width wider than the cap would give `copyWith` a
+  /// minimum above its own maximum, and constraints in that state are a
+  /// layout assertion rather than a narrow box. `enforce` clamps the cap into
+  /// the incoming range instead, so the cap yields to a width it is not
+  /// allowed to argue with. Nothing hands down such a width today — every
+  /// path here passes through a `Center`, which loosens — but this widget
+  /// lives in `app/widgets` and the next caller need not.
   BoxConstraints _cap(BoxConstraints constraints) =>
-      constraints.copyWith(maxWidth: math.min(constraints.maxWidth, _maxWidth));
+      BoxConstraints(maxWidth: _maxWidth).enforce(constraints);
 
   @override
   double computeMinIntrinsicWidth(double height) =>

@@ -102,6 +102,51 @@ void main() {
           reason: 'the reason has to survive too, not just the heading',
         );
       });
+
+      testWidgets('including its longest form on $name at scale $scale', (
+        WidgetTester tester,
+      ) async {
+        // Three paragraphs rather than two: a lit calorie or protein chip
+        // adds the sentence explaining that recipes with unmatched
+        // ingredients are left out of those filters. It is the most prose the
+        // app ever centres on an empty screen, so it is the one with the most
+        // to lose — and it is a variant the shorter case cannot stand in for.
+        await pumpHearthApp(
+          tester,
+          size: size,
+          textScale: scale,
+          recipes: <Recipe>[aRecipe(id: 'r1', title: 'Short ribs')],
+        );
+        await tester.tap(find.text('Recipes').last);
+        await pumpFrames(tester);
+
+        await tester.enterText(find.byType(TextField).first, 'zzz');
+        await pumpFrames(tester);
+
+        // The chips scroll sideways, and at these sizes the calorie one
+        // starts well off the right-hand edge.
+        await tester.dragUntilVisible(
+          find.text('Under 600 kcal'),
+          find.byType(Scrollable).at(1),
+          const Offset(-300, 0),
+        );
+        await pumpFrames(tester);
+        await tester.tap(find.text('Under 600 kcal'));
+        await pumpFrames(tester);
+
+        await tester.scrollUntilVisible(
+          find.text('No recipes match'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await pumpFrames(tester);
+
+        expect(
+          find.textContaining('no nutrition to filter on'),
+          findsOneWidget,
+          reason: 'an empty screen without this sentence reads as a bug',
+        );
+      });
     }
   }
 }
