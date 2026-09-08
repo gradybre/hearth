@@ -35,7 +35,13 @@ class SyncScope {
   /// reason the watermarks are: it is a fact about this account on this
   /// device, and inheriting it across a sign-in would be reporting somebody
   /// else's sync as your own.
-  String get lastFullPassKey => '${prefix}v2.$userId.$householdId.full-pass';
+  ///
+  /// The `#` is not decoration: without it this is exactly what
+  /// `watermarkKeyFor('full-pass')` produces, and two different facts sharing
+  /// a key is the kind of thing that is obvious only after it has happened.
+  /// No table is called that today, which is the whole reason to spend one
+  /// character on making it impossible rather than unlikely.
+  String get lastFullPassKey => '${prefix}v2.$userId.$householdId.#full-pass';
 
   @override
   bool operator ==(Object other) =>

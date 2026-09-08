@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/auth/auth_gateway.dart';
 
 import '../data/sync/photo_sync.dart';
-import '../data/sync/sync_checkpoints.dart';
 import '../data/sync/sync_engine.dart';
 import 'providers.dart';
 import 'sync_gate.dart';
@@ -120,11 +119,17 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
           !result.stoppedBecauseOffline &&
           !library.stoppedBecauseOffline &&
           !records.stoppedBecauseOffline) {
-        final SyncCheckpoints checkpoints = ref.read(syncCheckpointsProvider);
-        await checkpoints.recordFullPass(
-          await checkpoints.begin(),
-          DateTime.now().toUtc(),
-        );
+        try {
+          await ref
+              .read(syncCheckpointsProvider)
+              .recordFullPass(DateTime.now().toUtc());
+        } on Object {
+          // Swallowed on purpose, and this is the only place in the pass
+          // where that is right: a full disk failing to write a *note about*
+          // a sync must not turn the sync that just succeeded into a reported
+          // failure. The worst case is a stale line in Settings; the
+          // alternative is a red panel over a green pass.
+        }
       }
 
       state = SyncStatus.done(

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/native.dart';
@@ -35,6 +36,12 @@ Future<SettingsHarness> pumpSettings(
   FileShare? fileShare,
   PreferenceStore? preferences,
   HearthAccount? account = FakeAuthGateway.anAccount,
+
+  /// The answer to "when were we last in step?", as a future the test
+  /// controls. A real read resolves inside the first pump here, so without a
+  /// seam the loading frame is not observable — and a branch no test can
+  /// reach is a branch nothing holds.
+  Future<DateTime?>? lastFullSync,
 }) async {
   // Tall enough for the whole screen: it is a ListView, so anything below the
   // fold is simply not built, and a finder cannot scroll to what does not
@@ -71,6 +78,8 @@ Future<SettingsHarness> pumpSettings(
           preferenceStoreProvider.overrideWithValue(store),
         if (fileShare case final FileShare share)
           fileShareProvider.overrideWithValue(share),
+        if (lastFullSync case final Future<DateTime?> answer)
+          lastFullSyncProvider.overrideWith((Ref ref) => answer),
       ],
       child: MaterialApp(
         theme: HearthTheme.light(),
@@ -147,6 +156,25 @@ void main() {
               'the app version and the schema version come apart — a build that '
               'failed to migrate is the same app on an older schema, which is '
               'exactly the state somebody would be reporting',
+        );
+      });
+
+      testWidgets('but says nothing about it while it is still being read', (
+        WidgetTester tester,
+      ) async {
+        // Loading is not the same answer as "never". Reported as one, a device
+        // that syncs hourly says "no full sync yet" for the frame somebody
+        // screenshots — this panel telling the exact kind of lie it exists to
+        // prevent.
+        // A read that has not answered, held open on purpose. A real one
+        // resolves inside the first pump, so the frame that matters is not
+        // otherwise reachable from a test.
+        await pumpSettings(tester, lastFullSync: Completer<DateTime?>().future);
+
+        expect(
+          find.textContaining('No full sync yet'),
+          findsNothing,
+          reason: 'it answered before it had read the answer',
         );
       });
 

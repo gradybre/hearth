@@ -1039,8 +1039,15 @@ class _SyncPanel extends ConsumerWidget {
           ),
           child: Text(
             <String>[
-              switch (ref.watch(lastFullSyncProvider).value) {
-                final DateTime at => 'Last full sync ${_ago(at)}',
+              // Loading is not the same answer as "never", and saying it is
+              // would be this panel telling the exact kind of lie it exists
+              // to prevent: a device that syncs hourly reporting "no full
+              // sync yet" for the frame somebody screenshots. While the
+              // answer is still being read, it says nothing about it.
+              ?switch (ref.watch(lastFullSyncProvider)) {
+                AsyncValue<DateTime?>(:final DateTime value) =>
+                  'Last full sync ${_ago(value)}',
+                AsyncValue<DateTime?>(isLoading: true) => null,
                 _ => 'No full sync yet on this device',
               },
               'Hearth ${BuildInfo.appVersion}',
