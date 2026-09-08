@@ -48,6 +48,9 @@ class LocalAuthGateway implements AuthGateway {
   Future<void> signOut() async {}
 
   @override
+  Future<void> setPassword(String password) async {}
+
+  @override
   Future<void> sendPasswordReset(
     String email, {
     bool ownAddress = false,

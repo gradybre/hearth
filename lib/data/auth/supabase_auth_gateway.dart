@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'account_cache.dart';
 import 'auth_gateway.dart';
+import 'password_recovery.dart';
 
 /// The real accounts implementation, on Supabase Auth (spec §8.3).
 ///
@@ -20,8 +21,22 @@ enum AccountResolution {
 }
 
 class SupabaseAuthGateway implements AuthGateway {
-  SupabaseAuthGateway(this._client, {AccountCache? cache}) : _cache = cache {
+  SupabaseAuthGateway(
+    this._client, {
+    AccountCache? cache,
+    PasswordRecovery? recovery,
+    String? recoveryRedirect,
+  }) : _cache = cache,
+       _recovery = recovery,
+       _recoveryRedirect = recoveryRedirect {
     _authChanges = _client.auth.onAuthStateChange.listen((AuthState state) {
+      // Before the refresh below, deliberately. A recovery link *signs the
+      // user in* — the account resolves and the gate opens — so the fact that
+      // this session exists only to set a password has to be recorded before
+      // anything acts on the session itself.
+      if (state.event == AuthChangeEvent.passwordRecovery) {
+        _recovery?.begin();
+      }
       if (changesWhoYouAre(state.event)) _refresh();
     });
   }
@@ -59,6 +74,11 @@ class SupabaseAuthGateway implements AuthGateway {
   /// Where the last good account is kept so a cold start without signal can
   /// still get in. Null in builds that have no local database to write to.
   final AccountCache? _cache;
+  final PasswordRecovery? _recovery;
+
+  /// Where a recovery link should land, when the project has been told to
+  /// allow it. Null is the shipped default and means the project's own page.
+  final String? _recoveryRedirect;
 
   /// Pushed to whenever the account may have changed.
   ///
@@ -196,12 +216,36 @@ class SupabaseAuthGateway implements AuthGateway {
   /// an address is registered. See [readableResetFailure] for what that costs
   /// on the signed-out path, and for the one channel it does not close.
   @override
+  Future<void> setPassword(String password) async {
+    try {
+      await _client.auth.updateUser(UserAttributes(password: password));
+    } on AuthException catch (error) {
+      // The project's own policy, said as it said it: a length or strength
+      // rule belongs to the project, and repeating it here would be a second
+      // copy that eventually disagrees with the one being enforced.
+      throw AuthFailure(error.message);
+    }
+    // The session stays, and that is deliberate: they are signed in on this
+    // device, having just proved they can read the account's email. Signing
+    // them out to make them type the password they set eight seconds ago
+    // would be ceremony, not security.
+  }
+
+  @override
   Future<void> sendPasswordReset(
     String email, {
     bool ownAddress = false,
   }) async {
     try {
-      await _client.auth.resetPasswordForEmail(email.trim());
+      // Sent only when there is somewhere allow-listed for it to go. An
+      // unconfigured build asks for the same email it always did, landing on
+      // the project's own page — because a `redirectTo` the dashboard has not
+      // been told about produces a link that looks right and goes nowhere,
+      // which is worse than one that plainly goes elsewhere.
+      await _client.auth.resetPasswordForEmail(
+        email.trim(),
+        redirectTo: _recoveryRedirect,
+      );
     } on AuthException catch (error) {
       final String? readable = readableResetFailure(
         error,

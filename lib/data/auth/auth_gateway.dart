@@ -92,6 +92,13 @@ abstract interface class AuthGateway {
   /// way that is true of any address: a malformed one, or no connection.
   Future<void> sendPasswordReset(String email, {bool ownAddress = false});
 
+  /// Sets the password of the session that is signed in right now.
+  ///
+  /// Used on the session a recovery link opened, which is the only session
+  /// that reaches the screen calling this. Throws [AuthFailure] with something
+  /// worth showing when the link has expired or been used already.
+  Future<void> setPassword(String password);
+
   /// Joins the household the code belongs to, and returns the account as it
   /// stands afterwards.
   Future<HearthAccount> joinHousehold(String shareCode);

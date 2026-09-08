@@ -34,6 +34,7 @@ import '../data/adapters/usda_nutrition_source.dart';
 import '../data/auth/account_cache.dart';
 import '../data/auth/auth_gateway.dart';
 import '../data/auth/local_auth_gateway.dart';
+import '../data/auth/password_recovery.dart';
 import '../data/auth/supabase_auth_gateway.dart';
 import '../data/local/collection_store.dart';
 import '../data/local/cook_session_store.dart';
@@ -1011,6 +1012,44 @@ final FutureProvider<Directory> recipePhotoDirectoryProvider =
 /// no `config/local.json`, which is a supported way to run — offline, alone.
 final Provider<bool> supabaseReadyProvider = Provider<bool>((Ref ref) => false);
 
+/// Whether a recovery link has opened a session that has not set a password
+/// yet (spec §8.3).
+///
+/// Its own provider so the gate in `main.dart` and the screen that clears it
+/// are looking at one fact rather than two copies of it.
+final Provider<PasswordRecovery> passwordRecoveryProvider =
+    Provider<PasswordRecovery>((Ref ref) {
+      final PasswordRecovery recovery = PasswordRecovery();
+      ref.onDispose(recovery.dispose);
+      return recovery;
+    });
+
+/// Whether recovery is pending, as a stream the gate can rebuild on.
+final StreamProvider<bool> passwordRecoveryPendingProvider =
+    StreamProvider<bool>((Ref ref) {
+      final PasswordRecovery recovery = ref.watch(passwordRecoveryProvider);
+      // The current value first: the event that started recovery may have
+      // fired before anything was listening — a cold start on a link is
+      // exactly that — and a stream with no initial value would leave the gate
+      // showing the meal plan until something else changed.
+      return () async* {
+        yield recovery.isPending;
+        yield* recovery.watch();
+      }();
+    });
+
+/// Where a recovery link should land.
+///
+/// Empty is the shipped default and means the project's own page: a
+/// `redirectTo` the Supabase dashboard has not been told to allow produces a
+/// link that looks right and goes nowhere, which is worse than one that
+/// plainly goes elsewhere. Setting it is two changes that have to happen
+/// together — this value, and the allow-list entry — and
+/// `docs/SUPABASE_SETUP.md` says so.
+const String recoveryRedirect = String.fromEnvironment(
+  'SUPABASE_RECOVERY_REDIRECT',
+);
+
 final Provider<AuthGateway> authGatewayProvider = Provider<AuthGateway>((
   Ref ref,
 ) {
@@ -1020,6 +1059,8 @@ final Provider<AuthGateway> authGatewayProvider = Provider<AuthGateway>((
     // Lets a cold start with no signal get in on a session that is already in
     // the Keychain (spec §5.1's offline-first promise).
     cache: AccountCache(ref.watch(preferenceStoreProvider)),
+    recovery: ref.watch(passwordRecoveryProvider),
+    recoveryRedirect: recoveryRedirect.isEmpty ? null : recoveryRedirect,
   );
   ref.onDispose(gateway.dispose);
   return gateway;

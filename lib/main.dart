@@ -10,6 +10,7 @@ import 'app/theme/hearth_theme.dart';
 import 'app/theme/theme_choice.dart';
 import 'data/adapters/shared_content.dart';
 import 'data/auth/auth_gateway.dart';
+import 'features/account/new_password_screen.dart';
 import 'features/account/sign_in_screen.dart';
 
 Future<void> main() async {
@@ -90,6 +91,16 @@ class _HearthAppState extends ConsumerState<HearthApp> {
     // Watched, not merely created: the controller registers its triggers in
     // build, so nothing would ever drain the queue if no one listened.
     ref.watch(syncControllerProvider);
+
+    // Before the account is even consulted. A recovery link *signs the user
+    // in*, so by the time the account resolves this looks exactly like an
+    // ordinary session — and somebody who came to change their password would
+    // be standing in their meal plan holding a session minted by an email.
+    // Until the password is set, the only screen that session may reach is
+    // the one that sets it (spec §8.3).
+    if (ref.watch(passwordRecoveryPendingProvider).value ?? false) {
+      return _plain(const NewPasswordScreen(), themeMode);
+    }
 
     final AsyncValue<HearthAccount?> account = ref.watch(accountProvider);
 

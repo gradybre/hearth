@@ -82,6 +82,21 @@ class FakeAuthGateway implements AuthGateway {
   }
 
   @override
+  Future<void> setPassword(String password) async {
+    setPasswords.add(password);
+    if (setPasswordFails case final String message) {
+      throw AuthFailure(message);
+    }
+  }
+
+  /// Every password handed to [setPassword], so a test can show the screen
+  /// passed on what was typed rather than something near it.
+  final List<String> setPasswords = <String>[];
+
+  /// Set to make [setPassword] refuse — an expired link, a policy refusal.
+  String? setPasswordFails;
+
+  @override
   Future<void> sendPasswordReset(
     String email, {
     bool ownAddress = false,
