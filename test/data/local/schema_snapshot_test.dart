@@ -56,14 +56,29 @@ void main() {
           'it. Re-run the two drift_dev commands in this file\'s doc comment.',
     );
 
-    // And the file says what its name says, so a rename cannot fake it.
-    final Map<String, Object?> json =
-        jsonDecode(snapshot.readAsStringSync()) as Map<String, Object?>;
-    expect(json['_meta'], isA<Map<String, Object?>>());
+    // The file parses, so a truncated write is caught rather than discovered
+    // by the verifier below with a stranger message.
     expect(
-      (json['_meta']! as Map<String, Object?>)['version'],
-      isNotNull,
-      reason: 'the snapshot carries no version of its own',
+      jsonDecode(snapshot.readAsStringSync()),
+      isA<Map<String, Object?>>(),
+      reason: 'the snapshot is not readable JSON',
+    );
+
+    // And the *generated* helper knows about it, which is the second of the
+    // two commands. Dumping a snapshot and forgetting to regenerate leaves
+    // the verifier unable to build a database at the new version — a failure
+    // that surfaces as `MissingSchemaException` at some later date, from a
+    // test that has nothing to do with whoever caused it.
+    //
+    // Note `_meta.version` in the file is drift's *file format* version, not
+    // the schema's. It is not what this is checking, and reading it would be
+    // a check that looks like this one and is not.
+    expect(
+      GeneratedHelper.versions,
+      contains(db.schemaVersion),
+      reason:
+          'drift_schemas/ has v${db.schemaVersion} but the generated helper '
+          'does not. Re-run the second command in this file\'s doc comment.',
     );
   });
 

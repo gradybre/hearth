@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/core/build_info.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/data/local/pending_write_store.dart';
 
@@ -44,9 +45,12 @@ void main() {
   }
 
   group('an interrupted upgrade can always be finished', () {
-    // Every version the app has ever had. Not a sample: the one that broke a
-    // phone was v17, and nobody would have picked it.
-    for (int from = 1; from <= 24; from++) {
+    // Every version the app has ever had, not a sample: the one that broke a
+    // phone was v17, and nobody would have picked it. The end is read from
+    // the code rather than typed — hardcoding it means the newest historical
+    // version is never replayed after a bump, which is a silent gap and the
+    // worse of the two ways to get this wrong.
+    for (int from = 1; from < BuildInfo.schemaVersion; from++) {
       test('a database left at v$from opens and finishes upgrading', () async {
         final File file = await databaseAt(from);
         final HearthDatabase db = HearthDatabase.forTesting(
@@ -63,8 +67,8 @@ void main() {
             .customSelect('PRAGMA user_version')
             .getSingle();
         expect(
-          row.data.values.first,
-          25,
+          row.read<int>('user_version'),
+          db.schemaVersion,
           reason: 'the upgrade did not reach today, so it will replay again',
         );
       });
@@ -89,8 +93,12 @@ void main() {
       payload: const <String, Object?>{'id': 'entry-1', 'servings': 2},
       queuedAt: DateTime.utc(2026, 9, 1),
     );
-    // Wound back again: enqueueing above opened the database, which upgraded
-    // it. The point is a write made by the *old* build.
+    // Wound back again, because enqueueing above opened the database and that
+    // upgraded it. So this is not literally a row written by the v13 build —
+    // there is no v13 schema to write one against, which is the same limit
+    // the group above states. What it does hold is the half that can be
+    // held: whatever is in the queue when an upgrade runs is still there,
+    // intact, when it finishes.
     await before.customStatement('PRAGMA user_version = 13');
     await before.close();
 
