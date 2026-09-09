@@ -9,6 +9,10 @@ analyzer:
     - windows/**
     - "**/*.g.dart"
     - "**/*.drift.dart"
+    # Written by `dart run drift_dev schema generate`, and re-written whole
+    # every time a schema version is added. Editing one by hand is the same
+    # mistake as editing a *.g.dart.
+    - test/data/local/generated_migrations/**
     - android/**
     - web/**
     - linux/**

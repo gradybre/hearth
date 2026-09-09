@@ -53,7 +53,21 @@ task seems to require breaking one.
 7. **External integrations sit behind interfaces.** Nutrition sources (OFF → USDA → manual) and
    the shopping/Walmart export are swappable adapters. Never call them directly from UI code.
 
-8. **A migration is not done until it is pushed.** `supabase db reset` proves the SQL is right;
+8. **A migration is not done until it is pushed.** That is the server half.
+   The local half is that `schemaVersion` and the tables must move together:
+   a column added without a bump reaches every fresh install (`createAll`
+   reads today's tables) and no existing device (no step mentions it), and the
+   two disagree for ever. `drift_schemas/` records what the schema is, a test
+   holds the record against the code from both ends, and every upgrade step is
+   replayed from each historical version — the "duplicate column name" that
+   once stopped an app opening its own database is a red suite now. After a
+   schema change, run both:
+
+   ```bash
+   dart run drift_dev schema dump lib/data/local/hearth_database.dart drift_schemas/
+   dart run drift_dev schema generate drift_schemas/ test/data/local/generated_migrations/
+   ```
+ `supabase db reset` proves the SQL is right;
    it says nothing about the database the app actually talks to. Three migrations once sat
    local-only: the phone kept writing `is_default`, the hosted `upsert_food` had never heard of
    the column, and every pull quietly reverted it — three features silently broken while every
