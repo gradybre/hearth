@@ -485,24 +485,30 @@ class _MenuState extends State<_Menu> {
           ),
         ),
         if (names.length > 1)
-          SizedBox(
-            height: HearthTouch.minTarget + HearthSpacing.md,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.symmetric(horizontal: gutter),
+          // Sized by the chips, not by a number. A fixed box did not overflow
+          // at 3x text — it *constrained*, which is quieter and no better:
+          // the chip wants 78 points and was given 56, the same 56 it gets at
+          // 2x. Dynamic type is honoured, not capped (spec §6.3).
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              HearthSpacing.sm,
+              gutter,
+              HearthSpacing.xs,
+            ),
+            child: Row(
               children: <Widget>[
                 for (final String name in names)
                   Padding(
                     padding: const EdgeInsets.only(right: HearthSpacing.sm),
-                    child: Center(
-                      child: FilterChip(
-                        label: Text(name),
-                        selected: _only == name,
-                        // Choosing the one already chosen puts the whole menu
-                        // back, so the rail is never a state you cannot leave.
-                        onSelected: (bool _) =>
-                            setState(() => _only = _only == name ? null : name),
-                      ),
+                    child: FilterChip(
+                      label: Text(name),
+                      selected: _only == name,
+                      // Choosing the one already chosen puts the whole menu
+                      // back, so the rail is never a state you cannot leave.
+                      onSelected: (bool _) =>
+                          setState(() => _only = _only == name ? null : name),
                     ),
                   ),
               ],
@@ -512,6 +518,13 @@ class _MenuState extends State<_Menu> {
           child: sections.isEmpty
               ? _NoMatches(
                   query: _query.text,
+                  section: _only,
+                  // Widening before clearing: with a section chosen, the
+                  // likeliest next thing is the same search over the whole
+                  // menu, not starting again.
+                  onWiden: _only == null
+                      ? null
+                      : () => setState(() => _only = null),
                   onClear: () => setState(() {
                     _query.clear();
                     _only = null;
@@ -578,17 +591,41 @@ class _MenuState extends State<_Menu> {
 class _NoMatches extends StatelessWidget {
   const _NoMatches({
     required this.query,
+    required this.section,
+    required this.onWiden,
     required this.onClear,
     required this.gutter,
   });
 
   final String query;
+
+  /// The section the list is narrowed to, if any. Named in the sentence
+  /// because without it the sentence is false: filtered to Dressings, a
+  /// search for guacamole said "nothing on this menu matches" — and the menu
+  /// has guacamole, one section over.
+  final String? section;
+
+  /// Widen to the whole menu, keeping the search. Null when there is no
+  /// section to widen out of.
+  final VoidCallback? onWiden;
+
   final VoidCallback onClear;
   final double gutter;
 
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
+    final String typed = query.trim();
+    final String? within = section;
+    final String said;
+    if (typed.isEmpty) {
+      said = 'Nothing is left in ${within ?? 'this menu'}.';
+    } else if (within == null) {
+      said = 'Nothing on this menu matches "$typed".';
+    } else {
+      said = 'Nothing in $within matches "$typed".';
+    }
+
     return Padding(
       padding: EdgeInsets.all(gutter * 2),
       child: Column(
@@ -597,13 +634,16 @@ class _NoMatches extends StatelessWidget {
           Icon(Icons.search_off, size: 36, color: colors.textMuted),
           const SizedBox(height: HearthSpacing.md),
           Text(
-            query.trim().isEmpty
-                ? 'Nothing on this menu matches that section.'
-                : 'Nothing on this menu matches "${query.trim()}".',
+            said,
             style: context.text.body.copyWith(color: colors.textSecondary),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: HearthSpacing.md),
+          if (onWiden case final VoidCallback widen)
+            TextButton(
+              onPressed: widen,
+              child: const Text('Search the whole menu'),
+            ),
           TextButton(onPressed: onClear, child: const Text('Show everything')),
         ],
       ),

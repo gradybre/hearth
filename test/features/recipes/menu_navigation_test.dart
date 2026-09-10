@@ -230,6 +230,71 @@ void main() {
     });
   });
 
+  testWidgets('the section rail grows with the text rather than squashing', (
+    WidgetTester tester,
+  ) async {
+    // The rail was a fixed 60pt box with the chips centred in it, so at 3x
+    // the chip did not overflow — it was *constrained*, which is quieter and
+    // no better: it wants 78 points and was given 56, the same 56 it got at
+    // 2x and eight more than at ordinary text. Dynamic type is honoured, not
+    // capped (spec §6.3).
+    //
+    // One pump, and the two facts that settle it: the chip is past the old
+    // ceiling, and the rail is at least as tall as the chip it holds. A
+    // second `pumpHearthApp` in the same test would leave the first app's
+    // widgets standing for the finder to read.
+    await pumpHearthApp(tester, foods: longMenu(), textScale: 3);
+    await openMenu(tester);
+
+    final double chip = tester.getSize(find.byType(FilterChip).first).height;
+    final double around = tester.getSize(rail()).height;
+
+    expect(
+      chip,
+      greaterThan(60),
+      reason: 'the chip is $chip points at 3x — still squashed',
+    );
+    expect(
+      around,
+      greaterThanOrEqualTo(chip),
+      reason: 'the rail is $around points around a $chip point chip',
+    );
+  });
+
+  testWidgets('a search inside a section says which section it searched', (
+    WidgetTester tester,
+  ) async {
+    // Filter to Dressings, search for guacamole, and "Nothing on this menu
+    // matches" is simply false: guacamole is on this menu, one section over.
+    // The sentence has to name the narrowing that produced it, or it sends
+    // somebody off to add a food they already have.
+    await pumpHearthApp(tester, foods: longMenu());
+    await openMenu(tester);
+    await jumpTo(tester, 'Dressings');
+    await search(tester, 'guac');
+
+    expect(find.textContaining('Nothing in Dressings'), findsOneWidget);
+    expect(
+      find.textContaining('Nothing on this menu matches'),
+      findsNothing,
+      reason: 'it said the menu had no guacamole, and the menu does',
+    );
+  });
+
+  testWidgets('and searching the whole menu from there finds it', (
+    WidgetTester tester,
+  ) async {
+    await pumpHearthApp(tester, foods: longMenu());
+    await openMenu(tester);
+    await jumpTo(tester, 'Dressings');
+    await search(tester, 'guac');
+
+    await tester.tap(find.text('Search the whole menu'));
+    await pumpFrames(tester, frames: 12);
+
+    expect(find.text('Guacamole'), findsOneWidget);
+  });
+
   // The take-out control's move off the rows is asserted where the rest of
   // the deduction behaviour lives, in eat_out_builder_test.dart — beside the
   // rule it changed rather than in a second place that would drift from it.
