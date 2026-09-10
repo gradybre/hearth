@@ -217,6 +217,38 @@ class ServingDraft {
     id,
   ];
 
+  /// For the local draft record (review N01).
+  ///
+  /// Hand-written, and held honest by the round-trip test: it rebuilds a
+  /// serving with every field set to something other than its default and
+  /// asserts the result is `==` to what went in. A field in [_props] and not
+  /// here fails that test.
+  Map<String, Object?> toJson() => <String, Object?>{
+    'amount': amount,
+    'unit_id': unitId,
+    'kcal': kcal,
+    'protein': protein,
+    'carbs': carbs,
+    'fat': fat,
+    'fiber': fiber,
+    'sodium': sodium,
+    'cholesterol': cholesterol,
+    'id': id,
+  };
+
+  static ServingDraft fromJson(Map<String, Object?> json) => ServingDraft(
+    amount: '${json['amount'] ?? ''}',
+    unitId: '${json['unit_id'] ?? ''}',
+    kcal: '${json['kcal'] ?? ''}',
+    protein: '${json['protein'] ?? ''}',
+    carbs: '${json['carbs'] ?? ''}',
+    fat: '${json['fat'] ?? ''}',
+    fiber: '${json['fiber'] ?? ''}',
+    sodium: '${json['sodium'] ?? ''}',
+    cholesterol: '${json['cholesterol'] ?? ''}',
+    id: json['id'] as String?,
+  );
+
   @override
   bool operator ==(Object other) =>
       other is ServingDraft &&
@@ -647,6 +679,50 @@ class FoodDraft {
     isZeroCalorie,
     isModifier,
   ];
+
+  /// For the local draft record (review N01). See [ServingDraft.toJson].
+  Map<String, Object?> toJson() => <String, Object?>{
+    'name': name,
+    'brand': brand,
+    'menu_group': menuGroup,
+    'menu_order': menuOrder,
+    'store_tag': storeTag,
+    'walmart_item_id': walmartItemId,
+    'pack_size': packSize,
+    'barcode': barcode,
+    'servings': <Map<String, Object?>>[
+      for (final ServingDraft serving in servings) serving.toJson(),
+    ],
+    'existing_id': existingId,
+    'source': source.name,
+    'is_default': isDefault,
+    'is_zero_calorie': isZeroCalorie,
+    'is_modifier': isModifier,
+  };
+
+  static FoodDraft fromJson(Map<String, Object?> json) => FoodDraft(
+    name: '${json['name'] ?? ''}',
+    brand: '${json['brand'] ?? ''}',
+    menuGroup: '${json['menu_group'] ?? ''}',
+    menuOrder: (json['menu_order'] as num?)?.toInt(),
+    storeTag: '${json['store_tag'] ?? ''}',
+    walmartItemId: '${json['walmart_item_id'] ?? ''}',
+    packSize: '${json['pack_size'] ?? ''}',
+    barcode: '${json['barcode'] ?? ''}',
+    servings: <ServingDraft>[
+      for (final Object? serving
+          in json['servings'] as List<Object?>? ?? const <Object?>[])
+        if (serving is Map<String, Object?>) ServingDraft.fromJson(serving),
+    ],
+    existingId: json['existing_id'] as String?,
+    source: FoodSource.values.firstWhere(
+      (FoodSource s) => s.name == json['source'],
+      orElse: () => FoodSource.manual,
+    ),
+    isDefault: json['is_default'] == true,
+    isZeroCalorie: json['is_zero_calorie'] == true,
+    isModifier: json['is_modifier'] == true,
+  );
 
   @override
   bool operator ==(Object other) =>

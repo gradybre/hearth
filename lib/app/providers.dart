@@ -39,6 +39,7 @@ import '../data/auth/supabase_auth_gateway.dart';
 import '../data/local/collection_store.dart';
 import '../data/local/cook_session_store.dart';
 import '../data/local/cook_timer_store.dart';
+import '../data/local/editor_draft_store.dart';
 import '../data/local/food_profile_store.dart';
 import '../data/local/food_store.dart';
 import '../data/local/hearth_database.dart';
@@ -929,6 +930,18 @@ final FutureProvider<DateTime?> lastFullSyncProvider =
       ref.watch(syncControllerProvider);
       return ref.watch(syncCheckpointsProvider).lastFullPass();
     });
+
+/// Work in progress in an editor, kept across an interruption (review N01).
+///
+/// Scoped to whoever is signed in, so a sign-out and a sign-in does not offer
+/// one person the other's half-written recipe.
+final Provider<EditorDraftStore> editorDraftStoreProvider =
+    Provider<EditorDraftStore>(
+      (Ref ref) => EditorDraftStore(
+        ref.watch(databaseProvider),
+        userId: ref.watch(currentUserIdProvider),
+      ),
+    );
 
 final Provider<DataExport> dataExportProvider = Provider<DataExport>(
   (Ref ref) => DataExport(

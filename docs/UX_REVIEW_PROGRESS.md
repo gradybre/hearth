@@ -27,9 +27,9 @@ Status: `—` not started · `~` in progress · `✓` done · `n/a` not applicab
 
 | ID | What | Impl | Test | Review | Deployed | Verified |
 |---|---|---|---|---|---|---|
-| F01a | Dirty-state guard on recipe/food editors | — | — | — | n/a | — |
-| F01b | Recoverable local drafts (N01) | — | — | — | — | — |
-| F02 | Targeted shopping Undo | — | — | — | n/a | — |
+| F01a | Dirty-state guard on recipe/food editors | ✓ | ✓ | ~ #49 | n/a | — |
+| F01b | Recoverable local drafts (N01) | ✓ | ✓ | ~ #51 | B | — |
+| F02 | Targeted shopping Undo | ✓ | ✓ | ~ #50 | n/a | — |
 | F03 | PDF page states: selected/rendered/extracted/accepted | — | — | — | n/a | — |
 | F04 | Persistent per-row uncertainty; retry-safe batch save | — | — | — | — | — |
 | F05 | Calendar-derived day labels; no constant "Today" card | — | — | — | n/a | — |
@@ -43,7 +43,7 @@ Status: `—` not started · `~` in progress · `✓` done · `n/a` not applicab
 
 | ID | What | Impl | Test | Review | Deployed | Verified |
 |---|---|---|---|---|---|---|
-| N01 | Recoverable drafts | — | — | — | — | — |
+| N01 | Recoverable drafts | ✓ | ✓ | ~ #51 | B | — |
 | N02 | Move/copy a single meal entry | — | — | — | n/a | — |
 | N03 | Usual restaurant orders | — | — | — | n/a | — |
 | N04 | Recipe nutrition repair queue | — | — | — | n/a | — |
@@ -61,7 +61,7 @@ Deferred by Brendan, not to be built: N06, N07, N09, N10, N11, N12.
 | 3 | Direct gram/ounce entry and Move/Copy | — |
 | 4 | Restaurant search, selected review, usual orders | — |
 | 5 | Settings index; shopping prep separated from the trip | — |
-| 6 | Lost-edit and unsafe-Undo protection before visual work | — |
+| 6 | Lost-edit and unsafe-Undo protection before visual work | ✓ (#49/#50/#51) |
 | 7 | Import bookkeeping and operational gates before trial | — |
 | 8 | Optional features approved individually | ✓ (N06/N07/N09–N12 deferred) |
 
@@ -86,6 +86,18 @@ Deferred by Brendan, not to be built: N06, N07, N09, N10, N11, N12.
   unaffected.
 - **Units** display preference: *As written / Metric / Imperial* (§7.5).
 - §9.3 acceptance targets adopted as proposed.
+
+## Schema
+
+Local `schemaVersion` is **26** — `editor_drafts`, added by #51. Device-local
+and never synced, so there is **no Supabase migration and nothing to push**;
+`Deployed` is marked `B` on the draft rows only because installing a build
+carrying the local migration is Brendan's step, not because a server needs
+anything.
+
+`drift_schemas/` now holds v25 and v26, which is what made the first genuinely
+historical migration test possible — v25 built as v25 was, migrated for real,
+checked against v26.
 
 ## Standing limits
 

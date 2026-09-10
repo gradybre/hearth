@@ -76,6 +76,26 @@ class DraftSection {
     existingId,
   ];
 
+  /// For the local draft record (review N01).
+  ///
+  /// Hand-written rather than generated, and held honest by the round-trip
+  /// test: it rebuilds a section with every field set to something other than
+  /// its default and asserts the result is `==` to what went in, which the
+  /// equality below decides. A field in [_props] and not here fails that test.
+  Map<String, Object?> toJson() => <String, Object?>{
+    'name': name,
+    'ingredients': ingredientsText,
+    'directions': directionsText,
+    'existing_id': existingId,
+  };
+
+  static DraftSection fromJson(Map<String, Object?> json) => DraftSection(
+    name: '${json['name'] ?? ''}',
+    ingredientsText: '${json['ingredients'] ?? ''}',
+    directionsText: '${json['directions'] ?? ''}',
+    existingId: json['existing_id'] as String?,
+  );
+
   @override
   bool operator ==(Object other) =>
       other is DraftSection &&
@@ -162,6 +182,62 @@ class RecipeDraft {
     matches,
     noMatch,
   ];
+
+  /// For the local draft record (review N01). See [DraftSection.toJson].
+  Map<String, Object?> toJson() => <String, Object?>{
+    'title': title,
+    'servings': servings,
+    'sections': <Map<String, Object?>>[
+      for (final DraftSection section in sections) section.toJson(),
+    ],
+    'prep_minutes': prepMinutes,
+    'cook_minutes': cookMinutes,
+    'cuisine': cuisine,
+    'kind': kind.name,
+    'tags': tags,
+    'notes': notes,
+    'existing_id': existingId,
+    'icon_svg': iconSvg,
+    'matches': matches,
+    'no_match': noMatch.toList(),
+  };
+
+  static RecipeDraft fromJson(Map<String, Object?> json) => RecipeDraft(
+    title: '${json['title'] ?? ''}',
+    servings: (json['servings'] as num?)?.toDouble() ?? 1,
+    sections: <DraftSection>[
+      for (final Object? section
+          in json['sections'] as List<Object?>? ?? const <Object?>[])
+        if (section is Map<String, Object?>) DraftSection.fromJson(section),
+    ],
+    prepMinutes: (json['prep_minutes'] as num?)?.toInt(),
+    cookMinutes: (json['cook_minutes'] as num?)?.toInt(),
+    cuisine: json['cuisine'] as String?,
+    kind: RecipeKind.values.firstWhere(
+      (RecipeKind k) => k.name == json['kind'],
+      orElse: () => RecipeKind.cooked,
+    ),
+    tags: <String>[
+      for (final Object? tag
+          in json['tags'] as List<Object?>? ?? const <Object?>[])
+        '$tag',
+    ],
+    notes: json['notes'] as String?,
+    existingId: json['existing_id'] as String?,
+    iconSvg: json['icon_svg'] as String?,
+    matches: <String, String>{
+      for (final MapEntry<Object?, Object?> entry
+          in (json['matches'] as Map<Object?, Object?>? ??
+                  const <Object?, Object?>{})
+              .entries)
+        '${entry.key}': '${entry.value}',
+    },
+    noMatch: <String>{
+      for (final Object? key
+          in json['no_match'] as List<Object?>? ?? const <Object?>[])
+        '$key',
+    },
+  );
 
   @override
   bool operator ==(Object other) =>
