@@ -223,7 +223,9 @@ Deno.test('settling clears the reservation and counts what it cost', async () =>
   const report = await budget.settle(decision.ticket, usage);
 
   assertEquals(ledger.outstanding, 0, 'the reservation outlived the call');
-  assertEquals(ledger.spent, costOf(usage));
+  // Six places, because that is what goes on the wire — the column is
+  // numeric(10,4) and a float's last bits are nobody's money.
+  assertEquals(ledger.spent, Number(costOf(usage).toFixed(6)));
   assertEquals(report?.spent_usd, Number(costOf(usage).toFixed(4)));
 });
 
@@ -244,7 +246,7 @@ Deno.test('a billed answer nobody could read is still counted', async () => {
     new BilledFailure('That was too long to read in one go.', usage),
   );
 
-  assertEquals(ledger.spent, costOf(usage));
+  assertEquals(ledger.spent, Number(costOf(usage).toFixed(6)));
   assertEquals(ledger.outstanding, 0);
 });
 

@@ -1585,3 +1585,131 @@ begin
   raise notice 'live fixture guards passed';
 end;
 $$;
+
+-- ── The AI ceiling reserves before it spends (spec §3, §8.1) ───────────────
+--
+-- `ai_usage_this_month` was a read, and a read is a fact about the past:
+-- twenty requests arriving together all saw the same pre-call total and all
+-- proceeded. The reservation is what the *next* request can see, so this is
+-- the guard that matters — that a second call counts the first one's claim,
+-- that a claim nobody settles expires instead of holding the money for the
+-- month, and that a client cannot reach any of it.
+do $$
+declare
+  v_month date := date_trunc('month', now())::date;
+  v_had boolean;
+  v_id uuid;
+  v_second uuid;
+  v_allowed boolean;
+  v_spent numeric;
+  v_offenders text;
+begin
+  select exists(select 1 from public.ai_usage where month = v_month) into v_had;
+
+  -- Under a $1 ceiling, two 60-cent claims fit and the third does not — but
+  -- only because what is outstanding is counted. Without that, all three pass
+  -- against a table that says nothing has been spent.
+  select reservation_id, allowed into v_id, v_allowed
+    from public.reserve_ai_spend(0.60, 'extract', 1.00, 300);
+  if not v_allowed then
+    raise exception 'the first claim of the month was refused';
+  end if;
+
+  select reservation_id, allowed into v_second, v_allowed
+    from public.reserve_ai_spend(0.60, 'extract', 1.00, 300);
+  if not v_allowed then
+    raise exception 'the second claim was refused with 40 cents still free';
+  end if;
+
+  select allowed into v_allowed
+    from public.reserve_ai_spend(0.60, 'extract', 1.00, 300);
+  if v_allowed then
+    raise exception 'a third claim passed a ceiling already fully reserved';
+  end if;
+
+  -- Settling records what it really cost and gives the claim back.
+  perform public.settle_ai_spend(v_id, 1000, 2000, 0.0330);
+  if exists (select 1 from public.ai_reservations where id = v_id) then
+    raise exception 'a settled reservation outlived its call';
+  end if;
+  select cost_usd into v_spent from public.ai_usage where month = v_month;
+  if v_spent <> 0.0330 then
+    raise exception 'settling recorded % rather than 0.0330', v_spent;
+  end if;
+
+  -- Releasing gives it back without recording anything.
+  perform public.release_ai_spend(v_second);
+  if exists (select 1 from public.ai_reservations where id = v_second) then
+    raise exception 'a released reservation was left standing';
+  end if;
+  select cost_usd into v_spent from public.ai_usage where month = v_month;
+  if v_spent <> 0.0330 then
+    raise exception 'releasing charged for a call that never happened';
+  end if;
+
+  -- A ceiling of zero or less is a misconfiguration, not permission. Checked
+  -- here, with nothing outstanding, so it is the zero that refuses and not
+  -- the claims above it.
+  select allowed into v_allowed
+    from public.reserve_ai_spend(0.60, 'extract', 0, 300);
+  if v_allowed then
+    raise exception 'a ceiling of zero was read as unlimited';
+  end if;
+
+  -- And one that nobody settles is swept by the next claim rather than
+  -- holding the money until the month turns over. Deliberately larger than
+  -- the whole ceiling: at 90 cents it would be refused-or-not for the wrong
+  -- reason, and the guard would pass whether the sweep ran or not.
+  insert into public.ai_reservations (month, mode, amount_usd, expires_at)
+  values (v_month, 'extract', 1.50, now() - interval '1 minute');
+  select allowed into v_allowed
+    from public.reserve_ai_spend(0.60, 'extract', 1.00, 300);
+  if not v_allowed then
+    raise exception 'an expired reservation was still holding the ceiling up';
+  end if;
+
+  -- Nothing this block did is anybody's real spending.
+  delete from public.ai_reservations where month = v_month;
+  if v_had then
+    update public.ai_usage
+       set calls = calls - 1, input_tokens = input_tokens - 1000,
+           output_tokens = output_tokens - 2000, cost_usd = cost_usd - 0.0330
+     where month = v_month;
+  else
+    delete from public.ai_usage where month = v_month;
+  end if;
+
+  -- The ledger is the security boundary the ceiling rests on: a client that
+  -- could write either table, or call either function, could raise its own.
+  select string_agg(p.tablename || '.' || p.policyname, ', ') into v_offenders
+    from pg_policies p
+   where p.schemaname = 'public'
+     and p.tablename in ('ai_usage', 'ai_reservations')
+     and p.cmd <> 'SELECT';
+  if v_offenders is not null then
+    raise exception 'the AI ledger has a write policy: %', v_offenders;
+  end if;
+
+  if has_table_privilege('authenticated', 'public.ai_reservations', 'INSERT')
+     or has_table_privilege('authenticated', 'public.ai_reservations', 'DELETE')
+     or has_table_privilege('anon', 'public.ai_reservations', 'INSERT')
+     or has_table_privilege('anon', 'public.ai_reservations', 'DELETE') then
+    raise exception 'a client can write the reservation ledger directly';
+  end if;
+
+  if has_function_privilege(
+       'authenticated',
+       'public.reserve_ai_spend(numeric, text, numeric, integer)',
+       'EXECUTE')
+     or has_function_privilege(
+       'authenticated',
+       'public.settle_ai_spend(uuid, bigint, bigint, numeric)',
+       'EXECUTE')
+     or has_function_privilege(
+       'authenticated', 'public.release_ai_spend(uuid)', 'EXECUTE') then
+    raise exception 'a client can move the AI ledger itself';
+  end if;
+
+  raise notice 'AI budget reservation guards passed';
+end;
+$$;

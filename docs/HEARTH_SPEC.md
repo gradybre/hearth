@@ -674,6 +674,7 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
 ### 8.5 Edge Functions
 - **Verify the caller's JWT** before calling Claude/USDA, so only authenticated household members can trigger paid AI/lookup calls (protects the API budget). Ties directly to the AI cost/usage guardrail (§3).
 - **Enforce the monthly AI ceiling** here (soft cap: warn at 75%, refuse past 100% until lifted), with Anthropic billing limits as the hard backstop.
+- **The ceiling fails closed, and it reserves before it spends.** A spend counter that cannot be read refuses the paid modes — import, generation, menu and label reading — rather than treating an unreadable total as a month that has cost nothing; "used up" and "cannot tell" are different sentences, because they are fixed in different places. And the check is a reservation rather than a read: a read is a fact about the past, so N requests arriving together would all clear the same pre-call total. Each call claims a conservative upper bound before dispatch and settles the real cost afterwards, with unsettled claims expiring so a crashed call cannot hold the budget for the rest of the month. Logging, cooking and everything typed by hand never reach this function and are unaffected by any of it.
 
 ### 8.6 Secrets hygiene (Claude Code workflow)
 - Real keys in **`.env.local`, gitignored**; server secrets via `supabase secrets set`.

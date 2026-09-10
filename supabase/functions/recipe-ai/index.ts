@@ -24,10 +24,11 @@
 // this project's quota.
 
 import {
+  BilledFailure,
+  Budget,
   ceilingUsd,
-  checkBudget,
-  ICON_CEILING_FRACTION,
-  recordUsage,
+  maxOutputTokens,
+  type Ticket,
 } from './budget.ts';
 import { fetchGuarded, UrlRefused } from './url_guard.ts';
 
@@ -634,33 +635,21 @@ Deno.serve(async (request: Request): Promise<Response> => {
     );
   }
 
+  const budget = new Budget(callRpc, ceilingUsd(Deno.env.get));
+  // Reserved before the call, not merely counted after it: refusing to spend
+  // is the whole point, and a check that runs afterwards has already spent it
+  // (spec §3, §8.1). The reservation is what a second request arriving in the
+  // same second can see — a read on its own is a fact about the past.
+  const decision = await budget.reserve(mode);
+  if (!decision.allowed) {
+    return json(
+      { error: decision.error, usage: decision.report },
+      decision.status,
+    );
+  }
+  const ticket: Ticket = decision.ticket;
+
   try {
-    // Before the call, not after: refusing to spend is the whole point, and a
-    // check that runs afterwards has already spent it (spec §3, §8.1).
-    const budget = await checkBudget(callRpc, ceilingUsd(Deno.env.get));
-    if (budget.exhausted) {
-      return json({
-        // Not toFixed(2) on the ceiling: a small one rounds to "$0.00",
-        // which reads as a bug rather than as a limit.
-        error: `This month's AI budget is used up ($${
-          budget.spent.toFixed(2)
-        } of $${budget.ceiling}). Raise AI_MONTHLY_CEILING_USD to carry on.`,
-        usage: budget.report,
-      }, 429);
-    }
-
-    // A picture is the first thing to yield. Checked separately from the
-    // ceiling above rather than folded into it, so the number that stops the
-    // decorative work stands next to the number that stops everything.
-    if (mode === 'icon' && budget.fraction >= ICON_CEILING_FRACTION) {
-      return json({
-        error: 'Recipe icons are paused until next month: they stop at ' +
-          `${Math.round(ICON_CEILING_FRACTION * 100)}% of the AI budget so ` +
-          'they can never be the reason an import is refused.',
-        usage: budget.report,
-      }, 429);
-    }
-
     const content = mode === 'icon'
       ? iconContent((body.title ?? '').trim())
       : mode === 'shopping'
@@ -703,24 +692,19 @@ Deno.serve(async (request: Request): Promise<Response> => {
       ? LABEL_TOOL
       : RECIPE_TOOL;
 
-    // A menu is the one mode whose answer is as long as its input: a
-    // six-page guide is 150 rows, and at 4,096 tokens the transcription stops
-    // around row 60 — a short list that looks complete. The others answer
-    // with one recipe, one label, one basket.
-    // An icon is a few hundred bytes of markup, so a small ceiling is the
-    // cheapest guard against a model that decides to trace a photograph.
+    // The output cap lives in budget.ts, beside the reservation computed from
+    // it: two copies of this number would drift, and the one that drifted
+    // would be the one holding the ceiling up.
     const answer = await ask(
       system,
       content,
       key,
       tool,
-      mode === 'menu' ? 16_000 : mode === 'icon' ? 1500 : 4096,
+      maxOutputTokens(mode),
     );
-    const usage = await recordUsage(
-      callRpc,
-      ceilingUsd(Deno.env.get),
-      answer.usage,
-    );
+    // Settled with what it actually cost, which also gives the reservation
+    // back — the estimate was deliberately the pessimistic one.
+    const usage = await budget.settle(ticket, answer.usage);
 
     const shaped = mode === 'icon'
       ? shapeIcon(answer.input)
@@ -733,6 +717,11 @@ Deno.serve(async (request: Request): Promise<Response> => {
       : shape(answer.input);
     return json({ ...shaped, usage });
   } catch (error) {
+    // A 200 from Anthropic is billed whether or not anything readable came
+    // back out of it, so a `BilledFailure` is settled like a success; a photo
+    // that was too large or a link that was refused never reached the model,
+    // and its reservation goes straight back.
+    await budget.settleOrRelease(ticket, error);
     // `${error}` on an Error stringifies as "Error: bad request: …", so the
     // prefix check never matched: every malformed request came back 502 with
     // "Error: bad request:" showing through to the user. A 502 is retryable
@@ -1128,15 +1117,24 @@ async function ask(
     (c: { type?: string }) => c?.type === 'tool_use',
   );
   if (!block?.input) {
+    // Both of these are past a 200 that carried a usage block, so both were
+    // paid for. They throw carrying it, because the recording used to sit
+    // after this function returned and so never ran — for the longest input
+    // and the fullest output the month sees.
+    //
     // A cut-off tool call often cannot be parsed at all, and "nothing
     // readable" would send the user back to rephotograph a page that was
     // fine.
     if (truncated) {
-      throw new Error(
+      throw new BilledFailure(
         'That was too long to read in one go. Try fewer pages at a time.',
+        payload?.usage ?? null,
       );
     }
-    throw new Error('Claude returned nothing readable');
+    throw new BilledFailure(
+      'Claude returned nothing readable',
+      payload?.usage ?? null,
+    );
   }
 
   // The token counts were always in this payload and were always thrown away.
@@ -1146,31 +1144,43 @@ async function ask(
 
 /// Calls a Postgres function with the secret key.
 ///
-/// The secret key, not the caller's JWT: `ai_usage` has no write policy on
-/// purpose, because a client that could edit it could raise its own ceiling.
-// deno-lint-ignore no-explicit-any
-async function callRpc(name: string, args: unknown): Promise<any> {
+/// The secret key, not the caller's JWT: `ai_usage` and `ai_reservations` have
+/// no write policy on purpose, because a client that could edit either could
+/// raise its own ceiling.
+///
+/// Throws rather than answering null when it cannot get through. It used to
+/// answer null for a missing env var, a non-OK response and any throw alike,
+/// and the budget read that as a month that had cost nothing — so the ceiling
+/// vanished exactly when the database was unwell. `Budget` decides what to do
+/// about each failure; this only reports one.
+async function callRpc(
+  name: string,
+  args: Record<string, unknown>,
+  // deno-lint-ignore no-explicit-any
+): Promise<any> {
   const url = Deno.env.get('SUPABASE_URL');
   const secret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (!url || !secret) return null;
-
-  try {
-    const response = await fetch(`${url}/rest/v1/rpc/${name}`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        apikey: secret,
-        authorization: `Bearer ${secret}`,
-      },
-      body: JSON.stringify(args),
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!response.ok) return null;
-    return await response.json();
-  } catch {
-    // See checkBudget: counting is best-effort, refusing is not.
-    return null;
+  if (!url || !secret) {
+    throw new Error(
+      'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set, so the AI ' +
+        'usage ledger cannot be read',
+    );
   }
+
+  const response = await fetch(`${url}/rest/v1/rpc/${name}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      apikey: secret,
+      authorization: `Bearer ${secret}`,
+    },
+    body: JSON.stringify(args),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) {
+    throw new Error(`${name} answered ${response.status}`);
+  }
+  return await response.json();
 }
 
 /// Narrows what the model returned to the shape the app is promised.
