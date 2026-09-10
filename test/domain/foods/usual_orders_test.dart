@@ -147,6 +147,52 @@ void main() {
     );
   });
 
+  test('a favourite is offered before a more recent one', () {
+    // The review asks for Favourite/Recent ordering, and recent is inherited
+    // — the library is already `updatedAt desc`. Favourite is the half that
+    // has to be asked for, and it was not.
+    final Recipe recent = order(
+      'Something I had yesterday',
+      kind: RecipeKind.eatenOut,
+      notes: 'Chopt',
+    );
+    final Recipe loved = order(
+      'My usual bowl',
+      kind: RecipeKind.eatenOut,
+      notes: 'Chopt',
+    );
+
+    expect(
+      RestaurantMenu.usualOrders(
+        restaurant: 'Chopt',
+        // Library order: the recent one first.
+        recipes: <Recipe>[recent, loved],
+        foods: library(),
+        favourites: <String>{loved.id},
+      ).map((Recipe r) => r.id),
+      <String>[loved.id, recent.id],
+    );
+  });
+
+  test('and only a few are offered, not a whole history', () {
+    // They sit above the first menu heading, in the one change whose subject
+    // is reaching the menu faster. Fifteen cards there would be the problem
+    // wearing a different hat.
+    final List<Recipe> many = <Recipe>[
+      for (int i = 0; i < 12; i++)
+        order('Order $i', kind: RecipeKind.eatenOut, notes: 'Chopt'),
+    ];
+
+    expect(
+      RestaurantMenu.usualOrders(
+        restaurant: 'Chopt',
+        recipes: many,
+        foods: library(),
+      ),
+      hasLength(RestaurantMenu.usualOrdersShown),
+    );
+  });
+
   test('nothing saved means nothing offered', () {
     expect(
       RestaurantMenu.usualOrders(

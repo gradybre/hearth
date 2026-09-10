@@ -283,6 +283,9 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
                   foods: <String, Food>{
                     for (final Food food in library) food.id: food,
                   },
+                  favourites:
+                      ref.watch(favoriteRecipeIdsProvider).value ??
+                      const <String>{},
                 ),
                 picks: _picks,
                 hasSomethingToApplyTo: _hasSomethingToApplyTo(menu),
@@ -813,7 +816,12 @@ class _SelectedBar extends StatelessWidget {
       textDirection: TextDirection.ltr,
       textScaler: MediaQuery.textScalerOf(context),
     )..layout();
-    return painter.width;
+    final double width = painter.width;
+    // A laid-out paragraph holds native resources until it is released, and
+    // this runs twice on every build of the bar — which is every pick, every
+    // unpick and every change of portion.
+    painter.dispose();
+    return width;
   }
 }
 
