@@ -23,6 +23,13 @@
 // verify_jwt is on (the default), so only a signed-in Hearth user can spend
 // this project's quota.
 
+import {
+  BilledFailure,
+  Budget,
+  ceilingUsd,
+  maxOutputTokens,
+  type Ticket,
+} from './budget.ts';
 import { fetchGuarded, UrlRefused } from './url_guard.ts';
 
 const ANTHROPIC = 'https://api.anthropic.com/v1/messages';
@@ -45,40 +52,11 @@ const MAX_TOTAL_BYTES = 18 * 1024 * 1024;
 const MAX_MESSAGES = 40;
 const MAX_URL_BYTES = 2 * 1024 * 1024;
 
-/// USD per million tokens for MODEL. Change both together with MODEL.
-///
-/// Approximate on purpose: the ceiling is a guardrail, not an invoice, and
-/// Anthropic's own billing limit is the number that actually binds. Being a
-/// little pessimistic here is the safe direction to be wrong in.
-const INPUT_USD_PER_MTOK = 3;
-const OUTPUT_USD_PER_MTOK = 15;
-
-/// Above this share of the ceiling, answers carry a warning; at or above 1,
-/// they are refused (spec §3, §8.1).
-const WARN_AT = 0.75;
-
-/// Where a *decorative* call stops, well before the useful ones do.
-///
-/// A recipe icon is the only thing this function produces that nobody needs.
-/// Giving it the same ceiling as import would mean a month of pictures could
-/// be the reason a recipe import is refused at 90% of the budget — the
-/// picture having spent the money the import needed. So it yields first, and
-/// by a wide margin: half the ceiling still buys hundreds of sketches, and it
-/// leaves the other half for the features the app is actually for.
-const ICON_CEILING_FRACTION = 0.5;
-
 /// What a stored icon may weigh, mirroring `SketchIcon.maxMarkupLength` in
 /// the app and the check constraint on `recipes.icon_svg`. Three copies of
 /// one number, because the client is public and the database is the only one
 /// of the three that cannot be talked round.
 const MAX_ICON_LENGTH = 4096;
-
-/// The default when AI_MONTHLY_CEILING_USD is unset.
-///
-/// A number rather than "unlimited", deliberately. §8 names a dev-time retry
-/// loop as the real risk, and a loop that runs into an unset variable is a
-/// loop with no ceiling at all — which is the failure this exists to stop.
-const DEFAULT_CEILING_USD = 25;
 
 /// The one shape both modes return, and the only thing the app parses.
 ///
@@ -657,33 +635,21 @@ Deno.serve(async (request: Request): Promise<Response> => {
     );
   }
 
+  const budget = new Budget(callRpc, ceilingUsd(Deno.env.get));
+  // Reserved before the call, not merely counted after it: refusing to spend
+  // is the whole point, and a check that runs afterwards has already spent it
+  // (spec §3, §8.1). The reservation is what a second request arriving in the
+  // same second can see — a read on its own is a fact about the past.
+  const decision = await budget.reserve(mode);
+  if (!decision.allowed) {
+    return json(
+      { error: decision.error, usage: decision.report },
+      decision.status,
+    );
+  }
+  const ticket: Ticket = decision.ticket;
+
   try {
-    // Before the call, not after: refusing to spend is the whole point, and a
-    // check that runs afterwards has already spent it (spec §3, §8.1).
-    const budget = await checkBudget();
-    if (budget.exhausted) {
-      return json({
-        // Not toFixed(2) on the ceiling: a small one rounds to "$0.00",
-        // which reads as a bug rather than as a limit.
-        error: `This month's AI budget is used up ($${
-          budget.spent.toFixed(2)
-        } of $${budget.ceiling}). Raise AI_MONTHLY_CEILING_USD to carry on.`,
-        usage: budget.report,
-      }, 429);
-    }
-
-    // A picture is the first thing to yield. Checked separately from the
-    // ceiling above rather than folded into it, so the number that stops the
-    // decorative work stands next to the number that stops everything.
-    if (mode === 'icon' && budget.fraction >= ICON_CEILING_FRACTION) {
-      return json({
-        error: 'Recipe icons are paused until next month: they stop at ' +
-          `${Math.round(ICON_CEILING_FRACTION * 100)}% of the AI budget so ` +
-          'they can never be the reason an import is refused.',
-        usage: budget.report,
-      }, 429);
-    }
-
     const content = mode === 'icon'
       ? iconContent((body.title ?? '').trim())
       : mode === 'shopping'
@@ -726,20 +692,19 @@ Deno.serve(async (request: Request): Promise<Response> => {
       ? LABEL_TOOL
       : RECIPE_TOOL;
 
-    // A menu is the one mode whose answer is as long as its input: a
-    // six-page guide is 150 rows, and at 4,096 tokens the transcription stops
-    // around row 60 — a short list that looks complete. The others answer
-    // with one recipe, one label, one basket.
-    // An icon is a few hundred bytes of markup, so a small ceiling is the
-    // cheapest guard against a model that decides to trace a photograph.
+    // The output cap lives in budget.ts, beside the reservation computed from
+    // it: two copies of this number would drift, and the one that drifted
+    // would be the one holding the ceiling up.
     const answer = await ask(
       system,
       content,
       key,
       tool,
-      mode === 'menu' ? 16_000 : mode === 'icon' ? 1500 : 4096,
+      maxOutputTokens(mode),
     );
-    const usage = await recordUsage(answer.usage);
+    // Settled with what it actually cost, which also gives the reservation
+    // back — the estimate was deliberately the pessimistic one.
+    const usage = await budget.settle(ticket, answer.usage);
 
     const shaped = mode === 'icon'
       ? shapeIcon(answer.input)
@@ -752,6 +717,11 @@ Deno.serve(async (request: Request): Promise<Response> => {
       : shape(answer.input);
     return json({ ...shaped, usage });
   } catch (error) {
+    // A 200 from Anthropic is billed whether or not anything readable came
+    // back out of it, so a `BilledFailure` is settled like a success; a photo
+    // that was too large or a link that was refused never reached the model,
+    // and its reservation goes straight back.
+    await budget.settleOrRelease(ticket, error);
     // `${error}` on an Error stringifies as "Error: bad request: …", so the
     // prefix check never matched: every malformed request came back 502 with
     // "Error: bad request:" showing through to the user. A 502 is retryable
@@ -1147,15 +1117,24 @@ async function ask(
     (c: { type?: string }) => c?.type === 'tool_use',
   );
   if (!block?.input) {
+    // Both of these are past a 200 that carried a usage block, so both were
+    // paid for. They throw carrying it, because the recording used to sit
+    // after this function returned and so never ran — for the longest input
+    // and the fullest output the month sees.
+    //
     // A cut-off tool call often cannot be parsed at all, and "nothing
     // readable" would send the user back to rephotograph a page that was
     // fine.
     if (truncated) {
-      throw new Error(
+      throw new BilledFailure(
         'That was too long to read in one go. Try fewer pages at a time.',
+        payload?.usage ?? null,
       );
     }
-    throw new Error('Claude returned nothing readable');
+    throw new BilledFailure(
+      'Claude returned nothing readable',
+      payload?.usage ?? null,
+    );
   }
 
   // The token counts were always in this payload and were always thrown away.
@@ -1163,101 +1142,45 @@ async function ask(
   return { input: block.input, usage: payload?.usage ?? null, truncated };
 }
 
-/// What the month has cost, and whether that is already too much.
-///
-/// A failure to read the counter is treated as "carry on": the ceiling is a
-/// guardrail, and a database hiccup that silently disabled recipe import
-/// would be a worse outcome than a call that should not have been made.
-/// Anthropic's own billing limit is still underneath this.
-async function checkBudget(): Promise<
-  {
-    exhausted: boolean;
-    fraction: number;
-    spent: number;
-    ceiling: number;
-    report: unknown;
-  }
-> {
-  const ceiling = Number(
-    Deno.env.get('AI_MONTHLY_CEILING_USD') ?? DEFAULT_CEILING_USD,
-  );
-  const spent = await callRpc('ai_usage_this_month', {}) ?? 0;
-  const fraction = ceiling > 0 ? Number(spent) / ceiling : 0;
-
-  return {
-    exhausted: fraction >= 1,
-    // Carried out rather than left inside `report`: a caller deciding whether
-    // *this* mode may spend needs the number, not a display object.
-    fraction,
-    spent: Number(spent),
-    ceiling,
-    report: {
-      spent_usd: Number(Number(spent).toFixed(4)),
-      ceiling_usd: ceiling,
-      fraction: Number(fraction.toFixed(4)),
-      // The app shows a quiet line at 75% rather than a dialog: a warning
-      // that interrupts every import is one nobody reads by the third time.
-      warn: fraction >= WARN_AT,
-    },
-  };
-}
-
-/// Adds what a call cost and returns the month's totals for the app to show.
-async function recordUsage(
-  usage: { input_tokens?: number; output_tokens?: number } | null,
-): Promise<unknown> {
-  const input = usage?.input_tokens ?? 0;
-  const output = usage?.output_tokens ?? 0;
-  const cost = (input / 1e6) * INPUT_USD_PER_MTOK +
-    (output / 1e6) * OUTPUT_USD_PER_MTOK;
-
-  const row = await callRpc('record_ai_usage', {
-    p_input_tokens: input,
-    p_output_tokens: output,
-    p_cost_usd: Number(cost.toFixed(6)),
-  });
-
-  const ceiling = Number(
-    Deno.env.get('AI_MONTHLY_CEILING_USD') ?? DEFAULT_CEILING_USD,
-  );
-  const spent = Number(row?.cost_usd ?? 0);
-  const fraction = ceiling > 0 ? spent / ceiling : 0;
-
-  return {
-    spent_usd: Number(spent.toFixed(4)),
-    ceiling_usd: ceiling,
-    fraction: Number(fraction.toFixed(4)),
-    warn: fraction >= WARN_AT,
-  };
-}
-
 /// Calls a Postgres function with the secret key.
 ///
-/// The secret key, not the caller's JWT: `ai_usage` has no write policy on
-/// purpose, because a client that could edit it could raise its own ceiling.
-// deno-lint-ignore no-explicit-any
-async function callRpc(name: string, args: unknown): Promise<any> {
+/// The secret key, not the caller's JWT: `ai_usage` and `ai_reservations` have
+/// no write policy on purpose, because a client that could edit either could
+/// raise its own ceiling.
+///
+/// Throws rather than answering null when it cannot get through. It used to
+/// answer null for a missing env var, a non-OK response and any throw alike,
+/// and the budget read that as a month that had cost nothing — so the ceiling
+/// vanished exactly when the database was unwell. `Budget` decides what to do
+/// about each failure; this only reports one.
+async function callRpc(
+  name: string,
+  args: Record<string, unknown>,
+  // deno-lint-ignore no-explicit-any
+): Promise<any> {
   const url = Deno.env.get('SUPABASE_URL');
   const secret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (!url || !secret) return null;
-
-  try {
-    const response = await fetch(`${url}/rest/v1/rpc/${name}`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        apikey: secret,
-        authorization: `Bearer ${secret}`,
-      },
-      body: JSON.stringify(args),
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!response.ok) return null;
-    return await response.json();
-  } catch {
-    // See checkBudget: counting is best-effort, refusing is not.
-    return null;
+  if (!url || !secret) {
+    throw new Error(
+      'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set, so the AI ' +
+        'usage ledger cannot be read',
+    );
   }
+
+  const response = await fetch(`${url}/rest/v1/rpc/${name}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      apikey: secret,
+      authorization: `Bearer ${secret}`,
+    },
+    body: JSON.stringify(args),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) {
+    throw new Error(`${name} answered ${response.status}`);
+  }
+  return await response.json();
 }
 
 /// Narrows what the model returned to the shape the app is promised.

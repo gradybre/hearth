@@ -121,3 +121,11 @@ jobs:
           docker exec -i supabase_db_hearth \
             psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
             < supabase/tests/schema_guards.sql
+
+      # And the half a single session cannot tell you either. `schema_guards`
+      # is one connection, so a lock-order bug is invisible from inside it:
+      # every statement it runs succeeds. This drives the AI ledger's reserve
+      # and settle from two connections at once and fails if Postgres has to
+      # break a tie between them.
+      - name: Lock order
+        run: ./supabase/tests/lock_order.sh
