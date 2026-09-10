@@ -91,24 +91,8 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   /// For a *new* portion that is the one this food was last logged in;
   /// for an existing entry it is the one that entry itself was typed in,
   /// which is a different question and deliberately never answered by the
-  /// former — see [_entryUnitPrefix].
+  /// former — see `PreferenceStore.logUnitForEntry`.
   String? _rememberedUnitId;
-
-  /// Where the remembered unit lives. Device-local, like the theme: which
-  /// words you type a portion in is a habit of the phone in your hand, and
-  /// pushing it to a partner would change their screen for no reason they
-  /// could see.
-  ///
-  /// One key per food, so somebody who weighs everything does not re-pick
-  /// grams every time.
-  static const String _foodUnitPrefix = 'plan.log_unit.food.';
-
-  /// And one per entry, written only when the portion was *not* typed in the
-  /// default serving. An entry logged in ounces has to re-open in ounces —
-  /// never in whatever that food has been typed in since — and the row itself
-  /// cannot say so: `servings` is a count of the default serving and nothing
-  /// else, which is exactly the invariant above.
-  static const String _entryUnitPrefix = 'plan.log_unit.entry.';
 
   /// The food this sheet is about, once the library has it.
   ///
@@ -150,7 +134,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     // record and there is none to clear.
     if (unit == null) return;
     final PreferenceStore preferences = ref.read(preferenceStoreProvider);
-    final String key = '$_entryUnitPrefix$entryId';
+    final String key = '${PreferenceStore.logUnitForEntry}$entryId';
     final ServingOption? standard = _foodFor(foods)?.defaultServing;
     if (!unit.isRaw && unit.serving?.id == standard?.id) {
       await preferences.delete(key);
@@ -170,7 +154,9 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     // may not have arrived yet, so this is read by entry id and matched to a
     // unit once the library resolves.
     final MealPlanEntry? entry = widget.existing?.entry;
-    if (entry != null) unawaited(_recallUnit('$_entryUnitPrefix${entry.id}'));
+    if (entry != null) {
+      unawaited(_recallUnit('${PreferenceStore.logUnitForEntry}${entry.id}'));
+    }
   }
 
   @override
@@ -434,7 +420,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
       _entryUnit = null;
       _rememberedUnitId = null;
     });
-    unawaited(_recallUnit('$_foodUnitPrefix${food.id}'));
+    unawaited(_recallUnit('${PreferenceStore.logUnitForFood}${food.id}'));
   }
 
   Future<void> _remove() async {
@@ -580,7 +566,10 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
                   unawaited(
                     ref
                         .read(preferenceStoreProvider)
-                        .write('$_foodUnitPrefix${food.id}', picked.id),
+                        .write(
+                          '${PreferenceStore.logUnitForFood}${food.id}',
+                          picked.id,
+                        ),
                   );
                 }
               },
