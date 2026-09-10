@@ -7,6 +7,22 @@ import 'nutrient_coverage.dart';
 /// The four meal slots a day is divided into (spec §5.6).
 enum MealSlot { breakfast, lunch, dinner, snack }
 
+/// What a slot is called on screen.
+///
+/// Here rather than in the screen that happens to draw it: the day screen's
+/// headings, the destination picker and anything that names a slot in a
+/// sentence must agree, and a private map in one widget is how they stop.
+/// Display strings already live in this layer — see `day_format.dart`.
+extension MealSlotLabel on MealSlot {
+  String get label => switch (this) {
+    MealSlot.breakfast => 'Breakfast',
+    MealSlot.lunch => 'Lunch',
+    MealSlot.dinner => 'Dinner',
+    // Plural, because the section holds however many you had.
+    MealSlot.snack => 'Snacks',
+  };
+}
+
 /// What a plan entry points at.
 enum PlanRefType { food, recipe }
 
@@ -230,6 +246,38 @@ class MealPlanEntry {
         // never disturb a snapshot that has already been taken.
         macroSnapshot: macroSnapshot,
       );
+
+  /// The same meal, filed under a different day and slot (review N02).
+  ///
+  /// A named method rather than a wider [copyWith], because moving a record
+  /// between days is not an ordinary field edit and should not read like one.
+  /// Two things are load-bearing.
+  ///
+  /// The snapshot survives untouched. That is the entire reason a move exists
+  /// rather than a delete and a re-log: re-logging freezes *today's*
+  /// definition of the food over what was actually eaten, so correcting a
+  /// date would quietly rewrite the nutrition (non-negotiable 3).
+  ///
+  /// And [loggedAt] moves with the day. An entry filed under Saturday whose
+  /// own timestamp says Thursday makes everything that reads one disagree
+  /// with everything that reads the other; the caller re-dates it and keeps
+  /// the time of day, because the hour a meal was eaten is still true.
+  MealPlanEntry filedUnder({
+    required String dayId,
+    required MealSlot slot,
+    required DateTime? loggedAt,
+  }) => MealPlanEntry(
+    id: id,
+    dayId: dayId,
+    slot: slot,
+    refType: refType,
+    refId: refId,
+    servings: servings,
+    isPlanned: isPlanned,
+    isLogged: isLogged,
+    loggedAt: loggedAt,
+    macroSnapshot: macroSnapshot,
+  );
 
   @override
   bool operator ==(Object other) => other is MealPlanEntry && other.id == id;
