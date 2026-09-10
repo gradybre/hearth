@@ -123,6 +123,86 @@ void main() {
     expect(item.payload['shopping_list_id'], 'list-1');
   });
 
+  group('putting one line back (spec §5.7)', () {
+    test('leaves alone everything changed since the deletion', () async {
+      // Undo is one line coming back, not the list as it was. A tick made in
+      // the next aisle while the snackbar was still up is a decision of its
+      // own, and taking it back would be the same fault in the other
+      // direction.
+      await repository.replace(<ShoppingLine>[beef(), coffee()]);
+      await repository.replace(<ShoppingLine>[coffee()]);
+
+      await repository.replace(<ShoppingLine>[
+        coffee().copyWith(checked: true),
+      ]);
+      final List<ShoppingLine> after = await repository.restoreLine(beef());
+
+      expect(after.map((ShoppingLine l) => l.key), <String>[
+        'ground-beef',
+        'coffee',
+      ]);
+      expect(after.last.checked, isTrue);
+    });
+
+    test('and an item added since', () async {
+      await repository.replace(<ShoppingLine>[beef()]);
+      await repository.replace(<ShoppingLine>[]);
+
+      await repository.replace(<ShoppingLine>[coffee()]);
+      final List<ShoppingLine> after = await repository.restoreLine(beef());
+
+      expect(after.map((ShoppingLine l) => l.key), <String>[
+        'ground-beef',
+        'coffee',
+      ]);
+    });
+
+    test('twice puts back one line, not two', () async {
+      // A double tap, or a queued action replayed.
+      await repository.replace(<ShoppingLine>[beef(), coffee()]);
+      await repository.replace(<ShoppingLine>[coffee()]);
+
+      await repository.restoreLine(beef());
+      final List<ShoppingLine> after = await repository.restoreLine(beef());
+
+      expect(after, hasLength(2));
+    });
+
+    test('and a line already back by another route is left as it is', () async {
+      // Added again by hand while the snackbar was up. Same key, same item —
+      // and the one standing on the list is the newer decision, so it wins
+      // and Undo has nothing to do.
+      await repository.replace(<ShoppingLine>[beef(), coffee()]);
+      await repository.replace(<ShoppingLine>[coffee()]);
+
+      await repository.replace(<ShoppingLine>[beef(checked: true), coffee()]);
+      final List<ShoppingLine> after = await repository.restoreLine(beef());
+
+      expect(after, hasLength(2));
+      expect(after.first.checked, isTrue);
+    });
+
+    test('and the delete never reaches the other phone', () async {
+      // The queued upsert supersedes the queued delete rather than following
+      // it — `enqueue` drops earlier pending writes for the same row — so the
+      // partner never sees the line leave and come back.
+      await repository.replace(<ShoppingLine>[beef(), coffee()]);
+      await repository.replace(<ShoppingLine>[coffee()]);
+      await repository.restoreLine(beef());
+
+      final String id = ShoppingRepository.itemIdFor(
+        listId: 'list-1',
+        itemKey: 'ground-beef',
+      );
+      final List<PendingWrite> forLine = (await pending())
+          .where((PendingWrite w) => w.entityId == id)
+          .toList();
+
+      expect(forLine, hasLength(1));
+      expect(forLine.single.operation, WriteOperation.upsert);
+    });
+  });
+
   test('the list payload carries the range as plain dates', () async {
     // The server columns are `date`, not timestamps.
     await repository.replace(<ShoppingLine>[beef()]);

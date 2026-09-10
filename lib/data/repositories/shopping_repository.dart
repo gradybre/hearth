@@ -135,6 +135,43 @@ class ShoppingRepository {
     );
   }
 
+  /// Puts one removed line back, on the list as it stands *now* (spec §5.7).
+  ///
+  /// Undo is one line coming back, never the list as it was. The screen used
+  /// to hand back the whole snapshot it had captured before the deletion,
+  /// which meant everything done in between went with it: a line ticked in
+  /// the next aisle came un-ticked, an item added by hand disappeared, and a
+  /// change that had arrived from the other phone was quietly overwritten.
+  /// Every one of those is somebody's more recent decision, and undoing a
+  /// deletion was never a claim about any of them.
+  ///
+  /// Position survives because [ShoppingLine.sortOrder] is what the display
+  /// order is made of — the line goes back where it was walked to, not to the
+  /// bottom of the shop. The order the line is appended in therefore does not
+  /// matter, which is worth knowing before somebody "fixes" it.
+  ///
+  /// One case is deliberately left alone: a rebuild between the deletion and
+  /// the Undo. If the plan no longer calls for that line the rebuild drops
+  /// it, and this puts it back — arguably against the rebuild, arguably
+  /// exactly what the person pressing Undo asked for. It is left as the
+  /// second of those because Undo is a direct instruction and a rebuild is
+  /// not, and because the next rebuild settles it either way.
+  Future<List<ShoppingLine>> restoreLine(ShoppingLine line) async {
+    final List<ShoppingLine> now =
+        (await current())?.lines ?? const <ShoppingLine>[];
+
+    // The same key is the same item, so a line already standing there is this
+    // one, back by another route — Undo tapped twice, the item re-added by
+    // hand, or a rebuild that asked for it again. It wins and nothing is
+    // written: it is the newer decision, and a second copy would have to be
+    // deleted by hand in the shop.
+    if (now.any((ShoppingLine other) => other.key == line.key)) {
+      return ShoppingListMerge.display(now);
+    }
+
+    return replace(<ShoppingLine>[...now, line]);
+  }
+
   Future<List<ShoppingLine>> _write({
     required String listId,
     required DateTime from,
