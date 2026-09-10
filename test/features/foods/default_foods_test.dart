@@ -86,7 +86,9 @@ void main() {
       final HearthDatabase db = await pumpHearthApp(tester);
       await tester.tap(find.text('Foods').last);
       await pumpFrames(tester);
-      await tester.tap(find.byTooltip('Add a food by hand'));
+      await tester.tap(find.text('Add food'));
+      await pumpFrames(tester);
+      await tester.tap(find.text('Enter it by hand'));
       await pumpFrames(tester);
 
       await tester.enterText(find.byType(TextField).first, 'Whole milk');
@@ -335,7 +337,11 @@ void zeroCalorieTests() {
   Future<void> openNewFood(WidgetTester tester) async {
     await tester.tap(find.text('Foods').last);
     await pumpFrames(tester);
-    await tester.tap(find.byTooltip('Add a food by hand'));
+    // One labelled way in now (review §6.2.6), so entering a food by hand is
+    // a row in its sheet rather than a bare + in the corner.
+    await tester.tap(find.text('Add food'));
+    await pumpFrames(tester);
+    await tester.tap(find.text('Enter it by hand'));
     await pumpFrames(tester);
   }
 

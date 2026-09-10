@@ -93,7 +93,11 @@ Future<HearthDatabase> openScanner(
   );
   await tester.tap(find.text('Foods').last);
   await pumpFrames(tester);
-  await tester.tap(find.text('Scan'));
+  // One labelled way in now (review §6.2.6): the scanner is a row in the
+  // Add food sheet rather than an extended button of its own.
+  await tester.tap(find.text('Add food'));
+  await pumpFrames(tester);
+  await tester.tap(find.text('Scan a barcode'));
   await pumpFrames(tester);
   return db;
 }

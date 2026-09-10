@@ -189,7 +189,11 @@ void main() {
       await tester.tap(find.text('Foods').last);
       await pumpFrames(tester);
 
-      await tester.tap(find.byTooltip('Seasonings that need no match'));
+      // Maintenance moved into a labelled overflow menu (review §7.5): it
+      // used to be an unexplained sprig of grass floating in the corner.
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await pumpFrames(tester);
+      await tester.tap(find.text('Seasonings that need no match'));
       await pumpFrames(tester);
 
       expect(find.text('Seasonings'), findsOneWidget);
@@ -206,7 +210,11 @@ void main() {
       final HearthDatabase db = await pumpHearthApp(tester);
       await tester.tap(find.text('Foods').last);
       await pumpFrames(tester);
-      await tester.tap(find.byTooltip('Seasonings that need no match'));
+      // Maintenance moved into a labelled overflow menu (review §7.5): it
+      // used to be an unexplained sprig of grass floating in the corner.
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await pumpFrames(tester);
+      await tester.tap(find.text('Seasonings that need no match'));
       await pumpFrames(tester);
 
       await tester.scrollUntilVisible(find.text('water'), 300);

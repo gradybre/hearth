@@ -95,8 +95,9 @@ class _FakeCamera implements PhotoPicker {
       PickedPhoto(bytes: _onePixelPng, extension: 'png');
 
   @override
-  Future<List<PickedPhoto>> pickMultiple({int max = 10}) async =>
-      <PickedPhoto>[(await pick(PhotoOrigin.library))!];
+  Future<List<PickedPhoto>> pickMultiple({int max = 10}) async => <PickedPhoto>[
+    (await pick(PhotoOrigin.library))!,
+  ];
 }
 
 class _StubSource implements NutritionSource {
@@ -286,6 +287,29 @@ void main() {
 
       expect(find.text('Known to Hearth'), findsOneWidget);
     });
+
+    testWidgets('and that menu survives a small phone at 3x', (
+      WidgetTester tester,
+    ) async {
+      // A popup menu is neither a sheet nor a dialog, so the surface guard
+      // cannot ask for it and the flow sweep cannot list it — its own file
+      // no longer opens either, and the sweep's staleness check would fail
+      // on the entry. So the case lives here instead of going uncovered.
+      await pumpHearthApp(
+        tester,
+        foods: <Food>[yogurt()],
+        size: const Size(320, 568),
+        textScale: 3,
+      );
+      await tester.tap(find.text('Foods').last);
+      await pumpFrames(tester);
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('Seasonings that need no match'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   });
 
   group('whose foods (review §7.5)', () {
@@ -360,9 +384,8 @@ void main() {
         NativeDatabase.memory(),
       );
       addTearDown(db.close);
-      await PreferenceStore(
-        db,
-      ).write(PreferenceStore.foodScope, FoodScope.restaurants.stored);
+      await PreferenceStore(db)
+          .write(PreferenceStore.foodScope, FoodScope.restaurants.stored);
 
       final ProviderContainer container = ProviderContainer(
         overrides: [databaseProvider.overrideWithValue(db)],
