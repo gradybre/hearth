@@ -189,6 +189,19 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     farEnd: find.byTooltip('Drop Harvest Bowl'),
   ),
   SweptSurface(
+    name: "the shopping list's setup",
+    opensFrom: 'lib/features/shopping/shopping_screen.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Shopping');
+      // The harness seeds a line, because the list screen has two shapes: an
+      // empty one still leads with its setup, and `Manage list` is what
+      // replaces that once there is something to shop for (review §6.2.5).
+      await tools.reach(find.text('Manage list'));
+    },
+    arrived: find.text('Include seasonings'),
+    farEnd: find.text('Rebuild from the plan'),
+  ),
+  SweptSurface(
     name: 'choosing something to log',
     opensFrom: 'lib/features/plan/log_sheet.dart',
     open: (WidgetTester tester, SweepTools tools) async {
@@ -273,6 +286,4 @@ const Map<String, String> notSweptYet = <String, String>{
       'Needs a built shopping list with a line on it.',
   'lib/features/shopping/shopping_export_sheet.dart':
       'Needs a built shopping list and an export destination.',
-  'lib/features/shopping/shopping_screen.dart':
-      'A confirm dialog for clearing the list, which needs a built list.',
 };

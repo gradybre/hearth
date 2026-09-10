@@ -5,6 +5,7 @@ import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/shopping/shopping_line.dart';
 import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
@@ -83,6 +84,17 @@ void main() {
     size: size,
     recipes: <Recipe>[chilli()],
     foods: <Food>[yoghurt(), menuItem()],
+    // A shopping list with something on it. The list screen has two shapes —
+    // an empty one still leads with its setup — and `Manage list`, which is
+    // what the sweep is here for, exists only in the other.
+    shoppingLines: <ShoppingLine>[
+      ShoppingLine(
+        key: 'ground-beef',
+        name: 'Ground beef',
+        planned: <Quantity>[Quantity.of(2, Units.pound)],
+        storeTag: 'Costco',
+      ),
+    ],
     entries: <MealPlanEntry>[breakfast()],
     targets: const MacroTargets(
       kcal: 2200,

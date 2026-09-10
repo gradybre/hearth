@@ -129,7 +129,7 @@ class _Body extends ConsumerWidget {
         return a.compareTo(b);
       });
 
-    final int left = lines.where((ShoppingLine l) => !l.checked).length;
+    final int inBasket = lines.where((ShoppingLine l) => l.checked).length;
 
     return Column(
       children: <Widget>[
@@ -153,7 +153,7 @@ class _Body extends ConsumerWidget {
               ] else ...<Widget>[
                 _ListHeader(
                   range: range,
-                  left: left,
+                  inBasket: inBasket,
                   total: lines.length,
                   onManage: () => _manage(context, ref),
                 ),
@@ -327,7 +327,6 @@ class _Body extends ConsumerWidget {
   }
 }
 
-/// What the list covers, and the two things you do to the whole of it.
 /// What the range card used to be, where it belongs.
 class _ManageSheet extends ConsumerWidget {
   const _ManageSheet({required this.onRebuild});
@@ -432,15 +431,15 @@ class _ManageSheet extends ConsumerWidget {
 class _ListHeader extends StatelessWidget {
   const _ListHeader({
     required this.range,
-    required this.left,
+    required this.inBasket,
     required this.total,
     required this.onManage,
   });
 
   final ({DateTime from, DateTime to}) range;
 
-  /// Still to buy, and how many there are altogether.
-  final int left;
+  /// How many are already in the basket, and how many there are altogether.
+  final int inBasket;
   final int total;
 
   final VoidCallback onManage;
@@ -448,7 +447,6 @@ class _ListHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    final int inBasket = total - left;
     // No "Shopping" title. The tab underneath says Shopping and the section
     // bar above says Nutrition; a third of the same word is the "too many
     // headings of similar strength" §6.2.1 asks to be rid of. It also cost
@@ -564,6 +562,7 @@ class _ActionBar extends StatelessWidget {
   }
 }
 
+/// What the list covers, and the two things you do to the whole of it.
 class _RangeCard extends ConsumerWidget {
   const _RangeCard({
     required this.range,
