@@ -26,6 +26,8 @@ import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/week.dart';
+import 'package:hearth/domain/shopping/shopping_line.dart';
+import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
 import '../support/fixtures.dart';
@@ -148,6 +150,15 @@ List<Food> galleryFoodsFor(Scene scene) => <Food>[
   if (scene.longMenu) ...<Food>[...choptMenu(), ...otherRestaurants()],
 ];
 
+/// The shopping list a scene is pumped with.
+///
+/// Empty for every scene but the shopping ones, for the same reason
+/// [galleryFoodsFor] keeps the long menu to itself: a list already on the
+/// phone is exactly what the `shopping` scene is a picture of *not* having,
+/// and the two states have to be able to stand beside each other.
+List<ShoppingLine> galleryShoppingLinesFor(Scene scene) =>
+    scene.shoppingList ? galleryShoppingLines() : const <ShoppingLine>[];
+
 /// The provider overrides a scene needs, in the untyped shape `pumpHearthApp`
 /// takes — riverpod 3 exports the methods that make an `Override` and not the
 /// type itself, which is why the harness types them as `Object` too.
@@ -223,6 +234,7 @@ class Scene {
     this.dayOffset = 0,
     this.taps = const <String>[],
     this.longMenu = false,
+    this.shoppingList = false,
   });
 
   /// The file name, without extension. Also the caption in the index.
@@ -263,6 +275,13 @@ class Scene {
   /// and length is the one thing that would ruin every other scene it appeared
   /// in.
   final bool longMenu;
+
+  /// Whether this scene is pumped with [galleryShoppingLines].
+  ///
+  /// Only the shopping scenes want it, and the `shopping` scene wants the
+  /// opposite: it is the empty state, and a list seeded into every scene would
+  /// quietly delete that picture.
+  final bool shoppingList;
 
   final Size size;
   final Brightness brightness;
@@ -957,6 +976,159 @@ List<MealPlanEntry> galleryEntries(DateTime day) => <MealPlanEntry>[
   ),
 ];
 
+/// One line of the shopping fixture.
+///
+/// [store] is the shop the line is tagged with, which is the only thing the
+/// screen groups by — it has no notion of an aisle. Empty means untagged, and
+/// those sort to the bottom under "Anywhere".
+ShoppingLine _line(
+  String name, {
+  required int order,
+  String store = '',
+  List<Quantity> planned = const <Quantity>[],
+  Quantity? wanted,
+  Quantity? onHand,
+  bool checked = false,
+  bool manual = false,
+  bool unquantified = false,
+  List<String> from = const <String>[],
+}) => ShoppingLine(
+  key: name.toLowerCase().replaceAll(' ', '-'),
+  name: name,
+  planned: planned,
+  wanted: wanted,
+  onHand: onHand,
+  checked: checked,
+  storeTag: store.isEmpty ? null : store,
+  isManual: manual,
+  hasUnquantified: unquantified,
+  sortOrder: order,
+  sourceRecipeIds: from,
+);
+
+/// A shop's worth of list: sixteen lines, three groups, four already ticked.
+///
+/// Sized and shaped like the list the complaint is about rather than like a
+/// test's two rows. It carries every arrangement a line has — an amount
+/// changed by hand, a cupboard amount subtracted, two units that cannot be
+/// reconciled, a line with no amount at all, and two items no recipe asked
+/// for — so a redesign is judged against all of them at once instead of
+/// against the easy one.
+///
+/// **Invented**, like the rest of this file. Nothing here was on anybody's
+/// actual list.
+List<ShoppingLine> galleryShoppingLines() => <ShoppingLine>[
+  // Costco: the bulk half of the shop.
+  _line(
+    'Ground beef',
+    order: 0,
+    store: 'Costco',
+    planned: <Quantity>[Quantity.of(1.5, Units.pound)],
+    // Bought in packets, so the number to buy is not the number the recipes
+    // add up to — the case the edit pencil exists for.
+    wanted: Quantity.of(2, Units.pound),
+    from: <String>['r-lasagne', 'r-chilli'],
+  ),
+  _line(
+    'Chicken breast',
+    order: 1,
+    store: 'Costco',
+    planned: <Quantity>[Quantity.of(3, Units.pound)],
+    checked: true,
+  ),
+  _line(
+    'Rolled oats',
+    order: 2,
+    store: 'Costco',
+    planned: <Quantity>[Quantity.of(1600, Units.gram)],
+    from: <String>['r-oats'],
+  ),
+  _line(
+    'Greek yogurt, 0%',
+    order: 3,
+    store: 'Costco',
+    planned: <Quantity>[Quantity.of(1020, Units.gram)],
+  ),
+  // Trader Joe's: the weekly half.
+  _line(
+    'Lasagne sheets',
+    order: 4,
+    store: "Trader Joe's",
+    planned: <Quantity>[Quantity.of(12, Units.item)],
+    from: <String>['r-lasagne'],
+  ),
+  _line(
+    'Whole milk',
+    order: 5,
+    store: "Trader Joe's",
+    planned: <Quantity>[Quantity.of(1200, Units.millilitre)],
+    // Half of it is already in the fridge, so the shop needs the rest.
+    onHand: Quantity.of(500, Units.millilitre),
+    from: <String>['r-lasagne'],
+  ),
+  _line(
+    'Parmesan, grated',
+    order: 6,
+    store: "Trader Joe's",
+    planned: <Quantity>[Quantity.of(200, Units.gram)],
+    checked: true,
+  ),
+  _line(
+    'Baby spinach',
+    order: 7,
+    store: "Trader Joe's",
+    planned: <Quantity>[Quantity.of(2, Units.package)],
+  ),
+  // Anywhere: everything no shop was named for, which is most of a real list.
+  _line(
+    'Kidney beans',
+    order: 8,
+    planned: <Quantity>[Quantity.of(4, Units.can)],
+    from: <String>['r-chilli'],
+  ),
+  _line(
+    'Crushed tomatoes',
+    order: 9,
+    planned: <Quantity>[Quantity.of(2, Units.can)],
+    from: <String>['r-chilli'],
+  ),
+  _line(
+    'Yellow onion',
+    order: 10,
+    planned: <Quantity>[Quantity.of(5, Units.item)],
+  ),
+  // A recipe called for three cloves and another just said "garlic", so the
+  // total understates it and the line has to say so.
+  _line(
+    'Garlic',
+    order: 11,
+    planned: <Quantity>[Quantity.of(3, Units.clove)],
+    unquantified: true,
+  ),
+  _line(
+    'Blueberries',
+    order: 12,
+    planned: <Quantity>[Quantity.of(2, Units.container)],
+    checked: true,
+    from: <String>['r-oats'],
+  ),
+  // Two units with no density between them, which §5.7 says to show side by
+  // side rather than guess at. It has no single amount, so the tick is the
+  // only thing that can be said about it.
+  _line(
+    'Butter',
+    order: 13,
+    planned: <Quantity>[
+      Quantity.of(2, Units.tbsp),
+      Quantity.of(50, Units.gram),
+    ],
+  ),
+  // The two nobody planned. A rebuild cannot take them off, and — worth
+  // seeing in the picture — nothing on the row says they were added by hand.
+  _line('Coffee beans', order: 14, manual: true),
+  _line('Paper towels', order: 15, manual: true, checked: true),
+];
+
 /// The surfaces §9.1 asks for, plus the two states that catch most layout
 /// problems: dark, and a small phone at enlarged text.
 ///
@@ -998,6 +1170,28 @@ const List<Scene> scenes = <Scene>[
   ),
   Scene(name: 'foods', taps: <String>['Foods']),
   Scene(name: 'shopping', taps: <String>['Shopping']),
+  // The same tab with a shop's worth of list on it, which is the state the
+  // screen is actually used in and the one nothing had a picture of. The
+  // empty scene above cannot show the complaint: with no lines, the setup
+  // card sitting above them is the only thing there is.
+  Scene(name: 'shopping-list', shoppingList: true, taps: <String>['Shopping']),
+  // A small phone at double text, where the setup card's cost is at its
+  // worst: it grows with the type and the list starts below it either way.
+  Scene(
+    name: 'shopping-list-large-text',
+    shoppingList: true,
+    size: Size(320, 640),
+    textScale: 2.0,
+    taps: <String>['Shopping'],
+  ),
+  // And a desktop window, where the same card is stretched across 1280pt of
+  // width for the sake of a date and a switch.
+  Scene(
+    name: 'shopping-list-desktop',
+    shoppingList: true,
+    size: Size(1280, 900),
+    taps: <String>['Shopping'],
+  ),
   // The sheet every logged meal goes through, in both of its arrangements.
   // Reached by pressing what a person presses, because it is a modal over the
   // day screen and no launch target can open it.

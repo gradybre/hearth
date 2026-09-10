@@ -23,8 +23,11 @@ import 'package:hearth/data/auth/local_auth_gateway.dart';
 import 'package:hearth/data/local/collection_store.dart';
 import 'package:hearth/data/local/food_store.dart';
 import 'package:hearth/data/local/hearth_database.dart';
+import 'package:hearth/data/local/pending_write_store.dart';
 import 'package:hearth/data/local/plan_store.dart';
 import 'package:hearth/data/local/recipe_store.dart';
+import 'package:hearth/data/local/shopping_store.dart';
+import 'package:hearth/data/repositories/shopping_repository.dart';
 import 'package:hearth/domain/cooking/cook_session.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/food_profile.dart';
@@ -33,6 +36,7 @@ import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/recent_log.dart';
 import 'package:hearth/domain/planning/week.dart';
+import 'package:hearth/domain/shopping/shopping_line.dart';
 import 'package:hearth/main.dart';
 
 import 'fake_auth.dart';
@@ -85,6 +89,19 @@ Future<HearthDatabase> pumpHearthApp(
   Stream<List<Recipe>>? recipeStream,
   List<Food> foods = const <Food>[],
   List<MealPlanEntry> entries = const <MealPlanEntry>[],
+
+  /// A shopping list already on the phone (spec §5.7).
+  ///
+  /// Written through the real repository before the app builds, rather than
+  /// handed to the screen as an override, because the screen reads its list
+  /// from sqlite through `shoppingListProvider` and takes the dates on the
+  /// range card from the saved list's own range. A stubbed provider would
+  /// picture a list nothing could tick.
+  ///
+  /// The only way to arrange a populated list without it is to press "Build
+  /// from the plan" — which cannot produce a ticked line, an item added by
+  /// hand, or a line tagged with a shop.
+  List<ShoppingLine> shoppingLines = const <ShoppingLine>[],
   MacroTargets? targets,
   Set<String> favorites = const <String>{},
   List<CookTimer> timers = const <CookTimer>[],
@@ -171,6 +188,18 @@ Future<HearthDatabase> pumpHearthApp(
     for (final MealPlanEntry entry in entries) {
       await plans.upsertEntry(entry, updatedAt: DateTime(2026));
     }
+  }
+
+  // Through the repository rather than the store, so the list on screen went
+  // in the way the screen's own Save does: display order applied, ids derived
+  // from the line keys, and the write queued for sync.
+  if (shoppingLines.isNotEmpty) {
+    await ShoppingRepository(
+      database: db,
+      store: ShoppingStore(db),
+      queue: PendingWriteStore(db),
+      householdId: LocalAuthGateway.account.householdId,
+    ).replace(shoppingLines);
   }
 
   await tester.pumpWidget(
