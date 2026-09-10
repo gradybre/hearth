@@ -30,8 +30,8 @@ Status: `—` not started · `~` in progress · `✓` done · `n/a` not applicab
 | F01a | Dirty-state guard on recipe/food editors | ✓ | ✓ | ~ #49 | n/a | — |
 | F01b | Recoverable local drafts (N01) | ✓ | ✓ | ~ #51 | B | — |
 | F02 | Targeted shopping Undo | ✓ | ✓ | ~ #50 | n/a | — |
-| F03 | PDF page states: selected/rendered/extracted/accepted | — | — | — | n/a | — |
-| F04 | Persistent per-row uncertainty; retry-safe batch save | — | — | — | — | — |
+| F03 | PDF page states: rendered vs extracted | ✓ | ✓ | ~ #52 | n/a | — |
+| F04 | Accumulated uncertainty; retry-safe batch save | ✓ | ✓ | ~ #52 | n/a | — |
 | F05 | Calendar-derived day labels; no constant "Today" card | — | — | — | n/a | — |
 | F06 | Direct gram/ounce entry | — | — | — | n/a | — |
 | F07a | Connectivity retry + backoff wake-up | — | — | — | n/a | — |
@@ -62,7 +62,7 @@ Deferred by Brendan, not to be built: N06, N07, N09, N10, N11, N12.
 | 4 | Restaurant search, selected review, usual orders | — |
 | 5 | Settings index; shopping prep separated from the trip | — |
 | 6 | Lost-edit and unsafe-Undo protection before visual work | ✓ (#49/#50/#51) |
-| 7 | Import bookkeeping and operational gates before trial | — |
+| 7 | Import bookkeeping and operational gates before trial | ~ (#52; gates in P3) |
 | 8 | Optional features approved individually | ✓ (N06/N07/N09–N12 deferred) |
 
 ## P0 — baseline
