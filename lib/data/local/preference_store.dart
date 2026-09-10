@@ -29,6 +29,29 @@ class PreferenceStore {
   /// decision.
   static const String launchTarget = 'app.launch_target';
 
+  /// Which unit a food's portion was last typed in, one key per food id
+  /// (review F06). Device-local for the same reason again: whether you weigh
+  /// in grams or count pots is a habit of the phone in your hand.
+  ///
+  /// A prefix, not a key. Values are `PortionUnit.id` — `unit:g`,
+  /// `serving:pot` — which is why they are stable identifiers and not labels:
+  /// a food's serving can be renamed.
+  static const String logUnitForFood = 'plan.log_unit.food.';
+
+  /// And which unit one *entry* was typed in, one key per entry id, written
+  /// only when it was not the default serving.
+  ///
+  /// A different question from [logUnitForFood] and deliberately never
+  /// answered by it: an entry logged in ounces must re-open in ounces, not in
+  /// whatever that food has been typed in since. The entry row cannot say so
+  /// itself — `servings` is a count of the default serving and nothing else.
+  ///
+  /// These rows outlive the entries that made them, because entries are
+  /// soft-deleted and restorable (non-negotiable 3): clearing one on removal
+  /// would mean an undo brought the meal back in the wrong unit. One short
+  /// row per portion ever typed in something other than the default.
+  static const String logUnitForEntry = 'plan.log_unit.entry.';
+
   final HearthDatabase _db;
 
   Future<String?> read(String key) async {
