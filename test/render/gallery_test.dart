@@ -1,7 +1,7 @@
 @Tags(<String>['render'])
 library;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/app_harness.dart';
@@ -20,13 +20,21 @@ import 'gallery.dart';
 /// exercise nobody runs.
 ///
 /// ```bash
-/// HEARTH_RENDER=1 flutter test --update-goldens test/render
+/// HEARTH_RENDER=1 flutter test test/render          # → build/gallery/
+/// HEARTH_RENDER=1 HEARTH_RENDER_DIR=docs/reviews/2026-09-11 \
+///   flutter test test/render                        # → a deliverable
 /// ```
 ///
-/// Opt-in by environment for two reasons: a golden rendered on macOS does not
-/// match one rendered on CI's Linux, so running these by default would put a
-/// permanent red light in front of everybody; and they are design artefacts,
-/// not correctness gates. The correctness suite is unaffected either way.
+/// **It writes images; it does not compare them.** Goldens were the obvious
+/// mechanism and are the wrong one here: the day screen reads the wall clock
+/// for its date, and the shopping range is derived from it too, so a
+/// committed golden changes when the calendar does. Every later pull request
+/// would then carry a spurious image diff, which is precisely the signal
+/// these exist to provide. Producing artefacts to look at is what §9.1 asks
+/// for; a pass/fail gate is not.
+///
+/// Opt-in by environment because they are slow and are design artefacts
+/// rather than correctness gates. The ordinary suite is unaffected.
 void main() {
   setUpAll(() async {
     if (!renderingGallery) return;
@@ -58,10 +66,17 @@ void main() {
         await pumpFrames(tester, frames: 20);
       }
 
-      await expectLater(
-        find.byType(MaterialApp),
-        matchesGoldenFile('gallery/${scene.name}.png'),
+      // A weak smoke assertion before the capture. Writing the file is not
+      // itself proof of anything: a screen that failed to build its content
+      // would still produce a perfectly valid picture of nothing, and the
+      // gallery's whole job is to be looked at rather than checked.
+      expect(
+        find.byType(Text),
+        findsAtLeastNWidgets(5),
+        reason: '${scene.name} rendered almost no text; is it an error state?',
       );
+
+      await writeScene(tester, scene);
     }, skip: !renderingGallery);
   }
 }

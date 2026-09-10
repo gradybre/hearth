@@ -12,9 +12,12 @@
 library;
 
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/shell/launch_target.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
@@ -34,8 +37,37 @@ import '../support/fixtures.dart';
 /// ignore a red light.
 bool get renderingGallery => Platform.environment['HEARTH_RENDER'] == '1';
 
-String? get gallerySkip =>
-    renderingGallery ? null : 'set HEARTH_RENDER=1 to draw the gallery';
+/// Where the images are written. Gitignored by default, so drawing the
+/// gallery to look at it never dirties the tree; point it somewhere under
+/// `docs/` when the images are the deliverable.
+String get galleryDirectory =>
+    Platform.environment['HEARTH_RENDER_DIR'] ?? 'build/gallery';
+
+/// Captures the current frame and writes it as a PNG.
+///
+/// Straight to a file rather than through `matchesGoldenFile`, because these
+/// are artefacts rather than assertions — see the note in `gallery_test.dart`.
+/// `runAsync` is required: encoding an image needs the real event loop, which
+/// a widget test's fake async does not provide.
+Future<void> writeScene(WidgetTester tester, Scene scene) async {
+  final RenderView view = tester.binding.renderViews.first;
+  final OffsetLayer layer = view.debugLayer! as OffsetLayer;
+
+  final ByteData? png = await tester.runAsync<ByteData?>(() async {
+    final ui.Image image = await layer.toImage(Offset.zero & view.size);
+    try {
+      return await image.toByteData(format: ui.ImageByteFormat.png);
+    } finally {
+      image.dispose();
+    }
+  });
+  if (png == null) throw StateError('${scene.name} produced no image');
+
+  final Directory dir = Directory(galleryDirectory);
+  if (!dir.existsSync()) dir.createSync(recursive: true);
+  File('${dir.path}/${scene.name}.png')
+      .writeAsBytesSync(png.buffer.asUint8List());
+}
 
 /// Loads the Material icon font.
 ///
