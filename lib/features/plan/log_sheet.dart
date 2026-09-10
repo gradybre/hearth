@@ -15,10 +15,12 @@ import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/parsing/amount_parser.dart';
+import '../../domain/planning/day_format.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
 import '../../domain/planning/portion_unit.dart';
 import '../../domain/planning/recent_log.dart';
+import '../../domain/planning/week.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import '../foods/external_food_results.dart';
 import '../foods/food_search_controller.dart';
@@ -156,6 +158,19 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   bool _busy = false;
 
   bool get _isExisting => widget.existing != null;
+
+  bool get _isToday => isSameDay(widget.date, DateTime.now());
+
+  /// The day this is going to, in the fewest words that identify it.
+  ///
+  /// "Today" and "Yesterday" rather than a date to work out; a weekday and a
+  /// date for anything further off, because "Thursday" alone is two different
+  /// Thursdays. Carried in the accent colour when it is not today, so
+  /// backdating is visible before it is read — never colour alone, which is
+  /// why the words say it too (spec §6.3).
+  String _when() =>
+      relativeDay(widget.date) ??
+      '${weekdayName(widget.date)} ${shortDate(widget.date)}';
 
   @override
   void initState() {
@@ -551,6 +566,18 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
         children: <Widget>[
           Text(_label, style: context.text.sectionHeader),
           const SizedBox(height: HearthSpacing.xs),
+          // Where this is going, before what it costs. The sheet named the
+          // food and its macros and never said which day or meal it was
+          // about — fine on today, and the whole question on a day you have
+          // scrolled back to, because the header that knows the date is the
+          // thing this sheet is covering (review F05).
+          Text(
+            '${widget.slot.label} · ${_when()}',
+            style: context.text.metadata.copyWith(
+              color: _isToday ? colors.textMuted : colors.accent,
+            ),
+          ),
+          const SizedBox(height: HearthSpacing.xs),
           Text(
             alreadyLogged
                 ? 'Already logged. Adjust the portion or remove it.'
@@ -835,7 +862,11 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
                     ),
                 ],
                 if (matchingRecipes.isNotEmpty)
-                  const _GroupLabel(text: 'Recipes'),
+                  // "Yours", because the next heading down is "Elsewhere"
+                  // and those rows write to the library when one is picked.
+                  // The kind alone left the two readable as one list (review
+                  // §7's picker scopes).
+                  const _GroupLabel(text: 'Your recipes'),
                 for (final Recipe recipe in matchingRecipes)
                   _PickRow(
                     title: recipe.title,
@@ -843,7 +874,8 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
                         'serves ${recipe.servings == recipe.servings.roundToDouble() ? recipe.servings.round() : recipe.servings}',
                     onTap: () => setState(() => _recipe = recipe),
                   ),
-                if (matchingFoods.isNotEmpty) const _GroupLabel(text: 'Foods'),
+                if (matchingFoods.isNotEmpty)
+                  const _GroupLabel(text: 'Your foods'),
                 for (final Food food in matchingFoods)
                   _PickRow(
                     title: food.name,
