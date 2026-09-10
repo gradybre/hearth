@@ -45,6 +45,26 @@ void main() {
     ],
   );
 
+  /// One restaurant, one row: enough for the eat-out builder to have a menu
+  /// and a meal, so the sheet that lists what you picked can be swept at 3x
+  /// like everything else.
+  Food menuItem() => aFood(
+    'Harvest Bowl',
+    id: 'f-chopt-harvest',
+    brand: 'Chopt',
+    source: FoodSource.restaurant,
+    menuGroup: 'Warm bowls',
+    menuOrder: 1,
+    servingOptions: <ServingOption>[
+      ServingOption(
+        id: 'o-bowl',
+        label: '1 bowl',
+        amount: Quantity.of(1, Units.item),
+        macros: const Macros(kcal: 690, proteinG: 26, carbG: 78, fatG: 30),
+      ),
+    ],
+  );
+
   MealPlanEntry breakfast() => const MealPlanEntry(
     id: 'e1',
     dayId: 'day-1',
@@ -62,7 +82,7 @@ void main() {
     tester,
     size: size,
     recipes: <Recipe>[chilli()],
-    foods: <Food>[yoghurt()],
+    foods: <Food>[yoghurt(), menuItem()],
     entries: <MealPlanEntry>[breakfast()],
     targets: const MacroTargets(
       kcal: 2200,

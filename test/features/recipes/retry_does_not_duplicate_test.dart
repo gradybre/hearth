@@ -56,7 +56,7 @@ void main() {
     await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Steakburger').last);
     await pumpFrames(tester, frames: 12);
-    await tester.tap(find.textContaining('Build ('));
+    await tester.tap(find.text('Review meal'));
     await pumpFrames(tester, frames: 16);
     await tester.enterText(find.byType(TextField).first, 'Dinner out');
     await pumpFrames(tester, frames: 8);

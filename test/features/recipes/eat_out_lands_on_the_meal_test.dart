@@ -69,7 +69,7 @@ void main() {
     await pumpFrames(tester, frames: 12);
 
     // The builder's own button, which counts what you have picked.
-    await tester.tap(find.textContaining('Build ('));
+    await tester.tap(find.text('Review meal'));
     await pumpFrames(tester, frames: 16);
 
     expect(
@@ -105,7 +105,7 @@ void main() {
     await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Steakburger').last);
     await pumpFrames(tester, frames: 12);
-    await tester.tap(find.textContaining('Build ('));
+    await tester.tap(find.text('Review meal'));
     await pumpFrames(tester, frames: 16);
 
     // The editor is a review step, and a recipe needs a name — the builder

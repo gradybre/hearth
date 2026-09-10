@@ -174,6 +174,21 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     farEnd: find.text('Discard'),
   ),
   SweptSurface(
+    name: 'what you picked from a menu',
+    opensFrom: 'lib/features/recipes/eat_out_screen.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Recipes');
+      await tools.reach(find.text('Add recipe'));
+      await tools.reach(find.text('Eat out'));
+      await tools.reach(find.text('Chopt'));
+      // Something has to be picked before there is anything to review.
+      await tools.reach(find.text('Harvest Bowl'));
+      await tools.reach(find.textContaining('item ·'));
+    },
+    arrived: find.text('What you picked'),
+    farEnd: find.byTooltip('Drop Harvest Bowl'),
+  ),
+  SweptSurface(
     name: 'choosing something to log',
     opensFrom: 'lib/features/plan/log_sheet.dart',
     open: (WidgetTester tester, SweepTools tools) async {
