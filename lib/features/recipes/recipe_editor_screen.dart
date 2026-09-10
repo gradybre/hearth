@@ -230,6 +230,13 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
           setState(() {
             _matches = next;
             _noMatch = nextNoMatch;
+            // The baseline moves with them. Nobody chose these — the matcher
+            // applied what the household had already decided elsewhere — so
+            // counting them as unsaved work would ask "discard this recipe?"
+            // over a recipe that was opened and not touched. A match the user
+            // makes by hand goes through the review sheet, not through here,
+            // and still counts.
+            _openedDraft = _draft;
           });
         }
       });
@@ -573,6 +580,12 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     super.initState();
     final RecipeDraft? initial = widget.imported?.draft ?? widget.draft;
     if (initial != null) {
+      // Filled content is the baseline, not something to be asked about. An
+      // import or a duplicate opens on a *review* screen, and Cancel there is
+      // the reject answer that screen exists to offer (rule 4) — asking
+      // "discard this recipe?" when somebody pressed the button meaning
+      // exactly that is over-prompting, not protection. Edit the import and
+      // Cancel does ask, because then there is something of yours in it.
       _fill(initial);
     } else {
       // A blank editor has a baseline too, and it is the blank editor. Only

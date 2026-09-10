@@ -123,6 +123,71 @@ void main() {
     });
   });
 
+  group('what counts as work', () {
+    testWidgets('a match the matcher applied by itself does not', (
+      WidgetTester tester,
+    ) async {
+      // The over-prompting failure, reached properly this time. Opening a
+      // recipe runs the trusted matcher, which fills in what the household
+      // already decided elsewhere and commits it in a post-frame setState —
+      // no tap involved. Counted as unsaved work, that asks "discard this
+      // recipe?" over a recipe nobody touched, on nearly every recipe once
+      // the library has been used for a week.
+      await pumpHearthApp(
+        tester,
+        // A *default* food. Only a default, a remembered correction or a
+        // restaurant menu is trusted enough to be applied without asking —
+        // an ordinary library food is offered, not applied, so it would not
+        // reach the path this test is about.
+        foods: <Food>[aFood('Ground beef', id: 'f-beef', isDefault: true)],
+        recipes: <Recipe>[
+          aRecipe(
+            id: 'r1',
+            title: 'Weeknight chilli',
+            ingredients: <RecipeIngredient>[
+              anIngredient('ground beef', amount: 450),
+            ],
+          ),
+        ],
+      );
+      await tester.tap(find.text('Recipes').last);
+      await pumpFrames(tester);
+      await tester.tap(find.text('Weeknight chilli'));
+      await pumpFrames(tester, frames: 16);
+      await tester.tap(find.text('Edit'));
+      await pumpFrames(tester, frames: 20);
+
+      await tester.tap(find.text('Cancel'));
+      await pumpFrames(tester, frames: 16);
+
+      expect(
+        find.text('Keep editing'),
+        findsNothing,
+        reason: 'an automatic match was treated as something you typed',
+      );
+    });
+
+    testWidgets('and neither does opening an import you have not edited', (
+      WidgetTester tester,
+    ) async {
+      // Cancel on a review screen is the reject answer that screen exists to
+      // offer (rule 4). Asking "discard this recipe?" when somebody pressed
+      // the button meaning exactly that is over-prompting, not protection —
+      // and `recipe_import_test` was already holding this before the guard
+      // existed. Editing the import first is what makes it ask, which the
+      // recipe group above covers.
+      await pumpHearthApp(tester);
+      await tester.tap(find.text('Recipes').last);
+      await pumpFrames(tester);
+      await addRecipeVia(tester, 'Write a recipe');
+
+      await tester.tap(find.text('Cancel'));
+      await pumpFrames(tester, frames: 16);
+
+      expect(find.text('Keep editing'), findsNothing);
+    });
+  });
+
   group('the food editor', () {
     Future<void> openNewFood(WidgetTester tester) async {
       await pumpHearthApp(tester, foods: <Food>[aFood('Rolled oats')]);
