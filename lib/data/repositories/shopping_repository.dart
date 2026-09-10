@@ -147,7 +147,15 @@ class ShoppingRepository {
   ///
   /// Position survives because [ShoppingLine.sortOrder] is what the display
   /// order is made of — the line goes back where it was walked to, not to the
-  /// bottom of the shop.
+  /// bottom of the shop. The order the line is appended in therefore does not
+  /// matter, which is worth knowing before somebody "fixes" it.
+  ///
+  /// One case is deliberately left alone: a rebuild between the deletion and
+  /// the Undo. If the plan no longer calls for that line the rebuild drops
+  /// it, and this puts it back — arguably against the rebuild, arguably
+  /// exactly what the person pressing Undo asked for. It is left as the
+  /// second of those because Undo is a direct instruction and a rebuild is
+  /// not, and because the next rebuild settles it either way.
   Future<List<ShoppingLine>> restoreLine(ShoppingLine line) async {
     final List<ShoppingLine> now =
         (await current())?.lines ?? const <ShoppingLine>[];
