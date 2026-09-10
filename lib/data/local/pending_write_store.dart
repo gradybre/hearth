@@ -178,6 +178,41 @@ class PendingWriteStore {
     return rows.isNotEmpty;
   }
 
+  /// When the queue is next worth asking about, or null if it is not.
+  ///
+  /// Null covers three different situations that all mean the same thing to a
+  /// caller setting an alarm: nothing queued, something queued and already
+  /// due, or everything left has stopped being asked. Only a write that is
+  /// *waiting* has a moment worth waking for.
+  ///
+  /// Exists because [backoff] gave a refused write a wait and gave nobody a
+  /// reason to come back when it was over: passes are triggered by local
+  /// writes, sign-in and resume, and a write sitting out two hours changes
+  /// none of those. On a phone left on a counter, nothing happens at all.
+  ///
+  /// Deliberately answers *when* rather than being polled — see
+  /// `SyncController`, which sets one timer off this.
+  Future<DateTime?> nextAttemptDue({DateTime? now}) async {
+    final DateTime at = now ?? DateTime.now().toUtc();
+    final List<PendingWriteRow> waiting =
+        await (_db.select(_db.pendingWrites)..where(
+              ($PendingWritesTable t) =>
+                  t.attempts.isSmallerThanValue(maxAttempts) &
+                  t.nextAttemptAt.isNotNull() &
+                  t.nextAttemptAt.isBiggerThanValue(at),
+            ))
+            .get();
+    if (waiting.isEmpty) return null;
+
+    // UTC, because a caller comparing this against a moment it already holds
+    // uses `DateTime` equality, and Dart counts the same instant in local
+    // time and in UTC as two unequal values. The drafts store learned this
+    // the same way.
+    return waiting
+        .map((PendingWriteRow row) => row.nextAttemptAt!.toUtc())
+        .reduce((DateTime a, DateTime b) => a.isBefore(b) ? a : b);
+  }
+
   Future<int> count() async {
     final List<PendingWriteRow> rows = await _db
         .select(_db.pendingWrites)
