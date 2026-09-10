@@ -159,18 +159,24 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
 
   bool get _isExisting => widget.existing != null;
 
-  bool get _isToday => isSameDay(widget.date, DateTime.now());
+  /// How far the day being logged to is from today, on the calendar.
+  ///
+  /// One reading of the clock, used for both the words and the colour. Two
+  /// would be two sources of truth for one fact — and this change has just
+  /// finished collapsing three copies of the weekday list into one.
+  int get _daysFromToday => calendarDaysBetween(DateTime.now(), widget.date);
 
   /// The day this is going to, in the fewest words that identify it.
   ///
   /// "Today" and "Yesterday" rather than a date to work out; a weekday and a
   /// date for anything further off, because "Thursday" alone is two different
-  /// Thursdays. Carried in the accent colour when it is not today, so
-  /// backdating is visible before it is read — never colour alone, which is
-  /// why the words say it too (spec §6.3).
-  String _when() =>
-      relativeDay(widget.date) ??
-      '${weekdayName(widget.date)} ${shortDate(widget.date)}';
+  /// Thursdays.
+  String _when([int? delta]) => switch (delta ?? _daysFromToday) {
+    0 => 'Today',
+    -1 => 'Yesterday',
+    1 => 'Tomorrow',
+    _ => '${weekdayName(widget.date)} ${shortDate(widget.date)}',
+  };
 
   @override
   void initState() {
@@ -540,6 +546,9 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     // typed in. A raw gram or ounce amount is always available for a food
     // measured by mass or volume, so the row now earns its place even for a
     // food with a single stored serving.
+    // One reading of the clock for both the words and the colour.
+    final int daysFromToday = _daysFromToday;
+
     final Food? food = _foodFor(foods);
     final ServingOption? standard = food?.defaultServing;
     final List<PortionUnit> units = portionUnitsFor(food);
@@ -571,10 +580,16 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
           // about — fine on today, and the whole question on a day you have
           // scrolled back to, because the header that knows the date is the
           // thing this sheet is covering (review F05).
+          // The accent marks a day *behind* you and nothing else. Planning
+          // tomorrow's dinner is what a planner is for, and flagging it the
+          // same way as an accidental scroll back to last Tuesday would
+          // spend the signal on the routine case and leave the one worth
+          // noticing no louder. Never colour alone — the words say which day
+          // it is regardless (spec §6.3).
           Text(
-            '${widget.slot.label} · ${_when()}',
+            '${widget.slot.label} · ${_when(daysFromToday)}',
             style: context.text.metadata.copyWith(
-              color: _isToday ? colors.textMuted : colors.accent,
+              color: daysFromToday < 0 ? colors.accent : colors.textMuted,
             ),
           ),
           const SizedBox(height: HearthSpacing.xs),

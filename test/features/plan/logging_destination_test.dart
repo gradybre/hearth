@@ -1,5 +1,7 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
+import 'package:hearth/app/theme/hearth_colors.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/planning/day_format.dart';
@@ -80,6 +82,41 @@ void main() {
     await openSheetOn(tester, DateTime.now());
 
     expect(find.text('Breakfast · Today'), findsOneWidget);
+  });
+
+  /// The colour of the destination line.
+  ///
+  /// Read against the palette rather than against a second pump of the app.
+  /// Pumping twice in one test leaves the first app's widgets standing for
+  /// the finder to read — the trap #55 hit — and "is it the same colour as
+  /// today's" is a weaker statement than "is it the accent" anyway.
+  Color lineColour(WidgetTester tester, String text) =>
+      tester.widget<Text>(find.text(text)).style!.color!;
+
+  final HearthColors palette = HearthColors.light();
+
+  testWidgets('planning tomorrow is not flagged like a mistake', (
+    WidgetTester tester,
+  ) async {
+    // The accent is there so backdating is visible before it is read.
+    // Planning tomorrow's dinner is not backdating — it is what a planner is
+    // for — and marking the two the same way spends the signal on the wrong
+    // day, leaving the case worth noticing no louder than the routine one.
+    await openSheetOn(tester, addDays(dayKey(DateTime.now()), 1));
+
+    expect(lineColour(tester, 'Breakfast · Tomorrow'), palette.textMuted);
+  });
+
+  testWidgets('and today is not either', (WidgetTester tester) async {
+    await openSheetOn(tester, dayKey(DateTime.now()));
+
+    expect(lineColour(tester, 'Breakfast · Today'), palette.textMuted);
+  });
+
+  testWidgets('but a day behind you is', (WidgetTester tester) async {
+    await openSheetOn(tester, addDays(dayKey(DateTime.now()), -1));
+
+    expect(lineColour(tester, 'Breakfast · Yesterday'), palette.accent);
   });
 
   testWidgets('yesterday is named rather than dated', (
