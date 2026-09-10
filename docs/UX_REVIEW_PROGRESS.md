@@ -34,9 +34,9 @@ Status: `—` not started · `~` in progress · `✓` done · `n/a` not applicab
 | F04 | Accumulated uncertainty; retry-safe batch save | ✓ | ✓ | ~ #52 | n/a | — |
 | F05 | Calendar-derived day labels; no constant "Today" card | — | — | — | n/a | — |
 | F06 | Direct gram/ounce entry | — | — | — | n/a | — |
-| F07a | Connectivity retry + backoff wake-up | — | — | — | n/a | — |
+| F07a | Backoff wake-up | ✓ | ✓ | ~ #53 | n/a | — |
 | F07b | B02 reserve/settle, fail closed; record truncated usage | — | — | — | — | — |
-| F07c | Windows recovery protocol handler | — | — | — | n/a | B |
+| F07c | Windows recovery protocol handler | — | — | — | n/a | B — needs a Windows machine or a Windows CI job; see below |
 | F07d | Hosted recovery activation | n/a | n/a | n/a | B | B |
 
 ## Approved additions
@@ -98,6 +98,15 @@ anything.
 `drift_schemas/` now holds v25 and v26, which is what made the first genuinely
 historical migration test possible — v25 built as v25 was, migrated for real,
 checked against v26.
+
+## Why the Windows handler is still open
+
+It needs a registry entry under `HKCU\Software\Classes\hearth`, written
+either by an installer this repository does not have or by the app at startup
+in `windows/runner`. Either is platform C++ that cannot be compiled, run or
+tested from here — there is no Windows machine and no Windows CI job (one of
+WP8's open items). Writing it blind and reporting it done would be a claim
+nothing supports, so it stays named instead.
 
 ## Standing limits
 

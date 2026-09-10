@@ -34,6 +34,7 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
     ref.onDispose(() {
       WidgetsBinding.instance.removeObserver(this);
       _debounce?.cancel();
+      _backoff?.cancel();
     });
 
     // Signing in, or out: a fresh session means the queue may belong to
@@ -72,6 +73,37 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 600), sync);
   }
+
+  /// Comes back when the queue's own backoff says it is worth asking again.
+  ///
+  /// #22 gave a refused write a wait — 2s, 30s, 5m, 30m, 2h — and gave
+  /// nothing a reason to return when the wait was over. Every other trigger
+  /// here is somebody doing something: signing in, writing, resuming, tapping
+  /// Sync now. A write sitting out two hours does none of those, so on a
+  /// phone left on a counter it simply sat there.
+  ///
+  /// One timer for the *soonest* moment anything is due, re-set after each
+  /// pass. Not a poll: it asks the queue when to come back and then comes
+  /// back once, which is the distinction the class comment above draws
+  /// between this and a schedule that spends battery asking a question whose
+  /// answer has not changed.
+  Future<void> _wakeWhenDue() async {
+    _backoff?.cancel();
+    final DateTime? due = await ref
+        .read(pendingWriteStoreProvider)
+        .nextAttemptDue();
+    if (due == null) return;
+
+    // A floor, because a moment already past would fire immediately and a
+    // pass that fails the same way each time would then spin.
+    final Duration wait = due.difference(DateTime.now().toUtc());
+    _backoff = Timer(
+      wait < const Duration(seconds: 1) ? const Duration(seconds: 1) : wait,
+      sync,
+    );
+  }
+
+  Timer? _backoff;
 
   Future<void> sync() async {
     if (!ref.read(supabaseReadyProvider)) return;
@@ -153,6 +185,12 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
       // Error, and letting it escape would lose the sync silently.
       state = SyncStatus.failed('$error');
     } finally {
+      // However the pass ended — drained, refused, or cut off offline — the
+      // queue knows whether anything is still waiting and when. Asked here
+      // rather than only on success, because a pass that failed is exactly
+      // the one that left something waiting.
+      unawaited(_wakeWhenDue());
+
       // Asked again while that was running: honour it once, debounced like
       // any other request rather than called straight through, so a pass that
       // queues its own writes cannot chase its own tail.
