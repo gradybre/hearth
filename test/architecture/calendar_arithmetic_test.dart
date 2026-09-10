@@ -24,11 +24,19 @@ import 'package:test/test.dart';
 /// Spaces rather than deletion, so a match's offset still names the right
 /// line. Strings are not stripped: a `//` inside one is vanishingly rare
 /// here and blanking it would be the more surprising behaviour.
+///
+/// The separator is counted, not sniffed. Guarding it on `out.isNotEmpty`
+/// looks equivalent and is not: a file beginning with a blank line writes no
+/// newline for it, every later line moves up one, and the guard names a line
+/// that is not the offender's. Nothing under `lib/` starts blank today, which
+/// is exactly what would have kept that quiet.
 String withoutComments(String source) {
   final StringBuffer out = StringBuffer();
   bool inBlock = false;
-  for (final String line in source.split('\n')) {
-    if (out.isNotEmpty) out.write('\n');
+  final List<String> lines = source.split('\n');
+  for (int i = 0; i < lines.length; i++) {
+    final String line = lines[i];
+    if (i > 0) out.write('\n');
     String rest = line;
     final StringBuffer kept = StringBuffer();
     while (rest.isNotEmpty) {
@@ -66,6 +74,40 @@ String withoutComments(String source) {
 }
 
 void main() {
+  test('blanking comments keeps every line where it was', () {
+    // The line number is the entire product of these guards, and it is
+    // derived by counting newlines in the blanked text — so a blanked line
+    // that vanishes moves every offender below it.
+    const String source = '\n\nfinal x = a.difference(b).inDays;';
+    final String blanked = withoutComments(source);
+
+    expect(
+      blanked.split('\n').length,
+      source.split('\n').length,
+      reason: 'lines were lost, so every line number below is wrong',
+    );
+
+    final int at = blanked.indexOf('.difference');
+    expect(
+      '\n'.allMatches(blanked.substring(0, at)).length + 1,
+      3,
+      reason: 'the offender is on line 3 of the source',
+    );
+  });
+
+  test('and blanks a comment without shortening its line', () {
+    const String source =
+        'final a = 1; // a.add(Duration(days: 1))\nfinal b = 2;';
+    final String blanked = withoutComments(source);
+
+    expect(blanked.contains('Duration'), isFalse, reason: 'comment survived');
+    expect(
+      blanked.split('\n').first.length,
+      source.split('\n').first.length,
+      reason: 'the line changed length, so offsets after it are wrong',
+    );
+  });
+
   test('no date is advanced by a Duration of days', () {
     final Directory lib = Directory('lib');
     expect(

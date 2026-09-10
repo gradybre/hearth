@@ -25,6 +25,7 @@ import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/week.dart';
 import 'package:hearth/domain/units/unit.dart';
 
 import '../support/fixtures.dart';
@@ -132,10 +133,7 @@ class GalleryDate extends SelectedDate {
   final int offset;
 
   @override
-  DateTime build() {
-    final DateTime today = super.build();
-    return DateTime(today.year, today.month, today.day + offset);
-  }
+  DateTime build() => addDays(super.build(), offset);
 }
 
 /// The provider overrides a scene needs, in the untyped shape `pumpHearthApp`
@@ -412,10 +410,15 @@ const List<Scene> scenes = <Scene>[
   // The same screen, three days back. Its own scene because the day view is
   // not one screen: everything on it is supposed to follow the date in the
   // header, and a redesign judged only against today cannot show whether it
-  // does. As of this writing it does not — the summary card is captioned
-  // "Today" whatever day is selected (`day_screen.dart`, `_RemainingCard`) —
-  // and the point of drawing the before state is that the picture says so
-  // rather than a sentence in a review.
+  // does.
+  //
+  // What it shows is the *chrome* following the date, and only that. The
+  // meals are the same fixtures as every other scene — `galleryEntries`
+  // keys them to `day-1` and the harness hands them to whichever date is
+  // asked for — so this is not a picture of a past day's own food, and
+  // nothing here has been exercised against a day that is empty or
+  // differently full. Said out loud because a design artefact that is partly
+  // invented has to say which part.
   Scene(name: 'day-past', target: LaunchTarget.today, dayOffset: -3),
   Scene(
     name: 'today-dark',

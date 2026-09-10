@@ -10,7 +10,9 @@ keyboard, or two-device test (review §9.2).
 
 - **Impl** — code written and merged to `main`.
 - **Test** — an automated test holds the behaviour, and for a defect a failing
-  regression test was demonstrated *before* the fix.
+  regression test was demonstrated *before* the fix. `✓` here says the test
+  was written and is green, not that it is guarding `main`: read it with the
+  Impl column, which is the one that says whether any of it has merged.
 - **Review** — shipped through a PR with a fresh-context review over the diff.
 - **Deployed** — migration pushed to the hosted project, or Edge Function
   deployed. Blank where the change needs neither.
