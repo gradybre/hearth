@@ -2,11 +2,14 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/app/providers.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
+import 'package:hearth/domain/planning/day_format.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/nutrient_coverage.dart';
+import 'package:hearth/domain/planning/week.dart';
 import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/app_harness.dart';
@@ -62,6 +65,23 @@ void main() {
     await pumpFrames(tester, frames: 12);
   }
 
+  /// Reaches a day in the destination list and chooses it.
+  ///
+  /// Scrolled to, because the list is lazy and now starts a week behind the
+  /// one on screen — so the day after today is genuinely below the fold and
+  /// not merely off it: no finder can see a row a `ListView` has not built.
+  Future<void> chooseDay(WidgetTester tester, String label) async {
+    await tester.scrollUntilVisible(
+      find.textContaining(label),
+      120,
+      scrollable: find.byType(Scrollable).last,
+      maxScrolls: 30,
+    );
+    await pumpFrames(tester, frames: 8);
+    await tester.tap(find.textContaining(label));
+    await pumpFrames(tester, frames: 8);
+  }
+
   testWidgets('a meal offers to move and to be planned again', (
     WidgetTester tester,
   ) async {
@@ -82,6 +102,39 @@ void main() {
     );
   });
 
+  testWidgets('the day it was really eaten on can be behind you', (
+    WidgetTester tester,
+  ) async {
+    // The correction this exists for is noticing a mis-filed meal a day or
+    // two later, and that direction is backwards. The picker offered this
+    // week and the next — forward-looking, which is right for meal-prep
+    // assignment and wrong here: open the app on a Monday and *yesterday* is
+    // in the week before, so the commonest correction of all could not be
+    // made at all.
+    final DateTime monday = startOfWeek(DateTime.now());
+    _FixedDate.date = monday;
+    await pumpHearthApp(
+      tester,
+      foods: <Food>[yogurt()],
+      entries: <MealPlanEntry>[lunch()],
+      extraOverrides: <Object>[
+        selectedDateProvider.overrideWith(_FixedDate.new),
+      ],
+    );
+    await tester.tap(find.text('Plan').last);
+    await pumpFrames(tester);
+    await openOptions(tester);
+    await tester.tap(find.text('Move to another day or meal…'));
+    await pumpFrames(tester, frames: 12);
+
+    final DateTime yesterday = addDays(monday, -1);
+    expect(
+      find.textContaining(shortDate(yesterday)),
+      findsOneWidget,
+      reason: 'the day before the week started was not offered',
+    );
+  });
+
   testWidgets('moving it keeps the frozen snapshot and the same record', (
     WidgetTester tester,
   ) async {
@@ -97,8 +150,7 @@ void main() {
     await pumpFrames(tester, frames: 12);
 
     // Any day the picker offers that is not the one it is already on.
-    await tester.tap(find.textContaining('tomorrow'));
-    await pumpFrames(tester, frames: 8);
+    await chooseDay(tester, 'tomorrow');
     // The chip, not the day screen's own "Dinner" heading behind the sheet.
     await tester.tap(find.widgetWithText(ChoiceChip, 'Dinner'));
     await pumpFrames(tester, frames: 8);
@@ -112,6 +164,11 @@ void main() {
     expect(after.servings, 2);
     expect(after.mealSlot, MealSlot.dinner.name);
     expect(after.dayId, isNot(before.dayId));
+
+    // And it says where it went. Both of these put their result on another
+    // day, so the screen left behind is either unchanged or has quietly lost
+    // a row — with nothing said, there is no way to tell it worked.
+    expect(find.textContaining('Moved to dinner on'), findsOneWidget);
   });
 
   testWidgets('and planning it again leaves the original alone', (
@@ -123,8 +180,7 @@ void main() {
     await tester.tap(find.text('Plan this again…'));
     await pumpFrames(tester, frames: 12);
 
-    await tester.tap(find.textContaining('tomorrow'));
-    await pumpFrames(tester, frames: 8);
+    await chooseDay(tester, 'tomorrow');
     await tester.tap(find.text('Plan it'));
     await pumpFrames(tester, frames: 20);
 
@@ -153,9 +209,21 @@ void main() {
     expect(copy.isLogged, isFalse);
     expect(copy.macroSnapshot, isNull);
     expect(copy.servings, 2);
+
+    // The copy is on a day nobody is looking at, so this is the only
+    // evidence on screen that anything happened at all.
+    expect(find.textContaining('Planned for breakfast on'), findsOneWidget);
   });
 }
 
 double kcal(String? snapshot) =>
     ((jsonDecode(snapshot!) as Map<String, Object?>)['kcal']! as num)
         .toDouble();
+
+/// A [SelectedDate] the test puts where it needs it.
+class _FixedDate extends SelectedDate {
+  static DateTime date = dayKey(DateTime.now());
+
+  @override
+  DateTime build() => date;
+}

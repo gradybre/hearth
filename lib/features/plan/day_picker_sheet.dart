@@ -113,10 +113,17 @@ class _DayPickerSheetState extends ConsumerState<_DayPickerSheet> {
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     final DateTime anchor = ref.watch(selectedDateProvider);
-    // Offers this week and the next: meal prep and copy-day are both about
-    // the near future, and a full calendar would be a heavier control than
-    // the job needs.
+    // Meal prep and copy-day are about the near future, so they offer this
+    // week and the next; a full calendar would be a heavier control than
+    // either job needs.
+    //
+    // Moving one meal is the other direction. The correction it exists for is
+    // noticing a mis-filed meal a day or two *later*, and "this week and the
+    // next" cannot express that at all across a week boundary: open the app
+    // on a Monday and yesterday is in the week before, so the commonest
+    // correction there is could not be made.
     final List<DateTime> days = <DateTime>[
+      if (widget.single) ...weekOf(addDays(anchor, -7)),
       ...weekOf(anchor),
       ...weekOf(addDays(anchor, 7)),
     ];
@@ -294,15 +301,23 @@ class _DayCheck extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
       child: Semantics(
-        checked: selected,
+        // A radio announces as a radio. `checked` reads as a tick box, which
+        // promises you can tick a second one — and choosing a second day here
+        // silently replaces the first (spec §6.3).
+        checked: single ? null : selected,
+        selected: single ? selected : null,
+        inMutuallyExclusiveGroup: single ? true : null,
         label: label,
-        onTap: () => onChanged(!selected),
+        // Tapping the chosen one again is not an action: the parent ignores
+        // a deselection, so announcing one would offer something that does
+        // nothing.
+        onTap: single && selected ? null : () => onChanged(!selected),
         excludeSemantics: true,
         child: Material(
           color: selected ? colors.surfaceSunken : colors.surface,
           borderRadius: BorderRadius.circular(HearthRadius.md),
           child: InkWell(
-            onTap: () => onChanged(!selected),
+            onTap: single && selected ? null : () => onChanged(!selected),
             borderRadius: BorderRadius.circular(HearthRadius.md),
             child: Container(
               decoration: BoxDecoration(

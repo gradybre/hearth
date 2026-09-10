@@ -14,6 +14,7 @@ import '../../data/repositories/plan_repository.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
+import '../../domain/planning/day_format.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
@@ -719,6 +720,8 @@ class _EntryRow extends ConsumerWidget {
         .read(planRepositoryProvider)
         .move(entry.entry, date: to.date, slot: to.slot);
     ref.invalidate(dayEntriesProvider);
+    if (!context.mounted) return;
+    _say(context, 'Moved to ${_whenAndWhere(to)}.');
   }
 
   /// Plans the same food or recipe, at the same portion, for another day.
@@ -734,7 +737,22 @@ class _EntryRow extends ConsumerWidget {
         .read(planRepositoryProvider)
         .copyAsPlanned(entry.entry, date: to.date, slot: to.slot);
     ref.invalidate(dayEntriesProvider);
+    if (!context.mounted) return;
+    _say(context, 'Planned for ${_whenAndWhere(to)}.');
   }
+
+  /// Says what happened, because it happened somewhere else.
+  ///
+  /// Both of these put their result on a *different* day, so the screen the
+  /// user is looking at is either unchanged — the copy — or has quietly lost
+  /// a row, with no statement of where it went. `_copyDay` already answers
+  /// the same question the same way.
+  void _say(BuildContext context, String message) =>
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+
+  String _whenAndWhere(MealDestination to) =>
+      '${to.slot.label.toLowerCase()} on ${shortDate(to.date)}';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
