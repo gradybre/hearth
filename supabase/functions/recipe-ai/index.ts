@@ -23,6 +23,12 @@
 // verify_jwt is on (the default), so only a signed-in Hearth user can spend
 // this project's quota.
 
+import {
+  ceilingUsd,
+  checkBudget,
+  ICON_CEILING_FRACTION,
+  recordUsage,
+} from './budget.ts';
 import { fetchGuarded, UrlRefused } from './url_guard.ts';
 
 const ANTHROPIC = 'https://api.anthropic.com/v1/messages';
@@ -45,40 +51,11 @@ const MAX_TOTAL_BYTES = 18 * 1024 * 1024;
 const MAX_MESSAGES = 40;
 const MAX_URL_BYTES = 2 * 1024 * 1024;
 
-/// USD per million tokens for MODEL. Change both together with MODEL.
-///
-/// Approximate on purpose: the ceiling is a guardrail, not an invoice, and
-/// Anthropic's own billing limit is the number that actually binds. Being a
-/// little pessimistic here is the safe direction to be wrong in.
-const INPUT_USD_PER_MTOK = 3;
-const OUTPUT_USD_PER_MTOK = 15;
-
-/// Above this share of the ceiling, answers carry a warning; at or above 1,
-/// they are refused (spec §3, §8.1).
-const WARN_AT = 0.75;
-
-/// Where a *decorative* call stops, well before the useful ones do.
-///
-/// A recipe icon is the only thing this function produces that nobody needs.
-/// Giving it the same ceiling as import would mean a month of pictures could
-/// be the reason a recipe import is refused at 90% of the budget — the
-/// picture having spent the money the import needed. So it yields first, and
-/// by a wide margin: half the ceiling still buys hundreds of sketches, and it
-/// leaves the other half for the features the app is actually for.
-const ICON_CEILING_FRACTION = 0.5;
-
 /// What a stored icon may weigh, mirroring `SketchIcon.maxMarkupLength` in
 /// the app and the check constraint on `recipes.icon_svg`. Three copies of
 /// one number, because the client is public and the database is the only one
 /// of the three that cannot be talked round.
 const MAX_ICON_LENGTH = 4096;
-
-/// The default when AI_MONTHLY_CEILING_USD is unset.
-///
-/// A number rather than "unlimited", deliberately. §8 names a dev-time retry
-/// loop as the real risk, and a loop that runs into an unset variable is a
-/// loop with no ceiling at all — which is the failure this exists to stop.
-const DEFAULT_CEILING_USD = 25;
 
 /// The one shape both modes return, and the only thing the app parses.
 ///
@@ -660,7 +637,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
   try {
     // Before the call, not after: refusing to spend is the whole point, and a
     // check that runs afterwards has already spent it (spec §3, §8.1).
-    const budget = await checkBudget();
+    const budget = await checkBudget(callRpc, ceilingUsd(Deno.env.get));
     if (budget.exhausted) {
       return json({
         // Not toFixed(2) on the ceiling: a small one rounds to "$0.00",
@@ -739,7 +716,11 @@ Deno.serve(async (request: Request): Promise<Response> => {
       tool,
       mode === 'menu' ? 16_000 : mode === 'icon' ? 1500 : 4096,
     );
-    const usage = await recordUsage(answer.usage);
+    const usage = await recordUsage(
+      callRpc,
+      ceilingUsd(Deno.env.get),
+      answer.usage,
+    );
 
     const shaped = mode === 'icon'
       ? shapeIcon(answer.input)
@@ -1161,74 +1142,6 @@ async function ask(
   // The token counts were always in this payload and were always thrown away.
   // They are what the ceiling is counted in.
   return { input: block.input, usage: payload?.usage ?? null, truncated };
-}
-
-/// What the month has cost, and whether that is already too much.
-///
-/// A failure to read the counter is treated as "carry on": the ceiling is a
-/// guardrail, and a database hiccup that silently disabled recipe import
-/// would be a worse outcome than a call that should not have been made.
-/// Anthropic's own billing limit is still underneath this.
-async function checkBudget(): Promise<
-  {
-    exhausted: boolean;
-    fraction: number;
-    spent: number;
-    ceiling: number;
-    report: unknown;
-  }
-> {
-  const ceiling = Number(
-    Deno.env.get('AI_MONTHLY_CEILING_USD') ?? DEFAULT_CEILING_USD,
-  );
-  const spent = await callRpc('ai_usage_this_month', {}) ?? 0;
-  const fraction = ceiling > 0 ? Number(spent) / ceiling : 0;
-
-  return {
-    exhausted: fraction >= 1,
-    // Carried out rather than left inside `report`: a caller deciding whether
-    // *this* mode may spend needs the number, not a display object.
-    fraction,
-    spent: Number(spent),
-    ceiling,
-    report: {
-      spent_usd: Number(Number(spent).toFixed(4)),
-      ceiling_usd: ceiling,
-      fraction: Number(fraction.toFixed(4)),
-      // The app shows a quiet line at 75% rather than a dialog: a warning
-      // that interrupts every import is one nobody reads by the third time.
-      warn: fraction >= WARN_AT,
-    },
-  };
-}
-
-/// Adds what a call cost and returns the month's totals for the app to show.
-async function recordUsage(
-  usage: { input_tokens?: number; output_tokens?: number } | null,
-): Promise<unknown> {
-  const input = usage?.input_tokens ?? 0;
-  const output = usage?.output_tokens ?? 0;
-  const cost = (input / 1e6) * INPUT_USD_PER_MTOK +
-    (output / 1e6) * OUTPUT_USD_PER_MTOK;
-
-  const row = await callRpc('record_ai_usage', {
-    p_input_tokens: input,
-    p_output_tokens: output,
-    p_cost_usd: Number(cost.toFixed(6)),
-  });
-
-  const ceiling = Number(
-    Deno.env.get('AI_MONTHLY_CEILING_USD') ?? DEFAULT_CEILING_USD,
-  );
-  const spent = Number(row?.cost_usd ?? 0);
-  const fraction = ceiling > 0 ? spent / ceiling : 0;
-
-  return {
-    spent_usd: Number(spent.toFixed(4)),
-    ceiling_usd: ceiling,
-    fraction: Number(fraction.toFixed(4)),
-    warn: fraction >= WARN_AT,
-  };
 }
 
 /// Calls a Postgres function with the secret key.
