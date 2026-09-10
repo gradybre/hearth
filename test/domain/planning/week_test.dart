@@ -83,6 +83,97 @@ void main() {
     });
   });
 
+  group('calendarDaysBetween (spec §5.7, review F05)', () {
+    test('counts dates, not hours', () {
+      expect(
+        calendarDaysBetween(DateTime(2026, 3, 8), DateTime(2026, 3, 9)),
+        1,
+      );
+      expect(
+        calendarDaysBetween(DateTime(2026, 3, 9), DateTime(2026, 3, 8)),
+        -1,
+      );
+      expect(
+        calendarDaysBetween(DateTime(2026, 3, 8), DateTime(2026, 3, 8)),
+        0,
+      );
+    });
+
+    test('ignores the time of day on either side', () {
+      // The day screen compares one midnight key against another; nothing
+      // else should be able to change the answer.
+      expect(
+        calendarDaysBetween(
+          DateTime(2026, 3, 8, 23, 59),
+          DateTime(2026, 3, 9, 0, 1),
+        ),
+        1,
+        reason: 'two minutes apart, but a day apart on the calendar',
+      );
+    });
+
+    test('crosses months and years without arithmetic of its own', () {
+      expect(calendarDaysBetween(DateTime(2026, 2, 28), DateTime(2026, 3)), 1);
+      expect(calendarDaysBetween(DateTime(2025, 12, 31), DateTime(2026)), 1);
+      // 2028 is a leap year, so February has a 29th to cross.
+      expect(calendarDaysBetween(DateTime(2028, 2, 28), DateTime(2028, 3)), 2);
+    });
+
+    test('over a daylight-saving change, where a day is not 24 hours', () {
+      // The bug itself. Same shape as the `addDays` case below: CI runs in
+      // UTC where every day really is 24 hours, so this can only fail on a
+      // machine whose zone actually changes — which is why the convention is
+      // *also* enforced by reading the source, in
+      // test/architecture/calendar_arithmetic_test.dart.
+      final List<DateTime> transitions = <DateTime>[];
+      DateTime day = DateTime(2026);
+      while (day.year == 2026) {
+        final DateTime next = DateTime(day.year, day.month, day.day + 1);
+        if (next.timeZoneOffset != day.timeZoneOffset) transitions.add(day);
+        day = next;
+      }
+
+      if (transitions.isEmpty) {
+        markTestSkipped('this machine\'s timezone has no daylight saving');
+        return;
+      }
+
+      for (final DateTime before in transitions) {
+        final DateTime after = DateTime(
+          before.year,
+          before.month,
+          before.day + 1,
+        );
+
+        expect(
+          calendarDaysBetween(before, after),
+          1,
+          reason: 'crossing $before counted the wrong number of days',
+        );
+        expect(
+          calendarDaysBetween(after, before),
+          -1,
+          reason: 'crossing $before backwards counted the wrong number',
+        );
+      }
+
+      // And the old spelling misses it on at least one of them, so the
+      // assertions above are not passing by luck.
+      expect(
+        transitions.any((DateTime before) {
+          final DateTime after = DateTime(
+            before.year,
+            before.month,
+            before.day + 1,
+          );
+          return after.difference(before).inDays != 1;
+        }),
+        isTrue,
+        reason: 'no transition in this zone actually shortens a day',
+      );
+    });
+  });
+
   group('addDays (spec §5.7, R08)', () {
     test('crosses a month without arithmetic of its own', () {
       expect(addDays(DateTime(2026, 1, 30), 3), DateTime(2026, 2, 2));

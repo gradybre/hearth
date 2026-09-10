@@ -180,9 +180,9 @@ void main() {
       tester,
       eaten: const Macros(kcal: 400, fiberG: 14),
     );
-    // `.last` is the card's own heading; the first is the page title, and
-    // only the card opens the sheet.
-    await tester.tap(find.text('Today').last);
+    // The card's own caption. No `.last` any more: it used to read "Today",
+    // which the page title also said, so this depended on their order.
+    await tester.tap(find.text('Daily totals'));
     await pumpFrames(tester, frames: 12);
 
     expect(find.text('Fibre g'), findsOneWidget);

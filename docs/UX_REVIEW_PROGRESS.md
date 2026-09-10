@@ -21,6 +21,10 @@ keyboard, or two-device test (review §9.2).
 Status: `—` not started · `~` in progress · `✓` done · `n/a` not applicable ·
 `B` waiting on Brendan.
 
+`~` on Impl means the code is written and the PR is open, not merged. It
+becomes `✓` when Brendan merges it — five PRs are open at the time of
+writing and none of them is on `main` yet.
+
 ---
 
 ## Defects
@@ -32,7 +36,7 @@ Status: `—` not started · `~` in progress · `✓` done · `n/a` not applicab
 | F02 | Targeted shopping Undo | ✓ | ✓ | ~ #50 | n/a | — |
 | F03 | PDF page states: rendered vs extracted | ✓ | ✓ | ~ #52 | n/a | — |
 | F04 | Accumulated uncertainty; retry-safe batch save | ✓ | ✓ | ~ #52 | n/a | — |
-| F05 | Calendar-derived day labels; no constant "Today" card | — | — | — | n/a | — |
+| F05 | Calendar-derived day labels; no constant "Today" card | ✓ | ✓ | ~ #55 | n/a | — |
 | F06 | Direct gram/ounce entry | — | — | — | n/a | — |
 | F07a | Backoff wake-up | ✓ | ✓ | ~ #53 | n/a | — |
 | F07b | B02 reserve/settle, fail closed; record truncated usage | — | — | — | — | — |
