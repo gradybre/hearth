@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 
@@ -196,6 +197,33 @@ class ServingDraft {
     cholesterol: cholesterol ?? this.cholesterol,
     id: id,
   );
+
+  /// Everything a person can change, for the unsaved-work guard (review F01).
+  ///
+  /// **Every field of this class belongs in this list.** A field missing from
+  /// it is a field the editor will not notice you changed, which means Cancel
+  /// throws that change away without asking — the exact defect the guard was
+  /// built for, reintroduced quietly one field at a time.
+  List<Object?> get _props => <Object?>[
+    amount,
+    unitId,
+    kcal,
+    protein,
+    carbs,
+    fat,
+    fiber,
+    sodium,
+    cholesterol,
+    id,
+  ];
+
+  @override
+  bool operator ==(Object other) =>
+      other is ServingDraft &&
+      const ListEquality<Object?>().equals(other._props, _props);
+
+  @override
+  int get hashCode => const ListEquality<Object?>().hash(_props);
 }
 
 /// A food being entered by hand (spec §5.5).
@@ -598,6 +626,35 @@ class FoodDraft {
   /// a stated zero would turn a fact into a gap on every edit. Water really
   /// does have no sodium.
   static String _minorText(double? value) => value == null ? '' : _plain(value);
+
+  /// Everything a person can change, for the unsaved-work guard (review F01).
+  ///
+  /// **Every field of this class belongs in this list**, for the reason given
+  /// on [ServingDraft._props].
+  List<Object?> get _props => <Object?>[
+    name,
+    brand,
+    menuGroup,
+    menuOrder,
+    storeTag,
+    walmartItemId,
+    packSize,
+    barcode,
+    servings,
+    existingId,
+    source,
+    isDefault,
+    isZeroCalorie,
+    isModifier,
+  ];
+
+  @override
+  bool operator ==(Object other) =>
+      other is FoodDraft &&
+      const DeepCollectionEquality().equals(other._props, _props);
+
+  @override
+  int get hashCode => const DeepCollectionEquality().hash(_props);
 }
 
 /// A typed pack size — "1 lb", "7.2 oz" — as a quantity, or null.

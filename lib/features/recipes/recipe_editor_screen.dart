@@ -9,6 +9,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
+import '../../app/widgets/unsaved_work_guard.dart';
 import '../../data/adapters/label_reader.dart';
 import '../../data/adapters/recipe_ai.dart';
 import '../../data/repositories/ingredient_match_repository.dart';
@@ -105,6 +106,22 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   bool _saving = false;
   String? _existingId;
   bool _showErrors = false;
+
+  /// The draft as the editor opened on it, for the unsaved-work guard
+  /// (review F01). Null until the first fill, which is the moment before
+  /// which there is nothing to lose.
+  RecipeDraft? _openedDraft;
+
+  /// Whether leaving now would lose something.
+  ///
+  /// A comparison rather than a flag set on every keystroke, so typing a
+  /// character and deleting it again leaves the editor clean — an editor that
+  /// asks when nothing actually differs teaches people to press Discard
+  /// without reading it.
+  ///
+  /// Null baseline means the editor is still loading an existing recipe,
+  /// which returns a spinner from `build` and never reaches the guard.
+  bool get _isDirty => _openedDraft != null && _draft != _openedDraft;
 
   /// The sketch icon this recipe already has (spec §5.2).
   ///
@@ -555,7 +572,15 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   void initState() {
     super.initState();
     final RecipeDraft? initial = widget.imported?.draft ?? widget.draft;
-    if (initial != null) _fill(initial);
+    if (initial != null) {
+      _fill(initial);
+    } else {
+      // A blank editor has a baseline too, and it is the blank editor. Only
+      // an *existing* recipe reaches `_fill`, so without this a new recipe
+      // never had one — and a guard with no baseline is a guard that never
+      // fires, which is the defect it was built to fix.
+      _openedDraft = _draft;
+    }
   }
 
   void _hydrate(Recipe recipe) => _fill(RecipeDraft.fromRecipe(recipe));
@@ -591,6 +616,16 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     _matches = draft.matches;
     _noMatch = draft.noMatch;
     _loaded = true;
+    // Read back out of the controllers rather than stored from the argument.
+    // Filling normalises — 4.0 servings becomes the text "4", tags become a
+    // joined string and split again — so the incoming draft and the one the
+    // editor produces a moment later are not always equal, and using the
+    // former as the baseline would leave every editor dirty on open.
+    //
+    // Set on every fill, so a revision accepted from the panel below becomes
+    // the new baseline: having asked for it and kept it, being asked about it
+    // again on the way out is noise.
+    _openedDraft = _draft;
   }
 
   Future<void> _save() async {
@@ -755,294 +790,312 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      appBar: AppBar(
-        backgroundColor: colors.surface,
-        surfaceTintColor: Colors.transparent,
-        title: Text(switch ((widget.recipeId, widget.imported)) {
-          (final String? id, _) when id != null => 'Edit recipe',
-          (_, final RecipeImportResult? i) when i != null => 'Check and save',
-          _ => 'New recipe',
-        }, style: text.sectionHeader),
-        leading: TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        leadingWidth: 88,
-        actions: <Widget>[
-          Padding(
-            padding: const EdgeInsets.only(right: HearthSpacing.sm),
-            child: FilledButton(
-              onPressed: _saving ? null : _save,
-              child: Text(
-                _saving ? 'Saving…' : widget.intent?.action ?? 'Save',
-              ),
-            ),
+    return UnsavedWorkGuard(
+      isDirty: () => _isDirty,
+      what: 'recipe',
+      child: Scaffold(
+        backgroundColor: colors.background,
+        appBar: AppBar(
+          backgroundColor: colors.surface,
+          surfaceTintColor: Colors.transparent,
+          title: Text(switch ((widget.recipeId, widget.imported)) {
+            (final String? id, _) when id != null => 'Edit recipe',
+            (_, final RecipeImportResult? i) when i != null => 'Check and save',
+            _ => 'New recipe',
+          }, style: text.sectionHeader),
+          leading: TextButton(
+            onPressed: _saving ? null : _cancel,
+            child: const Text('Cancel'),
           ),
-        ],
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: EdgeInsets.all(gutter),
-          children: <Widget>[
-            if (widget.imported?.uncertain case final List<AiUncertainty> notes
-                when notes.isNotEmpty) ...<Widget>[
-              _UncertainNotes(notes: notes),
-              const SizedBox(height: HearthSpacing.lg),
-            ],
-            _Field(
-              controller: _title,
-              label: 'Title',
-              hint: 'Braised short ribs',
-              errorText: _showErrors ? draft.titleError : null,
-              onChanged: _rebuild,
-              textCapitalization: TextCapitalization.sentences,
-            ),
-            const SizedBox(height: HearthSpacing.lg),
-            const SizedBox(height: HearthSpacing.lg),
-            // A photo needs a recipe to belong to, so it is offered only once
-            // there is one to attach it to (spec §5.2).
-            RecipePhotoField(recipeId: _existingId),
-            const SizedBox(height: HearthSpacing.lg),
-            RecipeIconField(
-              recipeId: _existingId,
-              svg: _iconSvg,
-              onCleared: () => setState(() => _iconSvg = null),
-            ),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: _Field(
-                    controller: _servings,
-                    label: 'Serves',
-                    // A number pad on iOS has no decimal point, so a recipe
-                    // that serves 4.5 could not be typed. Prep and cook
-                    // beside it stay whole minutes.
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    errorText: _showErrors ? draft.servingsError : null,
-                    onChanged: _rebuild,
-                  ),
+          leadingWidth: 88,
+          actions: <Widget>[
+            Padding(
+              padding: const EdgeInsets.only(right: HearthSpacing.sm),
+              child: FilledButton(
+                onPressed: _saving ? null : _save,
+                child: Text(
+                  _saving ? 'Saving…' : widget.intent?.action ?? 'Save',
                 ),
-                // Nothing to prep and nothing to cook when somebody else did
-                // both (spec §5.2).
-                if (_kind == RecipeKind.cooked) ...<Widget>[
-                  const SizedBox(width: HearthSpacing.md),
-                  Expanded(
-                    child: _Field(
-                      controller: _prep,
-                      label: 'Prep (min)',
-                      keyboardType: TextInputType.number,
-                      onChanged: _rebuild,
-                    ),
-                  ),
-                  const SizedBox(width: HearthSpacing.md),
-                  Expanded(
-                    child: _Field(
-                      controller: _cook,
-                      label: 'Cook (min)',
-                      keyboardType: TextInputType.number,
-                      onChanged: _rebuild,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: HearthSpacing.xl),
-            for (int i = 0; i < _sections.length; i++) ...<Widget>[
-              if (_sections.length > 1) ...<Widget>[
-                _SectionHeader(
-                  fields: _sections[i],
-                  index: i,
-                  count: _sections.length,
-                  onChanged: _rebuild,
-                  onMoveUp: i == 0 ? null : () => _moveSection(i, i - 1),
-                  onMoveDown: i == _sections.length - 1
-                      ? null
-                      : () => _moveSection(i, i + 1),
-                  onRemove: () => _removeSection(i),
-                ),
-                const SizedBox(height: HearthSpacing.md),
-              ],
-              _Field(
-                controller: _sections[i].ingredients,
-                label: 'Ingredients',
-                hint:
-                    '2 tbsp olive oil\n3 cloves garlic, minced\nsalt to taste',
-                minLines: 4,
-                maxLines: 12,
-                onChanged: _rebuild,
               ),
-              if (RecipeDraft.parseIngredients(_sections[i].ingredients.text)
-                  .isNotEmpty) ...<Widget>[
-                const SizedBox(height: HearthSpacing.md),
-                _IngredientPreview(
-                  ingredients: RecipeDraft.parseIngredients(
-                    _sections[i].ingredients.text,
-                  ),
-                  foods: _foods,
-                  draft: draft,
-                  statusByName: statusByName,
-                  onMatch: _matchIngredient,
-                  onFix: _showFixOptions,
-                  onNoMatch: (ParsedIngredient i, bool marked) =>
-                      _markNoMatch(i, marked: marked),
-                ),
-                if (_unmatchedIn(i, draft) case final List<ParsedIngredient> u
-                    when u.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: HearthSpacing.sm),
-                  // Offered, not automatic. A dozen searches fired while
-                  // someone is still typing their ingredients would be work
-                  // nobody asked for, against services free to rate-limit us.
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: () => _findMatches(u),
-                      icon: const Icon(Icons.travel_explore, size: 18),
-                      label: Text(
-                        u.length == 1
-                            ? 'Find nutrition for 1 ingredient'
-                            : 'Find nutrition for ${u.length} ingredients',
-                      ),
-                    ),
-                  ),
-                ],
+            ),
+          ],
+        ),
+        body: SafeArea(
+          child: ListView(
+            padding: EdgeInsets.all(gutter),
+            children: <Widget>[
+              if (widget.imported?.uncertain
+                  case final List<AiUncertainty> notes
+                  when notes.isNotEmpty) ...<Widget>[
+                _UncertainNotes(notes: notes),
+                const SizedBox(height: HearthSpacing.lg),
               ],
-              const SizedBox(height: HearthSpacing.lg),
               _Field(
-                controller: _sections[i].directions,
-                label: 'Directions',
-                hint: 'Paste or type. Steps are numbered automatically.',
-                minLines: 4,
-                maxLines: 14,
+                controller: _title,
+                label: 'Title',
+                hint: 'Braised short ribs',
+                errorText: _showErrors ? draft.titleError : null,
                 onChanged: _rebuild,
                 textCapitalization: TextCapitalization.sentences,
               ),
-              const SizedBox(height: HearthSpacing.xl),
-            ],
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: _addSection,
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add a section'),
+              const SizedBox(height: HearthSpacing.lg),
+              const SizedBox(height: HearthSpacing.lg),
+              // A photo needs a recipe to belong to, so it is offered only once
+              // there is one to attach it to (spec §5.2).
+              RecipePhotoField(recipeId: _existingId),
+              const SizedBox(height: HearthSpacing.lg),
+              RecipeIconField(
+                recipeId: _existingId,
+                svg: _iconSvg,
+                onCleared: () => setState(() => _iconSvg = null),
               ),
-            ),
-            if (draft.parsedIngredients.isNotEmpty) ...<Widget>[
-              const SizedBox(height: HearthSpacing.lg),
-              // Whole-recipe, not per section: nutrition is about the dish,
-              // and a section's macros on their own are not a number anyone
-              // eats (spec §5.2's flatten-for-nutrition).
-              _LiveMacros(macros: macros),
-            ],
-            if (draft.parsedDirections.steps.isNotEmpty) ...<Widget>[
-              const SizedBox(height: HearthSpacing.lg),
-              // Numbered straight through the recipe. A cook counting steps
-              // counts the whole method, not each group from one.
-              _DirectionsPreview(directions: draft.parsedDirections),
-            ],
-            const SizedBox(height: HearthSpacing.xl),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: _Field(
-                    controller: _cuisine,
-                    label: 'Cuisine',
-                    onChanged: _rebuild,
-                    textCapitalization: TextCapitalization.words,
-                  ),
-                ),
-                const SizedBox(width: HearthSpacing.md),
-                Expanded(
-                  child: _Field(
-                    controller: _tags,
-                    label: 'Tags',
-                    hint: 'weeknight, batch',
-                    onChanged: _rebuild,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: HearthSpacing.md),
-            // Merged so a screen reader says "Eaten out, switch, off" as one
-            // thing rather than three (§6.3).
-            MergeSemantics(
-              child: Row(
+              Row(
                 children: <Widget>[
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text('Eaten out', style: context.text.body),
-                        Text(
-                          'A meal you ordered. Never goes on the shopping '
-                          'list.',
-                          style: context.text.metadata.copyWith(
-                            color: colors.textMuted,
-                          ),
-                        ),
-                      ],
+                    child: _Field(
+                      controller: _servings,
+                      label: 'Serves',
+                      // A number pad on iOS has no decimal point, so a recipe
+                      // that serves 4.5 could not be typed. Prep and cook
+                      // beside it stay whole minutes.
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      errorText: _showErrors ? draft.servingsError : null,
+                      onChanged: _rebuild,
                     ),
                   ),
-                  Switch(
-                    value: _kind == RecipeKind.eatenOut,
-                    onChanged: (bool value) => setState(() {
-                      _kind = value ? RecipeKind.eatenOut : RecipeKind.cooked;
-                      // Times belong to a recipe you cook. Cleared rather than
-                      // hidden, so a bowl saved after the switch is flipped
-                      // does not keep a prep time nobody can see.
-                      if (value) {
-                        _prep.clear();
-                        _cook.clear();
-                      }
-                      // Anything *Hearth* matched was matched against the
-                      // wrong kitchen and is dropped, so the auto-apply can
-                      // answer again with the other library. Hand-picked
-                      // matches are left exactly where they are — a person
-                      // choosing a food is not a guess to revisit.
-                      final Map<String, String> next = <String, String>{
-                        ..._matches,
-                      };
-                      for (final String key in _autoApplied) {
-                        next.remove(key);
-                      }
-                      _autoApplied.clear();
-                      _matches = next;
-                    }),
+                  // Nothing to prep and nothing to cook when somebody else did
+                  // both (spec §5.2).
+                  if (_kind == RecipeKind.cooked) ...<Widget>[
+                    const SizedBox(width: HearthSpacing.md),
+                    Expanded(
+                      child: _Field(
+                        controller: _prep,
+                        label: 'Prep (min)',
+                        keyboardType: TextInputType.number,
+                        onChanged: _rebuild,
+                      ),
+                    ),
+                    const SizedBox(width: HearthSpacing.md),
+                    Expanded(
+                      child: _Field(
+                        controller: _cook,
+                        label: 'Cook (min)',
+                        keyboardType: TextInputType.number,
+                        onChanged: _rebuild,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: HearthSpacing.xl),
+              for (int i = 0; i < _sections.length; i++) ...<Widget>[
+                if (_sections.length > 1) ...<Widget>[
+                  _SectionHeader(
+                    fields: _sections[i],
+                    index: i,
+                    count: _sections.length,
+                    onChanged: _rebuild,
+                    onMoveUp: i == 0 ? null : () => _moveSection(i, i - 1),
+                    onMoveDown: i == _sections.length - 1
+                        ? null
+                        : () => _moveSection(i, i + 1),
+                    onRemove: () => _removeSection(i),
+                  ),
+                  const SizedBox(height: HearthSpacing.md),
+                ],
+                _Field(
+                  controller: _sections[i].ingredients,
+                  label: 'Ingredients',
+                  hint: '2 tbsp olive oil\n3 cloves garlic, minced\nsalt to taste',
+                  minLines: 4,
+                  maxLines: 12,
+                  onChanged: _rebuild,
+                ),
+                if (RecipeDraft.parseIngredients(_sections[i].ingredients.text)
+                    .isNotEmpty) ...<Widget>[
+                  const SizedBox(height: HearthSpacing.md),
+                  _IngredientPreview(
+                    ingredients: RecipeDraft.parseIngredients(
+                      _sections[i].ingredients.text,
+                    ),
+                    foods: _foods,
+                    draft: draft,
+                    statusByName: statusByName,
+                    onMatch: _matchIngredient,
+                    onFix: _showFixOptions,
+                    onNoMatch: (ParsedIngredient i, bool marked) =>
+                        _markNoMatch(i, marked: marked),
+                  ),
+                  if (_unmatchedIn(i, draft) case final List<ParsedIngredient> u
+                      when u.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: HearthSpacing.sm),
+                    // Offered, not automatic. A dozen searches fired while
+                    // someone is still typing their ingredients would be work
+                    // nobody asked for, against services free to rate-limit us.
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => _findMatches(u),
+                        icon: const Icon(Icons.travel_explore, size: 18),
+                        label: Text(
+                          u.length == 1
+                              ? 'Find nutrition for 1 ingredient'
+                              : 'Find nutrition for ${u.length} ingredients',
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+                const SizedBox(height: HearthSpacing.lg),
+                _Field(
+                  controller: _sections[i].directions,
+                  label: 'Directions',
+                  hint: 'Paste or type. Steps are numbered automatically.',
+                  minLines: 4,
+                  maxLines: 14,
+                  onChanged: _rebuild,
+                  textCapitalization: TextCapitalization.sentences,
+                ),
+                const SizedBox(height: HearthSpacing.xl),
+              ],
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _addSection,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add a section'),
+                ),
+              ),
+              if (draft.parsedIngredients.isNotEmpty) ...<Widget>[
+                const SizedBox(height: HearthSpacing.lg),
+                // Whole-recipe, not per section: nutrition is about the dish,
+                // and a section's macros on their own are not a number anyone
+                // eats (spec §5.2's flatten-for-nutrition).
+                _LiveMacros(macros: macros),
+              ],
+              if (draft.parsedDirections.steps.isNotEmpty) ...<Widget>[
+                const SizedBox(height: HearthSpacing.lg),
+                // Numbered straight through the recipe. A cook counting steps
+                // counts the whole method, not each group from one.
+                _DirectionsPreview(directions: draft.parsedDirections),
+              ],
+              const SizedBox(height: HearthSpacing.xl),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: _Field(
+                      controller: _cuisine,
+                      label: 'Cuisine',
+                      onChanged: _rebuild,
+                      textCapitalization: TextCapitalization.words,
+                    ),
+                  ),
+                  const SizedBox(width: HearthSpacing.md),
+                  Expanded(
+                    child: _Field(
+                      controller: _tags,
+                      label: 'Tags',
+                      hint: 'weeknight, batch',
+                      onChanged: _rebuild,
+                    ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: HearthSpacing.lg),
-            _Field(
-              controller: _notes,
-              label: 'Notes',
-              minLines: 2,
-              maxLines: 6,
-              onChanged: _rebuild,
-              textCapitalization: TextCapitalization.sentences,
-            ),
-            // Last, deliberately. It is for correcting what the reader got
-            // wrong, which is something you notice after reading down the
-            // recipe — and putting it above the fields would push the save
-            // button around every time the conversation grew.
-            if (ref.watch(recipeAiProvider) != null) ...<Widget>[
-              const SizedBox(height: HearthSpacing.xl),
-              _ReviseCard(
-                current: () => _draft,
-                // Not "as opened": a title the model changed on request is
-                // still a title change, and the sketch has to follow it.
-                onApply: (RecipeDraft revised) =>
-                    setState(() => _fill(revised, asOpened: false)),
+              const SizedBox(height: HearthSpacing.md),
+              // Merged so a screen reader says "Eaten out, switch, off" as one
+              // thing rather than three (§6.3).
+              MergeSemantics(
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text('Eaten out', style: context.text.body),
+                          Text(
+                            'A meal you ordered. Never goes on the shopping '
+                            'list.',
+                            style: context.text.metadata.copyWith(
+                              color: colors.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: _kind == RecipeKind.eatenOut,
+                      onChanged: (bool value) => setState(() {
+                        _kind = value ? RecipeKind.eatenOut : RecipeKind.cooked;
+                        // Times belong to a recipe you cook. Cleared rather than
+                        // hidden, so a bowl saved after the switch is flipped
+                        // does not keep a prep time nobody can see.
+                        if (value) {
+                          _prep.clear();
+                          _cook.clear();
+                        }
+                        // Anything *Hearth* matched was matched against the
+                        // wrong kitchen and is dropped, so the auto-apply can
+                        // answer again with the other library. Hand-picked
+                        // matches are left exactly where they are — a person
+                        // choosing a food is not a guess to revisit.
+                        final Map<String, String> next = <String, String>{
+                          ..._matches,
+                        };
+                        for (final String key in _autoApplied) {
+                          next.remove(key);
+                        }
+                        _autoApplied.clear();
+                        _matches = next;
+                      }),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(height: HearthSpacing.lg),
+              _Field(
+                controller: _notes,
+                label: 'Notes',
+                minLines: 2,
+                maxLines: 6,
+                onChanged: _rebuild,
+                textCapitalization: TextCapitalization.sentences,
+              ),
+              // Last, deliberately. It is for correcting what the reader got
+              // wrong, which is something you notice after reading down the
+              // recipe — and putting it above the fields would push the save
+              // button around every time the conversation grew.
+              if (ref.watch(recipeAiProvider) != null) ...<Widget>[
+                const SizedBox(height: HearthSpacing.xl),
+                _ReviseCard(
+                  current: () => _draft,
+                  // Not "as opened": a title the model changed on request is
+                  // still a title change, and the sketch has to follow it.
+                  onApply: (RecipeDraft revised) =>
+                      setState(() => _fill(revised, asOpened: false)),
+                ),
+              ],
+              const SizedBox(height: HearthSpacing.xxl),
             ],
-            const SizedBox(height: HearthSpacing.xxl),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  /// Leaves the editor, asking first if there is anything to lose.
+  ///
+  /// Routed through the same question the system back gesture asks, rather
+  /// than popping directly: two ways out that disagree is one way out that
+  /// silently does not protect anything.
+  Future<void> _cancel() async {
+    if (!_isDirty) {
+      Navigator.of(context).pop();
+      return;
+    }
+    final NavigatorState navigator = Navigator.of(context);
+    if (await UnsavedWorkGuard.confirm(context, 'recipe')) navigator.pop();
   }
 
   void _rebuild(String _) => setState(() {});

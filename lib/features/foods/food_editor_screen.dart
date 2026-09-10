@@ -6,6 +6,7 @@ import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../app/widgets/unsaved_work_guard.dart';
 import '../../data/adapters/label_reader.dart';
 import '../../data/repositories/food_repository.dart';
 import '../../domain/models/food.dart';
@@ -55,6 +56,17 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
   );
   bool _loaded = false;
   bool _saving = false;
+
+  /// The food as the editor opened on it, for the unsaved-work guard
+  /// (review F01).
+  ///
+  /// A comparison rather than a flag set on every edit, so changing a field
+  /// and changing it back leaves the editor clean. An editor that asks when
+  /// nothing actually differs teaches people to press Discard without reading
+  /// it, and then it is not a guard.
+  late FoodDraft _openedDraft = _draft;
+
+  bool get _isDirty => _draft != _openedDraft;
   bool _showErrors = false;
 
   /// What the food's provenance was before the restaurant switch touched it,
@@ -236,6 +248,10 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
             );
           }
           _draft = _applyInitialLabel(FoodDraft.fromFood(food));
+          // The food as opened is the one just loaded, not the blank draft
+          // the field initialiser saw — without this every existing food is
+          // dirty the moment it appears.
+          _openedDraft = _draft;
           _loaded = true;
           return _form(context);
         },
@@ -251,326 +267,352 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      appBar: AppBar(
-        backgroundColor: colors.surface,
-        surfaceTintColor: Colors.transparent,
-        title: Text(switch ((widget.foodId, widget.initialDraft)) {
-          (final String? id, _) when id != null => 'Edit food',
-          (_, final FoodDraft? draft) when draft?.barcode.isNotEmpty ?? false =>
-            'Check and save',
-          _ => 'New food',
-        }, style: context.text.sectionHeader),
-        leading: TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        leadingWidth: 88,
-        actions: <Widget>[
-          Padding(
-            padding: const EdgeInsets.only(right: HearthSpacing.sm),
-            child: FilledButton(
-              onPressed: _saving ? null : _save,
-              child: Text(_saving ? 'Saving…' : 'Save'),
-            ),
+    return UnsavedWorkGuard(
+      isDirty: () => _isDirty,
+      what: 'food',
+      child: Scaffold(
+        backgroundColor: colors.background,
+        appBar: AppBar(
+          backgroundColor: colors.surface,
+          surfaceTintColor: Colors.transparent,
+          title: Text(switch ((widget.foodId, widget.initialDraft)) {
+            (final String? id, _) when id != null => 'Edit food',
+            (_, final FoodDraft? draft)
+                when draft?.barcode.isNotEmpty ?? false =>
+              'Check and save',
+            _ => 'New food',
+          }, style: context.text.sectionHeader),
+          leading: TextButton(
+            onPressed: _saving ? null : _cancel,
+            child: const Text('Cancel'),
           ),
-        ],
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: EdgeInsets.all(gutter),
-          children: <Widget>[
-            _TextField(
-              label: 'Name',
-              value: _draft.name,
-              hint: 'Greek yogurt',
-              errorText: _showErrors ? _draft.nameError : null,
-              textCapitalization: TextCapitalization.sentences,
-              onChanged: (String v) =>
-                  setState(() => _draft = _draft.copyWith(name: v)),
-            ),
-            const SizedBox(height: HearthSpacing.lg),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: _TextField(
-                    // The restaurant *is* the brand — a food from Chipotle is
-                    // branded Chipotle, and that one string is what groups a
-                    // menu together. Only the label changes, so nothing has to
-                    // be re-typed when the switch below is flipped.
-                    label: _isRestaurant ? 'Restaurant' : 'Brand',
-                    value: _draft.brand,
-                    hint: _isRestaurant ? 'Chipotle' : null,
-                    errorText: _showErrors ? _restaurantError : null,
-                    textCapitalization: TextCapitalization.words,
-                    onChanged: (String v) =>
-                        setState(() => _draft = _draft.copyWith(brand: v)),
-                  ),
-                ),
-                const SizedBox(width: HearthSpacing.md),
-                Expanded(
-                  child: _isRestaurant
-                      // Where it sits on their menu, so the builder can lay it
-                      // out the way they do rather than A to Z (spec §5.2).
-                      // Optional: an unsectioned item is listed last, not
-                      // hidden.
-                      ? _TextField(
-                          label: 'Menu section',
-                          value: _draft.menuGroup,
-                          hint: 'Proteins',
-                          textCapitalization: TextCapitalization.words,
-                          onChanged: (String v) => setState(
-                            () => _draft = _draft.copyWith(menuGroup: v),
-                          ),
-                        )
-                      // Nothing to tag with a shop. You do not buy a burrito
-                      // bowl's chicken at Costco.
-                      : _TextField(
-                          label: 'Store',
-                          value: _draft.storeTag,
-                          hint: 'Costco',
-                          textCapitalization: TextCapitalization.words,
-                          onChanged: (String v) => setState(
-                            () => _draft = _draft.copyWith(storeTag: v),
-                          ),
-                        ),
-                ),
-              ],
-            ),
-            const SizedBox(height: HearthSpacing.sm),
-            // The same control the other two food-level answers use, rather
-            // than a hand-rolled row: SwitchListTile merges its own semantics,
-            // so a screen reader says "From a restaurant, switch, off" as one
-            // thing (§6.3).
-            SwitchListTile.adaptive(
-              value: _isRestaurant,
-              onChanged: (bool on) => setState(() {
-                _draft = _draft.copyWith(
-                  source: on ? FoodSource.restaurant : _wasSource,
-                  // A shop tag means nothing on a menu item, and leaving one
-                  // behind would group a burrito bowl under Costco.
-                  storeTag: on ? '' : null,
-                  // And a deduction is a menu row. Left set, it would be a
-                  // switch nobody can see — the one below is gated on this —
-                  // on a food nothing in the app can reach.
-                  isModifier: on && _draft.isModifier,
-                );
-              }),
-              title: Text('From a restaurant', style: context.text.body),
-              subtitle: Text(
-                'Never matched into a recipe you cook — your chicken breast '
-                'and their chicken are not the same food. Shows up when you '
-                'build a meal you ate out.',
-                style: context.text.metadata.copyWith(color: colors.textMuted),
+          leadingWidth: 88,
+          actions: <Widget>[
+            Padding(
+              padding: const EdgeInsets.only(right: HearthSpacing.sm),
+              child: FilledButton(
+                onPressed: _saving ? null : _save,
+                child: Text(_saving ? 'Saving…' : 'Save'),
               ),
-              contentPadding: EdgeInsets.zero,
             ),
-            const SizedBox(height: HearthSpacing.lg),
-            // Only on a restaurant food. A deduction is a menu row — "make it
-            // a lettuce wrap" — and there is nothing in a household's own
-            // pantry that takes calories away.
-            if (_isRestaurant) ...<Widget>[
-              SwitchListTile.adaptive(
-                value: _draft.isModifier,
-                onChanged: (bool on) =>
-                    setState(() => _draft = _draft.copyWith(isModifier: on)),
-                title: Text(
-                  'This takes away rather than adds',
-                  style: context.text.body,
-                ),
-                subtitle: Text(
-                  '"Make it a lettuce wrap", −180 calories. Enter the numbers '
-                  'with their minus signs, as the sheet prints them. A '
-                  'deduction is only ever picked in the eat-out builder, '
-                  'against something you actually ordered.',
-                  style: context.text.metadata.copyWith(
-                    color: colors.textMuted,
-                  ),
-                ),
-                contentPadding: EdgeInsets.zero,
+          ],
+        ),
+        body: SafeArea(
+          child: ListView(
+            padding: EdgeInsets.all(gutter),
+            children: <Widget>[
+              _TextField(
+                label: 'Name',
+                value: _draft.name,
+                hint: 'Greek yogurt',
+                errorText: _showErrors ? _draft.nameError : null,
+                textCapitalization: TextCapitalization.sentences,
+                onChanged: (String v) =>
+                    setState(() => _draft = _draft.copyWith(name: v)),
               ),
               const SizedBox(height: HearthSpacing.lg),
-            ],
-            // Only when there is something to confirm. A food with real
-            // numbers on it has no zeros to vouch for, and offering the
-            // question anyway would invite somebody to answer it wrongly.
-            if (_draft.looksZeroCalorie) ...<Widget>[
-              SwitchListTile.adaptive(
-                value: _draft.isZeroCalorie,
-                onChanged: (bool on) =>
-                    setState(() => _draft = _draft.copyWith(isZeroCalorie: on)),
-                title: Text(
-                  'This really is 0 calories',
-                  style: context.text.body,
-                ),
-                subtitle: Text(
-                  'Black coffee, sparkling water, a zero-calorie sweetener. '
-                  'Without this, a food with nothing on it is treated as one '
-                  'whose numbers are missing.',
-                  style: context.text.metadata.copyWith(
-                    color: colors.textMuted,
-                  ),
-                ),
-                contentPadding: EdgeInsets.zero,
-              ),
-              const SizedBox(height: HearthSpacing.lg),
-            ],
-            // A standing choice, not a one-off correction. Marking it here
-            // rather than from the library is deliberate: this is the screen
-            // where you have just decided what this food *is*.
-            SwitchListTile.adaptive(
-              value: _draft.isDefault,
-              onChanged: (bool on) =>
-                  setState(() => _draft = _draft.copyWith(isDefault: on)),
-              title: Text('Use this by default', style: context.text.body),
-              subtitle: Text(
-                'Recipes calling for this will match it on their own. Several '
-                'kinds of one thing can each be a default — whole and 2% milk '
-                'both — and a recipe that does not say which will ask.',
-                style: context.text.metadata.copyWith(color: colors.textMuted),
-              ),
-              contentPadding: EdgeInsets.zero,
-            ),
-            const SizedBox(height: HearthSpacing.lg),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    'Serving sizes',
-                    style: context.text.sectionHeader,
-                  ),
-                ),
-                // §5.5's fallback chain ends at manual entry, and this is
-                // manual entry with the typing removed. It leads because it
-                // is the faster path for anything with a panel on it, and
-                // because it is the only thing here that can produce a weight
-                // and a volume for the same portion — the pair a recipe line
-                // measured in cups needs from a food sold by weight.
-                if (canReadLabels(ref))
-                  TextButton.icon(
-                    onPressed: _readLabel,
-                    icon: const Icon(Icons.document_scanner_outlined, size: 18),
-                    label: const Text('Read label'),
-                  ),
-                TextButton.icon(
-                  onPressed: () => setState(
-                    () => _draft = _draft.copyWith(
-                      servings: <ServingDraft>[
-                        ..._draft.servings,
-                        const ServingDraft(),
-                      ],
-                    ),
-                  ),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add'),
-                ),
-              ],
-            ),
-            if (_showErrors && _draft.servingsError != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
-                child: Text(
-                  _draft.servingsError!,
-                  style: context.text.metadata.copyWith(color: colors.error),
-                ),
-              ),
-            // Shown whether or not Save has been pressed. The hosted database
-            // refuses a negative outright and nothing local does, so a save
-            // that looked fine would sit in the queue and fail on the way up
-            // — better to say so beside the number that caused it.
-            if (_draft.macrosError case final String message)
-              Padding(
-                padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
-                child: Text(
-                  message,
-                  style: context.text.metadata.copyWith(color: colors.error),
-                ),
-              ),
-            const SizedBox(height: HearthSpacing.sm),
-            for (int i = 0; i < _draft.servings.length; i++)
-              Padding(
-                padding: const EdgeInsets.only(bottom: HearthSpacing.md),
-                child: _ServingRow(
-                  serving: _draft.servings[i],
-                  units: _servingUnits,
-                  canRemove: _draft.servings.length > 1,
-                  onChanged: (ServingDraft updated) => setState(() {
-                    final List<ServingDraft> next = <ServingDraft>[
-                      ..._draft.servings,
-                    ];
-                    next[i] = updated;
-                    _draft = _draft.copyWith(servings: next);
-                  }),
-                  onRemove: () => setState(() {
-                    final List<ServingDraft> next = <ServingDraft>[
-                      ..._draft.servings,
-                    ]..removeAt(i);
-                    _draft = _draft.copyWith(servings: next);
-                  }),
-                ),
-              ),
-
-            const SizedBox(height: HearthSpacing.lg),
-            // Optional, and skippable for most foods. Filling it in is what
-            // turns "Take it shopping" from a search into a basket (§5.7).
-            Text('Buying it at Walmart', style: context.text.label),
-            const SizedBox(height: HearthSpacing.xs),
-            Text(
-              'Paste a product link and Hearth remembers which product this '
-              'is. Add the pack size and it works out how many to order.',
-              style: context.text.metadata.copyWith(
-                color: context.colors.textMuted,
-              ),
-            ),
-            const SizedBox(height: HearthSpacing.sm),
-            _TextField(
-              label: 'Walmart link or item number',
-              value: _draft.walmartItemId,
-              hint: 'walmart.com/ip/…/10450479',
-              onChanged: (String v) =>
-                  setState(() => _draft = _draft.copyWith(walmartItemId: v)),
-            ),
-            if (_draft.walmartItemId.trim().isNotEmpty &&
-                !WalmartProduct.looksValid(_draft.walmartItemId)) ...<Widget>[
-              const SizedBox(height: HearthSpacing.xs),
-              // Said here rather than discovered at the shop: an id that does
-              // not parse is stored as nothing, and a basket that silently
-              // omits this food is the first anyone would know about it.
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Icon(
-                    Icons.info_outline,
-                    size: 16,
-                    color: context.colors.textMuted,
-                  ),
-                  const SizedBox(width: HearthSpacing.sm),
                   Expanded(
-                    child: Text(
-                      'No item number in that. Paste the whole product link, '
-                      'or just the number from the end of it.',
-                      style: context.text.metadata.copyWith(
-                        color: context.colors.textSecondary,
-                      ),
+                    child: _TextField(
+                      // The restaurant *is* the brand — a food from Chipotle is
+                      // branded Chipotle, and that one string is what groups a
+                      // menu together. Only the label changes, so nothing has to
+                      // be re-typed when the switch below is flipped.
+                      label: _isRestaurant ? 'Restaurant' : 'Brand',
+                      value: _draft.brand,
+                      hint: _isRestaurant ? 'Chipotle' : null,
+                      errorText: _showErrors ? _restaurantError : null,
+                      textCapitalization: TextCapitalization.words,
+                      onChanged: (String v) =>
+                          setState(() => _draft = _draft.copyWith(brand: v)),
                     ),
+                  ),
+                  const SizedBox(width: HearthSpacing.md),
+                  Expanded(
+                    child: _isRestaurant
+                        // Where it sits on their menu, so the builder can lay it
+                        // out the way they do rather than A to Z (spec §5.2).
+                        // Optional: an unsectioned item is listed last, not
+                        // hidden.
+                        ? _TextField(
+                            label: 'Menu section',
+                            value: _draft.menuGroup,
+                            hint: 'Proteins',
+                            textCapitalization: TextCapitalization.words,
+                            onChanged: (String v) => setState(
+                              () => _draft = _draft.copyWith(menuGroup: v),
+                            ),
+                          )
+                        // Nothing to tag with a shop. You do not buy a burrito
+                        // bowl's chicken at Costco.
+                        : _TextField(
+                            label: 'Store',
+                            value: _draft.storeTag,
+                            hint: 'Costco',
+                            textCapitalization: TextCapitalization.words,
+                            onChanged: (String v) => setState(
+                              () => _draft = _draft.copyWith(storeTag: v),
+                            ),
+                          ),
                   ),
                 ],
               ),
+              const SizedBox(height: HearthSpacing.sm),
+              // The same control the other two food-level answers use, rather
+              // than a hand-rolled row: SwitchListTile merges its own semantics,
+              // so a screen reader says "From a restaurant, switch, off" as one
+              // thing (§6.3).
+              SwitchListTile.adaptive(
+                value: _isRestaurant,
+                onChanged: (bool on) => setState(() {
+                  _draft = _draft.copyWith(
+                    source: on ? FoodSource.restaurant : _wasSource,
+                    // A shop tag means nothing on a menu item, and leaving one
+                    // behind would group a burrito bowl under Costco.
+                    storeTag: on ? '' : null,
+                    // And a deduction is a menu row. Left set, it would be a
+                    // switch nobody can see — the one below is gated on this —
+                    // on a food nothing in the app can reach.
+                    isModifier: on && _draft.isModifier,
+                  );
+                }),
+                title: Text('From a restaurant', style: context.text.body),
+                subtitle: Text(
+                  'Never matched into a recipe you cook — your chicken breast '
+                  'and their chicken are not the same food. Shows up when you '
+                  'build a meal you ate out.',
+                  style: context.text.metadata.copyWith(
+                    color: colors.textMuted,
+                  ),
+                ),
+                contentPadding: EdgeInsets.zero,
+              ),
+              const SizedBox(height: HearthSpacing.lg),
+              // Only on a restaurant food. A deduction is a menu row — "make it
+              // a lettuce wrap" — and there is nothing in a household's own
+              // pantry that takes calories away.
+              if (_isRestaurant) ...<Widget>[
+                SwitchListTile.adaptive(
+                  value: _draft.isModifier,
+                  onChanged: (bool on) =>
+                      setState(() => _draft = _draft.copyWith(isModifier: on)),
+                  title: Text(
+                    'This takes away rather than adds',
+                    style: context.text.body,
+                  ),
+                  subtitle: Text(
+                    '"Make it a lettuce wrap", −180 calories. Enter the numbers '
+                    'with their minus signs, as the sheet prints them. A '
+                    'deduction is only ever picked in the eat-out builder, '
+                    'against something you actually ordered.',
+                    style: context.text.metadata.copyWith(
+                      color: colors.textMuted,
+                    ),
+                  ),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const SizedBox(height: HearthSpacing.lg),
+              ],
+              // Only when there is something to confirm. A food with real
+              // numbers on it has no zeros to vouch for, and offering the
+              // question anyway would invite somebody to answer it wrongly.
+              if (_draft.looksZeroCalorie) ...<Widget>[
+                SwitchListTile.adaptive(
+                  value: _draft.isZeroCalorie,
+                  onChanged: (bool on) => setState(
+                    () => _draft = _draft.copyWith(isZeroCalorie: on),
+                  ),
+                  title: Text(
+                    'This really is 0 calories',
+                    style: context.text.body,
+                  ),
+                  subtitle: Text(
+                    'Black coffee, sparkling water, a zero-calorie sweetener. '
+                    'Without this, a food with nothing on it is treated as one '
+                    'whose numbers are missing.',
+                    style: context.text.metadata.copyWith(
+                      color: colors.textMuted,
+                    ),
+                  ),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const SizedBox(height: HearthSpacing.lg),
+              ],
+              // A standing choice, not a one-off correction. Marking it here
+              // rather than from the library is deliberate: this is the screen
+              // where you have just decided what this food *is*.
+              SwitchListTile.adaptive(
+                value: _draft.isDefault,
+                onChanged: (bool on) =>
+                    setState(() => _draft = _draft.copyWith(isDefault: on)),
+                title: Text('Use this by default', style: context.text.body),
+                subtitle: Text(
+                  'Recipes calling for this will match it on their own. Several '
+                  'kinds of one thing can each be a default — whole and 2% milk '
+                  'both — and a recipe that does not say which will ask.',
+                  style: context.text.metadata.copyWith(
+                    color: colors.textMuted,
+                  ),
+                ),
+                contentPadding: EdgeInsets.zero,
+              ),
+              const SizedBox(height: HearthSpacing.lg),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      'Serving sizes',
+                      style: context.text.sectionHeader,
+                    ),
+                  ),
+                  // §5.5's fallback chain ends at manual entry, and this is
+                  // manual entry with the typing removed. It leads because it
+                  // is the faster path for anything with a panel on it, and
+                  // because it is the only thing here that can produce a weight
+                  // and a volume for the same portion — the pair a recipe line
+                  // measured in cups needs from a food sold by weight.
+                  if (canReadLabels(ref))
+                    TextButton.icon(
+                      onPressed: _readLabel,
+                      icon: const Icon(
+                        Icons.document_scanner_outlined,
+                        size: 18,
+                      ),
+                      label: const Text('Read label'),
+                    ),
+                  TextButton.icon(
+                    onPressed: () => setState(
+                      () => _draft = _draft.copyWith(
+                        servings: <ServingDraft>[
+                          ..._draft.servings,
+                          const ServingDraft(),
+                        ],
+                      ),
+                    ),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add'),
+                  ),
+                ],
+              ),
+              if (_showErrors && _draft.servingsError != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
+                  child: Text(
+                    _draft.servingsError!,
+                    style: context.text.metadata.copyWith(color: colors.error),
+                  ),
+                ),
+              // Shown whether or not Save has been pressed. The hosted database
+              // refuses a negative outright and nothing local does, so a save
+              // that looked fine would sit in the queue and fail on the way up
+              // — better to say so beside the number that caused it.
+              if (_draft.macrosError case final String message)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
+                  child: Text(
+                    message,
+                    style: context.text.metadata.copyWith(color: colors.error),
+                  ),
+                ),
+              const SizedBox(height: HearthSpacing.sm),
+              for (int i = 0; i < _draft.servings.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: HearthSpacing.md),
+                  child: _ServingRow(
+                    serving: _draft.servings[i],
+                    units: _servingUnits,
+                    canRemove: _draft.servings.length > 1,
+                    onChanged: (ServingDraft updated) => setState(() {
+                      final List<ServingDraft> next = <ServingDraft>[
+                        ..._draft.servings,
+                      ];
+                      next[i] = updated;
+                      _draft = _draft.copyWith(servings: next);
+                    }),
+                    onRemove: () => setState(() {
+                      final List<ServingDraft> next = <ServingDraft>[
+                        ..._draft.servings,
+                      ]..removeAt(i);
+                      _draft = _draft.copyWith(servings: next);
+                    }),
+                  ),
+                ),
+
+              const SizedBox(height: HearthSpacing.lg),
+              // Optional, and skippable for most foods. Filling it in is what
+              // turns "Take it shopping" from a search into a basket (§5.7).
+              Text('Buying it at Walmart', style: context.text.label),
+              const SizedBox(height: HearthSpacing.xs),
+              Text(
+                'Paste a product link and Hearth remembers which product this '
+                'is. Add the pack size and it works out how many to order.',
+                style: context.text.metadata.copyWith(
+                  color: context.colors.textMuted,
+                ),
+              ),
+              const SizedBox(height: HearthSpacing.sm),
+              _TextField(
+                label: 'Walmart link or item number',
+                value: _draft.walmartItemId,
+                hint: 'walmart.com/ip/…/10450479',
+                onChanged: (String v) =>
+                    setState(() => _draft = _draft.copyWith(walmartItemId: v)),
+              ),
+              if (_draft.walmartItemId.trim().isNotEmpty &&
+                  !WalmartProduct.looksValid(_draft.walmartItemId)) ...<Widget>[
+                const SizedBox(height: HearthSpacing.xs),
+                // Said here rather than discovered at the shop: an id that does
+                // not parse is stored as nothing, and a basket that silently
+                // omits this food is the first anyone would know about it.
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: context.colors.textMuted,
+                    ),
+                    const SizedBox(width: HearthSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        'No item number in that. Paste the whole product link, '
+                        'or just the number from the end of it.',
+                        style: context.text.metadata.copyWith(
+                          color: context.colors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: HearthSpacing.md),
+              _TextField(
+                label: 'Sold in',
+                value: _draft.packSize,
+                hint: '1 lb',
+                onChanged: (String v) =>
+                    setState(() => _draft = _draft.copyWith(packSize: v)),
+              ),
+              const SizedBox(height: HearthSpacing.xxl),
             ],
-            const SizedBox(height: HearthSpacing.md),
-            _TextField(
-              label: 'Sold in',
-              value: _draft.packSize,
-              hint: '1 lb',
-              onChanged: (String v) =>
-                  setState(() => _draft = _draft.copyWith(packSize: v)),
-            ),
-            const SizedBox(height: HearthSpacing.xxl),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  /// Leaves the editor, asking first if there is anything to lose.
+  ///
+  /// Routed through the same question the system back gesture asks: two ways
+  /// out that disagree is one way out that silently protects nothing.
+  Future<void> _cancel() async {
+    if (!_isDirty) {
+      Navigator.of(context).pop();
+      return;
+    }
+    final NavigatorState navigator = Navigator.of(context);
+    if (await UnsavedWorkGuard.confirm(context, 'food')) navigator.pop();
   }
 }
 

@@ -117,3 +117,6 @@ Thumbs.db
 # a fact about the project. Covered by a global ignore on Brendan's machine,
 # which says nothing about anybody else's.
 .claude/settings.local.json
+
+# Agent worktrees are scratch checkouts, not project content.
+.claude/worktrees/

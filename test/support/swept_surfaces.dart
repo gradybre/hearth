@@ -159,6 +159,21 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     farEnd: find.text('Save targets'),
   ),
   SweptSurface(
+    name: 'the unsaved-work question',
+    opensFrom: 'lib/app/widgets/unsaved_work_guard.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Recipes');
+      await tools.reach(find.text('Add recipe'));
+      await tools.reach(find.text('Write a recipe'));
+      // Dirty first: a clean editor leaves without asking, which is the
+      // point of it, and would sweep nothing.
+      await tester.enterText(find.byType(TextField).first, 'Short ribs');
+      await tools.reach(find.text('Cancel'));
+    },
+    arrived: find.text('Keep editing'),
+    farEnd: find.text('Discard'),
+  ),
+  SweptSurface(
     name: 'choosing something to log',
     opensFrom: 'lib/features/plan/log_sheet.dart',
     open: (WidgetTester tester, SweepTools tools) async {
