@@ -39,7 +39,7 @@ writing and none of them is on `main` yet.
 | F03 | PDF page states: rendered vs extracted | ✓ | ✓ | ~ #52 | n/a | — |
 | F04 | Accumulated uncertainty; retry-safe batch save | ✓ | ✓ | ~ #52 | n/a | — |
 | F05 | Calendar-derived day labels; no constant "Today" card | ✓ | ✓ | ~ #55 | n/a | — |
-| F06 | Direct gram/ounce entry | — | — | — | n/a | — |
+| F06 | Direct gram/ounce entry | ✓ | ✓ | ~ #56 | n/a | — |
 | F07a | Backoff wake-up | ✓ | ✓ | ~ #53 | n/a | — |
 | F07b | B02 reserve/settle, fail closed; record truncated usage | — | — | — | — | — |
 | F07c | Windows recovery protocol handler | — | — | — | n/a | B — needs a Windows machine or a Windows CI job; see below |
