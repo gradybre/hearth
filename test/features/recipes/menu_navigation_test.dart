@@ -65,14 +65,15 @@ void main() {
 
   /// The horizontal rail the section chips sit in.
   ///
-  /// Six sections do not fit across a phone, so the rail scrolls — and a
-  /// lazy list has not built the chips off the right-hand edge. A finder
-  /// cannot see them and neither can a thumb until it scrolls, which is what
-  /// this does.
-  Finder rail() => find.ancestor(
-    of: find.byType(FilterChip).first,
-    matching: find.byType(Scrollable),
-  );
+  /// `.first` is the innermost: the rail scrolls inside the menu list now, so
+  /// a chip has two scrollable ancestors and asking for "the" one is asking
+  /// for two.
+  Finder rail() => find
+      .ancestor(
+        of: find.byType(FilterChip).first,
+        matching: find.byType(Scrollable),
+      )
+      .first;
 
   Future<void> reachChip(WidgetTester tester, String section) async {
     await tester.scrollUntilVisible(
@@ -155,10 +156,9 @@ void main() {
     await search(tester, '');
 
     // Both are still in it: the one picked before the filter and the one
-    // picked during it. Counted off the builder's own action, which is what
-    // this screen has until the summary bar replaces it.
+    // picked during it.
     expect(
-      find.text('Build (2)'),
+      find.textContaining('2 items ·'),
       findsOneWidget,
       reason: 'the meal did not survive being filtered',
     );

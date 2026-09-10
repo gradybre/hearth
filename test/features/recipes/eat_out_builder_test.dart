@@ -9,6 +9,12 @@ import '../../support/app_harness.dart';
 import '../../support/fixtures.dart';
 
 /// Building a meal from a restaurant's menu (spec §5.2).
+///
+/// The floating "Build (n)" button is a summary bar now: it counts, it
+/// totals, and its action reads "Review meal" because what it opens is the
+/// review screen and nothing is written until you get there (review §7.6).
+/// The assertions below moved with it — a count where the count was the
+/// point, the action where the tap was.
 void main() {
   Food item(
     String name, {
@@ -98,8 +104,8 @@ void main() {
     await tester.tap(find.text('Guacamole'));
     await pumpFrames(tester, frames: 12);
 
-    expect(find.text('Build (2)'), findsOneWidget);
-    await tester.tap(find.text('Build (2)'));
+    expect(find.textContaining('2 items ·'), findsOneWidget);
+    await tester.tap(find.text('Review meal'));
     await pumpFrames(tester, frames: 20);
 
     // Straight into the editor, already matched — no line asking for a food.
@@ -118,7 +124,7 @@ void main() {
     await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Chicken'));
     await pumpFrames(tester, frames: 12);
-    await tester.tap(find.text('Build (1)'));
+    await tester.tap(find.text('Review meal'));
     await pumpFrames(tester, frames: 20);
 
     await tester.enterText(find.byType(TextField).first, 'My usual bowl');
@@ -168,14 +174,14 @@ void main() {
     await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Chicken'));
     await pumpFrames(tester, frames: 12);
-    expect(find.text('Build (1)'), findsOneWidget);
+    expect(find.textContaining('1 item ·'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Back to restaurants'));
     await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Cava'));
     await pumpFrames(tester, frames: 12);
 
-    expect(find.textContaining('Build ('), findsNothing);
+    expect(find.text('Review meal'), findsNothing);
   });
 
   testWidgets('the menu is laid out the way the restaurant lays it out', (
@@ -340,7 +346,7 @@ void main() {
       // reader and a monochrome display (§6.3).
       expect(find.text('Taking it out'), findsOneWidget);
       expect(find.text('−1 oz · −3 kcal'), findsOneWidget);
-      expect(find.text('Build (2)'), findsOneWidget);
+      expect(find.textContaining('2 items ·'), findsOneWidget);
     });
 
     testWidgets('and it goes when the last real thing goes', (
@@ -357,7 +363,7 @@ void main() {
       await tester.tap(find.text('Single Steakburger'));
       await pumpFrames(tester, frames: 12);
 
-      expect(find.textContaining('Build ('), findsNothing);
+      expect(find.text('Review meal'), findsNothing);
       expect(find.text('Taking it out'), findsNothing);
     });
 
@@ -370,7 +376,7 @@ void main() {
       await pumpFrames(tester, frames: 12);
       await tester.tap(find.byTooltip('Take Lettuce out'));
       await pumpFrames(tester, frames: 12);
-      await tester.tap(find.text('Build (2)'));
+      await tester.tap(find.text('Review meal'));
       await pumpFrames(tester, frames: 20);
 
       expect(find.text('New recipe'), findsOneWidget);
@@ -409,7 +415,7 @@ void main() {
       await pumpFrames(tester, frames: 12);
       await tester.tap(find.byTooltip('Take Lettuce out'));
       await pumpFrames(tester, frames: 12);
-      await tester.tap(find.text('Build (2)'));
+      await tester.tap(find.text('Review meal'));
       await pumpFrames(tester, frames: 20);
 
       await tester.enterText(find.byType(TextField).first, 'Burger, no salad');
@@ -471,7 +477,7 @@ void main() {
       // It is still an ordinary row you can say you had.
       await tester.tap(find.text('Pickles'));
       await pumpFrames(tester, frames: 12);
-      expect(find.text('Build (2)'), findsOneWidget);
+      expect(find.textContaining('2 items ·'), findsOneWidget);
     });
 
     testWidgets('a meal that comes to less than nothing cannot be built', (
@@ -490,8 +496,8 @@ void main() {
       await tester.tap(find.byTooltip('Take Single Steakburger out'));
       await pumpFrames(tester, frames: 12);
 
-      expect(find.text('Build (2)'), findsOneWidget);
-      await tester.tap(find.text('Build (2)'));
+      expect(find.textContaining('2 items ·'), findsOneWidget);
+      await tester.tap(find.text('Review meal'));
       await pumpFrames(tester, frames: 20);
 
       // Still on the menu, and told why rather than left tapping a button
@@ -521,7 +527,7 @@ void main() {
       await pumpFrames(tester, frames: 12);
 
       expect(find.text('0.5×'), findsOneWidget);
-      expect(find.text('Build (1)'), findsOneWidget);
+      expect(find.textContaining('1 item ·'), findsOneWidget);
     });
 
     testWidgets('nor at its ceiling', (WidgetTester tester) async {
@@ -540,7 +546,7 @@ void main() {
       await pumpFrames(tester, frames: 12);
 
       expect(find.text('4×'), findsOneWidget);
-      expect(find.text('Build (1)'), findsOneWidget);
+      expect(find.textContaining('1 item ·'), findsOneWidget);
     });
 
     testWidgets('and neither does the one on a row being taken out', (
@@ -562,7 +568,7 @@ void main() {
 
       expect(find.text('−0.5×'), findsOneWidget);
       expect(find.text('Taking it out'), findsOneWidget);
-      expect(find.text('Build (2)'), findsOneWidget);
+      expect(find.textContaining('2 items ·'), findsOneWidget);
     });
 
     testWidgets('a meal of nothing but deductions cannot be built', (
@@ -576,7 +582,7 @@ void main() {
       // There is no control to tap: with nothing picked, nothing is offered
       // to take out, so a deductions-only meal has no first step.
       expect(find.byTooltip('Take Lettuce out'), findsNothing);
-      expect(find.textContaining('Build ('), findsNothing);
+      expect(find.text('Review meal'), findsNothing);
     });
   });
 
@@ -641,7 +647,7 @@ void main() {
       await pumpFrames(tester, frames: 12);
 
       // Nothing picked, so nothing to build.
-      expect(find.textContaining('Build ('), findsNothing);
+      expect(find.text('Review meal'), findsNothing);
     });
 
     testWidgets('and once something is picked, it comes along', (
@@ -655,8 +661,8 @@ void main() {
       await tester.tap(find.text('Make it a Lettuce Wrap'));
       await pumpFrames(tester, frames: 12);
 
-      expect(find.text('Build (2)'), findsOneWidget);
-      await tester.tap(find.text('Build (2)'));
+      expect(find.textContaining('2 items ·'), findsOneWidget);
+      await tester.tap(find.text('Review meal'));
       await pumpFrames(tester, frames: 20);
 
       // Both lines are in the draft and both are matched — the deduction is
@@ -682,7 +688,7 @@ void main() {
       await tester.tap(find.text('Single Steakburger'));
       await pumpFrames(tester, frames: 12);
 
-      expect(find.textContaining('Build ('), findsNothing);
+      expect(find.text('Review meal'), findsNothing);
     });
   });
 }

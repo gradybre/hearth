@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../models/food.dart';
+import '../models/recipe.dart';
 import '../parsing/amount_parser.dart';
 import '../units/quantity.dart';
 import '../units/unit.dart';
@@ -80,6 +81,54 @@ abstract final class RestaurantMenu {
       sections.add(sections.removeAt(unnamed));
     }
     return sections;
+  }
+
+  /// The household's own saved orders for [restaurant] (review N03).
+  ///
+  /// A restaurant meal is an ordinary recipe — `RecipeKind.eatenOut`, with the
+  /// menu's foods as its components — so this surfaces what is already there
+  /// rather than keeping a second store of orders beside the library.
+  ///
+  /// **Matched by the components first.** The builder records the restaurant
+  /// in the recipe's `notes`, and `notes` is a plain text box in the editor:
+  /// anybody who rewrites it as "the one on Fulton St" would sever the tie.
+  /// A recipe whose matched foods are this restaurant's menu foods is one of
+  /// its orders whatever the notes were changed to, and that cannot be typed
+  /// over. The notes are the fallback, and they still carry the case the
+  /// components cannot — an order saved before its ingredients were matched
+  /// to anything.
+  ///
+  /// A cooked recipe is never an order, however it is made: you can cook with
+  /// a food that came off a menu, and dinner at home is not a thing you
+  /// ordered.
+  static List<Recipe> usualOrders({
+    required String restaurant,
+    required Iterable<Recipe> recipes,
+    required Map<String, Food> foods,
+  }) {
+    final String wanted = restaurant.trim().toLowerCase();
+    if (wanted.isEmpty) return const <Recipe>[];
+
+    bool fromHere(Recipe recipe) {
+      for (final RecipeIngredient ingredient in recipe.allIngredients) {
+        final String? id = ingredient.foodId;
+        if (id == null) continue;
+        final Food? food = foods[id];
+        if (food == null || !_isMenuItem(food)) continue;
+        if (food.brand!.trim().toLowerCase() == wanted) return true;
+      }
+      // Nothing matched to a menu food. The builder's own note is all that is
+      // left, and it is what an unmatched order still has.
+      return (recipe.notes ?? '').trim().toLowerCase() == wanted;
+    }
+
+    return <Recipe>[
+      for (final Recipe recipe in recipes)
+        if (recipe.kind == RecipeKind.eatenOut &&
+            !recipe.isDeleted &&
+            fromHere(recipe))
+          recipe,
+    ];
   }
 
   /// Sheet order, then name for anything the sheet never numbered.

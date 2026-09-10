@@ -9,6 +9,7 @@ import '../../app/theme/hearth_theme.dart';
 import '../../domain/foods/restaurant_menu.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
+import '../../domain/models/recipe.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import '../plan/logging_intent.dart';
 import 'recipe_draft.dart';
@@ -108,6 +109,37 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
       return;
     }
     setState(() => _picks[food.id] = -1);
+  }
+
+  /// What is in the meal, without scrolling the menu to find out.
+  ///
+  /// A sheet rather than a screen: it is a glance at a decision still being
+  /// made, and coming back to the menu underneath is the common ending.
+  Future<void> _showPicked(List<Food> menu) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: context.colors.background,
+      isScrollControlled: true,
+      // Capped, the way every other sheet here is. Scroll-controlled and
+      // unconstrained, the list inside shrink-wraps to its whole content and
+      // the column overflows — 814 points of it at 3x text on a small phone,
+      // which the accessibility sweep caught the moment this was declared to
+      // it. Short of the full height so the tap-above-to-dismiss gesture
+      // survives (spec §6.3).
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+      ),
+      builder: (BuildContext sheet) => StatefulBuilder(
+        builder: (BuildContext sheet, StateSetter refresh) => _PickedSheet(
+          picks: _picked(menu),
+          onDrop: (Food food) {
+            _toggle(food, menu);
+            refresh(() {});
+            if (_picks.isEmpty) Navigator.of(sheet).pop();
+          },
+        ),
+      ),
+    );
   }
 
   /// One sentence, where the tap happened, in words rather than a colour.
@@ -221,17 +253,18 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
                 }),
         ),
       ),
-      floatingActionButton: _picks.isEmpty
+      // A bar rather than a floating button. "Build (3)" was a count and a
+      // verb: it did not say what the three were, what they came to, or
+      // whether any of them was missing a figure — and it was the only
+      // persistent thing the selected state had, over a menu whose first
+      // pick is thirty rows above the fold by the time you make the third
+      // (review §7.6).
+      bottomNavigationBar: _picks.isEmpty || chosen == null
           ? null
-          : FloatingActionButton.extended(
-              onPressed: () => _build(menu),
-              backgroundColor: colors.accent,
-              foregroundColor: colors.onAccent,
-              icon: const Icon(Icons.check),
-              label: Text(
-                'Build (${_picks.length})',
-                style: context.text.label,
-              ),
+          : _SelectedBar(
+              picks: _picked(menu),
+              onReview: () => _build(menu),
+              onOpen: () => _showPicked(menu),
             ),
       body: SafeArea(
         child: chosen == null
@@ -242,6 +275,15 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
               )
             : _Menu(
                 sections: RestaurantMenu.sectionsFor(chosen, library),
+                usualOrders: RestaurantMenu.usualOrders(
+                  restaurant: chosen,
+                  recipes:
+                      ref.watch(recipeLibraryProvider).value ??
+                      const <Recipe>[],
+                  foods: <String, Food>{
+                    for (final Food food in library) food.id: food,
+                  },
+                ),
                 picks: _picks,
                 hasSomethingToApplyTo: _hasSomethingToApplyTo(menu),
                 canRemove: (Food food) =>
@@ -373,6 +415,7 @@ class _Restaurants extends StatelessWidget {
 class _Menu extends StatefulWidget {
   const _Menu({
     required this.sections,
+    required this.usualOrders,
     required this.picks,
     required this.onToggle,
     required this.onRemove,
@@ -383,6 +426,14 @@ class _Menu extends StatefulWidget {
   });
 
   final List<MenuSection> sections;
+
+  /// What this household has already ordered here (review N03).
+  ///
+  /// Ordinary recipes, surfaced where you would order one rather than left in
+  /// a library you have to remember the name of. Empty is the common first
+  /// case and shows nothing at all.
+  final List<Recipe> usualOrders;
+
   final Map<String, double> picks;
 
   /// Whether anything a modifier could come off is picked yet.
@@ -461,42 +512,39 @@ class _MenuState extends State<_Menu> {
         if (section.name case final String name) name,
     ];
 
-    return Column(
+    // Search and the chips scroll with the menu rather than sitting above it
+    // in a fixed header. Pinned, they overflowed: at 3x text on a 320pt phone
+    // the field and the rail together are taller than what is left after the
+    // app bar and the summary bar, so `Expanded` was handed a negative height
+    // and the column spilled 814 points off the bottom. Dynamic type is
+    // honoured, not capped (spec §6.3) — so the thing that gives is the
+    // header's claim to always be on screen.
+    return ListView(
+      key: const Key('menu-list'),
+      padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, gutter * 3),
       children: <Widget>[
-        Padding(
-          padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
-          child: TextField(
-            controller: _query,
-            onChanged: (String _) => setState(() {}),
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search, size: 20),
-              // The count, not a bare "Search": on a 44-row menu the number
-              // is the reason to type rather than scroll.
-              hintText: 'Search $_total items',
-              suffixIcon: _query.text.isEmpty
-                  ? null
-                  : IconButton(
-                      icon: const Icon(Icons.close, size: 20),
-                      tooltip: 'Clear the search',
-                      onPressed: () => setState(_query.clear),
-                    ),
-            ),
+        TextField(
+          controller: _query,
+          onChanged: (String _) => setState(() {}),
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.search, size: 20),
+            // The count, not a bare "Search": on a 44-row menu the number
+            // is the reason to type rather than scroll.
+            hintText: 'Search $_total items',
+            suffixIcon: _query.text.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    tooltip: 'Clear the search',
+                    onPressed: () => setState(_query.clear),
+                  ),
           ),
         ),
-        if (names.length > 1)
-          // Sized by the chips, not by a number. A fixed box did not overflow
-          // at 3x text — it *constrained*, which is quieter and no better:
-          // the chip wants 78 points and was given 56, the same 56 it gets at
-          // 2x. Dynamic type is honoured, not capped (spec §6.3).
+        if (names.length > 1) ...<Widget>[
+          const SizedBox(height: HearthSpacing.sm),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.fromLTRB(
-              gutter,
-              HearthSpacing.sm,
-              gutter,
-              HearthSpacing.xs,
-            ),
             child: Row(
               children: <Widget>[
                 for (final String name in names)
@@ -514,70 +562,320 @@ class _MenuState extends State<_Menu> {
               ],
             ),
           ),
-        Expanded(
-          child: sections.isEmpty
-              ? _NoMatches(
-                  query: _query.text,
-                  section: _only,
-                  // Widening before clearing: with a section chosen, the
-                  // likeliest next thing is the same search over the whole
-                  // menu, not starting again.
-                  onWiden: _only == null
-                      ? null
-                      : () => setState(() => _only = null),
-                  onClear: () => setState(() {
-                    _query.clear();
-                    _only = null;
-                  }),
-                  gutter: gutter,
-                )
-              : _list(context, sections, gutter),
-        ),
+        ],
+        const SizedBox(height: HearthSpacing.md),
+        if (sections.isEmpty)
+          _NoMatches(
+            query: _query.text,
+            section: _only,
+            // Widening before clearing: with a section chosen, the likeliest
+            // next thing is the same search over the whole menu, not
+            // starting again.
+            onWiden: _only == null ? null : () => setState(() => _only = null),
+            onClear: () => setState(() {
+              _query.clear();
+              _only = null;
+            }),
+            gutter: gutter,
+          )
+        else
+          ..._rows(context, sections),
       ],
     );
   }
 
-  Widget _list(
-    BuildContext context,
-    List<MenuSection> sections,
-    double gutter,
-  ) {
-    return ListView(
-      padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, gutter * 5),
-      children: <Widget>[
-        for (final MenuSection section in sections) ...<Widget>[
-          // A section with no name is the items the sheet never grouped.
-          // Shown without a heading rather than under one Hearth invented.
-          if (section.name case final String name) ...<Widget>[
-            Padding(
-              padding: const EdgeInsets.only(
-                top: HearthSpacing.sm,
-                bottom: HearthSpacing.sm,
-              ),
-              // Keyed, because the section's name is now on screen twice —
-              // as this heading and as its jump chip — and a test reaching
-              // for "Beans" should not have to know which order they are in.
-              child: Text(
-                name,
-                key: Key('menu-section-$name'),
-                style: context.text.sectionHeader,
-              ),
+  /// The sections, as children of the one list everything lives in.
+  List<Widget> _rows(BuildContext context, List<MenuSection> sections) {
+    return <Widget>[
+      // Above the sections, because ordering starts once you have picked
+      // the place — and hidden the moment a search or a section narrows the
+      // list, where a block of recipes between the query and its results
+      // would be in the way of the thing being looked for.
+      if (widget.usualOrders.isNotEmpty &&
+          _query.text.trim().isEmpty &&
+          _only == null) ...<Widget>[
+        _UsualOrders(orders: widget.usualOrders),
+        const SizedBox(height: HearthSpacing.md),
+      ],
+      for (final MenuSection section in sections) ...<Widget>[
+        // A section with no name is the items the sheet never grouped.
+        // Shown without a heading rather than under one Hearth invented.
+        if (section.name case final String name) ...<Widget>[
+          Padding(
+            padding: const EdgeInsets.only(
+              top: HearthSpacing.sm,
+              bottom: HearthSpacing.sm,
             ),
-          ],
-          for (final Food food in section.items) ...<Widget>[
-            _MenuRow(
-              food: food,
-              count: widget.picks[food.id],
-              canPick: !food.isModifier || widget.hasSomethingToApplyTo,
-              canRemove: widget.canRemove(food),
-              onToggle: () => widget.onToggle(food),
-              onRemove: () => widget.onRemove(food),
-              onCount: (double count) => widget.onCount(food, count),
+            // Keyed, because the section's name is now on screen twice —
+            // as this heading and as its jump chip — and a test reaching
+            // for "Beans" should not have to know which order they are in.
+            child: Text(
+              name,
+              key: Key('menu-section-$name'),
+              style: context.text.sectionHeader,
             ),
-            const SizedBox(height: HearthSpacing.sm),
-          ],
+          ),
+        ],
+        for (final Food food in section.items) ...<Widget>[
+          _MenuRow(
+            food: food,
+            count: widget.picks[food.id],
+            canPick: !food.isModifier || widget.hasSomethingToApplyTo,
+            canRemove: widget.canRemove(food),
+            onToggle: () => widget.onToggle(food),
+            onRemove: () => widget.onRemove(food),
+            onCount: (double count) => widget.onCount(food, count),
+          ),
+          const SizedBox(height: HearthSpacing.sm),
         ],
       ],
+    ];
+  }
+}
+
+/// The orders this household already has here (review N03).
+///
+/// Opens the recipe it already is, rather than rebuilding it from the menu:
+/// same id, same frozen-log rules, and adjusting one makes a new recipe the
+/// way `RecipeDraft.again` already does for "my usual bowl, but no rice".
+class _UsualOrders extends StatelessWidget {
+  const _UsualOrders({required this.orders});
+
+  final List<Recipe> orders;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surfaceSunken,
+        borderRadius: BorderRadius.circular(HearthRadius.md),
+      ),
+      padding: const EdgeInsets.all(HearthSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text('Your usual orders', style: context.text.sectionHeader),
+          const SizedBox(height: HearthSpacing.sm),
+          for (final Recipe order in orders)
+            Padding(
+              padding: const EdgeInsets.only(bottom: HearthSpacing.xs),
+              child: Material(
+                color: colors.surface,
+                borderRadius: BorderRadius.circular(HearthRadius.sm),
+                child: InkWell(
+                  onTap: () => context.push('/recipe/${order.id}'),
+                  borderRadius: BorderRadius.circular(HearthRadius.sm),
+                  child: Padding(
+                    padding: const EdgeInsets.all(HearthSpacing.md),
+                    child: Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            order.title,
+                            style: context.text.ingredient,
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 18,
+                          color: colors.textMuted,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What is picked, what it comes to, and the way on (review §7.6).
+///
+/// Sticky rather than floating: the count was the whole of what the old
+/// button said, and a running total is the fact that changes as you pick.
+class _SelectedBar extends StatelessWidget {
+  const _SelectedBar({
+    required this.picks,
+    required this.onReview,
+    required this.onOpen,
+  });
+
+  final List<MenuPick> picks;
+  final VoidCallback onReview;
+  final VoidCallback onOpen;
+
+  /// Rows the chain never published a figure for.
+  ///
+  /// Counted out loud rather than summed as zero: a total that quietly
+  /// under-reports is worse than one that says how much of itself is missing
+  /// (spec §5.5's flag-don't-guess).
+  int get _unknown =>
+      picks.where((MenuPick p) => p.food.defaultServing == null).length;
+
+  double get _kcal => picks.fold(0, (double sum, MenuPick pick) {
+    final ServingOption? serving = pick.food.defaultServing;
+    if (serving == null) return sum;
+    return sum + MacroCalculator.forServings(serving, pick.count).kcal;
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final int n = picks.length;
+    final String counted =
+        '$n ${n == 1 ? 'item' : 'items'} · '
+        '${_kcal.round()} kcal';
+    final String said = _unknown == 0
+        ? counted
+        : '$counted + $_unknown unknown';
+
+    final Widget summary = InkWell(
+      onTap: onOpen,
+      borderRadius: BorderRadius.circular(HearthRadius.sm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: HearthSpacing.sm),
+        child: Column(
+          // Sized to its two lines. A Row gives its children an unbounded
+          // cross axis, and a `max` Column in one takes everything — which in
+          // the `bottomNavigationBar` slot meant the bar ate the body and the
+          // menu laid out at zero height the moment anything was picked.
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(said, style: context.text.body),
+            Text(
+              'Tap to see them',
+              style: context.text.metadata.copyWith(color: colors.textMuted),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final Widget action = FilledButton(
+      onPressed: onReview,
+      // What it opens is the review screen, and nothing is written until you
+      // get there (rule 4). "Build" named the machinery.
+      child: const Text('Review meal'),
+    );
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surfaceElevated,
+        border: Border(top: BorderSide(color: colors.outline)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(HearthSpacing.md),
+          // Side by side where they fit, stacked where they do not. At three
+          // times the text on a 320pt phone the summary and the button want
+          // 191 points more width than the screen has, and a Row simply
+          // overflows — dynamic type is honoured, not capped (spec §6.3).
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints box) {
+              final double wanted =
+                  _widthOf(context, said) + _widthOf(context, 'Review meal');
+              if (wanted + HearthSpacing.xl * 2 <= box.maxWidth) {
+                return Row(
+                  children: <Widget>[
+                    Expanded(child: summary),
+                    const SizedBox(width: HearthSpacing.md),
+                    action,
+                  ],
+                );
+              }
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  summary,
+                  const SizedBox(height: HearthSpacing.sm),
+                  action,
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// How wide [text] wants to be in the body style, so the bar can decide
+  /// whether it has room for two things beside each other.
+  static double _widthOf(BuildContext context, String text) {
+    final TextPainter painter = TextPainter(
+      text: TextSpan(text: text, style: context.text.body),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    return painter.width;
+  }
+}
+
+/// The picks, listed, so the meal can be checked without the menu.
+class _PickedSheet extends StatelessWidget {
+  const _PickedSheet({required this.picks, required this.onDrop});
+
+  final List<MenuPick> picks;
+  final ValueChanged<Food> onDrop;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(HearthSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text('What you picked', style: context.text.sectionHeader),
+            const SizedBox(height: HearthSpacing.md),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: <Widget>[
+                  for (final MenuPick pick in picks)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
+                      child: Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  pick.food.name,
+                                  style: context.text.ingredient,
+                                ),
+                                Text(
+                                  pick.portionLabel,
+                                  style: context.text.metadata.copyWith(
+                                    color: colors.textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => onDrop(pick.food),
+                            tooltip: 'Drop ${pick.food.name}',
+                            icon: const Icon(Icons.close, size: 20),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
