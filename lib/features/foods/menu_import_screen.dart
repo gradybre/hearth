@@ -15,6 +15,7 @@ import '../../domain/foods/menu_import.dart';
 import '../../domain/foods/pdf_batches.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
+import '../../domain/text/text_normaliser.dart';
 import '../../domain/units/quantity.dart';
 
 /// Adding a whole restaurant menu by pasting it (spec §5.2).
@@ -54,6 +55,9 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
 
   String? _readError;
 
+  /// What went wrong on the way to the library, if anything did.
+  String? _saveError;
+
   /// The PDF being read, once one has been chosen.
   ///
   /// Held rather than re-picked so a second batch does not send somebody back
@@ -66,6 +70,13 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
   /// read and must come round again — a high-water mark would step over it
   /// and never look back.
   final Set<int> _pagesRead = <int>{};
+
+  /// Pages that rendered on the last attempt and have not been extracted yet.
+  ///
+  /// The gap between paying for a picture and getting rows back is where F03
+  /// lived: treat the first as the second and a failure loses the pages
+  /// silently.
+  List<int> _pagesRendered = const <int>[];
 
   /// What the last read of this document actually looked at, and what it
   /// could not. Said afterwards in the same terms it was offered in, because
@@ -112,17 +123,26 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
       final MenuReading reading = await reader.read(images);
       if (!mounted) return;
       setState(() {
-        // A doubt belongs to the rows it came with. Left standing over a new
-        // read, it points at an item no longer on the screen. Cleared here,
-        // where a read has actually happened, rather than on the way to one.
-        _uncertain = const <AiUncertainty>[];
-        // Added to, not over. A guide is read a page at a time, and a
-        // hand-typed correction sits in the same box — overwriting destroys
-        // both, with no undo.
+        // Added to, not over — the rows and the doubts alike. A guide is read
+        // a page at a time and the box keeps every batch, so replacing the
+        // doubts with only the newest batch's left page one's flagged values
+        // sitting there with nothing marking them. The rows accumulated; the
+        // warnings about them did not.
         final String had = _pasted.text.trimRight();
         final String read = MenuImport.write(reading.rows);
         _pasted.text = had.isEmpty ? read : '$had\n$read';
-        _uncertain = reading.uncertain;
+        _uncertain = <AiUncertainty>[..._uncertain, ...reading.uncertain];
+
+        // *Now* those pages are read. Rows came back; this is the first
+        // moment the claim is true.
+        _pagesRead.addAll(_pagesRendered);
+        _pagesRendered = const <int>[];
+        if (_pdfFile case final PickedPdf picked) {
+          _pagesReadSaid = PdfBatches.describe(
+            _pagesRead,
+            pageCount: picked.pageCount,
+          );
+        }
         // Only where the field is still empty: a name already typed is a
         // decision, and a page's own branding is a guess.
         if (_restaurant.text.trim().isEmpty && reading.restaurant != null) {
@@ -139,7 +159,16 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
         setState(() => _readError = 'Could not read that. Try again.');
       }
     } finally {
-      if (mounted) setState(() => _reading = false);
+      if (mounted) {
+        setState(() {
+          _reading = false;
+          // Whatever rendered belonged to *this* attempt. Left standing, a
+          // failed PDF read followed by a successful screenshot read would
+          // commit the PDF's pages as extracted — pages nothing ever read,
+          // never offered again.
+          _pagesRendered = const <int>[];
+        });
+      }
     }
   }
 
@@ -204,14 +233,16 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
 
     if (mounted) {
       setState(() {
-        // Only what rendered counts as read. A page that failed stays unread
-        // so the next batch offers it again rather than stepping over it.
-        _pagesRead.addAll(rendered.numbers);
+        // Rendered, not read. Coverage used to be committed here — before the
+        // model had even been asked — so an extraction that then failed still
+        // stepped past those pages, and the screen claimed them while showing
+        // the error saying it had not worked. The pages were paid for and
+        // gone, with no way back but to pick the file again.
+        //
+        // What rendered is held aside instead, and becomes coverage in
+        // [_read] once rows have actually come back.
+        _pagesRendered = rendered.numbers;
         _pagesFailed = rendered.failed;
-        _pagesReadSaid = PdfBatches.describe(
-          rendered.numbers,
-          pageCount: picked.pageCount,
-        );
       });
     }
 
@@ -241,17 +272,26 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
       return;
     }
 
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
+    int done = 0;
     try {
-      const Uuid uuid = Uuid();
       final String restaurant = _restaurant.text.trim();
       final FoodRepository repository = ref.read(foodRepositoryProvider);
 
       for (final MenuImportLine line in usable) {
         final Quantity portion = line.portion!;
+        final String id = idForMenuFood(
+          restaurant: restaurant,
+          name: line.name,
+          portion: QuantityFormat.format(portion),
+          section: line.section,
+        );
         await repository.save(
           Food(
-            id: uuid.v4(),
+            id: id,
             name: line.name,
             brand: restaurant,
             source: FoodSource.restaurant,
@@ -263,7 +303,13 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
             menuOrder: line.order,
             servingOptions: <ServingOption>[
               ServingOption(
-                id: uuid.v4(),
+                // Derived from the food's own id for the same reason the food's
+                // is derived: a retry that minted a new one would leave the
+                // food carrying two servings of the same portion.
+                id: const Uuid().v5(
+                  Namespace.url.value,
+                  'hearth:menu-serving:$id',
+                ),
                 label: QuantityFormat.format(portion),
                 amount: portion,
                 macros: line.macros,
@@ -271,12 +317,52 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
             ],
           ),
         );
+        done++;
       }
       if (mounted) Navigator.of(context).pop(usable.length);
+    } on Object {
+      // Said, not swallowed. There was no `catch` here at all: a failure part
+      // way through left rows committed, the exception escaping an async
+      // `onPressed` where nothing could show it, and the button live again
+      // with no clue that half the menu was already in.
+      if (mounted) {
+        setState(
+          () => _saveError = done == 0
+              ? 'None of that could be saved. Try again.'
+              : '$done of ${usable.length} saved before that stopped, and the '
+                    'rest could not be saved. Try again — the ones already in '
+                    'will be updated rather than added twice.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
+
+  /// The id a menu row always gets.
+  ///
+  /// Derived rather than random, which is what makes a retry safe: the loop
+  /// used to mint a fresh uuid per row, so pressing Save again after a
+  /// failure part way through inserted every already-saved row a second time.
+  /// Deriving it from what identifies the row on the menu means the second
+  /// attempt updates what the first one wrote.
+  ///
+  /// The same pattern as `IngredientMatchStore.idFor` and `PlanStore.idFor`,
+  /// and for the same reason: two attempts at one fact should meet on one row.
+  /// The portion is part of it, and has to be. A menu that lists "Fries"
+  /// twice at two sizes is two foods, and a key on the name alone would
+  /// quietly keep the second and lose the first — a silent collapse that the
+  /// random ids this replaced could not produce.
+  static String idForMenuFood({
+    required String restaurant,
+    required String name,
+    required String portion,
+    String? section,
+  }) => const Uuid().v5(
+    Namespace.url.value,
+    'hearth:menu-food:${normaliseKey(restaurant)}:${normaliseKey(name)}:'
+    '${normaliseKey(section ?? '')}:${normaliseKey(portion)}',
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -456,6 +542,32 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
                 ),
                 const SizedBox(height: HearthSpacing.sm),
               ],
+            ],
+            // Outside the block above, which only renders where there is an AI
+            // backend. A save failure has nothing to do with whether one
+            // exists — pasting a menu by hand and pressing Save is the
+            // ordinary path — and putting it in there hid the message on
+            // exactly the builds most likely to need it.
+            //
+            // Not a snackbar: one over a screen holding thirty unsaved rows
+            // is gone before it has been read, and this says what to do next.
+            if (_saveError case final String message) ...<Widget>[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Icon(Icons.error_outline, size: 18, color: colors.error),
+                  const SizedBox(width: HearthSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: context.text.metadata.copyWith(
+                        color: colors.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: HearthSpacing.sm),
             ],
             TextField(
               controller: _pasted,
