@@ -10,7 +10,9 @@ keyboard, or two-device test (review §9.2).
 
 - **Impl** — code written and merged to `main`.
 - **Test** — an automated test holds the behaviour, and for a defect a failing
-  regression test was demonstrated *before* the fix.
+  regression test was demonstrated *before* the fix. `✓` here says the test
+  was written and is green, not that it is guarding `main`: read it with the
+  Impl column, which is the one that says whether any of it has merged.
 - **Review** — shipped through a PR with a fresh-context review over the diff.
 - **Deployed** — migration pushed to the hosted project, or Edge Function
   deployed. Blank where the change needs neither.
@@ -20,6 +22,10 @@ keyboard, or two-device test (review §9.2).
 
 Status: `—` not started · `~` in progress · `✓` done · `n/a` not applicable ·
 `B` waiting on Brendan.
+
+`~` on Impl means the code is written and the PR is open, not merged. It
+becomes `✓` when Brendan merges it — five PRs are open at the time of
+writing and none of them is on `main` yet.
 
 ---
 
@@ -32,7 +38,7 @@ Status: `—` not started · `~` in progress · `✓` done · `n/a` not applicab
 | F02 | Targeted shopping Undo | ✓ | ✓ | ~ #50 | n/a | — |
 | F03 | PDF page states: rendered vs extracted | ✓ | ✓ | ~ #52 | n/a | — |
 | F04 | Accumulated uncertainty; retry-safe batch save | ✓ | ✓ | ~ #52 | n/a | — |
-| F05 | Calendar-derived day labels; no constant "Today" card | — | — | — | n/a | — |
+| F05 | Calendar-derived day labels; no constant "Today" card | ✓ | ✓ | ~ #55 | n/a | — |
 | F06 | Direct gram/ounce entry | — | — | — | n/a | — |
 | F07a | Backoff wake-up | ✓ | ✓ | ~ #53 | n/a | — |
 | F07b | B02 reserve/settle, fail closed; record truncated usage | — | — | — | — | — |

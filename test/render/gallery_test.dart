@@ -54,6 +54,7 @@ void main() {
         // that only works without them is a layout that ships broken.
         viewPadding: const EdgeInsets.only(top: 47, bottom: 34),
         launchTarget: scene.target,
+        extraOverrides: galleryOverrides(scene),
         recipes: galleryRecipes(),
         foods: galleryFoods(),
         entries: galleryEntries(day),
@@ -61,8 +62,8 @@ void main() {
       );
       await pumpFrames(tester, frames: 20);
 
-      if (scene.tab case final String tab) {
-        await tester.tap(find.text(tab).last);
+      for (final String label in scene.taps) {
+        await pressLabel(tester, label);
         await pumpFrames(tester, frames: 20);
       }
 

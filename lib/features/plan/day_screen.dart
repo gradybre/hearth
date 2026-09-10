@@ -122,7 +122,11 @@ class _DayHeader extends ConsumerWidget {
 
   String get _label {
     final DateTime today = dayKey(DateTime.now());
-    final int delta = date.difference(today).inDays;
+    // Calendar days, not elapsed hours. `difference(...).inDays` counts
+    // 24-hour spans, and a local day is 23 or 25 of them twice a year — so
+    // on the shorter night yesterday came out as `0` and this said "Today"
+    // on a day that was not (review F05).
+    final int delta = calendarDaysBetween(today, date);
     if (delta == 0) return 'Today';
     if (delta == -1) return 'Yesterday';
     if (delta == 1) return 'Tomorrow';
@@ -265,7 +269,14 @@ class _RemainingCard extends ConsumerWidget {
               // The rings lead with what has been eaten, so the card is no
               // longer "what is left" and does not say so. What is left is
               // under each ring, and only when it is worth saying.
-              Expanded(child: Text('Today', style: context.text.sectionHeader)),
+              // Not the date. The header six lines up already names the day,
+              // and this said the literal string 'Today' whatever was
+              // selected — a card claiming today's numbers directly under a
+              // header reading "Monday 7 September" (review F05). A caption
+              // with nothing to compute is a caption that cannot go stale.
+              Expanded(
+                child: Text('Daily totals', style: context.text.sectionHeader),
+              ),
               if (!planned.isZero)
                 Text(
                   '${planned.kcal.round()} kcal still planned',

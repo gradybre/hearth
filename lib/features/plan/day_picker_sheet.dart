@@ -168,7 +168,10 @@ class _DayPickerSheetState extends ConsumerState<_DayPickerSheet> {
 
   String _label(DateTime day) {
     final DateTime today = dayKey(DateTime.now());
-    final int delta = day.difference(today).inDays;
+    // Calendar days, not elapsed hours — see `calendarDaysBetween`. This
+    // sheet picks the days a meal is copied onto, so "today" naming the
+    // wrong one is the same defect as F05 with more consequences.
+    final int delta = calendarDaysBetween(today, day);
     final String weekday = _weekdays[day.weekday - 1];
     if (delta == 0) return '$weekday ${shortDate(day)} · today';
     if (delta == 1) return '$weekday ${shortDate(day)} · tomorrow';

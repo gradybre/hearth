@@ -150,10 +150,10 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     opensFrom: 'lib/features/plan/macro_targets_sheet.dart',
     open: (WidgetTester tester, SweepTools tools) async {
       await tools.tab('Plan');
-      // "Today" is the page's title as well as the card's heading, and only
-      // the card opens the sheet.
-      await tools.bringNth(find.text('Today'), 2);
-      await tools.reach(find.text('Today'));
+      // The card's own caption, and now the only thing wearing it: it used to
+      // read "Today" — the page's title as well — so this had to reach for
+      // the second one and hope the order held (review F05).
+      await tools.reach(find.text('Daily totals'));
     },
     arrived: find.text('Weekly targets'),
     farEnd: find.text('Save targets'),

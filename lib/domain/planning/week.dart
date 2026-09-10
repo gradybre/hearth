@@ -42,3 +42,22 @@ List<DateTime> weekOf(DateTime moment) {
 
 /// True when the two moments fall on the same calendar day.
 bool isSameDay(DateTime a, DateTime b) => dayKey(a) == dayKey(b);
+
+/// Calendar days from [from] to [to] — negative when [to] is earlier.
+///
+/// The counterpart to [addDays], and it exists for the same reason: a local
+/// day is 23 or 25 hours long twice a year, so `to.difference(from).inDays`
+/// counts elapsed 24-hour spans and not dates. On the shorter night two
+/// midnight keys a day apart come to `0`, which is how the day screen came to
+/// label yesterday "Today" — the one screen whose entire job is attributing
+/// food to the right day.
+///
+/// The dates are rebuilt in UTC before subtracting. UTC has no daylight
+/// saving, so every day there really is 24 hours and the division is exact;
+/// the local offsets the two dates were carrying are precisely the thing that
+/// must not enter the arithmetic. Month and year boundaries come free.
+int calendarDaysBetween(DateTime from, DateTime to) => DateTime.utc(
+  to.year,
+  to.month,
+  to.day,
+).difference(DateTime.utc(from.year, from.month, from.day)).inDays;
