@@ -223,12 +223,12 @@ void main() {
     await openWithList(tester, assistant: assistant);
     await ask(tester, 'add coffee');
 
-    await tester.scrollUntilVisible(
-      find.text('Build from the plan'),
-      -300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.text('Build from the plan'));
+    // Through `Manage list`: the setup left the list screen when it stopped
+    // leading with 244 points of it (review §6.2.5), so a rebuild is no
+    // longer a button you scroll up the shopping list to reach.
+    await tester.tap(find.text('Manage list'));
+    await pumpFrames(tester, frames: 12);
+    await tester.tap(find.text('Rebuild from the plan'));
     await pumpFrames(tester, frames: 20);
 
     expect(find.text('Coffee'), findsOneWidget);

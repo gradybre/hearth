@@ -367,11 +367,11 @@ void main() {
       await pumpFrames(tester, frames: 20);
 
       await tester.scrollUntilVisible(
-        find.text('Take it shopping'),
+        find.text('Share or export'),
         300,
         scrollable: find.byType(Scrollable).first,
       );
-      await tester.tap(find.text('Take it shopping'));
+      await tester.tap(find.text('Share or export'));
       await pumpFrames(tester, frames: 10);
 
       expect(tester.takeException(), isNull);

@@ -110,7 +110,6 @@ class _Body extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final HearthColors colors = context.colors;
     final ({DateTime from, DateTime to}) range = ref.watch(
       shoppingRangeProvider,
     );
@@ -130,73 +129,89 @@ class _Body extends ConsumerWidget {
         return a.compareTo(b);
       });
 
-    return ListView(
-      padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, gutter * 3),
+    final int left = lines.where((ShoppingLine l) => !l.checked).length;
+
+    return Column(
       children: <Widget>[
-        _RangeCard(
-          range: range,
-          onRebuild: () => _rebuild(context, ref),
-          onAdd: () => _addManual(context, ref),
+        Expanded(
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, gutter),
+            children: <Widget>[
+              // An empty list is a setup task and a full one is not, so the two
+              // states are two shapes. The review is explicit that the empty
+              // state's controls are already right — "range, Build from plan, Add
+              // item are appropriate primary controls" — and that a list, once it
+              // exists, wants the range in a compact header with the setup behind
+              // Manage list (§6.2.5, §7.7).
+              if (lines.isEmpty) ...<Widget>[
+                _RangeCard(
+                  range: range,
+                  onRebuild: () => _rebuild(context, ref),
+                  onAdd: () => _addManual(context, ref),
+                ),
+                const SizedBox(height: HearthSpacing.lg),
+              ] else ...<Widget>[
+                _ListHeader(
+                  range: range,
+                  left: left,
+                  total: lines.length,
+                  onManage: () => _manage(context, ref),
+                ),
+                const SizedBox(height: HearthSpacing.lg),
+              ],
+              if (lines.isEmpty)
+                _Empty(range: range)
+              else
+                for (final String store in stores) ...<Widget>[
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
+                    child: Text(
+                      store.isEmpty ? 'Anywhere' : store,
+                      style: context.text.sectionHeader,
+                    ),
+                  ),
+                  _StoreGroup(
+                    lines: groups[store]!,
+                    onReorder: (int from, int to) =>
+                        _save(ref, _reordered(store, groups, from, to)),
+                    onTick: (ShoppingLine line, bool value) =>
+                        _save(ref, _replacing(line.ticked(value))),
+                    onEdit: (ShoppingLine line) => _edit(context, ref, line),
+                    onRemove: (ShoppingLine line) => _remove(ref, line),
+                    onRestore: (ShoppingLine line) => _restore(ref, line),
+                  ),
+                  const SizedBox(height: HearthSpacing.lg),
+                ],
+              // Last, so a growing conversation never pushes the list about.
+              if (ref.watch(shoppingAssistantProvider) != null) ...<Widget>[
+                _ChatCard(
+                  lines: lines,
+                  onApply: (List<ShoppingLine> next) => _save(ref, next),
+                ),
+                const SizedBox(height: HearthSpacing.lg),
+              ],
+            ],
+          ),
         ),
-        const SizedBox(height: HearthSpacing.lg),
-        if (lines.isEmpty)
-          _Empty(range: range)
-        else
-          for (final String store in stores) ...<Widget>[
-            Padding(
-              padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
-              child: Text(
-                store.isEmpty ? 'Anywhere' : store,
-                style: context.text.sectionHeader,
-              ),
-            ),
-            _StoreGroup(
-              lines: groups[store]!,
-              onReorder: (int from, int to) =>
-                  _save(ref, _reordered(store, groups, from, to)),
-              onTick: (ShoppingLine line, bool value) =>
-                  _save(ref, _replacing(line.ticked(value))),
-              onEdit: (ShoppingLine line) => _edit(context, ref, line),
-              onRemove: (ShoppingLine line) => _remove(ref, line),
-              onRestore: (ShoppingLine line) => _restore(ref, line),
-            ),
-            const SizedBox(height: HearthSpacing.lg),
-          ],
-        // Last, so a growing conversation never pushes the list about.
-        if (ref.watch(shoppingAssistantProvider) != null) ...<Widget>[
-          _ChatCard(
-            lines: lines,
-            onApply: (List<ShoppingLine> next) => _save(ref, next),
-          ),
-          const SizedBox(height: HearthSpacing.lg),
-        ],
-        if (lines.isNotEmpty) ...<Widget>[
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: () => showShoppingExportSheet(
-                context,
-                lines,
-                // Passed in, so the sheet and the adapter stay free of
-                // Riverpod and of anything that could reach a network.
-                foods: <String, Food>{
-                  for (final Food f
-                      in ref.read(foodLibraryProvider).value ?? const <Food>[])
-                    f.id: f,
-                },
-              ),
-              icon: const Icon(Icons.ios_share),
-              label: const Text('Take it shopping'),
+        // Off the bottom of the scroll and onto a bar. It sat below every
+        // line — off screen in all three renders of a sixteen-line list —
+        // and it is the one control here that sends anything anywhere, so
+        // the words that say so travel with it (rule 4).
+        if (lines.isNotEmpty)
+          _ActionBar(
+            onAdd: () => _addManual(context, ref),
+            onExport: () => showShoppingExportSheet(
+              context,
+              lines,
+              // Passed in, so the sheet and the adapter stay free of
+              // Riverpod and of anything that could reach a network.
+              foods: <String, Food>{
+                for (final Food f
+                    in ref.read(foodLibraryProvider).value ?? const <Food>[])
+                  f.id: f,
+              },
             ),
           ),
-          const SizedBox(height: HearthSpacing.md),
-          Center(
-            child: Text(
-              'Nothing leaves the app until you tap that.',
-              style: context.text.metadata.copyWith(color: colors.textMuted),
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -270,6 +285,31 @@ class _Body extends ConsumerWidget {
     if (changed != null) await _save(ref, _replacing(changed));
   }
 
+  /// The list's setup, on a sheet you open when you are preparing rather
+  /// than shopping (review §6.2.5).
+  ///
+  /// The same three controls the card held: the range, the seasonings switch
+  /// and the rebuild. Nothing is removed — it is moved off the screen you
+  /// stand in a shop holding.
+  Future<void> _manage(BuildContext context, WidgetRef ref) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: context.colors.background,
+      isScrollControlled: true,
+      // Capped like every other sheet here, so a tall one at large text
+      // scrolls rather than overflowing, and tapping above still dismisses.
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+      ),
+      builder: (BuildContext sheet) => _ManageSheet(
+        onRebuild: () {
+          Navigator.of(sheet).pop();
+          _rebuild(context, ref);
+        },
+      ),
+    );
+  }
+
   Future<void> _addManual(BuildContext context, WidgetRef ref) async {
     final String? name = await showDialog<String>(
       context: context,
@@ -288,6 +328,242 @@ class _Body extends ConsumerWidget {
 }
 
 /// What the list covers, and the two things you do to the whole of it.
+/// What the range card used to be, where it belongs.
+class _ManageSheet extends ConsumerWidget {
+  const _ManageSheet({required this.onRebuild});
+
+  final VoidCallback onRebuild;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final HearthColors colors = context.colors;
+    final ({DateTime from, DateTime to}) range = ref.watch(
+      shoppingRangeProvider,
+    );
+    final bool seasonings = ref.watch(shoppingSeasoningsProvider);
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(HearthSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text('Manage list', style: context.text.sectionHeader),
+            const SizedBox(height: HearthSpacing.lg),
+            Text('Shopping for', style: context.text.label),
+            const SizedBox(height: HearthSpacing.xs),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    '${shortDate(range.from)} – ${shortDate(range.to)}',
+                    style: context.text.body,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => _pickRange(context, ref, range),
+                  child: const Text('Change'),
+                ),
+              ],
+            ),
+            const SizedBox(height: HearthSpacing.lg),
+            // Merged, so a screen reader says "Include seasonings, switch,
+            // off" rather than reading a label and a control separately.
+            MergeSemantics(
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text('Include seasonings', style: context.text.body),
+                  ),
+                  Switch(
+                    value: seasonings,
+                    onChanged: (bool _) =>
+                        ref.read(shoppingSeasoningsProvider.notifier).toggle(),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: HearthSpacing.lg),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: onRebuild,
+                child: const Text('Rebuild from the plan'),
+              ),
+            ),
+            const SizedBox(height: HearthSpacing.sm),
+            Text(
+              'Replaces what the plan put here. Anything you added or ticked '
+              'by hand stays.',
+              style: context.text.metadata.copyWith(color: colors.textMuted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickRange(
+    BuildContext context,
+    WidgetRef ref,
+    ({DateTime from, DateTime to}) range,
+  ) async {
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: DateTimeRange(start: range.from, end: range.to),
+      firstDate: DateTime.now().subtract(const Duration(days: 60)),
+      lastDate: DateTime.now().add(const Duration(days: 180)),
+      helpText: 'What are you shopping for?',
+    );
+    if (picked == null) return;
+    ref
+        .read(shoppingRangeProvider.notifier)
+        .set(from: picked.start, to: picked.end);
+  }
+}
+
+/// The list's own header: which list this is, and how much of it is left.
+///
+/// The range card used to sit here — 244 points of a 605-point viewport on a
+/// phone, and 398 of 401 at twice the text, where not one line of the list
+/// was on screen. The dates are a fact you check once to be sure you are
+/// looking at the right list; what is left is the fact a shop actually wants
+/// (review §6.2.5).
+class _ListHeader extends StatelessWidget {
+  const _ListHeader({
+    required this.range,
+    required this.left,
+    required this.total,
+    required this.onManage,
+  });
+
+  final ({DateTime from, DateTime to}) range;
+
+  /// Still to buy, and how many there are altogether.
+  final int left;
+  final int total;
+
+  final VoidCallback onManage;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final int inBasket = total - left;
+    // No "Shopping" title. The tab underneath says Shopping and the section
+    // bar above says Nutrition; a third of the same word is the "too many
+    // headings of similar strength" §6.2.1 asks to be rid of. It also cost
+    // the whole viewport: at twice the text on a small phone the title, the
+    // button and the line together were taller than the 303 points the list
+    // had, so the list built its header and nothing else.
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        Expanded(
+          child: Text(
+            '$total ${total == 1 ? 'item' : 'items'}'
+            '${inBasket == 0 ? '' : ' · $inBasket in the basket'}'
+            ' · ${shortDate(range.from)} – ${shortDate(range.to)}',
+            // One line, with the count leading. At twice the text on a 320pt
+            // phone this wrapped to five lines, and a confirmatory line that
+            // takes a third of the screen is the problem this header
+            // replaced. Truncated is the right failure for it — and the half
+            // that survives the truncation should be how much is left, which
+            // is the fact a shop wants, rather than a date you checked once
+            // on the way in.
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: context.text.metadata.copyWith(color: colors.textMuted),
+          ),
+        ),
+        const SizedBox(width: HearthSpacing.sm),
+        // Labelled, not an icon: what is behind it is a date range, a switch
+        // and a rebuild, and no glyph says that (spec §6.3).
+        TextButton.icon(
+          onPressed: onManage,
+          icon: const Icon(Icons.tune, size: 18),
+          label: const Text('Manage list'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Add and export, always reachable.
+class _ActionBar extends StatelessWidget {
+  const _ActionBar({required this.onAdd, required this.onExport});
+
+  final VoidCallback onAdd;
+  final VoidCallback onExport;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surfaceElevated,
+        border: Border(top: BorderSide(color: colors.outline)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(HearthSpacing.md),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              // Side by side where they fit; stacked where they do not. At
+              // twice the text on a 320pt phone two buttons in a row wrap
+              // their labels onto three lines each, and the bar then takes
+              // the height the list needed (spec §6.3).
+              LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints box) {
+                  final Widget add = OutlinedButton.icon(
+                    onPressed: onAdd,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add an item'),
+                  );
+                  final Widget export = FilledButton.icon(
+                    onPressed: onExport,
+                    icon: const Icon(Icons.ios_share, size: 18),
+                    // What the destination actually opens. "Take it
+                    // shopping" named a feeling rather than an action.
+                    label: const Text('Share or export'),
+                  );
+                  final double scaled = MediaQuery.textScalerOf(context)
+                      .scale(14);
+                  if (box.maxWidth >= scaled * 22) {
+                    return Row(
+                      children: <Widget>[
+                        Expanded(child: add),
+                        const SizedBox(width: HearthSpacing.sm),
+                        Expanded(child: export),
+                      ],
+                    );
+                  }
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      export,
+                      const SizedBox(height: HearthSpacing.xs),
+                      add,
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: HearthSpacing.xs),
+              Text(
+                'Nothing leaves the app until you tap that.',
+                textAlign: TextAlign.center,
+                style: context.text.metadata.copyWith(color: colors.textMuted),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RangeCard extends ConsumerWidget {
   const _RangeCard({
     required this.range,
@@ -513,6 +789,10 @@ class _LineTile extends StatelessWidget {
   /// The arithmetic underneath, when there is any worth showing.
   String? get _detail {
     final List<String> parts = <String>[
+      // Said, because a rebuild keeps it and drops the rest — and until now
+      // a line somebody typed looked exactly like one the plan produced, so
+      // there was no way to tell beforehand what a rebuild would take.
+      if (line.isManual) 'added by hand',
       if (line.isEdited && line.planned.isNotEmpty)
         'recipes call for ${line.planned.map(QuantityFormat.format).join(' + ')}',
       if (line.onHand != null) 'have ${QuantityFormat.format(line.onHand!)}',
