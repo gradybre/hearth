@@ -18,7 +18,6 @@ import '../../domain/planning/day_format.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
-import '../../domain/planning/week.dart';
 import 'day_picker_sheet.dart';
 import 'entry_resolver.dart';
 import 'log_sheet.dart';
@@ -97,45 +96,12 @@ class _DayHeader extends ConsumerWidget {
 
   final DateTime date;
 
-  static const List<String> _weekdays = <String>[
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Sunday',
-  ];
-  static const List<String> _months = <String>[
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
+  /// Today, Yesterday, Tomorrow — or the weekday, for a day none of those
+  /// name. `relativeDay` counts calendar days rather than elapsed hours,
+  /// which is what stopped this saying "Today" on the 23-hour night (F05).
+  String get _label => relativeDay(date) ?? weekdayName(date);
 
-  String get _label {
-    final DateTime today = dayKey(DateTime.now());
-    // Calendar days, not elapsed hours. `difference(...).inDays` counts
-    // 24-hour spans, and a local day is 23 or 25 of them twice a year — so
-    // on the shorter night yesterday came out as `0` and this said "Today"
-    // on a day that was not (review F05).
-    final int delta = calendarDaysBetween(today, date);
-    if (delta == 0) return 'Today';
-    if (delta == -1) return 'Yesterday';
-    if (delta == 1) return 'Tomorrow';
-    return _weekdays[date.weekday - 1];
-  }
-
-  String get _subtitle =>
-      '${_weekdays[date.weekday - 1]} ${date.day} ${_months[date.month - 1]}';
+  String get _subtitle => '${weekdayName(date)} ${date.day} ${monthName(date)}';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

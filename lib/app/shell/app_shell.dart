@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../features/recipes/timer_bar.dart';
 import '../theme/hearth_colors.dart';
@@ -221,7 +222,71 @@ class _Sidebar extends StatelessWidget {
                     onTap: () => onDestinationSelected(i),
                   ),
                 ),
+              // Below the tabs, not among them: it is not one of this
+              // section's screens and should not read as one.
+              const _SettingsButton(),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The way into Settings, in whichever chrome is showing.
+///
+/// One widget rather than two spellings, because "the same place whichever
+/// screen you are looking at" is the whole point of it: Settings used to live
+/// on the home screen alone, so changing a preference about the screen you
+/// were on meant leaving that screen and coming back.
+///
+/// It pushes rather than replacing, so Settings returns you to the section
+/// you opened it from — which the home screen's own route does too.
+class _SettingsButton extends StatelessWidget {
+  const _SettingsButton({this.compact = false});
+
+  /// Icon alone, for the slim bar above a phone's content. The sidebar has
+  /// room for the word and uses it, the same way its other rows do.
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    void open() => GoRouter.of(context).push('/household');
+
+    if (compact) {
+      return IconButton(
+        icon: Icon(Icons.settings_outlined, size: 20, color: colors.textMuted),
+        tooltip: 'Settings',
+        onPressed: open,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: HearthSpacing.sm),
+      child: Tooltip(
+        message: 'Settings',
+        child: TextButton.icon(
+          onPressed: open,
+          icon: Icon(
+            Icons.settings_outlined,
+            size: 18,
+            color: colors.textMuted,
+          ),
+          label: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Settings',
+              style: context.text.body.copyWith(color: colors.textSecondary),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          style: TextButton.styleFrom(
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.symmetric(
+              horizontal: HearthSpacing.md,
+              vertical: HearthSpacing.sm,
+            ),
           ),
         ),
       ),
@@ -323,7 +388,7 @@ class _SectionBar extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(
                   0,
                   HearthSpacing.sm,
-                  HearthSpacing.lg,
+                  HearthSpacing.sm,
                   HearthSpacing.sm,
                 ),
                 // Hard against the right edge, balancing the way home on the
@@ -342,6 +407,11 @@ class _SectionBar extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    // Beyond the section's own name, so the bar reads
+                    // "where you are" and then "the app's own settings" —
+                    // and it is in the same place on every one of the four
+                    // screens, which is the whole of the fix.
+                    const _SettingsButton(compact: true),
                   ],
                 ),
               ),

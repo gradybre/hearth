@@ -15,10 +15,12 @@ import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/parsing/amount_parser.dart';
+import '../../domain/planning/day_format.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
 import '../../domain/planning/portion_unit.dart';
 import '../../domain/planning/recent_log.dart';
+import '../../domain/planning/week.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import '../foods/external_food_results.dart';
 import '../foods/food_search_controller.dart';
@@ -156,6 +158,25 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   bool _busy = false;
 
   bool get _isExisting => widget.existing != null;
+
+  /// How far the day being logged to is from today, on the calendar.
+  ///
+  /// One reading of the clock, used for both the words and the colour. Two
+  /// would be two sources of truth for one fact — and this change has just
+  /// finished collapsing three copies of the weekday list into one.
+  int get _daysFromToday => calendarDaysBetween(DateTime.now(), widget.date);
+
+  /// The day this is going to, in the fewest words that identify it.
+  ///
+  /// "Today" and "Yesterday" rather than a date to work out; a weekday and a
+  /// date for anything further off, because "Thursday" alone is two different
+  /// Thursdays.
+  String _when([int? delta]) => switch (delta ?? _daysFromToday) {
+    0 => 'Today',
+    -1 => 'Yesterday',
+    1 => 'Tomorrow',
+    _ => '${weekdayName(widget.date)} ${shortDate(widget.date)}',
+  };
 
   @override
   void initState() {
@@ -525,6 +546,9 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     // typed in. A raw gram or ounce amount is always available for a food
     // measured by mass or volume, so the row now earns its place even for a
     // food with a single stored serving.
+    // One reading of the clock for both the words and the colour.
+    final int daysFromToday = _daysFromToday;
+
     final Food? food = _foodFor(foods);
     final ServingOption? standard = food?.defaultServing;
     final List<PortionUnit> units = portionUnitsFor(food);
@@ -550,6 +574,24 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
         padding: const EdgeInsets.all(HearthSpacing.lg),
         children: <Widget>[
           Text(_label, style: context.text.sectionHeader),
+          const SizedBox(height: HearthSpacing.xs),
+          // Where this is going, before what it costs. The sheet named the
+          // food and its macros and never said which day or meal it was
+          // about — fine on today, and the whole question on a day you have
+          // scrolled back to, because the header that knows the date is the
+          // thing this sheet is covering (review F05).
+          // The accent marks a day *behind* you and nothing else. Planning
+          // tomorrow's dinner is what a planner is for, and flagging it the
+          // same way as an accidental scroll back to last Tuesday would
+          // spend the signal on the routine case and leave the one worth
+          // noticing no louder. Never colour alone — the words say which day
+          // it is regardless (spec §6.3).
+          Text(
+            '${widget.slot.label} · ${_when(daysFromToday)}',
+            style: context.text.metadata.copyWith(
+              color: daysFromToday < 0 ? colors.accent : colors.textMuted,
+            ),
+          ),
           const SizedBox(height: HearthSpacing.xs),
           Text(
             alreadyLogged
@@ -835,7 +877,11 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
                     ),
                 ],
                 if (matchingRecipes.isNotEmpty)
-                  const _GroupLabel(text: 'Recipes'),
+                  // "Yours", because the next heading down is "Elsewhere"
+                  // and those rows write to the library when one is picked.
+                  // The kind alone left the two readable as one list (review
+                  // §7's picker scopes).
+                  const _GroupLabel(text: 'Your recipes'),
                 for (final Recipe recipe in matchingRecipes)
                   _PickRow(
                     title: recipe.title,
@@ -843,7 +889,8 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
                         'serves ${recipe.servings == recipe.servings.roundToDouble() ? recipe.servings.round() : recipe.servings}',
                     onTap: () => setState(() => _recipe = recipe),
                   ),
-                if (matchingFoods.isNotEmpty) const _GroupLabel(text: 'Foods'),
+                if (matchingFoods.isNotEmpty)
+                  const _GroupLabel(text: 'Your foods'),
                 for (final Food food in matchingFoods)
                   _PickRow(
                     title: food.name,

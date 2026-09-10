@@ -99,16 +99,6 @@ class _DayPickerSheetState extends ConsumerState<_DayPickerSheet> {
   final Set<DateTime> _selected = <DateTime>{};
   late MealSlot _slot = widget.slot ?? MealSlot.breakfast;
 
-  static const List<String> _weekdays = <String>[
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Sunday',
-  ];
-
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
@@ -265,15 +255,12 @@ class _DayPickerSheetState extends ConsumerState<_DayPickerSheet> {
   }
 
   String _label(DateTime day) {
-    final DateTime today = dayKey(DateTime.now());
-    // Calendar days, not elapsed hours — see `calendarDaysBetween`. This
-    // sheet picks the days a meal is copied onto, so "today" naming the
-    // wrong one is the same defect as F05 with more consequences.
-    final int delta = calendarDaysBetween(today, day);
-    final String weekday = _weekdays[day.weekday - 1];
-    if (delta == 0) return '$weekday ${shortDate(day)} · today';
-    if (delta == 1) return '$weekday ${shortDate(day)} · tomorrow';
-    return '$weekday ${shortDate(day)}';
+    // `relativeDay` counts calendar days rather than elapsed hours. This
+    // sheet picks the days a meal is moved or copied onto, so "today" naming
+    // the wrong one is the same defect as F05 with more consequences.
+    final String dated = '${weekdayName(day)} ${shortDate(day)}';
+    final String? near = relativeDay(day);
+    return near == null ? dated : '$dated · ${near.toLowerCase()}';
   }
 }
 
