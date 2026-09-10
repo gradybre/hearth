@@ -50,7 +50,7 @@ writing and none of them is on `main` yet.
 | ID | What | Impl | Test | Review | Deployed | Verified |
 |---|---|---|---|---|---|---|
 | N01 | Recoverable drafts | ✓ | ✓ | ~ #51 | B | — |
-| N02 | Move/copy a single meal entry | — | — | — | n/a | — |
+| N02 | Move/copy a single meal entry | ✓ | ✓ | ~ #57 | n/a | — |
 | N03 | Usual restaurant orders | — | — | — | n/a | — |
 | N04 | Recipe nutrition repair queue | — | — | — | n/a | — |
 | N05 | Food reuse, then reviewed merge | — | — | — | — | — |

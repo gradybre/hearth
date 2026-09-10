@@ -504,13 +504,6 @@ class _SlotSection extends ConsumerWidget {
   final List<ResolvedEntry> entries;
   final DateTime date;
 
-  static const Map<MealSlot, String> _titles = <MealSlot, String>{
-    MealSlot.breakfast: 'Breakfast',
-    MealSlot.lunch: 'Lunch',
-    MealSlot.dinner: 'Dinner',
-    MealSlot.snack: 'Snacks',
-  };
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final HearthColors colors = context.colors;
@@ -524,7 +517,7 @@ class _SlotSection extends ConsumerWidget {
         Row(
           children: <Widget>[
             Expanded(
-              child: Text(_titles[slot]!, style: context.text.sectionHeader),
+              child: Text(slot.label, style: context.text.sectionHeader),
             ),
             if (!slotTotal.isZero)
               Text(
@@ -534,7 +527,7 @@ class _SlotSection extends ConsumerWidget {
             const SizedBox(width: HearthSpacing.sm),
             IconButton(
               onPressed: () => showLogSheet(context, date: date, slot: slot),
-              tooltip: 'Add to ${_titles[slot]!.toLowerCase()}',
+              tooltip: 'Add to ${slot.label.toLowerCase()}',
               icon: Icon(Icons.add, color: colors.accent),
             ),
           ],
@@ -645,6 +638,45 @@ class _EntryRow extends ConsumerWidget {
               title: Text('Edit portion', style: context.text.body),
               onTap: () => Navigator.of(context).pop(_EntryAction.editPortion),
             ),
+            // Correcting the day a meal is filed under used to mean deleting
+            // it and logging it again — which freezes today's definition of
+            // the food over what was actually eaten (review N02).
+            ListTile(
+              leading: Icon(
+                Icons.swap_horiz,
+                color: context.colors.textSecondary,
+              ),
+              title: Text(
+                'Move to another day or meal…',
+                style: context.text.body,
+              ),
+              subtitle: entry.entry.isLogged
+                  ? Text(
+                      'Keeps what it was worth when you ate it',
+                      style: context.text.metadata.copyWith(
+                        color: context.colors.textMuted,
+                      ),
+                    )
+                  : null,
+              onTap: () => Navigator.of(context).pop(_EntryAction.move),
+            ),
+            // Named for what it does. "Copy" would leave open whether the
+            // second one has been eaten, and it has not: a snapshot freezes
+            // when a meal is logged and at no other time, so this plans one.
+            ListTile(
+              leading: Icon(
+                Icons.event_repeat,
+                color: context.colors.textSecondary,
+              ),
+              title: Text('Plan this again…', style: context.text.body),
+              subtitle: Text(
+                "Uses the food's nutrition as it stands then",
+                style: context.text.metadata.copyWith(
+                  color: context.colors.textMuted,
+                ),
+              ),
+              onTap: () => Navigator.of(context).pop(_EntryAction.planAgain),
+            ),
             ListTile(
               leading: Icon(Icons.delete_outline, color: context.colors.error),
               title: Text('Remove from this day', style: context.text.body),
@@ -665,9 +697,43 @@ class _EntryRow extends ConsumerWidget {
           slot: entry.entry.slot,
           existing: entry,
         );
+      case _EntryAction.move:
+        await _move(context, ref);
+      case _EntryAction.planAgain:
+        await _planAgain(context, ref);
       case _EntryAction.remove:
         await _remove(ref);
     }
+  }
+
+  /// Files this meal under another day or slot, as the same record.
+  Future<void> _move(BuildContext context, WidgetRef ref) async {
+    final MealDestination? to = await showMealDestination(
+      context,
+      title: 'Move ${entry.label}',
+      actionLabel: 'Move it',
+      slot: entry.entry.slot,
+    );
+    if (to == null) return;
+    await ref
+        .read(planRepositoryProvider)
+        .move(entry.entry, date: to.date, slot: to.slot);
+    ref.invalidate(dayEntriesProvider);
+  }
+
+  /// Plans the same food or recipe, at the same portion, for another day.
+  Future<void> _planAgain(BuildContext context, WidgetRef ref) async {
+    final MealDestination? to = await showMealDestination(
+      context,
+      title: 'Plan ${entry.label} again',
+      actionLabel: 'Plan it',
+      slot: entry.entry.slot,
+    );
+    if (to == null) return;
+    await ref
+        .read(planRepositoryProvider)
+        .copyAsPlanned(entry.entry, date: to.date, slot: to.slot);
+    ref.invalidate(dayEntriesProvider);
   }
 
   @override
@@ -805,7 +871,7 @@ class _EntryRow extends ConsumerWidget {
 }
 
 /// What a long press offers.
-enum _EntryAction { editPortion, remove }
+enum _EntryAction { editPortion, move, planAgain, remove }
 
 class _Card extends StatelessWidget {
   const _Card({required this.child, this.onTap});

@@ -6,7 +6,17 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../domain/planning/day_format.dart';
+import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/week.dart';
+
+/// Where one meal is going: a day and a meal slot (review N02).
+@immutable
+class MealDestination {
+  const MealDestination({required this.date, required this.slot});
+
+  final DateTime date;
+  final MealSlot slot;
+}
 
 /// Picks several days at once.
 ///
@@ -18,7 +28,37 @@ Future<List<DateTime>?> showDayPicker(
   required String title,
   required String actionLabel,
   DateTime? excluding,
-}) => showModalBottomSheet<List<DateTime>>(
+}) async => await _show(
+  context,
+  title: title,
+  actionLabel: actionLabel,
+  excluding: excluding,
+) as List<DateTime>?;
+
+/// Asks for a single day *and* a slot, for moving or repeating one meal.
+///
+/// The same sheet as [showDayPicker] rather than one beside it: the list of
+/// days, the height cap and the footer are the same problem solved once, and
+/// two copies of a day list would drift the moment either grew a month view.
+/// What changes is that one day is chosen instead of several, and that the
+/// slot is part of the answer — "the wrong day" and "the wrong meal" are the
+/// same correction, and asking for them on two screens would be two.
+Future<MealDestination?> showMealDestination(
+  BuildContext context, {
+  required String title,
+  required String actionLabel,
+  required MealSlot slot,
+}) async =>
+    await _show(context, title: title, actionLabel: actionLabel, slot: slot)
+        as MealDestination?;
+
+Future<Object?> _show(
+  BuildContext context, {
+  required String title,
+  required String actionLabel,
+  DateTime? excluding,
+  MealSlot? slot,
+}) => showModalBottomSheet<Object>(
   context: context,
   isScrollControlled: true,
   backgroundColor: Colors.transparent,
@@ -26,6 +66,7 @@ Future<List<DateTime>?> showDayPicker(
     title: title,
     actionLabel: actionLabel,
     excluding: excluding,
+    slot: slot,
   ),
 );
 
@@ -34,6 +75,7 @@ class _DayPickerSheet extends ConsumerStatefulWidget {
     required this.title,
     required this.actionLabel,
     this.excluding,
+    this.slot,
   });
 
   final String title;
@@ -42,12 +84,20 @@ class _DayPickerSheet extends ConsumerStatefulWidget {
   /// A day that cannot be chosen — the source day, when copying.
   final DateTime? excluding;
 
+  /// The slot to open on, when one meal is being moved or repeated. Null for
+  /// the several-days assignment, which has no slot of its own to change.
+  final MealSlot? slot;
+
+  /// One day, or several. Set by asking for a slot: a meal is in one place.
+  bool get single => slot != null;
+
   @override
   ConsumerState<_DayPickerSheet> createState() => _DayPickerSheetState();
 }
 
 class _DayPickerSheetState extends ConsumerState<_DayPickerSheet> {
   final Set<DateTime> _selected = <DateTime>{};
+  late MealSlot _slot = widget.slot ?? MealSlot.breakfast;
 
   static const List<String> _weekdays = <String>[
     'Monday',
@@ -100,14 +150,15 @@ class _DayPickerSheetState extends ConsumerState<_DayPickerSheet> {
                         style: context.text.sectionHeader,
                       ),
                     ),
-                    Text(
-                      _selected.isEmpty
-                          ? 'none chosen'
-                          : '${_selected.length} chosen',
-                      style: context.text.metadata.copyWith(
-                        color: colors.textMuted,
+                    if (!widget.single)
+                      Text(
+                        _selected.isEmpty
+                            ? 'none chosen'
+                            : '${_selected.length} chosen',
+                        style: context.text.metadata.copyWith(
+                          color: colors.textMuted,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -125,7 +176,20 @@ class _DayPickerSheetState extends ConsumerState<_DayPickerSheet> {
                           day: day,
                           label: _label(day),
                           selected: _selected.contains(day),
+                          single: widget.single,
                           onChanged: (bool value) => setState(() {
+                            // One meal is in one place, so choosing a day
+                            // here replaces the choice rather than adding to
+                            // it — and a chosen day cannot be un-chosen into
+                            // no answer at all.
+                            if (widget.single) {
+                              if (value) {
+                                _selected
+                                  ..clear()
+                                  ..add(day);
+                              }
+                              return;
+                            }
                             if (value) {
                               _selected.add(day);
                             } else {
@@ -136,6 +200,27 @@ class _DayPickerSheetState extends ConsumerState<_DayPickerSheet> {
                   ],
                 ),
               ),
+              if (widget.single)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: HearthSpacing.lg,
+                    vertical: HearthSpacing.sm,
+                  ),
+                  child: Wrap(
+                    spacing: HearthSpacing.sm,
+                    runSpacing: HearthSpacing.sm,
+                    children: <Widget>[
+                      for (final MealSlot slot in MealSlot.values)
+                        ChoiceChip(
+                          label: Text(slot.label),
+                          selected: slot == _slot,
+                          onSelected: (bool picked) {
+                            if (picked) setState(() => _slot = slot);
+                          },
+                        ),
+                    ],
+                  ),
+                ),
               Padding(
                 padding: const EdgeInsets.all(HearthSpacing.lg),
                 child: Row(
@@ -150,9 +235,15 @@ class _DayPickerSheetState extends ConsumerState<_DayPickerSheet> {
                       onPressed: _selected.isEmpty
                           ? null
                           : () => Navigator.of(context).pop(
-                              _selected.toList()..sort(
-                                (DateTime a, DateTime b) => a.compareTo(b),
-                              ),
+                              widget.single
+                                  ? MealDestination(
+                                      date: _selected.single,
+                                      slot: _slot,
+                                    )
+                                  : (_selected.toList()..sort(
+                                      (DateTime a, DateTime b) =>
+                                          a.compareTo(b),
+                                    )),
                             ),
                       child: Text(widget.actionLabel),
                     ),
@@ -185,12 +276,17 @@ class _DayCheck extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onChanged,
+    this.single = false,
   });
 
   final DateTime day;
   final String label;
   final bool selected;
   final ValueChanged<bool> onChanged;
+
+  /// One of these, or any number. It changes the icon, because a checkbox
+  /// promises you can tick a second one.
+  final bool single;
 
   @override
   Widget build(BuildContext context) {
@@ -221,7 +317,13 @@ class _DayCheck extends StatelessWidget {
                   // Selection is carried by an icon as well as the fill, so it
                   // does not rest on colour alone (spec §6.3).
                   Icon(
-                    selected ? Icons.check_box : Icons.check_box_outline_blank,
+                    single
+                        ? (selected
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_unchecked)
+                        : (selected
+                              ? Icons.check_box
+                              : Icons.check_box_outline_blank),
                     size: 20,
                     color: selected ? colors.accent : colors.textMuted,
                   ),

@@ -300,6 +300,87 @@ class PlanRepository {
     });
   }
 
+  /// Files an existing meal under a different day or slot (review N02).
+  ///
+  /// The same record, moved — not a copy, and emphatically not a delete and a
+  /// re-log. Re-logging costs the meal from the food as it stands *now*, so
+  /// correcting a date that way rewrites what was eaten (non-negotiable 3).
+  /// This is the whole reason the operation exists.
+  ///
+  /// The destination day is ensured and queued before the entry, because the
+  /// entry's `dayId` is a foreign key and the server has never heard of a day
+  /// nobody has written to yet. The day it came *from* is left alone: an
+  /// empty day is not a problem, and removing one would take the other meals
+  /// on it with it.
+  Future<MealPlanEntry> move(
+    MealPlanEntry entry, {
+    required DateTime date,
+    required MealSlot slot,
+  }) async {
+    final DateTime now = _now();
+
+    return _db.transaction(() async {
+      final MealPlanDayRow day = await _store.ensureDay(
+        userId: _userId,
+        date: date,
+        idFactory: () => dayIdFor(userId: _userId, date: date),
+        updatedAt: now,
+      );
+      await _queueDay(day, now);
+
+      final MealPlanEntry moved = entry.filedUnder(
+        dayId: day.id,
+        slot: slot,
+        loggedAt: _reDated(entry.loggedAt, date),
+      );
+      await _store.upsertEntry(moved, updatedAt: now);
+      await _queueEntry(moved, now);
+      return moved;
+    });
+  }
+
+  /// The same food or recipe, at the same portion, planned for another day
+  /// (review N02).
+  ///
+  /// A *planned* entry, deliberately. A copy is a meal nobody has eaten yet,
+  /// and a snapshot freezes when a meal is logged and at no other time — so
+  /// there is nothing to inherit and carrying one forward would give that
+  /// column a second meaning. It follows that the copy is costed from the
+  /// food as it stands when it is eventually logged, which is also the answer
+  /// anyone would want after correcting that food's macros.
+  Future<MealPlanEntry> copyAsPlanned(
+    MealPlanEntry entry, {
+    required DateTime date,
+    required MealSlot slot,
+  }) => add(
+    date: date,
+    slot: slot,
+    refType: entry.refType,
+    refId: entry.refId,
+    servings: entry.servings,
+  );
+
+  /// [at], on [date], at the same time of day.
+  ///
+  /// Local throughout. Day attribution is local — `dayKey` says so — so
+  /// reading the hour off a UTC instant and rebuilding it as a local one
+  /// would shift the meal by the offset, which on this side of the Atlantic
+  /// is enough to move an early breakfast onto the day before.
+  static DateTime? _reDated(DateTime? at, DateTime date) {
+    if (at == null) return null;
+    final DateTime local = at.toLocal();
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      local.hour,
+      local.minute,
+      local.second,
+      local.millisecond,
+      local.microsecond,
+    );
+  }
+
   Future<void> removeEntry(String entryId) async {
     final DateTime now = _now();
     await _db.transaction(() async {
