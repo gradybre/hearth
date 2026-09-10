@@ -210,4 +210,36 @@ void main() {
       expect(PortionUnit.withId(units, null), isNull);
     });
   });
+
+  group('how a field writes the number', () {
+    test('a weight is a decimal, never a mixed fraction', () {
+      const PortionUnit grams = PortionUnit.raw(Units.gram);
+      expect(grams.format(125.5), '125.5');
+      expect(grams.format(87.5), '87.5');
+      expect(grams.format(130), '130');
+    });
+
+    test('and trims the precision it does not need', () {
+      expect(const PortionUnit.raw(Units.ounce).format(6.25), '6.25');
+      expect(const PortionUnit.raw(Units.ounce).format(6.2), '6.2');
+      expect(const PortionUnit.raw(Units.ounce).format(6), '6');
+      expect(const PortionUnit.raw(Units.millilitre).format(250), '250');
+    });
+
+    test('but a count of servings keeps its fractions', () {
+      // The whole reason `writeAmount` exists: a third of a batch reads
+      // "1/3", and a decimal there would be worse, not better.
+      final PortionUnit pot = PortionUnit.serving(
+        ServingOption(
+          id: 'pot',
+          label: '170 g pot',
+          amount: Quantity.of(170, Units.gram),
+          macros: const Macros(kcal: 281),
+        ),
+      );
+      expect(pot.format(0.5), '1/2');
+      expect(pot.format(1 / 3), '1/3');
+      expect(pot.format(2), '2');
+    });
+  });
 }

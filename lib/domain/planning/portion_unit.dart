@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../models/food.dart';
+import '../parsing/amount_parser.dart';
 import '../units/quantity.dart';
 import '../units/unit.dart';
 
@@ -76,6 +77,21 @@ class PortionUnit {
     'oz' || 'fl_oz' => 2,
     _ => null,
   };
+
+  /// [count], as this unit's field writes it.
+  ///
+  /// `writeAmount` spells halves and quarters as fractions, which is exactly
+  /// what a count of servings wants — a third of a batch reads "1/3". A
+  /// weight does not: 125.5 g came out as "125 1/2", and nobody writes a half
+  /// gram that way. So a raw unit writes a plain decimal, trimmed of the
+  /// zeros its precision does not need.
+  String format(double count) {
+    final int? decimals = _decimals;
+    if (decimals == null || !count.isFinite) return writeAmount(count);
+    final String text = count.toStringAsFixed(decimals);
+    if (!text.contains('.')) return text;
+    return text.replaceFirst(RegExp(r'\.?0+$'), '');
+  }
 
   /// [count], as this unit's field shows it.
   ///

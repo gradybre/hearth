@@ -136,11 +136,21 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     final PreferenceStore preferences = ref.read(preferenceStoreProvider);
     final String key = '${PreferenceStore.logUnitForEntry}$entryId';
     final ServingOption? standard = _foodFor(foods)?.defaultServing;
-    if (!unit.isRaw && unit.serving?.id == standard?.id) {
-      await preferences.delete(key);
-      return;
+    // Never throws. By the time this runs the meal is already saved, and
+    // failing here would leave the sheet open over a committed entry — one
+    // more tap of "Log it" and the day has the meal twice. Which unit a
+    // portion was typed in is the least important thing this save does, and
+    // it should not be the only one that can undo the rest.
+    try {
+      if (!unit.isRaw && unit.serving?.id == standard?.id) {
+        await preferences.delete(key);
+        return;
+      }
+      await preferences.write(key, unit.id);
+    } on Object {
+      // The portion, the macros and the day are all already right. This
+      // costs the next correction its unit and nothing else.
     }
-    await preferences.write(key, unit.id);
   }
 
   bool _busy = false;
@@ -591,6 +601,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
             servings: count,
             step: unit?.step ?? 0.25,
             basisId: unit?.id,
+            format: unit == null ? writeAmount : unit.format,
             onChanged: (double value) => setState(() {
               _servings = unit == null
                   ? value
@@ -602,7 +613,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
           // whatever typed it, so this is the one line that says so.
           if (unit != null && unit.isRaw && standard != null)
             _ResolvedPortion(
-              amount: '${writeAmount(count)} ${unit.label}',
+              amount: '${unit.format(count)} ${unit.label}',
               servings: _servings,
               serving: standard,
             ),
@@ -980,6 +991,7 @@ class _PortionStepper extends StatefulWidget {
     required this.onChanged,
     this.step = 0.25,
     this.basisId,
+    this.format = writeAmount,
   });
 
   /// How much is being logged, counted in whatever unit [basisId] names.
@@ -995,13 +1007,18 @@ class _PortionStepper extends StatefulWidget {
   /// when the number happens to land on the same value.
   final String? basisId;
 
+  /// How the number is written. A count of servings wants `writeAmount`'s
+  /// fractions — a third of a batch reads "1/3" — and a weight does not:
+  /// 125.5 g wrote itself "125 1/2" until this was a choice.
+  final String Function(double) format;
+
   @override
   State<_PortionStepper> createState() => _PortionStepperState();
 }
 
 class _PortionStepperState extends State<_PortionStepper> {
   late final TextEditingController _field = TextEditingController(
-    text: writeAmount(widget.servings),
+    text: widget.format(widget.servings),
   );
   final FocusNode _focus = FocusNode();
 
@@ -1030,7 +1047,7 @@ class _PortionStepperState extends State<_PortionStepper> {
     // it, and half-typed input is not a number to be corrected yet.
     if (!_focus.hasFocus &&
         (widget.servings != old.servings || widget.basisId != old.basisId)) {
-      _field.text = writeAmount(widget.servings);
+      _field.text = widget.format(widget.servings);
     }
   }
 
@@ -1051,10 +1068,10 @@ class _PortionStepperState extends State<_PortionStepper> {
     // Not finite is not a portion either: "1e999" parses to infinity, and
     // infinity is neither caught by `<= 0` nor anything you can eat.
     if (typed == null || !typed.isFinite || typed <= 0) {
-      _field.text = writeAmount(widget.servings);
+      _field.text = widget.format(widget.servings);
       return;
     }
-    _field.text = writeAmount(typed);
+    _field.text = widget.format(typed);
     if (typed != widget.servings) widget.onChanged(typed);
   }
 
@@ -1062,7 +1079,7 @@ class _PortionStepperState extends State<_PortionStepper> {
     final double next = ((widget.servings + by) * 100).roundToDouble() / 100;
     if (next <= 0) return;
     _focus.unfocus();
-    _field.text = writeAmount(next);
+    _field.text = widget.format(next);
     widget.onChanged(next);
   }
 

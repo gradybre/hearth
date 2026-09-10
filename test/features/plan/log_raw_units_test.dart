@@ -100,6 +100,39 @@ void main() {
       ((jsonDecode(snapshot!) as Map<String, Object?>)['kcal']! as num)
           .toDouble();
 
+  testWidgets('half a gram is a decimal, not a mixed fraction', (
+    WidgetTester tester,
+  ) async {
+    // `writeAmount` spells halves and quarters as fractions, which is what a
+    // count of servings wants — a third of a batch reads "1/3". A weight does
+    // not: nobody writes 125½ grams, and `forDisplay` keeps a decimal place
+    // for g and ml precisely so half-gram amounts are reachable.
+    await pick(tester, <Food>[yoghurt()], 'Greek yoghurt');
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'g'));
+    await pumpFrames(tester, frames: 8);
+    await type(tester, '125.5');
+
+    expect(
+      find.widgetWithText(TextField, '125 1/2'),
+      findsNothing,
+      reason: 'a grams field wrote a mixed fraction',
+    );
+    expect(find.widgetWithText(TextField, '125.5'), findsOneWidget);
+  });
+
+  testWidgets('and a count of servings still writes them as fractions', (
+    WidgetTester tester,
+  ) async {
+    // The other half of the same rule, so the fix cannot quietly take the
+    // fractions away from the place they belong.
+    await pick(tester, <Food>[yoghurt()], 'Greek yoghurt');
+
+    await type(tester, '0.5');
+
+    expect(find.widgetWithText(TextField, '1/2'), findsOneWidget);
+  });
+
   testWidgets('85 g of a 170 g serving freezes half its calories', (
     WidgetTester tester,
   ) async {
