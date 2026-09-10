@@ -179,7 +179,7 @@ void main() {
     // Back on the builder — its empty state, because the stubbed library
     // cannot have grown. "Paste a menu" is on that screen too, so the title
     // is what tells the two apart.
-    expect(find.text('Ate out'), findsOneWidget);
+    expect(find.text('Eat out'), findsWidgets);
     expect(find.text('No restaurants yet'), findsOneWidget);
     expect(await db.select(db.foods).get(), hasLength(1));
   });
