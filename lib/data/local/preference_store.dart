@@ -29,6 +29,14 @@ class PreferenceStore {
   /// decision.
   static const String launchTarget = 'app.launch_target';
 
+  /// Whose foods the library is showing — your own, or a restaurant's menus
+  /// (see `FoodScope`, review §7.5).
+  ///
+  /// Device-local like the rest of these: which half of the library you are
+  /// browsing right now is not a household decision, and switching a partner's
+  /// screen to a chain's menu would be one.
+  static const String foodScope = 'foods.scope';
+
   /// Which unit a food's portion was last typed in, one key per food id
   /// (review F06). Device-local for the same reason again: whether you weigh
   /// in grams or count pots is a habit of the phone in your hand.
