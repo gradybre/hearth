@@ -24,8 +24,8 @@ Status: `—` not started · `~` in progress · `✓` done · `n/a` not applicab
 `B` waiting on Brendan.
 
 `~` on Impl means the code is written and the PR is open, not merged. It
-becomes `✓` when Brendan merges it — five PRs are open at the time of
-writing and none of them is on `main` yet.
+becomes `✓` when Brendan merges it. Nothing is open at the time of
+writing: #49–#57 are all on `main`.
 
 ---
 
@@ -33,15 +33,15 @@ writing and none of them is on `main` yet.
 
 | ID | What | Impl | Test | Review | Deployed | Verified |
 |---|---|---|---|---|---|---|
-| F01a | Dirty-state guard on recipe/food editors | ✓ | ✓ | ~ #49 | n/a | — |
-| F01b | Recoverable local drafts (N01) | ✓ | ✓ | ~ #51 | B | — |
-| F02 | Targeted shopping Undo | ✓ | ✓ | ~ #50 | n/a | — |
-| F03 | PDF page states: rendered vs extracted | ✓ | ✓ | ~ #52 | n/a | — |
-| F04 | Accumulated uncertainty; retry-safe batch save | ✓ | ✓ | ~ #52 | n/a | — |
-| F05 | Calendar-derived day labels; no constant "Today" card | ✓ | ✓ | ~ #55 | n/a | — |
-| F06 | Direct gram/ounce entry | ✓ | ✓ | ~ #56 | n/a | — |
-| F07a | Backoff wake-up | ✓ | ✓ | ~ #53 | n/a | — |
-| F07b | B02 reserve/settle, fail closed; record truncated usage | — | — | — | — | — |
+| F01a | Dirty-state guard on recipe/food editors | ✓ | ✓ | ✓ #49 | n/a | — |
+| F01b | Recoverable local drafts (N01) | ✓ | ✓ | ✓ #51 | B | — |
+| F02 | Targeted shopping Undo | ✓ | ✓ | ✓ #50 | n/a | — |
+| F03 | PDF page states: rendered vs extracted | ✓ | ✓ | ✓ #52 | n/a | — |
+| F04 | Accumulated uncertainty; retry-safe batch save | ✓ | ✓ | ✓ #52 | n/a | — |
+| F05 | Calendar-derived day labels; no constant "Today" card | ✓ | ✓ | ✓ #55 | n/a | — |
+| F06 | Direct gram/ounce entry | ✓ | ✓ | ✓ #56 | n/a | — |
+| F07a | Backoff wake-up | ✓ | ✓ | ✓ #53 | n/a | — |
+| F07b | B02 reserve/settle, fail closed; record truncated usage | ✓ | ✓ | ✓ #54 | B | — |
 | F07c | Windows recovery protocol handler | — | — | — | n/a | B — needs a Windows machine or a Windows CI job; see below |
 | F07d | Hosted recovery activation | n/a | n/a | n/a | B | B |
 
@@ -49,8 +49,8 @@ writing and none of them is on `main` yet.
 
 | ID | What | Impl | Test | Review | Deployed | Verified |
 |---|---|---|---|---|---|---|
-| N01 | Recoverable drafts | ✓ | ✓ | ~ #51 | B | — |
-| N02 | Move/copy a single meal entry | ✓ | ✓ | ~ #57 | n/a | — |
+| N01 | Recoverable drafts | ✓ | ✓ | ✓ #51 | B | — |
+| N02 | Move/copy a single meal entry | ✓ | ✓ | ✓ #57 | n/a | — |
 | N03 | Usual restaurant orders | — | — | — | n/a | — |
 | N04 | Recipe nutrition repair queue | — | — | — | n/a | — |
 | N05 | Food reuse, then reviewed merge | — | — | — | — | — |
@@ -64,11 +64,11 @@ Deferred by Brendan, not to be built: N06, N07, N09, N10, N11, N12.
 |---|---|---|
 | 1 | Keep warm identity; fewer repeated cards/headings/copy | — |
 | 2 | Compact Today kept; Week becomes seven-day comparison | — |
-| 3 | Direct gram/ounce entry and Move/Copy | — |
+| 3 | Direct gram/ounce entry and Move/Copy | ✓ (#55/#56/#57) |
 | 4 | Restaurant search, selected review, usual orders | — |
 | 5 | Settings index; shopping prep separated from the trip | — |
 | 6 | Lost-edit and unsafe-Undo protection before visual work | ✓ (#49/#50/#51) |
-| 7 | Import bookkeeping and operational gates before trial | ~ (#52; gates in P3) |
+| 7 | Import bookkeeping and operational gates before trial | ~ (#52/#53/#54; F07c–d open) |
 | 8 | Optional features approved individually | ✓ (N06/N07/N09–N12 deferred) |
 
 ## P0 — baseline
@@ -85,8 +85,13 @@ Deferred by Brendan, not to be built: N06, N07, N09, N10, N11, N12.
 
 ## Decisions taken
 
-- **N02 Copy** reproduces the frozen portion and re-freezes the same macros.
-  Move keeps its snapshot untouched. One meaning in every menu.
+- **N02** Move keeps its snapshot untouched — that is the whole reason it
+  exists rather than a delete and a re-log. "Plan this again" makes a
+  *planned* entry with no snapshot at all, so it is costed from the food as
+  it stands when it is eventually logged: a snapshot freezes at log time and
+  at no other time. Both are said in words on the sheet. (This supersedes an
+  earlier note here that had Copy re-freezing the original's macros; the
+  design review settled it the other way.)
 - **B02** fails closed: import, generation and label reading refuse while the
   spend counter is unreadable; logging, cooking and everything manual are
   unaffected.
