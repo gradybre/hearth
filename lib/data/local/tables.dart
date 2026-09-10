@@ -528,6 +528,59 @@ class Preferences extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{key};
 }
 
+/// Work in progress in an editor, so an interruption does not end it
+/// (spec §5.2, review N01).
+///
+/// **Device-local, and deliberately not synced.** A half-typed recipe is not
+/// a fact about the household — it is a fact about this phone, five minutes
+/// ago, and pushing it would put an unreviewed draft in front of the other
+/// person as though somebody had decided something. Rule 4 says nothing
+/// automated reaches the library without review, and a draft is the state
+/// *before* that review. It is in this file with `preferences` and
+/// `cook_sessions` for the same reason all three are: they describe a device,
+/// not a household.
+///
+/// Scoped by user because two people share a device in exactly one situation
+/// — a sign-out and a sign-in — and inheriting a stranger's half-written
+/// recipe would be both confusing and a small privacy failure.
+@DataClassName('EditorDraftRow')
+class EditorDrafts extends Table {
+  /// What is being edited: `recipe:new`, `recipe:<id>`, `food:<id>`. One
+  /// draft per target, because a second draft of the same recipe is not a
+  /// thing anybody wants to be offered a choice between.
+  TextColumn get id => text()();
+
+  TextColumn get userId => text()();
+
+  /// `recipe` or `food`. Stored rather than parsed back out of [id] so a
+  /// reader does not have to know the id's shape to know what it holds.
+  TextColumn get kind => text()();
+
+  /// The record being edited, or null for a new one.
+  TextColumn get targetId => text().nullable()();
+
+  /// What the underlying record's `updatedAt` was when this draft started.
+  ///
+  /// The whole of the "somebody else edited it while your draft sat here"
+  /// check. Null for a new record, which cannot have been edited underneath.
+  DateTimeColumn get sourceUpdatedAt => dateTime().nullable()();
+
+  /// The draft itself, as the editor's own JSON.
+  TextColumn get payload => text()();
+
+  DateTimeColumn get updatedAt => dateTime()();
+
+  /// The user is part of the key, not just a filter.
+  ///
+  /// With `id` alone, two accounts on one device share a row: signing in as
+  /// the other person and starting a new recipe overwrites the first
+  /// person's draft, because `recipe:new` is the same key for both. Their
+  /// work then disappears with nothing to say so — the exact failure this
+  /// table exists to prevent, arriving through the table itself.
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{userId, id};
+}
+
 /// Where you are in cooking a particular recipe (spec §5.2).
 ///
 /// Keyed by recipe, so opening a different one does not inherit another's

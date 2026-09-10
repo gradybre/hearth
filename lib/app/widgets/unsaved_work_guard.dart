@@ -69,6 +69,50 @@ class UnsavedWorkGuard extends StatelessWidget {
     return discard ?? false;
   }
 
+  /// Offers back work that outlived the last session (review N01).
+  ///
+  /// Returns true to restore it. Asked rather than applied: a draft put into
+  /// the fields on open is work in front of somebody who does not know where
+  /// it came from, and for an existing record could quietly replace what
+  /// their partner changed since — rule 4's spirit, one screen earlier.
+  ///
+  /// Here rather than in each editor for the same reason the discard question
+  /// is: two screens asking the same thing differently is how one of them
+  /// ends up asking it wrong.
+  static Future<bool> offerDraft(
+    BuildContext context, {
+    required String what,
+    required bool stale,
+  }) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) => AlertDialog(
+          backgroundColor: context.colors.surface,
+          title: Text('Unfinished changes', style: context.text.sectionHeader),
+          content: Text(
+            stale
+                ? 'You left changes here that were never saved, and this '
+                      '$what has been edited since — probably on the other '
+                      'phone. Restoring replaces what is here now.'
+                : 'You left changes here that were never saved.',
+            style: context.text.body,
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Discard them'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Restore'),
+            ),
+          ],
+        ),
+      ) ??
+      // Dismissed by tapping outside keeps the draft: it is the answer that
+      // loses nothing, and the question will be asked again next time.
+      false;
+
   @override
   Widget build(BuildContext context) => PopScope<Object?>(
     canPop: !isDirty(),

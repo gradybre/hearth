@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +10,7 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/widgets/unsaved_work_guard.dart';
 import '../../data/adapters/label_reader.dart';
+import '../../data/local/editor_draft_store.dart';
 import '../../data/repositories/food_repository.dart';
 import '../../domain/models/food.dart';
 import '../../domain/parsing/amount_parser.dart';
@@ -57,6 +60,16 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
   bool _loaded = false;
   bool _saving = false;
 
+  /// Waits out a burst of editing before writing the draft down (review N01).
+  Timer? _draftTimer;
+
+  /// True once a restore has been offered, so a rebuild does not ask again.
+  bool _draftAsked = false;
+
+  /// What the food's `updatedAt` was when this editor opened, for the
+  /// stale-draft check.
+  DateTime? _sourceUpdatedAt;
+
   /// The food as the editor opened on it, for the unsaved-work guard
   /// (review F01).
   ///
@@ -66,7 +79,11 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
   /// it, and then it is not a guard.
   late FoodDraft _openedDraft = _draft;
 
-  bool get _isDirty => _draft != _openedDraft;
+  bool get _isDirty => _restored || _draft != _openedDraft;
+
+  /// True once a draft has been put back. Work recovered is still work
+  /// unsaved, however closely it happens to match its own baseline.
+  bool _restored = false;
   bool _showErrors = false;
 
   /// What the food's provenance was before the restaurant switch touched it,
@@ -169,6 +186,15 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
     setState(() => _saving = true);
     try {
       await repository.save(food);
+
+      // The draft goes once the food is committed locally, and not before. A
+      // save that throws leaves it exactly where it was, which is the moment
+      // it is worth most.
+      await ref
+          .read(editorDraftStoreProvider)
+          .clear(kind: 'food', targetId: widget.foodId);
+      _restored = false;
+
       // Pops the id, not nothing: a scan started from a recipe ingredient
       // needs to know which food it just created so it can attach it. Callers
       // that only wanted the food saved ignore the result.
@@ -248,6 +274,7 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
             );
           }
           _draft = _applyInitialLabel(FoodDraft.fromFood(food));
+          _sourceUpdatedAt = food.updatedAt?.toUtc();
           // The food as opened is the one just loaded, not the blank draft
           // the field initialiser saw — without this every existing food is
           // dirty the moment it appears.
@@ -262,6 +289,12 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
   }
 
   Widget _form(BuildContext context) {
+    // Hooked to the rebuild rather than to each mutation: every change here
+    // goes through `setState`, so this fires once per change with no call
+    // site left to forget. It only arms a timer, so a build stays a build.
+    _rememberDraft();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _offerDraft());
+
     final HearthColors colors = context.colors;
     final double gutter = MediaQuery.sizeOf(context).width >= 840
         ? HearthSpacing.gutterExpanded
@@ -600,6 +633,73 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    // Otherwise the debounce outlives the screen: harmless on a phone, and a
+    // pending-timer failure in every widget test that opens this editor.
+    _draftTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Writes what is in the editor down, shortly.
+  ///
+  /// Only when there is something to lose: a clean editor has nothing worth
+  /// recovering, and writing one would mean offering to restore a food
+  /// somebody opened and read.
+  void _rememberDraft() {
+    _draftTimer?.cancel();
+    if (!_isDirty) return;
+    _draftTimer = Timer(const Duration(seconds: 2), () async {
+      if (!mounted || !_isDirty) return;
+      await ref
+          .read(editorDraftStoreProvider)
+          .save(
+            EditorDraft(
+              kind: 'food',
+              targetId: widget.foodId,
+              sourceUpdatedAt: _sourceUpdatedAt,
+              payload: _draft.toJson(),
+            ),
+            at: DateTime.now().toUtc(),
+          );
+    });
+  }
+
+  /// Offers a draft back, once, if one outlived the last session.
+  Future<void> _offerDraft() async {
+    if (_draftAsked) return;
+    _draftAsked = true;
+
+    final EditorDraft? draft = await ref
+        .read(editorDraftStoreProvider)
+        .find(kind: 'food', targetId: widget.foodId);
+    if (draft == null || !mounted) return;
+
+    final bool stale =
+        _sourceUpdatedAt != null &&
+        draft.sourceUpdatedAt != null &&
+        _sourceUpdatedAt!.isAfter(draft.sourceUpdatedAt!);
+
+    final bool restore = await UnsavedWorkGuard.offerDraft(
+      context,
+      what: 'food',
+      stale: stale,
+    );
+    if (!mounted) return;
+    if (restore) {
+      setState(() {
+        _draft = FoodDraft.fromJson(draft.payload);
+        // Not clean: work recovered is still work unsaved, and treating it as
+        // the baseline would lose it again on the way out without asking.
+        _restored = true;
+      });
+    } else {
+      await ref
+          .read(editorDraftStoreProvider)
+          .clear(kind: 'food', targetId: widget.foodId);
+    }
   }
 
   /// Leaves the editor, asking first if there is anything to lose.

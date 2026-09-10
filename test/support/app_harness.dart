@@ -148,7 +148,11 @@ Future<HearthDatabase> pumpHearthApp(
   // stream. A recipe that exists only in the stream would show as "no longer
   // exists" the moment a test opens it.
   for (final Recipe recipe in recipes) {
-    await RecipeStore(db).upsert(recipe, updatedAt: DateTime(2026));
+    // The fixture's own timestamp where it has one. A hardcoded date here
+    // makes every test about *when* a recipe changed impossible to write,
+    // which is not obvious until you try — see the stale-draft test.
+    await RecipeStore(db)
+        .upsert(recipe, updatedAt: recipe.updatedAt ?? DateTime(2026));
   }
 
   // Plan entries are handed to the UI through the override below, but acting

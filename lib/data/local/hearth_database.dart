@@ -34,6 +34,7 @@ part 'hearth_database.g.dart';
     CookTimers,
     FoodProfiles,
     Preferences,
+    EditorDrafts,
     CookSessions,
     RecipePhotos,
     PlanTemplates,
@@ -49,11 +50,17 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 25;
+  int get schemaVersion => 26;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (Migrator m, int from, int to) async {
+      // v26 keeps an editor's work across an interruption (review N01).
+      // Additive, device-local, and never synced: a half-typed recipe is a
+      // fact about this phone rather than about the household.
+      if (from < 26) {
+        await m.createTable(editorDrafts);
+      }
       // v2 adds remembered ingredient matches (spec §5.3). Nothing else
       // changes, so the existing cache is kept rather than rebuilt.
       if (from < 2) {

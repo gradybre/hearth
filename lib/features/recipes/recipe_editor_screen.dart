@@ -12,6 +12,7 @@ import '../../app/theme/hearth_typography.dart';
 import '../../app/widgets/unsaved_work_guard.dart';
 import '../../data/adapters/label_reader.dart';
 import '../../data/adapters/recipe_ai.dart';
+import '../../data/local/editor_draft_store.dart';
 import '../../data/repositories/ingredient_match_repository.dart';
 import '../../domain/foods/no_match_rule.dart';
 import '../../domain/format/quantity_format.dart';
@@ -107,6 +108,23 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   String? _existingId;
   bool _showErrors = false;
 
+  /// Waits out a burst of typing before writing the draft down (review N01).
+  ///
+  /// A keystroke is not worth a database write, and a write per keystroke
+  /// would make the editor feel like it is thinking. Two seconds is short
+  /// enough that a crash loses a phrase rather than a paragraph.
+  Timer? _draftTimer;
+
+  /// True once a restore has been offered, so a rebuild does not ask again.
+  bool _draftAsked = false;
+
+  /// What the recipe's `updatedAt` was when this editor opened.
+  ///
+  /// Compared against a draft's own record of the same thing, which is how a
+  /// draft taken before the other phone edited the recipe is recognised as
+  /// out of date rather than applied over their work.
+  DateTime? _sourceUpdatedAt;
+
   /// The draft as the editor opened on it, for the unsaved-work guard
   /// (review F01). Null until the first fill, which is the moment before
   /// which there is nothing to lose.
@@ -121,7 +139,12 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   ///
   /// Null baseline means the editor is still loading an existing recipe,
   /// which returns a spinner from `build` and never reaches the guard.
-  bool get _isDirty => _openedDraft != null && _draft != _openedDraft;
+  bool get _isDirty =>
+      _restored || (_openedDraft != null && _draft != _openedDraft);
+
+  /// True once a draft has been put back. Work recovered is still work
+  /// unsaved, however closely it happens to match its own baseline.
+  bool _restored = false;
 
   /// The sketch icon this recipe already has (spec §5.2).
   ///
@@ -152,6 +175,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
 
   @override
   void dispose() {
+    _draftTimer?.cancel();
     for (final TextEditingController controller in <TextEditingController>[
       _title,
       _servings,
@@ -596,7 +620,10 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     }
   }
 
-  void _hydrate(Recipe recipe) => _fill(RecipeDraft.fromRecipe(recipe));
+  void _hydrate(Recipe recipe) {
+    _sourceUpdatedAt = recipe.updatedAt?.toUtc();
+    _fill(RecipeDraft.fromRecipe(recipe));
+  }
 
   /// Puts [draft] into the fields.
   ///
@@ -680,6 +707,14 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       // restaurant meal in the library (§8.3: retain the saved recipe and
       // offer retry without duplicating it).
       _existingId = saved.id;
+
+      // The draft goes once the recipe is committed locally, and not before.
+      // A save that throws on the way here leaves it exactly where it was,
+      // which is the moment it is worth most.
+      await ref
+          .read(editorDraftStoreProvider)
+          .clear(kind: 'recipe', targetId: widget.recipeId);
+      _restored = false;
 
       // Not awaited, deliberately (spec §5.2): saving a recipe must never sit
       // waiting on a picture. It lands in the store, so it appears on
@@ -802,6 +837,11 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     final double gutter = MediaQuery.sizeOf(context).width >= 840
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
+
+    // After the first frame the editor is actually usable on — not in
+    // `initState`, which for an existing recipe runs before the recipe has
+    // been read and would compare a draft against nothing.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _offerDraft());
 
     return UnsavedWorkGuard(
       isDirty: () => _isDirty,
@@ -1111,7 +1151,80 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     if (await UnsavedWorkGuard.confirm(context, 'recipe')) navigator.pop();
   }
 
-  void _rebuild(String _) => setState(() {});
+  void _rebuild(String _) {
+    setState(() {});
+    _rememberDraft();
+  }
+
+  /// Writes what is in the editor down, shortly.
+  ///
+  /// Only when there is something to lose: a clean editor has nothing worth
+  /// recovering, and writing one would mean offering to restore a recipe
+  /// somebody opened and read.
+  void _rememberDraft() {
+    _draftTimer?.cancel();
+    if (!_isDirty) return;
+    _draftTimer = Timer(const Duration(seconds: 2), () async {
+      if (!mounted || !_isDirty) return;
+      await ref
+          .read(editorDraftStoreProvider)
+          .save(
+            EditorDraft(
+              kind: 'recipe',
+              targetId: widget.recipeId,
+              sourceUpdatedAt: _sourceUpdatedAt,
+              payload: _draft.toJson(),
+            ),
+            at: DateTime.now().toUtc(),
+          );
+    });
+  }
+
+  /// Offers a draft back, once, if one outlived the last session.
+  ///
+  /// Asked rather than restored: a draft applied on open would put work in
+  /// front of somebody who does not know where it came from, and — for an
+  /// existing recipe — could quietly replace what their partner has since
+  /// changed. Rule 4's spirit, one screen earlier.
+  Future<void> _offerDraft() async {
+    if (_draftAsked) return;
+    _draftAsked = true;
+
+    final EditorDraft? draft = await ref
+        .read(editorDraftStoreProvider)
+        .find(kind: 'recipe', targetId: widget.recipeId);
+    if (draft == null || !mounted) return;
+
+    // Moved on underneath. Restoring silently here is the one outcome worth
+    // refusing outright: it would hand back a copy of a version the other
+    // phone has already replaced.
+    final bool stale =
+        _sourceUpdatedAt != null &&
+        draft.sourceUpdatedAt != null &&
+        _sourceUpdatedAt!.isAfter(draft.sourceUpdatedAt!);
+
+    final bool restore = await UnsavedWorkGuard.offerDraft(
+      context,
+      what: 'recipe',
+      stale: stale,
+    );
+    if (!mounted) return;
+    if (restore) {
+      setState(() {
+        _fill(RecipeDraft.fromJson(draft.payload));
+        // Filling sets the baseline to the restored draft, which would leave
+        // the editor *clean* — and leaving would then lose the very work just
+        // recovered, without asking. It is not clean: it is exactly the
+        // unsaved work it was before the app closed, and it says so until it
+        // is saved.
+        _restored = true;
+      });
+    } else {
+      await ref
+          .read(editorDraftStoreProvider)
+          .clear(kind: 'recipe', targetId: widget.recipeId);
+    }
+  }
 }
 
 /// Asking for a change instead of typing it (spec §5.4).

@@ -8816,6 +8816,491 @@ class PreferencesCompanion extends UpdateCompanion<PreferenceRow> {
   }
 }
 
+class $EditorDraftsTable extends EditorDrafts
+    with TableInfo<$EditorDraftsTable, EditorDraftRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EditorDraftsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _targetIdMeta = const VerificationMeta(
+    'targetId',
+  );
+  @override
+  late final GeneratedColumn<String> targetId = GeneratedColumn<String>(
+    'target_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sourceUpdatedAtMeta = const VerificationMeta(
+    'sourceUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> sourceUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'source_updated_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _payloadMeta = const VerificationMeta(
+    'payload',
+  );
+  @override
+  late final GeneratedColumn<String> payload = GeneratedColumn<String>(
+    'payload',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    userId,
+    kind,
+    targetId,
+    sourceUpdatedAt,
+    payload,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'editor_drafts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<EditorDraftRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('target_id')) {
+      context.handle(
+        _targetIdMeta,
+        targetId.isAcceptableOrUnknown(data['target_id']!, _targetIdMeta),
+      );
+    }
+    if (data.containsKey('source_updated_at')) {
+      context.handle(
+        _sourceUpdatedAtMeta,
+        sourceUpdatedAt.isAcceptableOrUnknown(
+          data['source_updated_at']!,
+          _sourceUpdatedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('payload')) {
+      context.handle(
+        _payloadMeta,
+        payload.isAcceptableOrUnknown(data['payload']!, _payloadMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_payloadMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {userId, id};
+  @override
+  EditorDraftRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return EditorDraftRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      targetId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}target_id'],
+      ),
+      sourceUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}source_updated_at'],
+      ),
+      payload: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $EditorDraftsTable createAlias(String alias) {
+    return $EditorDraftsTable(attachedDatabase, alias);
+  }
+}
+
+class EditorDraftRow extends DataClass implements Insertable<EditorDraftRow> {
+  /// What is being edited: `recipe:new`, `recipe:<id>`, `food:<id>`. One
+  /// draft per target, because a second draft of the same recipe is not a
+  /// thing anybody wants to be offered a choice between.
+  final String id;
+  final String userId;
+
+  /// `recipe` or `food`. Stored rather than parsed back out of [id] so a
+  /// reader does not have to know the id's shape to know what it holds.
+  final String kind;
+
+  /// The record being edited, or null for a new one.
+  final String? targetId;
+
+  /// What the underlying record's `updatedAt` was when this draft started.
+  ///
+  /// The whole of the "somebody else edited it while your draft sat here"
+  /// check. Null for a new record, which cannot have been edited underneath.
+  final DateTime? sourceUpdatedAt;
+
+  /// The draft itself, as the editor's own JSON.
+  final String payload;
+  final DateTime updatedAt;
+  const EditorDraftRow({
+    required this.id,
+    required this.userId,
+    required this.kind,
+    this.targetId,
+    this.sourceUpdatedAt,
+    required this.payload,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['user_id'] = Variable<String>(userId);
+    map['kind'] = Variable<String>(kind);
+    if (!nullToAbsent || targetId != null) {
+      map['target_id'] = Variable<String>(targetId);
+    }
+    if (!nullToAbsent || sourceUpdatedAt != null) {
+      map['source_updated_at'] = Variable<DateTime>(sourceUpdatedAt);
+    }
+    map['payload'] = Variable<String>(payload);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  EditorDraftsCompanion toCompanion(bool nullToAbsent) {
+    return EditorDraftsCompanion(
+      id: Value(id),
+      userId: Value(userId),
+      kind: Value(kind),
+      targetId: targetId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(targetId),
+      sourceUpdatedAt: sourceUpdatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceUpdatedAt),
+      payload: Value(payload),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory EditorDraftRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return EditorDraftRow(
+      id: serializer.fromJson<String>(json['id']),
+      userId: serializer.fromJson<String>(json['userId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      targetId: serializer.fromJson<String?>(json['targetId']),
+      sourceUpdatedAt: serializer.fromJson<DateTime?>(json['sourceUpdatedAt']),
+      payload: serializer.fromJson<String>(json['payload']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'userId': serializer.toJson<String>(userId),
+      'kind': serializer.toJson<String>(kind),
+      'targetId': serializer.toJson<String?>(targetId),
+      'sourceUpdatedAt': serializer.toJson<DateTime?>(sourceUpdatedAt),
+      'payload': serializer.toJson<String>(payload),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  EditorDraftRow copyWith({
+    String? id,
+    String? userId,
+    String? kind,
+    Value<String?> targetId = const Value.absent(),
+    Value<DateTime?> sourceUpdatedAt = const Value.absent(),
+    String? payload,
+    DateTime? updatedAt,
+  }) => EditorDraftRow(
+    id: id ?? this.id,
+    userId: userId ?? this.userId,
+    kind: kind ?? this.kind,
+    targetId: targetId.present ? targetId.value : this.targetId,
+    sourceUpdatedAt: sourceUpdatedAt.present
+        ? sourceUpdatedAt.value
+        : this.sourceUpdatedAt,
+    payload: payload ?? this.payload,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  EditorDraftRow copyWithCompanion(EditorDraftsCompanion data) {
+    return EditorDraftRow(
+      id: data.id.present ? data.id.value : this.id,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      targetId: data.targetId.present ? data.targetId.value : this.targetId,
+      sourceUpdatedAt: data.sourceUpdatedAt.present
+          ? data.sourceUpdatedAt.value
+          : this.sourceUpdatedAt,
+      payload: data.payload.present ? data.payload.value : this.payload,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EditorDraftRow(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('kind: $kind, ')
+          ..write('targetId: $targetId, ')
+          ..write('sourceUpdatedAt: $sourceUpdatedAt, ')
+          ..write('payload: $payload, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    userId,
+    kind,
+    targetId,
+    sourceUpdatedAt,
+    payload,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is EditorDraftRow &&
+          other.id == this.id &&
+          other.userId == this.userId &&
+          other.kind == this.kind &&
+          other.targetId == this.targetId &&
+          other.sourceUpdatedAt == this.sourceUpdatedAt &&
+          other.payload == this.payload &&
+          other.updatedAt == this.updatedAt);
+}
+
+class EditorDraftsCompanion extends UpdateCompanion<EditorDraftRow> {
+  final Value<String> id;
+  final Value<String> userId;
+  final Value<String> kind;
+  final Value<String?> targetId;
+  final Value<DateTime?> sourceUpdatedAt;
+  final Value<String> payload;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const EditorDraftsCompanion({
+    this.id = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.targetId = const Value.absent(),
+    this.sourceUpdatedAt = const Value.absent(),
+    this.payload = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EditorDraftsCompanion.insert({
+    required String id,
+    required String userId,
+    required String kind,
+    this.targetId = const Value.absent(),
+    this.sourceUpdatedAt = const Value.absent(),
+    required String payload,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       userId = Value(userId),
+       kind = Value(kind),
+       payload = Value(payload),
+       updatedAt = Value(updatedAt);
+  static Insertable<EditorDraftRow> custom({
+    Expression<String>? id,
+    Expression<String>? userId,
+    Expression<String>? kind,
+    Expression<String>? targetId,
+    Expression<DateTime>? sourceUpdatedAt,
+    Expression<String>? payload,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (userId != null) 'user_id': userId,
+      if (kind != null) 'kind': kind,
+      if (targetId != null) 'target_id': targetId,
+      if (sourceUpdatedAt != null) 'source_updated_at': sourceUpdatedAt,
+      if (payload != null) 'payload': payload,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EditorDraftsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? userId,
+    Value<String>? kind,
+    Value<String?>? targetId,
+    Value<DateTime?>? sourceUpdatedAt,
+    Value<String>? payload,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return EditorDraftsCompanion(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      kind: kind ?? this.kind,
+      targetId: targetId ?? this.targetId,
+      sourceUpdatedAt: sourceUpdatedAt ?? this.sourceUpdatedAt,
+      payload: payload ?? this.payload,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (targetId.present) {
+      map['target_id'] = Variable<String>(targetId.value);
+    }
+    if (sourceUpdatedAt.present) {
+      map['source_updated_at'] = Variable<DateTime>(sourceUpdatedAt.value);
+    }
+    if (payload.present) {
+      map['payload'] = Variable<String>(payload.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EditorDraftsCompanion(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('kind: $kind, ')
+          ..write('targetId: $targetId, ')
+          ..write('sourceUpdatedAt: $sourceUpdatedAt, ')
+          ..write('payload: $payload, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $CookSessionsTable extends CookSessions
     with TableInfo<$CookSessionsTable, CookSessionRow> {
   @override
@@ -12280,6 +12765,7 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
   late final $CookTimersTable cookTimers = $CookTimersTable(this);
   late final $FoodProfilesTable foodProfiles = $FoodProfilesTable(this);
   late final $PreferencesTable preferences = $PreferencesTable(this);
+  late final $EditorDraftsTable editorDrafts = $EditorDraftsTable(this);
   late final $CookSessionsTable cookSessions = $CookSessionsTable(this);
   late final $RecipePhotosTable recipePhotos = $RecipePhotosTable(this);
   late final $PlanTemplatesTable planTemplates = $PlanTemplatesTable(this);
@@ -12308,6 +12794,7 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
     cookTimers,
     foodProfiles,
     preferences,
+    editorDrafts,
     cookSessions,
     recipePhotos,
     planTemplates,
@@ -18839,6 +19326,250 @@ typedef $$PreferencesTableProcessedTableManager =
       PreferenceRow,
       PrefetchHooks Function()
     >;
+typedef $$EditorDraftsTableCreateCompanionBuilder =
+    EditorDraftsCompanion Function({
+      required String id,
+      required String userId,
+      required String kind,
+      Value<String?> targetId,
+      Value<DateTime?> sourceUpdatedAt,
+      required String payload,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$EditorDraftsTableUpdateCompanionBuilder =
+    EditorDraftsCompanion Function({
+      Value<String> id,
+      Value<String> userId,
+      Value<String> kind,
+      Value<String?> targetId,
+      Value<DateTime?> sourceUpdatedAt,
+      Value<String> payload,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$EditorDraftsTableFilterComposer
+    extends Composer<_$HearthDatabase, $EditorDraftsTable> {
+  $$EditorDraftsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get targetId => $composableBuilder(
+    column: $table.targetId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get sourceUpdatedAt => $composableBuilder(
+    column: $table.sourceUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$EditorDraftsTableOrderingComposer
+    extends Composer<_$HearthDatabase, $EditorDraftsTable> {
+  $$EditorDraftsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get targetId => $composableBuilder(
+    column: $table.targetId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get sourceUpdatedAt => $composableBuilder(
+    column: $table.sourceUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$EditorDraftsTableAnnotationComposer
+    extends Composer<_$HearthDatabase, $EditorDraftsTable> {
+  $$EditorDraftsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get targetId =>
+      $composableBuilder(column: $table.targetId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get sourceUpdatedAt => $composableBuilder(
+    column: $table.sourceUpdatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get payload =>
+      $composableBuilder(column: $table.payload, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$EditorDraftsTableTableManager
+    extends
+        RootTableManager<
+          _$HearthDatabase,
+          $EditorDraftsTable,
+          EditorDraftRow,
+          $$EditorDraftsTableFilterComposer,
+          $$EditorDraftsTableOrderingComposer,
+          $$EditorDraftsTableAnnotationComposer,
+          $$EditorDraftsTableCreateCompanionBuilder,
+          $$EditorDraftsTableUpdateCompanionBuilder,
+          (
+            EditorDraftRow,
+            BaseReferences<
+              _$HearthDatabase,
+              $EditorDraftsTable,
+              EditorDraftRow
+            >,
+          ),
+          EditorDraftRow,
+          PrefetchHooks Function()
+        > {
+  $$EditorDraftsTableTableManager(_$HearthDatabase db, $EditorDraftsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EditorDraftsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EditorDraftsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EditorDraftsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> userId = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String?> targetId = const Value.absent(),
+                Value<DateTime?> sourceUpdatedAt = const Value.absent(),
+                Value<String> payload = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => EditorDraftsCompanion(
+                id: id,
+                userId: userId,
+                kind: kind,
+                targetId: targetId,
+                sourceUpdatedAt: sourceUpdatedAt,
+                payload: payload,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String userId,
+                required String kind,
+                Value<String?> targetId = const Value.absent(),
+                Value<DateTime?> sourceUpdatedAt = const Value.absent(),
+                required String payload,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => EditorDraftsCompanion.insert(
+                id: id,
+                userId: userId,
+                kind: kind,
+                targetId: targetId,
+                sourceUpdatedAt: sourceUpdatedAt,
+                payload: payload,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$EditorDraftsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$HearthDatabase,
+      $EditorDraftsTable,
+      EditorDraftRow,
+      $$EditorDraftsTableFilterComposer,
+      $$EditorDraftsTableOrderingComposer,
+      $$EditorDraftsTableAnnotationComposer,
+      $$EditorDraftsTableCreateCompanionBuilder,
+      $$EditorDraftsTableUpdateCompanionBuilder,
+      (
+        EditorDraftRow,
+        BaseReferences<_$HearthDatabase, $EditorDraftsTable, EditorDraftRow>,
+      ),
+      EditorDraftRow,
+      PrefetchHooks Function()
+    >;
 typedef $$CookSessionsTableCreateCompanionBuilder =
     CookSessionsCompanion Function({
       required String recipeId,
@@ -20697,6 +21428,8 @@ class $HearthDatabaseManager {
       $$FoodProfilesTableTableManager(_db, _db.foodProfiles);
   $$PreferencesTableTableManager get preferences =>
       $$PreferencesTableTableManager(_db, _db.preferences);
+  $$EditorDraftsTableTableManager get editorDrafts =>
+      $$EditorDraftsTableTableManager(_db, _db.editorDrafts);
   $$CookSessionsTableTableManager get cookSessions =>
       $$CookSessionsTableTableManager(_db, _db.cookSessions);
   $$RecipePhotosTableTableManager get recipePhotos =>
