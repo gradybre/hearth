@@ -159,7 +159,16 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
         setState(() => _readError = 'Could not read that. Try again.');
       }
     } finally {
-      if (mounted) setState(() => _reading = false);
+      if (mounted) {
+        setState(() {
+          _reading = false;
+          // Whatever rendered belonged to *this* attempt. Left standing, a
+          // failed PDF read followed by a successful screenshot read would
+          // commit the PDF's pages as extracted — pages nothing ever read,
+          // never offered again.
+          _pagesRendered = const <int>[];
+        });
+      }
     }
   }
 
@@ -277,6 +286,7 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
         final String id = idForMenuFood(
           restaurant: restaurant,
           name: line.name,
+          portion: QuantityFormat.format(portion),
           section: line.section,
         );
         await repository.save(
@@ -339,14 +349,19 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
   ///
   /// The same pattern as `IngredientMatchStore.idFor` and `PlanStore.idFor`,
   /// and for the same reason: two attempts at one fact should meet on one row.
+  /// The portion is part of it, and has to be. A menu that lists "Fries"
+  /// twice at two sizes is two foods, and a key on the name alone would
+  /// quietly keep the second and lose the first — a silent collapse that the
+  /// random ids this replaced could not produce.
   static String idForMenuFood({
     required String restaurant,
     required String name,
+    required String portion,
     String? section,
   }) => const Uuid().v5(
     Namespace.url.value,
     'hearth:menu-food:${normaliseKey(restaurant)}:${normaliseKey(name)}:'
-    '${normaliseKey(section ?? '')}',
+    '${normaliseKey(section ?? '')}:${normaliseKey(portion)}',
   );
 
   @override

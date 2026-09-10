@@ -777,6 +777,62 @@ void main() {
       expect(saved, hasLength(3));
     });
 
+    testWidgets(
+      'a failed PDF read does not get claimed by a later photo read',
+      (WidgetTester tester) async {
+        // What rendered belongs to the attempt that rendered it. Left standing,
+        // the next successful read of *anything* commits it — so reading
+        // screenshots after a PDF read failed claimed the PDF's pages, and
+        // they stopped being offered without ever having been read.
+        final FakePdf pdf = FakePdf(pageCount: 18);
+        final _FlakyMenuReader reader = _FlakyMenuReader(oneRow('Falafel'));
+        await pumpHearthApp(
+          tester,
+          pdfPages: pdf,
+          photoPicker: _OnePhoto(),
+          menuReader: reader,
+        );
+        await openImporter(tester);
+
+        await tester.tap(find.text('Read from a PDF'));
+        await pumpFrames(tester, frames: 20);
+
+        reader.failNext = false;
+        await tester.tap(find.text('Read from screenshots'));
+        await pumpFrames(tester, frames: 20);
+
+        expect(
+          find.textContaining('Read pages 1–6 of 18'),
+          findsOneWidget,
+          reason: 'the photo read swallowed the PDF pages that never worked',
+        );
+      },
+    );
+
+    testWidgets('two sizes of the same item stay two foods', (
+      WidgetTester tester,
+    ) async {
+      // Deriving the id made a retry safe; deriving it from the name alone
+      // would make a menu lossy. "Fries" at two sizes is two foods, and the
+      // random ids this replaced could not have collapsed them.
+      final HearthDatabase db = await pumpHearthApp(tester);
+      await openImporter(tester);
+      await tester.enterText(find.byType(TextField).first, 'Chipotle');
+      await paste(
+        tester,
+        'Fries, 4 oz, 300, 4, 40, 14\nFries, 8 oz, 600, 8, 80, 28',
+      );
+
+      await tester.tap(find.textContaining('Save'));
+      await pumpFrames(tester, frames: 20);
+
+      // Straight off the table, rather than through a household id a test
+      // would have to guess — guess it wrong and the assertion runs against
+      // an empty list and calls that a pass.
+      final List<FoodRow> saved = await db.select(db.foods).get();
+      expect(saved, hasLength(2), reason: 'one size overwrote the other');
+    });
+
     testWidgets('a doubt from page one outlives page two', (
       WidgetTester tester,
     ) async {
