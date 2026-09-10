@@ -32,7 +32,10 @@ class HomeScreen extends StatelessWidget {
 
   /// The column stops widening here. On a Mac a single card stretched across
   /// 1400px reads as a stray banner; a centred column reads as a page.
-  static const double maxContentWidth = 640;
+  ///
+  /// Held in the theme beside the width the *lists* use, so the two are one
+  /// decision rather than two numbers in two files that happen to differ.
+  static const double maxContentWidth = HearthLayout.launcherWidth;
 
   @override
   Widget build(BuildContext context) {
