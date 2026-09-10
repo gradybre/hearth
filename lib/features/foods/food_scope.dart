@@ -51,6 +51,15 @@ enum FoodScope {
     FoodScope.yours => food.source != FoodSource.restaurant,
     FoodScope.restaurants => food.source == FoodSource.restaurant,
   };
+
+  /// Which side of the switch [food] is on.
+  ///
+  /// The inverse of [contains], and the question a screen asks after a save:
+  /// a food written while the other half is showing has not gone anywhere,
+  /// but it is out of sight, which looks the same from the chair.
+  static FoodScope of(Food food) => food.source == FoodSource.restaurant
+      ? FoodScope.restaurants
+      : FoodScope.yours;
 }
 
 /// [foods] narrowed to one scope, in the order they arrived.

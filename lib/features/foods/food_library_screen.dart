@@ -66,6 +66,47 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
   /// tap on Delete is already three distinct gestures — more than the swipe
   /// and tap that a single delete asks for without one. The safety net is the
   /// same as a single delete's: a real soft-delete restore, not a re-creation.
+  /// Shows the half of the library a newly saved food actually landed in.
+  ///
+  /// Every way in can cross the divide: entering one by hand while the menus
+  /// are showing writes a food of your own, and the editor's "From a
+  /// restaurant" switch writes a menu row while your own foods are showing —
+  /// that one without the scope being touched at all. Either way the save
+  /// succeeds and the list does not change, which reads as a save that failed.
+  /// The switch moving is what says where it went.
+  Future<void> _reveal(String id) async {
+    final Food? food = await ref.read(foodRepositoryProvider).byId(id);
+    if (food == null || !mounted) return;
+    final FoodScope scope = FoodScope.of(food);
+    if (ref.read(currentFoodScopeProvider) == scope) return;
+    await _chooseScope(scope);
+  }
+
+  /// Opens the blank editor, and shows where what it saved landed.
+  ///
+  /// The same door as the sheet's "Enter it by hand" row, so it answers the
+  /// same way: a food saved out of the scope you are standing in moves the
+  /// switch rather than disappearing.
+  Future<void> _addByHand() async {
+    final String? saved = await context.push<String>('/food/new');
+    if (saved != null) await _reveal(saved);
+  }
+
+  /// Switches scope, and lets a failed write go quiet.
+  ///
+  /// The notifier puts the state back when the row will not store, so the
+  /// chip returning to where it was is already the whole report — and the tap
+  /// was to look at a list, not to save anything. What must not happen is the
+  /// rethrow escaping a callback nobody awaits, which is an unhandled error
+  /// for a preference.
+  Future<void> _chooseScope(FoodScope scope) async {
+    try {
+      await ref.read(foodScopeProvider.notifier).choose(scope);
+    } on Object {
+      // Deliberately swallowed; see above.
+    }
+  }
+
   Future<void> _deleteSelected() async {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     final List<String> ids = _selected.toList(growable: false);
@@ -109,7 +150,7 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
       // the maintenance is in the labelled menu at the top of the list.
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'food-add',
-        onPressed: () => showAddFoodSheet(context),
+        onPressed: () => showAddFoodSheet(context, onSaved: _reveal),
         backgroundColor: colors.accent,
         foregroundColor: colors.onAccent,
         icon: const Icon(Icons.add),
@@ -202,7 +243,10 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
                           gutter,
                           0,
                         ),
-                        child: _ScopeSwitch(scope: scope),
+                        child: _ScopeSwitch(
+                          scope: scope,
+                          onChosen: _chooseScope,
+                        ),
                       ),
                     ),
                   ],
@@ -273,6 +317,7 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
                             query: _search.text,
                             gutter: gutter,
                             scope: scope,
+                            onAddByHand: _addByHand,
                           )
                         else
                           for (final Food food in visible) ...<Widget>[
@@ -336,13 +381,14 @@ class _MaintenanceMenu extends StatelessWidget {
 /// A [Wrap] rather than a Row: at three times the text two labelled chips are
 /// wider than a small phone, and honouring dynamic type means the layout
 /// gives way rather than the words (§6.3).
-class _ScopeSwitch extends ConsumerWidget {
-  const _ScopeSwitch({required this.scope});
+class _ScopeSwitch extends StatelessWidget {
+  const _ScopeSwitch({required this.scope, required this.onChosen});
 
   final FoodScope scope;
+  final ValueChanged<FoodScope> onChosen;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Wrap(
+  Widget build(BuildContext context) => Wrap(
     spacing: HearthSpacing.sm,
     runSpacing: HearthSpacing.sm,
     children: <Widget>[
@@ -353,7 +399,7 @@ class _ScopeSwitch extends ConsumerWidget {
               ? Icons.home_outlined
               : Icons.storefront_outlined,
           selected: option == scope,
-          onTap: () => ref.read(foodScopeProvider.notifier).choose(option),
+          onTap: () => onChosen(option),
         ),
     ],
   );
@@ -641,11 +687,13 @@ class _NoMatches extends StatelessWidget {
     required this.query,
     required this.gutter,
     required this.scope,
+    required this.onAddByHand,
   });
 
   final String query;
   final double gutter;
   final FoodScope scope;
+  final VoidCallback onAddByHand;
 
   @override
   Widget build(BuildContext context) {
@@ -664,14 +712,13 @@ class _NoMatches extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: HearthSpacing.sm),
-        // Only from your own foods: "add it as a new food" out of a
-        // restaurant scope would save a manual food into a list that shows
-        // nothing but menu rows, and it would vanish on the spot.
-        if (yours)
-          TextButton(
-            onPressed: () => context.push('/food/new'),
-            child: const Text('Add it as a new food'),
-          ),
+        // Offered in either scope. A food typed in from the menus is one of
+        // your own, so the switch moves to meet it — the same answer the
+        // floating button gives, rather than a second rule for the same door.
+        TextButton(
+          onPressed: onAddByHand,
+          child: const Text('Add it as a new food'),
+        ),
       ],
     );
   }

@@ -176,6 +176,34 @@ Future<void> searchFor(WidgetTester tester, String query) async {
   await pumpFrames(tester);
 }
 
+/// Fills the blank editor in and saves, the shortest food there is.
+Future<void> saveFoodNamed(WidgetTester tester, String name) async {
+  await tester.enterText(find.byType(TextField).first, name);
+  await pumpFrames(tester);
+  await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+  await pumpFrames(tester, frames: 20);
+}
+
+/// Turns the blank editor's food into a restaurant's, which needs a name for
+/// the restaurant as well — one with none refuses to save.
+Future<void> makeItARestaurants(WidgetTester tester, String restaurant) async {
+  final Finder toggle = find.widgetWithText(
+    SwitchListTile,
+    'From a restaurant',
+  );
+  await tester.scrollUntilVisible(
+    toggle,
+    200,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.tap(toggle);
+  await pumpFrames(tester);
+  await tester.drag(find.byType(Scrollable).first, const Offset(0, 1200));
+  await pumpFrames(tester);
+  await tester.enterText(find.byType(TextField).at(1), restaurant);
+  await pumpFrames(tester);
+}
+
 void main() {
   group('one way in (review §6.2.6)', () {
     testWidgets('the screen carries exactly one floating action', (
@@ -442,6 +470,75 @@ void main() {
 
       expect(find.text('Elsewhere'), findsOneWidget);
       expect(find.textContaining('Apple, raw'), findsOneWidget);
+    });
+  });
+
+  group('a saved food lands where you can see it', () {
+    // What is asserted here is the *list moving*, not the new food appearing
+    // in it: `pumpHearthApp` feeds the library from a fixed stream override,
+    // so nothing saved through the app can ever show up in a widget test.
+    // The switch changing scope is the visible half of the same behaviour,
+    // and it is the half that answers "where did my food go".
+
+    testWidgets('one entered from the menus scope does not vanish', (
+      WidgetTester tester,
+    ) async {
+      // The screen already knows this failure: `_NoMatches` dropped its "Add
+      // it as a new food" button in this scope precisely because the food
+      // "would vanish on the spot". The floating button is the same door, and
+      // it is the one people use.
+      await openFoods(tester, foods: <Food>[yogurt(), harvestBowl()]);
+      await chooseScope(tester, 'Restaurant menus');
+      expect(find.textContaining('Harvest Bowl'), findsOneWidget);
+
+      await openAddFood(tester);
+      await tester.tap(find.text('Enter it by hand'));
+      await pumpFrames(tester);
+      await saveFoodNamed(tester, 'Deli turkey');
+
+      expect(
+        find.text('Greek yogurt'),
+        findsOneWidget,
+        reason: 'the food was saved into the half of the library not showing',
+      );
+      expect(find.textContaining('Harvest Bowl'), findsNothing);
+    });
+
+    testWidgets('and nor does a restaurant one entered from your own', (
+      WidgetTester tester,
+    ) async {
+      // The mirror, and reachable without touching the scope at all: the
+      // editor's own "From a restaurant" switch moves the food across the
+      // divide while you are standing on the other side of it.
+      await openFoods(tester, foods: <Food>[yogurt(), harvestBowl()]);
+      expect(find.text('Greek yogurt'), findsOneWidget);
+
+      await openAddFood(tester);
+      await tester.tap(find.text('Enter it by hand'));
+      await pumpFrames(tester);
+      await tester.enterText(find.byType(TextField).first, 'Burrito bowl');
+      await pumpFrames(tester);
+      await makeItARestaurants(tester, 'Cava');
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(find.textContaining('Harvest Bowl'), findsOneWidget);
+      expect(find.text('Greek yogurt'), findsNothing);
+    });
+
+    testWidgets('and a food saved into the scope you are in leaves it alone', (
+      WidgetTester tester,
+    ) async {
+      // The common case, and the one a switch that always moved would break.
+      await openFoods(tester, foods: <Food>[yogurt(), harvestBowl()]);
+
+      await openAddFood(tester);
+      await tester.tap(find.text('Enter it by hand'));
+      await pumpFrames(tester);
+      await saveFoodNamed(tester, 'Deli turkey');
+
+      expect(find.text('Greek yogurt'), findsOneWidget);
+      expect(find.textContaining('Harvest Bowl'), findsNothing);
     });
   });
 }

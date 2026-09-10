@@ -24,7 +24,16 @@ import 'read_label_sheet.dart';
 /// Every row ends in the editor or the scanner, never in a saved food —
 /// nothing a camera or a database produced is written without being looked at
 /// (CLAUDE.md rule 4).
-Future<void> showAddFoodSheet(BuildContext context) => showModalBottomSheet(
+///
+/// [onSaved] receives the id of whatever was eventually saved, from any of the
+/// three ways in. The Foods screen is scoped, and all three can write a food
+/// into the half that is not showing — the manual editor's "From a restaurant"
+/// switch does it without the scope being touched at all — so the caller has
+/// to be told, or a food is saved out of sight.
+Future<void> showAddFoodSheet(
+  BuildContext context, {
+  required ValueChanged<String> onSaved,
+}) => showModalBottomSheet(
   context: context,
   isScrollControlled: true,
   backgroundColor: Colors.transparent,
@@ -32,14 +41,17 @@ Future<void> showAddFoodSheet(BuildContext context) => showModalBottomSheet(
   // every row closes the sheet before it navigates, and the builder's context
   // is dead the moment it does. Reading a label opens a second sheet from it,
   // which a defunct element cannot do.
-  builder: (BuildContext _) => _AddFoodSheet(host: context),
+  builder: (BuildContext _) => _AddFoodSheet(host: context, onSaved: onSaved),
 );
 
 class _AddFoodSheet extends ConsumerWidget {
-  const _AddFoodSheet({required this.host});
+  const _AddFoodSheet({required this.host, required this.onSaved});
 
   /// The screen underneath, which outlives this sheet.
   final BuildContext host;
+
+  /// Told the id of the food that was saved, if one was.
+  final ValueChanged<String> onSaved;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -77,7 +89,8 @@ class _AddFoodSheet extends ConsumerWidget {
               label: 'Scan a barcode',
               blurb: 'The fastest way in for anything with a packet.',
               icon: Icons.qr_code_scanner,
-              onChosen: () => host.push('/food/scan'),
+              onChosen: () => host.push<String>('/food/scan'),
+              onSaved: onSaved,
             ),
             // Hidden rather than disabled when the build has no label reader:
             // the Claude key lives in an Edge Function, so an unconfigured
@@ -89,6 +102,7 @@ class _AddFoodSheet extends ConsumerWidget {
                 blurb: 'Photograph the panel on the back of the packet.',
                 icon: Icons.document_scanner_outlined,
                 onChosen: () => _readLabel(host),
+                onSaved: onSaved,
               ),
             _Way(
               label: 'Enter it by hand',
@@ -98,7 +112,8 @@ class _AddFoodSheet extends ConsumerWidget {
               // the biggest threat to the success bar.
               blurb: 'The deli counter, the bulk bins, your own cooking.',
               icon: Icons.edit_outlined,
-              onChosen: () => host.push('/food/new'),
+              onChosen: () => host.push<String>('/food/new'),
+              onSaved: onSaved,
             ),
           ],
         ),
@@ -110,10 +125,10 @@ class _AddFoodSheet extends ConsumerWidget {
   ///
   /// Straight to the editor, like every other route into the library: nothing
   /// a camera produced is saved without being looked at (CLAUDE.md rule 4).
-  static Future<void> _readLabel(BuildContext host) async {
+  static Future<String?> _readLabel(BuildContext host) async {
     final LabelReading? reading = await showReadLabelSheet(host);
-    if (reading == null || !host.mounted) return;
-    await host.push<String>(
+    if (reading == null || !host.mounted) return null;
+    return host.push<String>(
       '/food/new',
       extra: FoodDraft.blank().withLabel(reading),
     );
@@ -127,12 +142,17 @@ class _Way extends StatelessWidget {
     required this.blurb,
     required this.icon,
     required this.onChosen,
+    required this.onSaved,
   });
 
   final String label;
   final String blurb;
   final IconData icon;
-  final Future<void> Function() onChosen;
+
+  /// Runs this way in, and answers with the id of the food it saved.
+  final Future<String?> Function() onChosen;
+
+  final ValueChanged<String> onSaved;
 
   @override
   Widget build(BuildContext context) {
@@ -144,12 +164,13 @@ class _Way extends StatelessWidget {
         blurb,
         style: context.text.metadata.copyWith(color: colors.textMuted),
       ),
-      onTap: () {
+      onTap: () async {
         // The sheet closes first in every case. Reading a label opens a sheet
         // of its own, and two stacked modals leave this one behind whatever
         // the second one pushes.
         Navigator.of(context).pop();
-        onChosen();
+        final String? saved = await onChosen();
+        if (saved != null) onSaved(saved);
       },
     );
   }
