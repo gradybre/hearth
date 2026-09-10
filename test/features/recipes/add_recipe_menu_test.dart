@@ -48,7 +48,7 @@ void main() {
   // thing being tested.
   for (final (String label, String lands) in <(String, String)>[
     ('Write a recipe', 'Title'),
-    ('Eat out', 'Ate out'),
+    ('Eat out', 'Eat out'),
   ]) {
     testWidgets('$label goes where it says', (WidgetTester tester) async {
       await openLibrary(tester);

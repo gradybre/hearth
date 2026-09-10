@@ -97,11 +97,13 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
   void _remove(Food food, List<Food> menu) {
     if (!RestaurantMenu.canBeTakenOut(food)) return;
     if (!_hasSomethingToApplyTo(menu, excluding: food)) {
-      // Said out loud, not left to a tooltip. The button stays enabled so the
-      // tap cannot fall through to the row behind and *add* the component
-      // (see the note on it), which leaves this as the only place the refusal
-      // can be explained to somebody using a finger rather than a mouse or a
-      // screen reader (§6.3).
+      // Reachable only as a race now that the control is not offered until
+      // there is something for it to come off: the menu is watched and the
+      // picks are not, so a partner deleting the burger between this frame
+      // and the tap leaves a button whose reason has just stopped being
+      // true. Said out loud rather than silently ignored, because a control
+      // that takes a tap and does nothing is worse than one that explains
+      // itself (§6.3).
       _say('Pick something for ${food.name} to come out of first.');
       return;
     }
@@ -205,7 +207,7 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
       appBar: AppBar(
         backgroundColor: colors.surface,
         surfaceTintColor: Colors.transparent,
-        title: Text(chosen ?? 'Ate out', style: context.text.sectionHeader),
+        title: Text(chosen ?? 'Eat out', style: context.text.sectionHeader),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           // Back to the restaurants first, then out. Two stages in one screen
@@ -318,7 +320,10 @@ class _Restaurants extends StatelessWidget {
               child: TextButton.icon(
                 onPressed: () => context.push('/food/menu-import'),
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('Paste another menu'),
+                // It has taken PDFs and photographs since #52. Paste is
+                // one of three ways in, and naming the least of them sent
+                // people looking for a clipboard they did not need.
+                label: const Text('Add restaurant'),
               ),
             ),
           );
@@ -352,7 +357,20 @@ class _Restaurants extends StatelessWidget {
   }
 }
 
-class _Menu extends StatelessWidget {
+/// A restaurant's menu, with a way through it (review §7.6).
+///
+/// Search and the section chips are held here rather than on the screen
+/// above, because they are about *looking* at a menu and nothing about them
+/// outlives it: changing restaurant throws the whole widget away, which is
+/// exactly the right lifetime for a query.
+///
+/// **Section jump is a filter, not a scroll.** Scrolling to a heading means
+/// reaching a widget a lazy `ListView` has not built — `ensureVisible` has no
+/// context for it — and doing it properly needs a scroll-to-index package the
+/// app does not carry. A filter gets you to Toppings exactly, keeps the
+/// source order and grouping inside it, and composes with the search instead
+/// of fighting it.
+class _Menu extends StatefulWidget {
   const _Menu({
     required this.sections,
     required this.picks,
@@ -380,9 +398,52 @@ class _Menu extends StatelessWidget {
   final double gutter;
 
   @override
+  State<_Menu> createState() => _MenuState();
+}
+
+class _MenuState extends State<_Menu> {
+  final TextEditingController _query = TextEditingController();
+
+  /// The section shown on its own, or null for all of them.
+  String? _only;
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
+  }
+
+  /// How many rows the whole menu has, which is the fact that tells you the
+  /// search is worth using. A bare magnifier over a list you cannot see the
+  /// end of says nothing at all.
+  int get _total =>
+      widget.sections.fold(0, (int n, MenuSection s) => n + s.items.length);
+
+  /// The sections as narrowed by the chip and the query, dropping any left
+  /// with nothing in them — a heading over no rows is a worse answer than no
+  /// heading.
+  List<MenuSection> get _shown {
+    final String query = _query.text.trim().toLowerCase();
+    final List<MenuSection> narrowed = <MenuSection>[];
+    for (final MenuSection section in widget.sections) {
+      if (_only != null && section.name != _only) continue;
+      final List<Food> items = query.isEmpty
+          ? section.items
+          : <Food>[
+              for (final Food food in section.items)
+                if (food.name.toLowerCase().contains(query)) food,
+            ];
+      if (items.isEmpty) continue;
+      narrowed.add(MenuSection(name: section.name, items: items));
+    }
+    return narrowed;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    if (sections.isEmpty) {
+    final double gutter = widget.gutter;
+    if (widget.sections.isEmpty) {
       return Padding(
         padding: EdgeInsets.all(gutter * 2),
         child: Center(
@@ -394,6 +455,93 @@ class _Menu extends StatelessWidget {
       );
     }
 
+    final List<MenuSection> sections = _shown;
+    final List<String> names = <String>[
+      for (final MenuSection section in widget.sections)
+        if (section.name case final String name) name,
+    ];
+
+    return Column(
+      children: <Widget>[
+        Padding(
+          padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
+          child: TextField(
+            controller: _query,
+            onChanged: (String _) => setState(() {}),
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search, size: 20),
+              // The count, not a bare "Search": on a 44-row menu the number
+              // is the reason to type rather than scroll.
+              hintText: 'Search $_total items',
+              suffixIcon: _query.text.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close, size: 20),
+                      tooltip: 'Clear the search',
+                      onPressed: () => setState(_query.clear),
+                    ),
+            ),
+          ),
+        ),
+        if (names.length > 1)
+          // Sized by the chips, not by a number. A fixed box did not overflow
+          // at 3x text — it *constrained*, which is quieter and no better:
+          // the chip wants 78 points and was given 56, the same 56 it gets at
+          // 2x. Dynamic type is honoured, not capped (spec §6.3).
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              HearthSpacing.sm,
+              gutter,
+              HearthSpacing.xs,
+            ),
+            child: Row(
+              children: <Widget>[
+                for (final String name in names)
+                  Padding(
+                    padding: const EdgeInsets.only(right: HearthSpacing.sm),
+                    child: FilterChip(
+                      label: Text(name),
+                      selected: _only == name,
+                      // Choosing the one already chosen puts the whole menu
+                      // back, so the rail is never a state you cannot leave.
+                      onSelected: (bool _) =>
+                          setState(() => _only = _only == name ? null : name),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: sections.isEmpty
+              ? _NoMatches(
+                  query: _query.text,
+                  section: _only,
+                  // Widening before clearing: with a section chosen, the
+                  // likeliest next thing is the same search over the whole
+                  // menu, not starting again.
+                  onWiden: _only == null
+                      ? null
+                      : () => setState(() => _only = null),
+                  onClear: () => setState(() {
+                    _query.clear();
+                    _only = null;
+                  }),
+                  gutter: gutter,
+                )
+              : _list(context, sections, gutter),
+        ),
+      ],
+    );
+  }
+
+  Widget _list(
+    BuildContext context,
+    List<MenuSection> sections,
+    double gutter,
+  ) {
     return ListView(
       padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, gutter * 5),
       children: <Widget>[
@@ -406,23 +554,99 @@ class _Menu extends StatelessWidget {
                 top: HearthSpacing.sm,
                 bottom: HearthSpacing.sm,
               ),
-              child: Text(name, style: context.text.sectionHeader),
+              // Keyed, because the section's name is now on screen twice —
+              // as this heading and as its jump chip — and a test reaching
+              // for "Beans" should not have to know which order they are in.
+              child: Text(
+                name,
+                key: Key('menu-section-$name'),
+                style: context.text.sectionHeader,
+              ),
             ),
           ],
           for (final Food food in section.items) ...<Widget>[
             _MenuRow(
               food: food,
-              count: picks[food.id],
-              canPick: !food.isModifier || hasSomethingToApplyTo,
-              canRemove: canRemove(food),
-              onToggle: () => onToggle(food),
-              onRemove: () => onRemove(food),
-              onCount: (double count) => onCount(food, count),
+              count: widget.picks[food.id],
+              canPick: !food.isModifier || widget.hasSomethingToApplyTo,
+              canRemove: widget.canRemove(food),
+              onToggle: () => widget.onToggle(food),
+              onRemove: () => widget.onRemove(food),
+              onCount: (double count) => widget.onCount(food, count),
             ),
             const SizedBox(height: HearthSpacing.sm),
           ],
         ],
       ],
+    );
+  }
+}
+
+/// What a search that found nothing says.
+///
+/// Named rather than folded into the list, because "no rows" and "no menu"
+/// are different facts and the empty menu above already has its own sentence.
+/// Offers the way out as a control, not as advice: the state it is in is one
+/// the screen put you in.
+class _NoMatches extends StatelessWidget {
+  const _NoMatches({
+    required this.query,
+    required this.section,
+    required this.onWiden,
+    required this.onClear,
+    required this.gutter,
+  });
+
+  final String query;
+
+  /// The section the list is narrowed to, if any. Named in the sentence
+  /// because without it the sentence is false: filtered to Dressings, a
+  /// search for guacamole said "nothing on this menu matches" — and the menu
+  /// has guacamole, one section over.
+  final String? section;
+
+  /// Widen to the whole menu, keeping the search. Null when there is no
+  /// section to widen out of.
+  final VoidCallback? onWiden;
+
+  final VoidCallback onClear;
+  final double gutter;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final String typed = query.trim();
+    final String? within = section;
+    final String said;
+    if (typed.isEmpty) {
+      said = 'Nothing is left in ${within ?? 'this menu'}.';
+    } else if (within == null) {
+      said = 'Nothing on this menu matches "$typed".';
+    } else {
+      said = 'Nothing in $within matches "$typed".';
+    }
+
+    return Padding(
+      padding: EdgeInsets.all(gutter * 2),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          Icon(Icons.search_off, size: 36, color: colors.textMuted),
+          const SizedBox(height: HearthSpacing.md),
+          Text(
+            said,
+            style: context.text.body.copyWith(color: colors.textSecondary),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: HearthSpacing.md),
+          if (onWiden case final VoidCallback widen)
+            TextButton(
+              onPressed: widen,
+              child: const Text('Search the whole menu'),
+            ),
+          TextButton(onPressed: onClear, child: const Text('Show everything')),
+        ],
+      ),
     );
   }
 }
@@ -592,25 +816,28 @@ class _MenuRow extends StatelessWidget {
               // And never on a row the sheet gave no portion — see
               // [RestaurantMenu.canBeTakenOut], which is where both rules
               // live so this screen and the domain cannot disagree.
-              if (RestaurantMenu.canBeTakenOut(food) && !isPicked) ...<Widget>[
+              // "No lettuce" — only once there is something for it to come
+              // off, which is the same question `_remove` guards with.
+              //
+              // This reverses an earlier decision that kept it on every row,
+              // greyed, with "pick something first" in its tooltip: the
+              // reasoning was that a control which comes and goes is harder
+              // to follow than one saying what it waits for. True of the
+              // modifier *rows*, which say it in visible words. Not true
+              // here — a tooltip is invisible without a screen reader or a
+              // hover no phone has, so the waiting state was mute. What it
+              // did have was width: at 2x text it took enough to wrap a
+              // three-word item name onto three lines (review §7.6).
+              if (RestaurantMenu.canBeTakenOut(food) &&
+                  !isPicked &&
+                  canRemove) ...<Widget>[
                 const SizedBox(width: HearthSpacing.sm),
                 IconButton(
-                  // Enabled even when it will refuse, and that is deliberate:
-                  // a disabled IconButton does not take the tap, so it falls
-                  // through to the row behind and *adds* the component —
-                  // exactly the opposite of the control that was pressed.
-                  // `_remove` is where the rule lives, and it holds whatever
-                  // the menu did while this screen was open.
                   onPressed: onRemove,
                   visualDensity: VisualDensity.compact,
-                  color: canRemove ? null : colors.textMuted,
                   // Named, not "take it out": read on its own by a screen
-                  // reader it would be a control with no subject. It says
-                  // what it is waiting for rather than disappearing until its
-                  // turn, the way the modifier rows do.
-                  tooltip: canRemove
-                      ? 'Take ${food.name} out'
-                      : 'Take ${food.name} out — pick something first',
+                  // reader it would be a control with no subject.
+                  tooltip: 'Take ${food.name} out',
                   icon: const Icon(Icons.do_not_disturb_on_outlined, size: 20),
                 ),
               ],

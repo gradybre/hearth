@@ -204,12 +204,17 @@ void main() {
 
     double y(String text) => tester.getTopLeft(find.text(text)).dy;
 
-    expect(find.text('Beans'), findsOneWidget);
-    expect(find.text('Proteins'), findsOneWidget);
-    expect(find.text('Salsas'), findsOneWidget);
+    // The heading, not the jump chip: a section's name is on screen twice
+    // now, and only one of the two is in the list being ordered.
+    Finder heading(String name) => find.byKey(Key('menu-section-$name'));
+    double headingY(String name) => tester.getTopLeft(heading(name)).dy;
 
-    expect(y('Beans'), lessThan(y('Proteins')));
-    expect(y('Proteins'), lessThan(y('Salsas')));
+    expect(heading('Beans'), findsOneWidget);
+    expect(heading('Proteins'), findsOneWidget);
+    expect(heading('Salsas'), findsOneWidget);
+
+    expect(headingY('Beans'), lessThan(headingY('Proteins')));
+    expect(headingY('Proteins'), lessThan(headingY('Salsas')));
     // And within a section, the sheet's order rather than the alphabet.
     expect(y('Barbacoa'), lessThan(y('Chicken')));
   });
@@ -295,18 +300,24 @@ void main() {
       await pumpFrames(tester, frames: 12);
     }
 
-    testWidgets('is offered on every ordinary row, and waits its turn', (
+    testWidgets('waits off the row until it has something to come off', (
       WidgetTester tester,
     ) async {
-      // Greyed with the reason rather than hidden, the way a modifier row is:
-      // a control that appears and disappears as you pick is harder to
-      // understand than one that says what it is waiting for.
+      // This reverses what used to be here. The control sat greyed on every
+      // ordinary row with "pick something first" in its tooltip, on the
+      // argument that a control which comes and goes is harder to follow
+      // than one saying what it waits for. True of the modifier *rows*,
+      // which say it in visible words — and false here, where the waiting
+      // state lived only in a tooltip no finger ever opens. What it did have
+      // was width: at 2x text it took enough to wrap a three-word item name
+      // onto three lines (review §7.6).
       await pumpHearthApp(tester, foods: freddys());
       await openFreddys(tester);
 
+      expect(find.byTooltip('Take Lettuce out'), findsNothing);
       expect(
         find.byTooltip('Take Lettuce out — pick something first'),
-        findsOneWidget,
+        findsNothing,
       );
 
       await tester.tap(find.text('Single Steakburger'));
@@ -418,31 +429,16 @@ void main() {
       expect(lettuce.rawText, startsWith('−'));
     });
 
-    testWidgets('and the refusal says why rather than doing nothing', (
-      WidgetTester tester,
-    ) async {
-      // The button is enabled even when it will refuse, so that the tap does
-      // not fall through to the row and *add* the component. What was left
-      // was a control that took the tap and did nothing at all with it: no
-      // state change, no message, and the reason only in a tooltip that a
-      // touch user has to long-press to find. Colour was the whole of it,
-      // which rule 6 does not allow.
-      await pumpHearthApp(tester, foods: freddys());
-      await openFreddys(tester);
-
-      await tester.tap(
-        find.byTooltip(
-          'Take Lettuce out — pick something '
-          'first',
-        ),
-      );
-      await pumpFrames(tester, frames: 12);
-
-      expect(
-        find.text('Pick something for Lettuce to come out of first.'),
-        findsOneWidget,
-      );
-    });
+    // The spoken refusal in `_remove` used to be tested here, by tapping the
+    // greyed control. There is no greyed control now — it is not offered
+    // until `canRemove` — so the refusal is unreachable by tapping, and a
+    // test that reached for it would be testing a button that is not there.
+    //
+    // The guard itself stays and is not dead: the menu is watched while the
+    // picks are not, so a partner deleting the burger between a frame and a
+    // tap leaves a button whose reason has just stopped being true. That race
+    // needs the library to change mid-gesture, which a widget test cannot
+    // stage, so it is named here rather than asserted.
 
     testWidgets('a row the sheet gave no portion is not offered at all', (
       WidgetTester tester,
@@ -577,14 +573,9 @@ void main() {
       await pumpHearthApp(tester, foods: freddys());
       await openFreddys(tester);
 
-      await tester.tap(
-        find.byTooltip(
-          'Take Lettuce out — pick something '
-          'first',
-        ),
-      );
-      await pumpFrames(tester, frames: 12);
-
+      // There is no control to tap: with nothing picked, nothing is offered
+      // to take out, so a deductions-only meal has no first step.
+      expect(find.byTooltip('Take Lettuce out'), findsNothing);
       expect(find.textContaining('Build ('), findsNothing);
     });
   });

@@ -140,7 +140,12 @@ ServingOption aServing({
   String? label,
 }) => ServingOption(
   id: id ?? _id('serving'),
-  label: label ?? '$amount ${unit.label}',
+  // Trimmed, because a countable unit has no word: `Units.item.label` is
+  // empty, so this left "1 " with a trailing space. Harmless to a matcher
+  // and not harmless in a screenshot — a rendered gallery frame read
+  // "1  · 690 kcal" and was mistaken for a shipping defect, when
+  // `QuantityFormat.format` gives production a plain "1".
+  label: label ?? '$amount ${unit.label}'.trim(),
   amount: Quantity.of(amount, unit),
   macros: macros,
 );

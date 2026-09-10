@@ -136,6 +136,18 @@ class GalleryDate extends SelectedDate {
   DateTime build() => addDays(super.build(), offset);
 }
 
+/// The food library a scene is pumped with.
+///
+/// Everything gets [galleryFoods]; only a scene that asks for it also gets
+/// [choptMenu]. Kept apart rather than appended to the shared list because a
+/// forty-four-row menu in the library would take the Foods tab and the two
+/// logging-sheet scenes with it — three pictures of a chain's toppings, and
+/// none of them the screen anybody wanted to look at.
+List<Food> galleryFoodsFor(Scene scene) => <Food>[
+  ...galleryFoods(),
+  if (scene.longMenu) ...<Food>[...choptMenu(), ...otherRestaurants()],
+];
+
 /// The provider overrides a scene needs, in the untyped shape `pumpHearthApp`
 /// takes — riverpod 3 exports the methods that make an `Override` and not the
 /// type itself, which is why the harness types them as `Object` too.
@@ -210,6 +222,7 @@ class Scene {
     this.textScale = 1.0,
     this.dayOffset = 0,
     this.taps = const <String>[],
+    this.longMenu = false,
   });
 
   /// The file name, without extension. Also the caption in the index.
@@ -242,6 +255,14 @@ class Scene {
   /// last March by the spring, and what these scenes are about is the
   /// relationship between the two, never a particular Tuesday.
   final int dayOffset;
+
+  /// Whether this scene is pumped with [choptMenu] as well as the ordinary
+  /// fixtures.
+  ///
+  /// Only the eat-out scenes want it: the point of that menu is its length,
+  /// and length is the one thing that would ruin every other scene it appeared
+  /// in.
+  final bool longMenu;
 
   final Size size;
   final Brightness brightness;
@@ -369,6 +390,543 @@ List<Food> galleryFoods() => <Food>[
   ),
 ];
 
+/// One row off a pasted nutrition sheet.
+///
+/// [order] is the position on that sheet, which is what
+/// `RestaurantMenu.itemsFor` sorts by — so the fixture is laid out here in the
+/// order the builder will draw it, and moving an item down the list is a
+/// matter of moving its number.
+Food _menuItem(
+  String name, {
+  required int order,
+  required String section,
+  required double kcal,
+  double proteinG = 0,
+  double carbG = 0,
+  double fatG = 0,
+  num amount = 4,
+  Unit? unit,
+}) => aFood(
+  name,
+  id: 'f-chopt-$order',
+  brand: 'Chopt Creative Salad Co.',
+  source: FoodSource.restaurant,
+  menuGroup: section,
+  menuOrder: order,
+  servingOptions: <ServingOption>[
+    aServing(
+      amount: amount,
+      unit: unit ?? Units.ounce,
+      macros: Macros(kcal: kcal, proteinG: proteinG, carbG: carbG, fatG: fatG),
+    ),
+  ],
+);
+
+/// A whole chain menu — forty-four rows in six sections.
+///
+/// Long on purpose. Every other restaurant fixture in the suite is three or
+/// four items, which is a size at which no menu screen can be wrong: the
+/// review's complaint is that finding the guacamole means travelling past
+/// everything else, and a four-row menu is a picture of that complaint being
+/// false. Guacamole is deliberately the forty-third row of forty-four, under
+/// Toppings, where a real sheet would put it.
+///
+/// **Invented.** The chain is real; these numbers are not, and nothing here
+/// was read off a published nutrition sheet. It is a fixture for judging a
+/// layout, and no figure in it is evidence about anybody's lunch.
+List<Food> choptMenu() => <Food>[
+  _menuItem(
+    'Harvest Bowl',
+    order: 1,
+    section: 'Warm bowls',
+    kcal: 690,
+    proteinG: 27,
+    carbG: 74,
+    fatG: 32,
+    amount: 1,
+    unit: Units.item,
+  ),
+  _menuItem(
+    'Spicy Chicken Tinga Bowl',
+    order: 2,
+    section: 'Warm bowls',
+    kcal: 640,
+    proteinG: 38,
+    carbG: 58,
+    fatG: 27,
+    amount: 1,
+    unit: Units.item,
+  ),
+  _menuItem(
+    'Miso Ginger Salmon Bowl',
+    order: 3,
+    section: 'Warm bowls',
+    kcal: 720,
+    proteinG: 36,
+    carbG: 61,
+    fatG: 38,
+    amount: 1,
+    unit: Units.item,
+  ),
+  _menuItem(
+    'Buffalo Chicken Warm Bowl',
+    order: 4,
+    section: 'Warm bowls',
+    kcal: 760,
+    proteinG: 41,
+    carbG: 55,
+    fatG: 42,
+    amount: 1,
+    unit: Units.item,
+  ),
+  _menuItem(
+    'Chimichurri Steak Bowl',
+    order: 5,
+    section: 'Warm bowls',
+    kcal: 810,
+    proteinG: 44,
+    carbG: 59,
+    fatG: 45,
+    amount: 1,
+    unit: Units.item,
+  ),
+  _menuItem(
+    'Sweet Potato & Farro Bowl',
+    order: 6,
+    section: 'Warm bowls',
+    kcal: 580,
+    proteinG: 16,
+    carbG: 82,
+    fatG: 21,
+    amount: 1,
+    unit: Units.item,
+  ),
+  _menuItem(
+    'Kale Caesar',
+    order: 7,
+    section: 'Chopped salads',
+    kcal: 520,
+    proteinG: 21,
+    carbG: 24,
+    fatG: 38,
+    amount: 1,
+    unit: Units.item,
+  ),
+  _menuItem(
+    'Mexican Caesar',
+    order: 8,
+    section: 'Chopped salads',
+    kcal: 610,
+    proteinG: 26,
+    carbG: 31,
+    fatG: 43,
+    amount: 1,
+    unit: Units.item,
+  ),
+  _menuItem(
+    'Santa Fe Chopped',
+    order: 9,
+    section: 'Chopped salads',
+    kcal: 660,
+    proteinG: 34,
+    carbG: 44,
+    fatG: 37,
+    amount: 1,
+    unit: Units.item,
+  ),
+  _menuItem(
+    'Palm Beach Chopped',
+    order: 10,
+    section: 'Chopped salads',
+    kcal: 540,
+    proteinG: 29,
+    carbG: 36,
+    fatG: 28,
+    amount: 1,
+    unit: Units.item,
+  ),
+  _menuItem(
+    'Cobb, no blue cheese',
+    order: 11,
+    section: 'Chopped salads',
+    kcal: 590,
+    proteinG: 38,
+    carbG: 18,
+    fatG: 41,
+    amount: 1,
+    unit: Units.item,
+  ),
+  _menuItem(
+    'Falafel & Feta Chopped',
+    order: 12,
+    section: 'Chopped salads',
+    kcal: 630,
+    proteinG: 22,
+    carbG: 52,
+    fatG: 36,
+    amount: 1,
+    unit: Units.item,
+  ),
+  _menuItem(
+    'Thai Crunch',
+    order: 13,
+    section: 'Chopped salads',
+    kcal: 570,
+    proteinG: 24,
+    carbG: 47,
+    fatG: 31,
+    amount: 1,
+    unit: Units.item,
+  ),
+  _menuItem(
+    'Build your own chopped salad',
+    order: 14,
+    section: 'Chopped salads',
+    kcal: 180,
+    proteinG: 6,
+    carbG: 22,
+    fatG: 7,
+    amount: 1,
+    unit: Units.item,
+  ),
+  _menuItem(
+    'Romaine',
+    order: 15,
+    section: 'Greens & grains',
+    kcal: 15,
+    proteinG: 1,
+    carbG: 3,
+  ),
+  _menuItem(
+    'Baby kale',
+    order: 16,
+    section: 'Greens & grains',
+    kcal: 25,
+    proteinG: 2,
+    carbG: 4,
+  ),
+  _menuItem(
+    'Spinach & arugula',
+    order: 17,
+    section: 'Greens & grains',
+    kcal: 20,
+    proteinG: 2,
+    carbG: 3,
+  ),
+  _menuItem(
+    'Warm wild rice',
+    order: 18,
+    section: 'Greens & grains',
+    kcal: 190,
+    proteinG: 5,
+    carbG: 40,
+    fatG: 2,
+  ),
+  _menuItem(
+    'Cilantro-lime brown rice',
+    order: 19,
+    section: 'Greens & grains',
+    kcal: 210,
+    proteinG: 4,
+    carbG: 44,
+    fatG: 3,
+  ),
+  _menuItem(
+    'Farro',
+    order: 20,
+    section: 'Greens & grains',
+    kcal: 230,
+    proteinG: 8,
+    carbG: 47,
+    fatG: 2,
+  ),
+  _menuItem(
+    'Grilled chicken',
+    order: 21,
+    section: 'Proteins',
+    kcal: 180,
+    proteinG: 32,
+    fatG: 6,
+  ),
+  _menuItem(
+    'Spicy chicken tinga',
+    order: 22,
+    section: 'Proteins',
+    kcal: 220,
+    proteinG: 29,
+    carbG: 4,
+    fatG: 10,
+  ),
+  _menuItem(
+    'Falafel',
+    order: 23,
+    section: 'Proteins',
+    kcal: 260,
+    proteinG: 9,
+    carbG: 26,
+    fatG: 14,
+  ),
+  _menuItem(
+    'Miso ginger salmon',
+    order: 24,
+    section: 'Proteins',
+    kcal: 290,
+    proteinG: 28,
+    carbG: 6,
+    fatG: 17,
+  ),
+  _menuItem(
+    'Chimichurri steak',
+    order: 25,
+    section: 'Proteins',
+    kcal: 310,
+    proteinG: 34,
+    carbG: 2,
+    fatG: 19,
+  ),
+  _menuItem(
+    'Braised beef',
+    order: 26,
+    section: 'Proteins',
+    kcal: 340,
+    proteinG: 31,
+    carbG: 3,
+    fatG: 23,
+  ),
+  _menuItem(
+    'Crispy tofu',
+    order: 27,
+    section: 'Proteins',
+    kcal: 200,
+    proteinG: 14,
+    carbG: 9,
+    fatG: 13,
+  ),
+  _menuItem(
+    'Mexican Caesar dressing',
+    order: 28,
+    section: 'Dressings',
+    kcal: 190,
+    proteinG: 2,
+    carbG: 3,
+    fatG: 19,
+    amount: 2,
+  ),
+  _menuItem(
+    'Spicy chipotle ranch',
+    order: 29,
+    section: 'Dressings',
+    kcal: 210,
+    proteinG: 1,
+    carbG: 4,
+    fatG: 22,
+    amount: 2,
+  ),
+  _menuItem(
+    'Sesame ginger vinaigrette',
+    order: 30,
+    section: 'Dressings',
+    kcal: 160,
+    carbG: 9,
+    fatG: 14,
+    amount: 2,
+  ),
+  _menuItem(
+    'Lemon tahini',
+    order: 31,
+    section: 'Dressings',
+    kcal: 180,
+    proteinG: 3,
+    carbG: 6,
+    fatG: 16,
+    amount: 2,
+  ),
+  _menuItem(
+    'Red wine vinaigrette',
+    order: 32,
+    section: 'Dressings',
+    kcal: 120,
+    carbG: 3,
+    fatG: 12,
+    amount: 2,
+  ),
+  _menuItem(
+    'Avocado green goddess',
+    order: 33,
+    section: 'Dressings',
+    kcal: 170,
+    proteinG: 2,
+    carbG: 5,
+    fatG: 16,
+    amount: 2,
+  ),
+  _menuItem(
+    'Balsamic, on the side',
+    order: 34,
+    section: 'Dressings',
+    kcal: 110,
+    carbG: 6,
+    fatG: 10,
+    amount: 2,
+  ),
+  _menuItem(
+    'Roasted sweet potato',
+    order: 35,
+    section: 'Toppings',
+    kcal: 120,
+    proteinG: 2,
+    carbG: 27,
+  ),
+  _menuItem(
+    'Sweet corn & tomato salsa',
+    order: 36,
+    section: 'Toppings',
+    kcal: 70,
+    proteinG: 2,
+    carbG: 15,
+    fatG: 1,
+  ),
+  _menuItem(
+    'Pickled red onion',
+    order: 37,
+    section: 'Toppings',
+    kcal: 20,
+    carbG: 5,
+    amount: 1,
+  ),
+  _menuItem(
+    'Cotija cheese',
+    order: 38,
+    section: 'Toppings',
+    kcal: 110,
+    proteinG: 7,
+    carbG: 1,
+    fatG: 9,
+    amount: 1,
+  ),
+  _menuItem(
+    'Spicy broccoli',
+    order: 39,
+    section: 'Toppings',
+    kcal: 90,
+    proteinG: 4,
+    carbG: 10,
+    fatG: 4,
+  ),
+  _menuItem(
+    'Crispy shallots',
+    order: 40,
+    section: 'Toppings',
+    kcal: 130,
+    proteinG: 1,
+    carbG: 9,
+    fatG: 10,
+    amount: 1,
+  ),
+  _menuItem(
+    'Toasted almonds',
+    order: 41,
+    section: 'Toppings',
+    kcal: 170,
+    proteinG: 6,
+    carbG: 6,
+    fatG: 15,
+    amount: 1,
+  ),
+  _menuItem(
+    'Feta',
+    order: 42,
+    section: 'Toppings',
+    kcal: 100,
+    proteinG: 6,
+    carbG: 2,
+    fatG: 8,
+    amount: 1,
+  ),
+  // The one everybody is looking for: the forty-third row of forty-four, at
+  // the bottom of the last section. Its position is the point of the fixture.
+  _menuItem(
+    'Guacamole',
+    order: 43,
+    section: 'Toppings',
+    kcal: 150,
+    proteinG: 2,
+    carbG: 8,
+    fatG: 13,
+    amount: 2,
+  ),
+  _menuItem(
+    'Tortilla chips',
+    order: 44,
+    section: 'Toppings',
+    kcal: 140,
+    proteinG: 2,
+    carbG: 18,
+    fatG: 7,
+    amount: 1,
+  ),
+];
+
+/// Two more chains, a couple of rows each.
+///
+/// Nothing on these menus is picked by any scene; they exist so the first
+/// stage of the builder is a *list* rather than a pair. A household that has
+/// pasted one menu is a first-run state, and the screen already has a scene
+/// for that in its own right — what nobody had a picture of is the ordinary
+/// case, four places you eat, and whether choosing between them reads.
+///
+/// Invented, like [choptMenu], and for the same reason.
+List<Food> otherRestaurants() => <Food>[
+  aFood(
+    'Guacamole & Chips',
+    id: 'f-sg-1',
+    brand: 'Sweetgreen',
+    source: FoodSource.restaurant,
+    menuGroup: 'Sides',
+    menuOrder: 1,
+    servingOptions: <ServingOption>[
+      aServing(
+        amount: 1,
+        unit: Units.item,
+        label: '1 side',
+        macros: const Macros(kcal: 340, proteinG: 4, carbG: 30, fatG: 24),
+      ),
+    ],
+  ),
+  aFood(
+    'Harvest Bowl',
+    id: 'f-sg-2',
+    brand: 'Sweetgreen',
+    source: FoodSource.restaurant,
+    menuGroup: 'Warm bowls',
+    menuOrder: 2,
+    servingOptions: <ServingOption>[
+      aServing(
+        amount: 1,
+        unit: Units.item,
+        label: '1 bowl',
+        macros: const Macros(kcal: 705, proteinG: 30, carbG: 66, fatG: 36),
+      ),
+    ],
+  ),
+  aFood(
+    'Charred Chicken & Sweet Potato',
+    id: 'f-dig-1',
+    brand: 'Dig — the one on Fulton St',
+    source: FoodSource.restaurant,
+    menuGroup: 'Bowls',
+    menuOrder: 1,
+    servingOptions: <ServingOption>[
+      aServing(
+        amount: 1,
+        unit: Units.item,
+        label: '1 bowl',
+        macros: const Macros(kcal: 620, proteinG: 41, carbG: 58, fatG: 22),
+      ),
+    ],
+  ),
+];
+
 /// A day with one meal eaten and one still planned, which is the state the
 /// day screen is actually looked at in.
 List<MealPlanEntry> galleryEntries(DateTime day) => <MealPlanEntry>[
@@ -452,5 +1010,67 @@ const List<Scene> scenes = <Scene>[
     name: 'log-sheet-servings',
     target: LaunchTarget.today,
     taps: <String>['Add to lunch', 'Peanut butter, smooth'],
+  ),
+  // The eat-out builder, in the four states a redesign has to answer for. All
+  // four carry [choptMenu], because the complaint the redesign is about is a
+  // property of a long menu and invisible on a short one.
+  //
+  // Reached by pressing what a person presses — Recipes, Add recipe, Eat out —
+  // because `/recipe/eat-out` is a pushed route and no launch target opens it.
+  Scene(
+    name: 'eat-out-restaurants',
+    longMenu: true,
+    taps: <String>['Recipes', 'Add recipe', 'Eat out'],
+  ),
+  Scene(
+    name: 'eat-out-menu',
+    longMenu: true,
+    taps: <String>[
+      'Recipes',
+      'Add recipe',
+      'Eat out',
+      'Chopt Creative Salad Co.',
+    ],
+  ),
+  // A salad and two things on it, which is what somebody actually orders —
+  // and it takes three taps spread over thirty-six rows to say so.
+  //
+  // The order matters and so does the ending. `pressLabel` aligns whatever it
+  // presses to the top of the viewport, so the *last* tap decides where the
+  // list is standing when the shutter goes; and a lazy list drops what it has
+  // scrolled past, so pressing back up the menu cannot be done at all. Ending
+  // on the last two rows is what puts more than one pick in frame: the list
+  // is already against its own end, so the scroll clamps and the rows above
+  // stay where they are.
+  //
+  // What no arrangement of this scene can show is the first pick alongside
+  // the last two. Thirty-six rows apart, they do not fit on a phone, and that
+  // is a property of the screen rather than of the fixture.
+  Scene(
+    name: 'eat-out-picked',
+    longMenu: true,
+    taps: <String>[
+      'Recipes',
+      'Add recipe',
+      'Eat out',
+      'Chopt Creative Salad Co.',
+      'Kale Caesar',
+      'Guacamole',
+      'Tortilla chips',
+    ],
+  ),
+  // A small phone at double text, which is where a list with no way to jump
+  // costs the most: the same forty-four rows, four or five of them on screen.
+  Scene(
+    name: 'eat-out-menu-large-text',
+    longMenu: true,
+    size: Size(320, 640),
+    textScale: 2.0,
+    taps: <String>[
+      'Recipes',
+      'Add recipe',
+      'Eat out',
+      'Chopt Creative Salad Co.',
+    ],
   ),
 ];

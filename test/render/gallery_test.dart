@@ -56,7 +56,7 @@ void main() {
         launchTarget: scene.target,
         extraOverrides: galleryOverrides(scene),
         recipes: galleryRecipes(),
-        foods: galleryFoods(),
+        foods: galleryFoodsFor(scene),
         entries: galleryEntries(day),
         targets: galleryTargets,
       );
