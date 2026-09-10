@@ -87,8 +87,30 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
   /// back once, which is the distinction the class comment above draws
   /// between this and a schedule that spends battery asking a question whose
   /// answer has not changed.
-  Future<void> _wakeWhenDue() async {
+  Future<void> _wakeWhenDue({required bool offline}) async {
     _backoff?.cancel();
+
+    // Offline is the case a due-time cannot cover. A pass that could not
+    // reach the server leaves the queue *untouched* on purpose — being
+    // offline is not the write's fault and must not spend one of its few
+    // attempts — so no `nextAttemptAt` is set and there is nothing to wake
+    // for. The network returning is not an event this app can see without a
+    // plugin, so the honest alternative is to ask again on a widening
+    // interval while work is waiting, and stop the moment it is not.
+    if (offline) {
+      final int queued = await ref.read(pendingWriteStoreProvider).count();
+      if (queued == 0) {
+        _offlineTries = 0;
+        return;
+      }
+      final Duration wait =
+          _offlineRetries[_offlineTries.clamp(0, _offlineRetries.length - 1)];
+      _offlineTries++;
+      _backoff = Timer(wait, sync);
+      return;
+    }
+
+    _offlineTries = 0;
     final DateTime? due = await ref
         .read(pendingWriteStoreProvider)
         .nextAttemptDue();
@@ -105,6 +127,23 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
 
   Timer? _backoff;
 
+  /// How many passes in a row have ended offline with work still waiting.
+  /// Reset the moment one does not.
+  int _offlineTries = 0;
+
+  /// How long to wait before asking again while offline.
+  ///
+  /// Widening, and capped: a phone in a lift should not ask every thirty
+  /// seconds for an hour, and a phone that spent the night in a drawer should
+  /// still be asking occasionally rather than have given up. The last entry
+  /// repeats for as long as there is something to send.
+  static const List<Duration> _offlineRetries = <Duration>[
+    Duration(seconds: 30),
+    Duration(minutes: 2),
+    Duration(minutes: 10),
+    Duration(minutes: 30),
+  ];
+
   Future<void> sync() async {
     if (!ref.read(supabaseReadyProvider)) return;
 
@@ -119,6 +158,12 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
     // end of the pass that was already running.
     if (!_gate.start()) return;
     state = const SyncStatus.syncing();
+
+    // Read in the `finally` below, so it has to outlive the try. False when
+    // the pass threw before it knew: an error is not the same as being
+    // offline, and treating it as one would put the widening retry behind
+    // something a retry cannot fix.
+    bool wasOffline = false;
     try {
       // Push before pull, always. Sending what this device did before
       // accepting what another device did means a local change can never be
@@ -138,6 +183,11 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
         await photos.push();
         await photos.pull();
       }
+
+      wasOffline =
+          result.stoppedBecauseOffline ||
+          library.stoppedBecauseOffline ||
+          records.stoppedBecauseOffline;
 
       final bool abandoned = library.abandonedScope || records.abandonedScope;
 
@@ -189,7 +239,7 @@ class SyncController extends Notifier<SyncStatus> with WidgetsBindingObserver {
       // queue knows whether anything is still waiting and when. Asked here
       // rather than only on success, because a pass that failed is exactly
       // the one that left something waiting.
-      unawaited(_wakeWhenDue());
+      unawaited(_wakeWhenDue(offline: wasOffline));
 
       // Asked again while that was running: honour it once, debounced like
       // any other request rather than called straight through, so a pass that
