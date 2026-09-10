@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/app/providers.dart';
 import 'package:hearth/app/shell/launch_target.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
@@ -118,6 +119,76 @@ String? _flutterRootFromExecutable() {
   return Directory(resolved).parent.parent.path;
 }
 
+/// The planner, opened on a day that is not today.
+///
+/// Subclassed rather than overridden with a fixed value because the real
+/// notifier is what the screen's own arrows and "Go to today" button drive; a
+/// scene that replaced it with a constant would picture a day screen whose
+/// controls do nothing, which is not the screen that ships.
+class GalleryDate extends SelectedDate {
+  GalleryDate(this.offset);
+
+  /// Days from today. Negative is the past.
+  final int offset;
+
+  @override
+  DateTime build() {
+    final DateTime today = super.build();
+    return DateTime(today.year, today.month, today.day + offset);
+  }
+}
+
+/// The provider overrides a scene needs, in the untyped shape `pumpHearthApp`
+/// takes — riverpod 3 exports the methods that make an `Override` and not the
+/// type itself, which is why the harness types them as `Object` too.
+List<Object> galleryOverrides(Scene scene) => <Object>[
+  if (scene.dayOffset != 0)
+    selectedDateProvider.overrideWith(() => GalleryDate(scene.dayOffset)),
+];
+
+/// Presses one of [Scene.taps].
+///
+/// Visible text first, tooltip second: a tab is a word on screen, while "add
+/// to breakfast" is a bare `+` whose only name is its tooltip. `.last` because
+/// a label on screen is often also a label behind the sheet on top of it, and
+/// the thing to press is the one in front.
+///
+/// Scrolled to first when nothing on screen carries the label. The picker
+/// half of the logging sheet lists the whole library, and a `ListView` builds
+/// only what is near the viewport — so a food below the fold is not merely
+/// off-screen, it is absent from the tree and no finder can see it.
+Future<void> pressLabel(WidgetTester tester, String label) async {
+  Finder? onScreen() {
+    final Finder byText = find.text(label);
+    if (byText.evaluate().isNotEmpty) return byText.last;
+    final Finder byTooltip = find.byTooltip(label);
+    if (byTooltip.evaluate().isNotEmpty) return byTooltip.last;
+    return null;
+  }
+
+  if (onScreen() == null) {
+    final Finder scrollables = find.byType(Scrollable);
+    if (scrollables.evaluate().isEmpty) {
+      throw StateError('Nothing on screen is labelled "$label" to press.');
+    }
+    // The innermost list, for the same reason `.last` is used above: the one
+    // in front is the one being read.
+    await tester.scrollUntilVisible(
+      find.text(label),
+      120,
+      scrollable: scrollables.last,
+      maxScrolls: 40,
+    );
+  }
+
+  final Finder? target = onScreen();
+  if (target == null) {
+    throw StateError('Nothing on screen is labelled "$label" to press.');
+  }
+  await tester.ensureVisible(target);
+  await tester.tap(target);
+}
+
 /// Weekly targets, so the day screen shows progress rather than a setup
 /// prompt. A gallery of the un-set-up state judges the wrong screen.
 const MacroTargets galleryTargets = MacroTargets(
@@ -139,7 +210,8 @@ class Scene {
     this.size = const Size(390, 844),
     this.brightness = Brightness.light,
     this.textScale = 1.0,
-    this.tab,
+    this.dayOffset = 0,
+    this.taps = const <String>[],
   });
 
   /// The file name, without extension. Also the caption in the index.
@@ -153,9 +225,25 @@ class Scene {
   /// no tabs at all.
   final LaunchTarget? target;
 
-  /// A tab to press after launch, for surfaces the launch target cannot reach
-  /// on its own.
-  final String? tab;
+  /// Things to press after launch, in order, for surfaces no launch target
+  /// reaches: a tab in the shell, and — two presses deeper — the logging
+  /// sheet, which exists only as a modal over the day screen.
+  ///
+  /// Matched as visible text first and as a tooltip second, because half of
+  /// what has to be pressed here is an icon button whose only name is its
+  /// tooltip. Labels rather than keys or types, so a scene reads as the thing
+  /// a person would do; a rearranged screen breaks the scene loudly, which is
+  /// the right failure for a picture that would otherwise be silently of the
+  /// wrong screen.
+  final List<String> taps;
+
+  /// How far from today the planner opens, in days. Negative is the past.
+  ///
+  /// An offset rather than a date, because the day screen resolves "today"
+  /// from the wall clock: a fixed date would be three days ago this week and
+  /// last March by the spring, and what these scenes are about is the
+  /// relationship between the two, never a particular Tuesday.
+  final int dayOffset;
 
   final Size size;
   final Brightness brightness;
@@ -201,6 +289,56 @@ List<Recipe> galleryRecipes() => <Recipe>[
 ];
 
 List<Food> galleryFoods() => <Food>[
+  // The two the logging sheet scenes pick, first in the list on purpose. The
+  // picker is a lazy list, so reaching a food further down means scrolling —
+  // and scrolling a draggable sheet drags it open on the way, which pictures
+  // the sheet at a height nobody chose.
+  //
+  // One serving, and it is a weight. The sheet has two arrangements for the
+  // row above the stepper and this is the one nothing else in the gallery
+  // reaches: a single serving still has to say what it is, because "1" on its
+  // own could be a fillet or 170 g.
+  aFood(
+    'Chicken breast, roasted',
+    id: 'f-chicken',
+    servingOptions: <ServingOption>[
+      aServing(
+        amount: 170,
+        unit: Units.gram,
+        label: '170 g',
+        macros: const Macros(kcal: 281, proteinG: 53, carbG: 0, fatG: 6),
+      ),
+    ],
+  ),
+  // And the other arrangement: several servings of the same kind, which is
+  // the only case the sheet offers a picker for. All weights deliberately —
+  // the sheet drops any option it cannot express as a multiple of the default
+  // one, so a spoon measured by volume would silently not appear.
+  aFood(
+    'Peanut butter, smooth',
+    id: 'f-pb',
+    brand: 'Whole Earth',
+    servingOptions: <ServingOption>[
+      aServing(
+        amount: 32,
+        unit: Units.gram,
+        label: '2 tbsp (32 g)',
+        macros: const Macros(kcal: 191, proteinG: 8, carbG: 6, fatG: 16),
+      ),
+      aServing(
+        amount: 100,
+        unit: Units.gram,
+        label: '100 g',
+        macros: const Macros(kcal: 597, proteinG: 25, carbG: 20, fatG: 51),
+      ),
+      aServing(
+        amount: 340,
+        unit: Units.gram,
+        label: '1 jar (340 g)',
+        macros: const Macros(kcal: 2030, proteinG: 85, carbG: 68, fatG: 173),
+      ),
+    ],
+  ),
   aFoodPer100g(
     'Greek yogurt, 0%',
     kcal: 59,
@@ -265,8 +403,20 @@ List<MealPlanEntry> galleryEntries(DateTime day) => <MealPlanEntry>[
 
 /// The surfaces §9.1 asks for, plus the two states that catch most layout
 /// problems: dark, and a small phone at enlarged text.
+///
+/// And the two that only exist as a *before* picture: a past day, and the
+/// logging sheet. Both are surfaces a redesign has to be judged against and
+/// neither was drawn, so the review had nothing to compare its proposals to.
 const List<Scene> scenes = <Scene>[
   Scene(name: 'today', target: LaunchTarget.today),
+  // The same screen, three days back. Its own scene because the day view is
+  // not one screen: everything on it is supposed to follow the date in the
+  // header, and a redesign judged only against today cannot show whether it
+  // does. As of this writing it does not — the summary card is captioned
+  // "Today" whatever day is selected (`day_screen.dart`, `_RemainingCard`) —
+  // and the point of drawing the before state is that the picture says so
+  // rather than a sentence in a review.
+  Scene(name: 'day-past', target: LaunchTarget.today, dayOffset: -3),
   Scene(
     name: 'today-dark',
     target: LaunchTarget.today,
@@ -279,8 +429,25 @@ const List<Scene> scenes = <Scene>[
     textScale: 2.0,
   ),
   Scene(name: 'home', target: LaunchTarget.home),
-  Scene(name: 'recipes', tab: 'Recipes'),
-  Scene(name: 'recipes-desktop', tab: 'Recipes', size: Size(1280, 900)),
-  Scene(name: 'foods', tab: 'Foods'),
-  Scene(name: 'shopping', tab: 'Shopping'),
+  Scene(name: 'recipes', taps: <String>['Recipes']),
+  Scene(
+    name: 'recipes-desktop',
+    taps: <String>['Recipes'],
+    size: Size(1280, 900),
+  ),
+  Scene(name: 'foods', taps: <String>['Foods']),
+  Scene(name: 'shopping', taps: <String>['Shopping']),
+  // The sheet every logged meal goes through, in both of its arrangements.
+  // Reached by pressing what a person presses, because it is a modal over the
+  // day screen and no launch target can open it.
+  Scene(
+    name: 'log-sheet-mass',
+    target: LaunchTarget.today,
+    taps: <String>['Add to breakfast', 'Chicken breast, roasted'],
+  ),
+  Scene(
+    name: 'log-sheet-servings',
+    target: LaunchTarget.today,
+    taps: <String>['Add to lunch', 'Peanut butter, smooth'],
+  ),
 ];
