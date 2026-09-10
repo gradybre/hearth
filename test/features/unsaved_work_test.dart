@@ -340,6 +340,39 @@ void main() {
       );
     });
 
+    testWidgets('a change that was not typing is written down too', (
+      WidgetTester tester,
+    ) async {
+      // Typing is one of fifteen ways this editor changes. Hanging the draft
+      // off the text fields meant the guard and the draft disagreed about
+      // what counts as work: add a section or match an ingredient, lose the
+      // app, and it was gone — although Cancel would have asked about it.
+      final HearthDatabase db = await pumpHearthApp(tester);
+      final EditorDraftStore drafts = EditorDraftStore(
+        db,
+        userId: LocalAuthGateway.account.userId,
+      );
+
+      await tester.tap(find.text('Recipes').last);
+      await pumpFrames(tester);
+      await addRecipeVia(tester, 'Write a recipe');
+      await pumpFrames(tester, frames: 20);
+
+      await tester.tap(find.text('Add a section'));
+      await pumpFrames(tester, frames: 12);
+      // Past the debounce, without waiting two real seconds.
+      await tester.pump(const Duration(seconds: 3));
+      await pumpFrames(tester, frames: 8);
+
+      final EditorDraft? saved = await drafts.find(kind: 'recipe');
+      expect(
+        saved,
+        isNotNull,
+        reason: 'a change made without the keyboard was never written down',
+      );
+      expect((saved!.payload['sections']! as List<Object?>), hasLength(2));
+    });
+
     testWidgets('an untouched editor is never offered one', (
       WidgetTester tester,
     ) async {

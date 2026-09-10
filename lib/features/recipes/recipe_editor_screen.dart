@@ -838,6 +838,16 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
 
+    // Hooked to the rebuild rather than to the text fields. Typing is only
+    // one of fifteen ways this editor changes — adding a section, matching an
+    // ingredient, switching kind — and hanging the draft off `onChanged`
+    // meant the guard and the draft disagreed about what counts as work:
+    // match a food, lose the app, and the match was gone although Cancel
+    // would have asked about it. Every change goes through `setState`, so
+    // this fires for all of them and there is no call site left to forget.
+    // It only arms a timer, so a build stays a build.
+    _rememberDraft();
+
     // After the first frame the editor is actually usable on — not in
     // `initState`, which for an existing recipe runs before the recipe has
     // been read and would compare a draft against nothing.
@@ -1151,10 +1161,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     if (await UnsavedWorkGuard.confirm(context, 'recipe')) navigator.pop();
   }
 
-  void _rebuild(String _) {
-    setState(() {});
-    _rememberDraft();
-  }
+  void _rebuild(String _) => setState(() {});
 
   /// Writes what is in the editor down, shortly.
   ///
