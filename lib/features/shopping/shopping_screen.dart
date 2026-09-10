@@ -7,6 +7,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
+import '../../app/widgets/reading_column.dart';
 import '../../app/widgets/swipe_to_delete.dart';
 import '../../app/widgets/undo_snackbar.dart';
 import '../../data/local/shopping_store.dart';
@@ -44,13 +45,15 @@ class ShoppingScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: colors.background,
       body: SafeArea(
-        child: list.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (Object e, StackTrace s) =>
-              Center(child: Text('The list could not be read.\n$e')),
-          data: (ShoppingListSnapshot? snapshot) => _Body(
-            lines: snapshot?.lines ?? const <ShoppingLine>[],
-            gutter: gutter,
+        child: ReadingColumn(
+          child: list.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (Object e, StackTrace s) =>
+                Center(child: Text('The list could not be read.\n$e')),
+            data: (ShoppingListSnapshot? snapshot) => _Body(
+              lines: snapshot?.lines ?? const <ShoppingLine>[],
+              gutter: gutter,
+            ),
           ),
         ),
       ),

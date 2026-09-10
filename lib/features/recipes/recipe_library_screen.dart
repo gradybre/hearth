@@ -8,6 +8,7 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
 import '../../app/widgets/centred_message.dart';
+import '../../app/widgets/reading_column.dart';
 import '../../app/widgets/swipe_to_delete.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
@@ -58,105 +59,108 @@ class RecipeLibraryScreen extends ConsumerWidget {
         label: Text('Add recipe', style: context.text.label),
       ),
       body: SafeArea(
-        child: library.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (Object error, StackTrace stack) =>
-              _LibraryError(error: error, gutter: gutter),
-          data: (List<Recipe> recipes) {
-            // Computed here rather than in the header so the button knows
-            // whether it would find anything before it is offered.
-            final bool sweepable = DefaultSweep.proposals(
-              recipes: recipes,
-              library: ref.watch(foodLibraryProvider).value ?? const <Food>[],
-            ).isNotEmpty;
+        child: ReadingColumn(
+          child: library.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (Object error, StackTrace stack) =>
+                _LibraryError(error: error, gutter: gutter),
+            data: (List<Recipe> recipes) {
+              // Computed here rather than in the header so the button knows
+              // whether it would find anything before it is offered.
+              final bool sweepable = DefaultSweep.proposals(
+                recipes: recipes,
+                library: ref.watch(foodLibraryProvider).value ?? const <Food>[],
+              ).isNotEmpty;
 
-            // Slivers rather than a Column with an Expanded list.
-            //
-            // The header and the filter bar were fixed chrome above the list,
-            // and on a 320x568 phone at three times the text they are taller
-            // than the screen on their own — so the list was handed a
-            // negative height and the whole thing overflowed by ten points.
-            // As slivers the chrome scrolls away with the content, which is
-            // what a short screen needs and what a tall one never noticed.
-            return CustomScrollView(
-              slivers: <Widget>[
-                // Outside the empty/non-empty branch on purpose. The household
-                // control used to live only in the populated case, which hid it
-                // from exactly the person who needs it — someone with an empty
-                // library, about to share a code.
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
-                    child: Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: Text(
-                            'Recipes',
-                            style: context.text.recipeTitle,
+              // Slivers rather than a Column with an Expanded list.
+              //
+              // The header and the filter bar were fixed chrome above the list,
+              // and on a 320x568 phone at three times the text they are taller
+              // than the screen on their own — so the list was handed a
+              // negative height and the whole thing overflowed by ten points.
+              // As slivers the chrome scrolls away with the content, which is
+              // what a short screen needs and what a tall one never noticed.
+              return CustomScrollView(
+                slivers: <Widget>[
+                  // Outside the empty/non-empty branch on purpose. The household
+                  // control used to live only in the populated case, which hid it
+                  // from exactly the person who needs it — someone with an empty
+                  // library, about to share a code.
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
+                      child: Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: Text(
+                              'Recipes',
+                              style: context.text.recipeTitle,
+                            ),
                           ),
-                        ),
-                        // Only when there is something to sweep. A button that
-                        // can only ever say "nothing to do" is a button that
-                        // teaches people not to press it.
-                        if (sweepable)
+                          // Only when there is something to sweep. A button that
+                          // can only ever say "nothing to do" is a button that
+                          // teaches people not to press it.
+                          if (sweepable)
+                            IconButton(
+                              icon: const Icon(Icons.push_pin_outlined),
+                              tooltip:
+                                  'Apply defaults to unmatched ingredients',
+                              onPressed: () => context.push('/recipe/defaults'),
+                            ),
+                          // The household lives behind the library rather than in a
+                          // settings pillar of its own: it is a thing you set up
+                          // once and then forget (spec §5.1).
                           IconButton(
-                            icon: const Icon(Icons.push_pin_outlined),
-                            tooltip: 'Apply defaults to unmatched ingredients',
-                            onPressed: () => context.push('/recipe/defaults'),
+                            icon: const Icon(Icons.people_outline),
+                            tooltip: 'Household',
+                            onPressed: () => context.push('/household'),
                           ),
-                        // The household lives behind the library rather than in a
-                        // settings pillar of its own: it is a thing you set up
-                        // once and then forget (spec §5.1).
-                        IconButton(
-                          icon: const Icon(Icons.people_outline),
-                          tooltip: 'Household',
-                          onPressed: () => context.push('/household'),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                const SliverToBoxAdapter(
-                  child: SizedBox(height: HearthSpacing.md),
-                ),
-                if (hasLibrary) ...<Widget>[
-                  SliverToBoxAdapter(child: RecipeFilterBar(gutter: gutter)),
                   const SliverToBoxAdapter(
                     child: SizedBox(height: HearthSpacing.md),
                   ),
-                ],
-                if (recipes.isEmpty)
-                  // Filling what is left, so a centred message stays centred
-                  // on a tall screen and grows past it when it must.
-                  //
-                  // `hasScrollBody: false` asks the child for an intrinsic
-                  // height, which a LayoutBuilder cannot answer — so the
-                  // message is told not to scroll, and answers. With a scroll
-                  // body instead, this sliver claims a whole viewport of
-                  // scroll extent regardless of the chrome above it, and the
-                  // empty states gain dead scroll they never had.
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _EmptyLibrary(gutter: gutter),
-                  )
-                else if ((shown.value ?? const <Recipe>[]).isEmpty)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _NoMatches(
-                      gutter: gutter,
-                      filter: filter,
-                      onClear: () =>
-                          ref.read(recipeFilterProvider.notifier).clearAll(),
+                  if (hasLibrary) ...<Widget>[
+                    SliverToBoxAdapter(child: RecipeFilterBar(gutter: gutter)),
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: HearthSpacing.md),
                     ),
-                  )
-                else
-                  _RecipeSliver(
-                    recipes: shown.value ?? const <Recipe>[],
-                    gutter: gutter,
-                  ),
-              ],
-            );
-          },
+                  ],
+                  if (recipes.isEmpty)
+                    // Filling what is left, so a centred message stays centred
+                    // on a tall screen and grows past it when it must.
+                    //
+                    // `hasScrollBody: false` asks the child for an intrinsic
+                    // height, which a LayoutBuilder cannot answer — so the
+                    // message is told not to scroll, and answers. With a scroll
+                    // body instead, this sliver claims a whole viewport of
+                    // scroll extent regardless of the chrome above it, and the
+                    // empty states gain dead scroll they never had.
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: _EmptyLibrary(gutter: gutter),
+                    )
+                  else if ((shown.value ?? const <Recipe>[]).isEmpty)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: _NoMatches(
+                        gutter: gutter,
+                        filter: filter,
+                        onClear: () =>
+                            ref.read(recipeFilterProvider.notifier).clearAll(),
+                      ),
+                    )
+                  else
+                    _RecipeSliver(
+                      recipes: shown.value ?? const <Recipe>[],
+                      gutter: gutter,
+                    ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

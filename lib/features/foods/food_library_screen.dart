@@ -8,6 +8,7 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
 import '../../app/widgets/centred_message.dart';
+import '../../app/widgets/reading_column.dart';
 import '../../app/widgets/swipe_to_delete.dart';
 import '../../app/widgets/undo_snackbar.dart';
 import '../../data/adapters/label_reader.dart';
@@ -158,124 +159,126 @@ class _FoodLibraryScreenState extends ConsumerState<FoodLibraryScreen> {
         ],
       ),
       body: SafeArea(
-        child: library.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (Object error, StackTrace stack) => Center(
-            child: Text('The food library could not be read.\n$error'),
-          ),
-          data: (List<Food> visible) {
-            // The unfiltered library, for the "your library is empty" branch:
-            // no foods at all and no foods *matching* are different states
-            // and want different words.
-            final List<Food> foods =
-                ref.watch(foodLibraryProvider).value ?? const <Food>[];
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Padding(
-                  padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
-                  child: _selected.isEmpty
-                      ? Text('Foods', style: context.text.recipeTitle)
-                      : Row(
-                          children: <Widget>[
-                            IconButton(
-                              icon: const Icon(Icons.close),
-                              tooltip: 'Cancel selecting',
-                              onPressed: () =>
-                                  setState(() => _selected.clear()),
-                            ),
-                            Expanded(
-                              child: Text(
-                                '${_selected.length} selected',
-                                style: context.text.recipeTitle,
+        child: ReadingColumn(
+          child: library.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (Object error, StackTrace stack) => Center(
+              child: Text('The food library could not be read.\n$error'),
+            ),
+            data: (List<Food> visible) {
+              // The unfiltered library, for the "your library is empty" branch:
+              // no foods at all and no foods *matching* are different states
+              // and want different words.
+              final List<Food> foods =
+                  ref.watch(foodLibraryProvider).value ?? const <Food>[];
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
+                    child: _selected.isEmpty
+                        ? Text('Foods', style: context.text.recipeTitle)
+                        : Row(
+                            children: <Widget>[
+                              IconButton(
+                                icon: const Icon(Icons.close),
+                                tooltip: 'Cancel selecting',
+                                onPressed: () =>
+                                    setState(() => _selected.clear()),
                               ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              tooltip:
-                                  'Delete ${_selected.length} selected foods',
-                              color: colors.error,
-                              onPressed: _deleteSelected,
-                            ),
-                          ],
-                        ),
-                ),
-                Padding(
-                  padding: EdgeInsets.all(gutter),
-                  child: TextField(
-                    controller: _search,
-                    // The library filters as you type; the wider search waits
-                    // for a pause and lands underneath when it arrives.
-                    onChanged: (String value) {
-                      ref.read(foodFilterProvider.notifier).search(value);
-                      ref.read(foodSearchProvider.notifier).search(value);
-                      setState(() {});
-                    },
-                    style: context.text.body,
-                    decoration: InputDecoration(
-                      hintText: 'Search foods',
-                      prefixIcon: Icon(Icons.search, color: colors.textMuted),
-                      suffixIcon: _search.text.isEmpty
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.clear),
-                              tooltip: 'Clear search',
-                              onPressed: () {
-                                _search.clear();
-                                ref
-                                    .read(foodFilterProvider.notifier)
-                                    .search('');
-                                ref.read(foodSearchProvider.notifier).clear();
-                                setState(() {});
-                              },
-                            ),
-                    ),
-                  ),
-                ),
-                // Hidden while the library is genuinely empty: chips that can
-                // only ever filter nothing down to nothing are just clutter in
-                // front of someone who has yet to add their first food.
-                if (foods.isNotEmpty) ...<Widget>[
-                  FoodFilterBar(gutter: gutter),
-                  const SizedBox(height: HearthSpacing.md),
-                ],
-                Expanded(
-                  // One scroll view for both: what the household has, then
-                  // what the wider sources turned up. An empty library is no
-                  // longer a dead end — the search still reaches outward.
-                  child: ListView(
-                    padding: EdgeInsets.fromLTRB(
-                      gutter,
-                      0,
-                      gutter,
-                      gutter + 72,
-                    ),
-                    children: <Widget>[
-                      if (foods.isEmpty && _search.text.isEmpty)
-                        _EmptyFoods(gutter: gutter)
-                      else if (visible.isEmpty)
-                        _NoMatches(query: _search.text, gutter: gutter)
-                      else
-                        for (final Food food in visible) ...<Widget>[
-                          _DeletableFood(
-                            // Keyed by food, not by position: an unkeyed row
-                            // hands its swiped-open state to whatever moves up
-                            // when the list shifts.
-                            key: ValueKey<String>(food.id),
-                            food: food,
-                            selecting: _selected.isNotEmpty,
-                            selected: _selected.contains(food.id),
-                            onToggle: _toggle,
+                              Expanded(
+                                child: Text(
+                                  '${_selected.length} selected',
+                                  style: context.text.recipeTitle,
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline),
+                                tooltip:
+                                    'Delete ${_selected.length} selected foods',
+                                color: colors.error,
+                                onPressed: _deleteSelected,
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: HearthSpacing.sm),
-                        ],
-                      ExternalFoodResults(query: _search.text, onSaved: null),
-                    ],
                   ),
-                ),
-              ],
-            );
-          },
+                  Padding(
+                    padding: EdgeInsets.all(gutter),
+                    child: TextField(
+                      controller: _search,
+                      // The library filters as you type; the wider search waits
+                      // for a pause and lands underneath when it arrives.
+                      onChanged: (String value) {
+                        ref.read(foodFilterProvider.notifier).search(value);
+                        ref.read(foodSearchProvider.notifier).search(value);
+                        setState(() {});
+                      },
+                      style: context.text.body,
+                      decoration: InputDecoration(
+                        hintText: 'Search foods',
+                        prefixIcon: Icon(Icons.search, color: colors.textMuted),
+                        suffixIcon: _search.text.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.clear),
+                                tooltip: 'Clear search',
+                                onPressed: () {
+                                  _search.clear();
+                                  ref
+                                      .read(foodFilterProvider.notifier)
+                                      .search('');
+                                  ref.read(foodSearchProvider.notifier).clear();
+                                  setState(() {});
+                                },
+                              ),
+                      ),
+                    ),
+                  ),
+                  // Hidden while the library is genuinely empty: chips that can
+                  // only ever filter nothing down to nothing are just clutter in
+                  // front of someone who has yet to add their first food.
+                  if (foods.isNotEmpty) ...<Widget>[
+                    FoodFilterBar(gutter: gutter),
+                    const SizedBox(height: HearthSpacing.md),
+                  ],
+                  Expanded(
+                    // One scroll view for both: what the household has, then
+                    // what the wider sources turned up. An empty library is no
+                    // longer a dead end — the search still reaches outward.
+                    child: ListView(
+                      padding: EdgeInsets.fromLTRB(
+                        gutter,
+                        0,
+                        gutter,
+                        gutter + 72,
+                      ),
+                      children: <Widget>[
+                        if (foods.isEmpty && _search.text.isEmpty)
+                          _EmptyFoods(gutter: gutter)
+                        else if (visible.isEmpty)
+                          _NoMatches(query: _search.text, gutter: gutter)
+                        else
+                          for (final Food food in visible) ...<Widget>[
+                            _DeletableFood(
+                              // Keyed by food, not by position: an unkeyed row
+                              // hands its swiped-open state to whatever moves up
+                              // when the list shifts.
+                              key: ValueKey<String>(food.id),
+                              food: food,
+                              selecting: _selected.isNotEmpty,
+                              selected: _selected.contains(food.id),
+                              onToggle: _toggle,
+                            ),
+                            const SizedBox(height: HearthSpacing.sm),
+                          ],
+                        ExternalFoodResults(query: _search.text, onSaved: null),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

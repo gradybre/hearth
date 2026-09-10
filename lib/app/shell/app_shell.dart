@@ -105,6 +105,13 @@ class AppShell extends StatelessWidget {
   Widget _wideLayout(BuildContext context) {
     final HearthColors colors = context.colors;
     return Row(
+      // Stretched, so the rail is the height of the window. A Row centres its
+      // children on the cross axis unless told otherwise, and the sidebar
+      // sizes to its own content — so on a 900pt window it sat in a band down
+      // the middle with empty paper above and below, and the way out of the
+      // section began a third of the way down the screen (review §6.2.7:
+      // "the sidebar floats around the vertical center").
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         _Sidebar(
           section: section,
