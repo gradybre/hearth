@@ -411,10 +411,10 @@ void main() {
       WidgetTester tester,
     ) async {
       await openLibrary(tester);
-      expect(find.text('Clear all'), findsNothing);
+      expect(find.text('Clear filters'), findsNothing);
     });
 
-    testWidgets('Clear all clears everything', (WidgetTester tester) async {
+    testWidgets('Clear filters clears every chip', (WidgetTester tester) async {
       await openLibrary(tester);
 
       await reach(tester, find.text('Favourites'));
@@ -424,7 +424,7 @@ void main() {
       await reach(tester, find.text('Paella experiments'));
       await closeFilters(tester);
 
-      await reach(tester, find.text('Clear all'));
+      await reach(tester, find.text('Clear filters'));
 
       final RecipeFilter after = filterOf(tester);
       expect(after.activeCount, 0);
@@ -495,5 +495,30 @@ void main() {
 
       handle.dispose();
     });
+  });
+
+  testWidgets('the clear button says what it clears, and does not overreach', (
+    WidgetTester tester,
+  ) async {
+    // It called `clearChips`, which keeps the search text — so "Clear all"
+    // emptied the strip and left the library still narrowed by a word, with
+    // nothing on screen left to say so. The strip deliberately does not list
+    // the search (the field has its own ×), which is what makes "all" the
+    // wrong word rather than a small exaggeration.
+    await openLibrary(tester);
+    await tester.enterText(find.byType(TextField).first, 'chilli');
+    await pumpFrames(tester, frames: 12);
+
+    await pickInSheet(tester, 'Under 30 min');
+
+    await reach(tester, find.text('Clear filters'));
+
+    // The chips are gone and the search is untouched, which is what the
+    // button now says it does.
+    expect(find.text('Under 30 min'), findsNothing);
+    expect(
+      tester.widget<TextField>(find.byType(TextField).first).controller?.text,
+      'chilli',
+    );
   });
 }

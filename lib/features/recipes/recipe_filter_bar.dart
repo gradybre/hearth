@@ -162,10 +162,16 @@ class _RecipeFilterBarState extends ConsumerState<RecipeFilterBar> {
               children: <Widget>[
                 for (final _Applied one in applied)
                   _AppliedChip(label: one.label, onRemove: one.remove),
+                // "Clear filters", not "Clear all": `clearChips` keeps the
+                // search text, so "all" emptied the strip and left the
+                // library still narrowed by a word — with the strip, which
+                // is the screen's answer to what is narrowing this list, then
+                // saying nothing at all. The search keeps its own × in the
+                // field; this button is about the chips beside it.
                 TextButton.icon(
                   onPressed: control.clearChips,
                   icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
-                  label: const Text('Clear all'),
+                  label: const Text('Clear filters'),
                 ),
               ],
             ),

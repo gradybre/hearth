@@ -160,7 +160,7 @@ void main() {
 
       await pickFilter(tester, 'Under 30 min');
       expect(find.text('Under 30 min'), findsOneWidget);
-      expect(find.text('Clear all'), findsOneWidget);
+      expect(find.text('Clear filters'), findsOneWidget);
     });
 
     testWidgets('a collection chip is offered for each cookbook', (
