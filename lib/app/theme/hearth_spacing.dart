@@ -29,6 +29,21 @@ abstract final class HearthRadius {
 }
 
 /// Minimum interactive sizes.
+/// How wide a column of content is allowed to get.
+///
+/// A window is as wide as somebody dragged it; a line of text is not. The
+/// recipe list on a 1280pt desktop laid a short title at one end of a
+/// thousand-point row and a heart at the other, which is not a row anybody
+/// reads across (review §6.2.7).
+abstract final class HearthLayout {
+  /// A list of rows: a title, some metadata, an action at the end.
+  ///
+  /// Wider than the launcher's column of cards, because a row carries its
+  /// meaning left to right and wants the room; narrow enough that the eye
+  /// does not have to travel to find the end of one.
+  static const double readingWidth = 820;
+}
+
 abstract final class HearthTouch {
   /// Apple's and Material's shared floor.
   static const double minTarget = 44;
