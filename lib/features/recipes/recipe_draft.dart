@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 
@@ -61,6 +62,27 @@ class DraftSection {
     directionsText: directionsText ?? this.directionsText,
     existingId: existingId,
   );
+
+  /// Everything a person can change, for the unsaved-work guard (review F01).
+  ///
+  /// **Every field of this class belongs in this list.** A field missing from
+  /// it is a field the editor will not notice you changed, which means Cancel
+  /// throws that change away without asking — the exact defect the guard was
+  /// built for, reintroduced quietly one field at a time.
+  List<Object?> get _props => <Object?>[
+    name,
+    ingredientsText,
+    directionsText,
+    existingId,
+  ];
+
+  @override
+  bool operator ==(Object other) =>
+      other is DraftSection &&
+      const ListEquality<Object?>().equals(other._props, _props);
+
+  @override
+  int get hashCode => const ListEquality<Object?>().hash(_props);
 }
 
 class RecipeDraft {
@@ -120,6 +142,34 @@ class RecipeDraft {
   /// (spec §5.3). Keyed the same way as [matches], and for the same reason:
   /// the mark has to survive the text above it being edited.
   final Set<String> noMatch;
+
+  /// Everything a person can change, for the unsaved-work guard (review F01).
+  ///
+  /// **Every field of this class belongs in this list**, for the reason given
+  /// on [DraftSection._props].
+  List<Object?> get _props => <Object?>[
+    title,
+    servings,
+    sections,
+    prepMinutes,
+    cookMinutes,
+    cuisine,
+    kind,
+    tags,
+    notes,
+    existingId,
+    iconSvg,
+    matches,
+    noMatch,
+  ];
+
+  @override
+  bool operator ==(Object other) =>
+      other is RecipeDraft &&
+      const DeepCollectionEquality().equals(other._props, _props);
+
+  @override
+  int get hashCode => const DeepCollectionEquality().hash(_props);
 
   bool get isEditing => existingId != null;
 
