@@ -133,9 +133,21 @@ Future<void> openLibrary(
   await pumpFrames(tester, frames: 12);
 }
 
-RecipeFilter filterOf(WidgetTester tester) => ProviderScope.containerOf(
-  tester.element(find.byType(MaterialApp).first),
-).read(recipeFilterProvider);
+ProviderContainer containerOf(WidgetTester tester) =>
+    ProviderScope.containerOf(tester.element(find.byType(MaterialApp).first));
+
+RecipeFilter filterOf(WidgetTester tester) =>
+    containerOf(tester).read(recipeFilterProvider);
+
+/// What the library is showing, read from the provider rather than counted on
+/// screen: the list is lazy, so the fifth card of five is never built at
+/// 390x844 and counting cards would call a full library a filtered one.
+List<String> shownIds(WidgetTester tester) => <String>[
+  for (final Recipe recipe
+      in containerOf(tester).read(filteredRecipesProvider).value ??
+          const <Recipe>[])
+    recipe.id,
+];
 
 /// Brings [finder] on screen and taps it.
 Future<void> reach(WidgetTester tester, Finder finder) async {
@@ -210,16 +222,16 @@ void main() {
     ) async {
       await openLibrary(tester);
 
+      // Not "no horizontal Scrollable": the search field contains one of its
+      // own for its editable, and always will. The rail's was a
+      // SingleChildScrollView, and the rail wraps now instead.
       expect(
         find.descendant(
           of: find.byType(RecipeFilterBar),
-          matching: find.byWidgetPredicate(
-            (Widget widget) =>
-                widget is Scrollable && widget.axis == Axis.horizontal,
-          ),
+          matching: find.byType(SingleChildScrollView),
         ),
         findsNothing,
-        reason: 'a scroll inside a scroll — the rail wraps instead',
+        reason: 'a sideways scroll inside a list that scrolls down',
       );
     });
   });
@@ -227,7 +239,7 @@ void main() {
   group('everything still filters (spec §5.2)', () {
     testWidgets('a cuisine, from behind Filters', (WidgetTester tester) async {
       await openLibrary(tester);
-      expect(find.byType(RecipeCard), findsNWidgets(5));
+      expect(shownIds(tester), hasLength(5));
 
       await pickInSheet(tester, 'Thai');
 
@@ -295,7 +307,7 @@ void main() {
       await closeFilters(tester);
 
       expect(filterOf(tester).cuisines, isEmpty);
-      expect(find.byType(RecipeCard), findsNWidgets(5));
+      expect(shownIds(tester), hasLength(5));
     });
 
     testWidgets('the two toggles stay in the rail', (
@@ -420,7 +432,7 @@ void main() {
       expect(after.collectionIds, isEmpty);
       expect(after.maxTotalTime, isNull);
       expect(after.favoritesOnly, isFalse);
-      expect(find.byType(RecipeCard), findsNWidgets(5));
+      expect(shownIds(tester), hasLength(5));
       expect(find.text('Filters'), findsOneWidget);
     });
 
@@ -438,11 +450,7 @@ void main() {
     testWidgets('the rail survives 3x text on a small phone', (
       WidgetTester tester,
     ) async {
-      await openLibrary(
-        tester,
-        size: const Size(320, 568),
-        textScale: 3.0,
-      );
+      await openLibrary(tester, size: const Size(320, 568), textScale: 3.0);
 
       expect(tester.takeException(), isNull, reason: 'the rail overflowed');
     });
@@ -450,11 +458,7 @@ void main() {
     testWidgets('and so does the applied strip beneath it', (
       WidgetTester tester,
     ) async {
-      await openLibrary(
-        tester,
-        size: const Size(320, 568),
-        textScale: 3.0,
-      );
+      await openLibrary(tester, size: const Size(320, 568), textScale: 3.0);
 
       await reach(tester, find.text('Favourites'));
       await reach(tester, find.text('Eaten out'));

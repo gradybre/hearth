@@ -226,6 +226,16 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     farEnd: find.text('Cholesterol'),
   ),
   SweptSurface(
+    name: 'the recipe filters',
+    opensFrom: 'lib/features/recipes/recipe_filters_sheet.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Recipes');
+      await tools.reach(find.textContaining(RegExp(r'^Filters')));
+    },
+    arrived: find.text('Filter recipes'),
+    farEnd: find.text('Done'),
+  ),
+  SweptSurface(
     name: 'the ways to add a recipe',
     opensFrom: 'lib/features/recipes/add_recipe_sheet.dart',
     open: (WidgetTester tester, SweepTools tools) async {

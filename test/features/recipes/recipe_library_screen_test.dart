@@ -113,8 +113,15 @@ void main() {
         ],
       );
       // The fixture has no tags, so none should render — a tag row must not
-      // appear as an empty strip.
-      expect(find.byType(Wrap), findsNothing);
+      // appear as an empty strip. Scoped to the card: the filter rail is a
+      // Wrap of its own now, and always has controls in it.
+      expect(
+        find.descendant(
+          of: find.byType(RecipeCard),
+          matching: find.byType(Wrap),
+        ),
+        findsNothing,
+      );
     });
   });
 
@@ -139,7 +146,12 @@ void main() {
       await pumpHearthApp(tester, recipes: <Recipe>[shortRibs()]);
       final SemanticsHandle handle = tester.ensureSemantics();
 
-      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      // iOS's 44, not Android's 48. Hearth ships iOS, macOS and Windows, and
+      // the theme sets 44 as the floor for every button in the app
+      // (hearth_theme.dart) — the same call test/app/a11y/guidelines_test.dart
+      // makes and says out loud. Asking this one screen for 48 would fail on
+      // any themed button that ever appears on it, which is why it only ever
+      // passed on a fixture with no filters applied.
       await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
 
       handle.dispose();

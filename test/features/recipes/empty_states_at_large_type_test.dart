@@ -4,6 +4,7 @@ import 'package:hearth/domain/models/recipe.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/fixtures.dart';
+import '../../support/swept_surfaces.dart';
 
 /// Empty states at accessibility text sizes (spec §6.3).
 ///
@@ -123,16 +124,15 @@ void main() {
         await tester.enterText(find.byType(TextField).first, 'zzz');
         await pumpFrames(tester);
 
-        // The chips scroll sideways, and at these sizes the calorie one
-        // starts well off the right-hand edge.
-        await tester.dragUntilVisible(
-          find.text('Under 600 kcal'),
-          find.byType(Scrollable).at(1),
-          const Offset(-300, 0),
-        );
-        await pumpFrames(tester);
-        await tester.tap(find.text('Under 600 kcal'));
-        await pumpFrames(tester);
+        // The calorie chip lives behind Filters now, with everything else
+        // that used to run off the right-hand edge of the rail (review P6).
+        // Both the rail and the sheet are dragged to rather than reached for:
+        // at 3x on a small phone the sheet's first group fills it, so the
+        // nutrition chips are not built until it is scrolled.
+        final SweepTools tools = SweepTools(tester);
+        await tools.reach(find.textContaining(RegExp(r'^Filters')));
+        await tools.reach(find.text('Under 600 kcal'));
+        await tools.reach(find.text('Done'));
 
         await tester.scrollUntilVisible(
           find.text('No recipes match'),
