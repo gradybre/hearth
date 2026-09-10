@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/app/widgets/swipe_to_delete.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
@@ -366,6 +367,133 @@ void main() {
       expect(find.text('ground beef'), findsNothing);
       // Same undo as the swipe, from the same one place.
       expect(find.text('Deleted ground beef'), findsOneWidget);
+    });
+  });
+
+  group('undoing a deletion and nothing else (spec §5.7)', () {
+    /// Adds a manual item, so there is a second line to change.
+    Future<void> addByHand(WidgetTester tester, String name) async {
+      await tester.tap(find.byTooltip('Add an item by hand'));
+      await pumpFrames(tester);
+      await tester.enterText(find.byType(TextField).last, name);
+      await tester.tap(find.text('Add'));
+      await pumpFrames(tester, frames: 20);
+    }
+
+    Future<void> swipeAndDelete(WidgetTester tester, String name) async {
+      await tester.drag(find.text(name), const Offset(-200, 0));
+      await pumpFrames(tester, frames: 20);
+      // The Delete button of *that* row: every row has one behind it, and
+      // only the swiped-open one can be pressed.
+      await tester.tap(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text(name),
+            matching: find.byType(SwipeToDelete),
+          ),
+          matching: find.widgetWithText(TextButton, 'Delete'),
+        ),
+      );
+      await pumpFrames(tester, frames: 20);
+    }
+
+    Future<void> undo(WidgetTester tester) async {
+      await tester.tap(find.text('Undo'));
+      await pumpFrames(tester, frames: 20);
+    }
+
+    /// Opens a list of two lines: the plan's beef and a manual coffee.
+    Future<void> openTwo(WidgetTester tester) async {
+      await openShopping(tester, entries: <MealPlanEntry>[tonight()]);
+      await build(tester);
+      await addByHand(tester, 'Coffee');
+    }
+
+    testWidgets('a tick made after the deletion survives the Undo', (
+      WidgetTester tester,
+    ) async {
+      // The shop is the whole point: beef comes off the list, the next aisle
+      // gets ticked, and only then does somebody notice the beef was wanted
+      // after all. Undo is that one line coming back — never the list as it
+      // stood before, which would quietly un-tick what has been bought since.
+      await openTwo(tester);
+
+      await swipeAndDelete(tester, 'ground beef');
+      await tester.tap(find.text('Coffee'));
+      await pumpFrames(tester, frames: 20);
+      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+
+      await undo(tester);
+
+      expect(find.text('ground beef'), findsOneWidget);
+      expect(
+        find.byIcon(Icons.check_circle),
+        findsOneWidget,
+        reason: 'the coffee was ticked after the deletion, so Undo leaves it',
+      );
+    });
+
+    testWidgets('and so does an item added after it', (
+      WidgetTester tester,
+    ) async {
+      await openTwo(tester);
+
+      await swipeAndDelete(tester, 'ground beef');
+      await addByHand(tester, 'Paper towels');
+      await undo(tester);
+
+      expect(find.text('ground beef'), findsOneWidget);
+      expect(find.text('Paper towels'), findsOneWidget);
+    });
+
+    testWidgets('the amount sheet’s Remove undoes the same way', (
+      WidgetTester tester,
+    ) async {
+      // The other door onto the same deletion (§6.3's gesture-free path), and
+      // it used to hand back its own stale copy of the list.
+      await openTwo(tester);
+
+      await tester.tap(find.text('1 lb'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Remove from list'));
+      await pumpFrames(tester, frames: 20);
+
+      await tester.tap(find.text('Coffee'));
+      await pumpFrames(tester, frames: 20);
+      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+
+      await undo(tester);
+
+      expect(find.text('ground beef'), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    });
+
+    testWidgets('and the restored line keeps its place in the shop', (
+      WidgetTester tester,
+    ) async {
+      // The order is the route you walk, so a line that comes back at the
+      // bottom of the list has not really come back.
+      await openTwo(tester);
+      final Offset was = tester.getCenter(find.text('ground beef'));
+
+      await swipeAndDelete(tester, 'ground beef');
+      await undo(tester);
+
+      expect(tester.getCenter(find.text('ground beef')), was);
+    });
+
+    testWidgets('and a line added back by hand is not doubled by the Undo', (
+      WidgetTester tester,
+    ) async {
+      // Same key, back on the list already. The one standing there is the
+      // more recent decision, so it stays and Undo has nothing to do.
+      await openTwo(tester);
+      await swipeAndDelete(tester, 'Coffee');
+
+      await addByHand(tester, 'Coffee');
+      await undo(tester);
+
+      expect(find.text('Coffee'), findsOneWidget);
     });
   });
 }

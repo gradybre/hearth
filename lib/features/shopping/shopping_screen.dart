@@ -155,9 +155,7 @@ class _Body extends ConsumerWidget {
                   _save(ref, _replacing(line.ticked(value))),
               onEdit: (ShoppingLine line) => _edit(context, ref, line),
               onRemove: (ShoppingLine line) => _remove(ref, line),
-              // Captured before the removal, so undo restores the order too.
-              onRestore: (ShoppingLine _) =>
-                  _restore(ref, <ShoppingLine>[...lines]),
+              onRestore: (ShoppingLine line) => _restore(ref, line),
             ),
             const SizedBox(height: HearthSpacing.lg),
           ],
@@ -238,18 +236,21 @@ class _Body extends ConsumerWidget {
 
   /// Puts a removed line back where it was.
   ///
-  /// The *whole previous list* is handed back rather than the one line
-  /// re-appended, so an undone removal returns to the position it was dragged
-  /// into rather than to the bottom of the shop (spec §5.7's ordering).
-  Future<void> _restore(WidgetRef ref, List<ShoppingLine> before) =>
-      _save(ref, before);
+  /// The one line, spliced into the list as it stands when Undo is tapped —
+  /// not the list as it stood before the deletion. Whatever happened in
+  /// between is somebody's more recent decision and stays (spec §5.7); the
+  /// repository owns that, because it is the only thing here that can read
+  /// what the list is *now* rather than what this screen last drew.
+  Future<void> _restore(WidgetRef ref, ShoppingLine line) async {
+    await ref.read(shoppingRepositoryProvider).restoreLine(line);
+    ref.invalidate(shoppingListProvider);
+  }
 
   Future<void> _edit(
     BuildContext context,
     WidgetRef ref,
     ShoppingLine line,
   ) async {
-    final List<ShoppingLine> before = <ShoppingLine>[...lines];
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     final ShoppingLine? changed = await showShoppingAmountSheet(
       context,
@@ -259,7 +260,7 @@ class _Body extends ConsumerWidget {
         showUndoSnackBar(
           messenger,
           message: 'Deleted ${line.name}',
-          onUndo: () => _restore(ref, before),
+          onUndo: () => _restore(ref, line),
         );
       },
     );
@@ -466,10 +467,9 @@ class _StoreGroup extends StatelessWidget {
         // the point. One flick removing a line while you scroll a list
         // one-handed in a shop is exactly the accident it exists to prevent.
         //
-        // The undo is a real restore here as it is elsewhere, though by a
-        // different route: the whole previous list is handed back, so the
-        // line returns to the position it was dragged into rather than to
-        // the bottom of the shop.
+        // The undo is a real restore here as it is elsewhere: the one line
+        // goes back into the list as it stands, at the position it was
+        // dragged into rather than at the bottom of the shop.
         return SwipeToDelete(
           key: ValueKey<String>(line.key),
           name: line.name,
