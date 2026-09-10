@@ -97,13 +97,18 @@ declare
   v_reserved numeric;
   v_id uuid;
 begin
-  -- Expiry is swept here rather than on a timer: this function already holds
-  -- the lock, the table is tiny, and a scheduled job is one more thing that
-  -- can stop running without anybody noticing.
-  delete from public.ai_reservations where expires_at <= now();
-
   -- The month's row is the lock everything queues on, so it has to exist
   -- before the first call of the month rather than after it.
+  --
+  -- And it is taken *first*, before this function touches `ai_reservations`
+  -- at all. `settle_ai_spend` locks `ai_usage` and then deletes its own
+  -- reservation; a sweep above this line would take the same two the other
+  -- way round, and the pair deadlocked over a reservation settled after it
+  -- had expired — the stalled isolate the TTL exists for. Postgres breaks
+  -- the tie by aborting one, and an aborted reserve reaches the Edge
+  -- Function as a throw, which `Budget.reserve` cannot tell from an
+  -- unreadable ledger: it answers 503 and refuses an import whose budget was
+  -- never the problem. `supabase/tests/lock_order.sh` holds the order.
   insert into public.ai_usage (month) values (v_month)
     on conflict (month) do nothing;
   select u.cost_usd into v_spent
@@ -111,9 +116,23 @@ begin
     where u.month = v_month
     for update;
 
+  -- Expiry is swept here rather than on a timer: this function already holds
+  -- the lock, the table is tiny, and a scheduled job is one more thing that
+  -- can stop running without anybody noticing. Below the lock above, and
+  -- above the sum below, so what has expired is not counted.
+  delete from public.ai_reservations where expires_at <= now();
+
   select coalesce(sum(r.amount_usd), 0) into v_reserved
     from public.ai_reservations r
     where r.month = v_month;
+
+  -- A null total is not a month that has cost nothing. The insert above means
+  -- the row is there; if anything ever removes it mid-flight, `null >=
+  -- p_ceiling_usd` is null, plpgsql reads null as not-true, and the
+  -- reservation is granted against a ceiling that was never compared — the
+  -- same fail-open, in SQL, that this migration exists to take out of the
+  -- TypeScript.
+  v_spent := coalesce(v_spent, 0);
 
   -- Spent plus outstanding, against the same `>= 1` the function has always
   -- used — the threshold is unchanged, what it is measured over is not. A
@@ -149,7 +168,10 @@ $$;
 --
 -- `ai_usage` first and the reservation second, matching the order
 -- `reserve_ai_spend` takes them in. Two functions taking the same two locks
--- the other way round is a deadlock waiting for a busy month.
+-- the other way round is a deadlock waiting for a stalled isolate, and this
+-- pair had exactly that until `reserve_ai_spend`'s sweep moved below its
+-- lock. `supabase/tests/lock_order.sh` drives both from two connections and
+-- fails if Postgres has to break a tie.
 --
 -- A reservation that has already expired is simply not there to delete, and
 -- the usage is recorded anyway: the money was spent whatever the bookkeeping

@@ -4,8 +4,12 @@ import {
   BilledFailure,
   Budget,
   costOf,
+  DEFAULT_CEILING_USD,
+  INPUT_USD_PER_MTOK,
   ICON_CEILING_FRACTION,
+  maxOutputTokens,
   type Mode,
+  OUTPUT_USD_PER_MTOK,
   RESERVATION_TTL_SECONDS,
   reserveUsd,
   type Rpc,
@@ -176,8 +180,8 @@ Deno.test('what is already reserved counts against the ceiling', async () => {
   const allowed = decisions.filter((d) => d.allowed).length;
 
   assert(allowed < 20, 'all twenty were let through on one stale read');
-  // Six, exactly: $1 of headroom at $0.1694 a call, and the seventh is the
-  // one that finds the ceiling already committed.
+  // Exactly as many as $1 of headroom pays for, and the next is the one that
+  // finds the ceiling already committed.
   assertEquals(allowed, Math.ceil(1 / reserveUsd('extract')));
   assert(
     ledger.spent + ledger.reserved >= CEILING,
@@ -350,6 +354,31 @@ Deno.test('every mode reserves something, and no more than it could spend', asyn
       assert(reserved < CEILING / 10, `${mode} reserves ${reserved}, too much`);
     });
   }
+});
+
+Deno.test('a recipe shared as words is reserved for like one', async () => {
+  // `extract` was reserved from the cap its *fetched page* is sliced to —
+  // 60,000 characters — while the shared-text path is sliced to
+  // `MAX_URL_BYTES` instead: two megabytes, some 700,000 tokens. So the
+  // Instagram creator who answers "recipe" with a DM could bill most of a
+  // dollar against a claim of seventeen cents, and the ceiling would hear
+  // about it only once the call had settled.
+  //
+  // The bound is the context window, because that is where Anthropic stops
+  // charging and starts refusing; reserving against the raw two megabytes
+  // would hold four times what a month could lose.
+  const contextWindow = 200_000;
+  assertEquals(
+    reserveUsd('extract'),
+    Number(
+      (contextWindow / 1e6 * INPUT_USD_PER_MTOK +
+        maxOutputTokens('extract') / 1e6 * OUTPUT_USD_PER_MTOK).toFixed(6),
+    ),
+  );
+
+  // And still small enough that a second import is not refused for money
+  // nobody was going to spend: a default ceiling holds dozens at once.
+  assert(reserveUsd('extract') * 20 < DEFAULT_CEILING_USD);
 });
 
 Deno.test('the reservation is taken before the model is called', async () => {

@@ -95,13 +95,29 @@ export function maxOutputTokens(mode: Mode): number {
   return mode === 'menu' ? 16_000 : mode === 'icon' ? 1500 : 4096;
 }
 
+/// The model's context window, and so the most any one call can be billed for
+/// however much the caller sends it.
+///
+/// The real bound on `extract`. Past this Anthropic answers 400 and charges
+/// nothing, so reserving against the raw slice below would hold four times
+/// what a month could actually lose.
+const MAX_CONTEXT_TOKENS = 200_000;
+
 /// What a mode's input could weigh, in tokens.
 ///
 /// Pessimistic where it can be. An image costs about 1,600 tokens whatever its
 /// size, because anything larger is downscaled before it is counted, so ten
 /// images have a real ceiling. Text is counted at three characters per token
 /// rather than the usual four, against the caps `index.ts` already slices to:
-/// 60,000 characters of page, 20,000 of recipe, 20,000 of list.
+/// 60,000 characters of fetched page, 20,000 of recipe, 20,000 of list — and,
+/// on the extract path, `MAX_URL_BYTES` of shared text.
+///
+/// That last one is why extract is capped rather than summed. A recipe shared
+/// as words — the Instagram creator who answers "recipe" with a DM — is sliced
+/// to two megabytes, some 700,000 tokens, and this function used to return
+/// 36,000 for that mode: seventeen cents claimed against a call that could
+/// bill most of a dollar. The context window is the honest bound, because it
+/// is where the charging stops.
 ///
 /// Generation and shopping are the honest exceptions: their conversations are
 /// capped in number of turns and not in length, so those two figures are a
@@ -112,15 +128,21 @@ export function maxOutputTokens(mode: Mode): number {
 function maxInputTokens(mode: Mode): number {
   const perImage = 1600;
   const maxImages = 10;
+  const perChar = 1 / 3;
+  // `MAX_URL_BYTES` in index.ts, which slices `body.text` by character.
+  const maxSharedTextChars = 2 * 1024 * 1024;
   switch (mode) {
     case 'extract':
-      return maxImages * perImage + 60_000 / 3;
+      return Math.min(
+        maxImages * perImage + (60_000 + maxSharedTextChars) * perChar,
+        MAX_CONTEXT_TOKENS,
+      );
     case 'menu':
     case 'label':
       return maxImages * perImage;
     case 'generate':
     case 'shopping':
-      return 60_000 / 3;
+      return 60_000 * perChar;
     case 'icon':
       // A title sliced to 200 characters, and the prompt around it.
       return 1000;
