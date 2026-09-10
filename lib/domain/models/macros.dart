@@ -170,9 +170,15 @@ enum MacroKind { calories, protein, carbs, fat }
 
 /// The three optional nutrients carried alongside the four macros (spec §5.6).
 ///
-/// Deliberately **not** members of [MacroKind]. That enum drives progress
-/// against `macro_target`, and these have no targets: they are shown where
-/// known and absent where not, never a bar to fill.
+/// Deliberately **not** members of [MacroKind] — but not because they have no
+/// targets. They did not when this enum was written; since schema v22 they do,
+/// nullable, and [dailyValue] below is the fallback when nobody has set one.
+///
+/// They stay separate because they do not behave like the four. [isFloor]
+/// is the reason: fibre is something to reach and the other two are budgets
+/// to stay under, where every member of [MacroKind] fills the same way. An
+/// enum that mixed them would make that distinction somebody's job to
+/// remember.
 enum MinorNutrient {
   fiber('Fibre', 'g'),
   sodium('Sodium', 'mg'),
