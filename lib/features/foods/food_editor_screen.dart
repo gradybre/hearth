@@ -12,6 +12,7 @@ import '../../app/widgets/unsaved_work_guard.dart';
 import '../../data/adapters/label_reader.dart';
 import '../../data/local/editor_draft_store.dart';
 import '../../data/repositories/food_repository.dart';
+import '../../domain/format/serving_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/parsing/amount_parser.dart';
 import '../../domain/shopping/walmart_product.dart';
@@ -178,8 +179,27 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
     // never a block — two genuinely different foods can share a name.
     final List<Food> duplicates = await repository.likelyDuplicatesOf(food);
     if (duplicates.isNotEmpty && mounted) {
-      final bool? proceed = await _confirmDuplicate(duplicates);
-      if (proceed != true) return;
+      final _DuplicateChoice? choice = await _confirmDuplicate(duplicates);
+      if (choice == null || choice.isGoBack) return;
+      // Re-checked after the dialog, not only before it. The guard below has
+      // always been here for this window — a route disposed while a dialog is
+      // open — and the branch underneath reads `ref` and `context`, both of
+      // which throw on a state that has gone.
+      if (!mounted) return;
+
+      // Using the one already there writes nothing at all: no second copy, no
+      // merge, no remap, no soft-delete (review N05, which asks for this half
+      // first for exactly that reason). The id handed back is the existing
+      // food's, so a scan started from a recipe ingredient attaches the food
+      // the household already has rather than a duplicate of it.
+      if (choice.existingId case final String id) {
+        await ref
+            .read(editorDraftStoreProvider)
+            .clear(kind: 'food', targetId: widget.foodId);
+        _restored = false;
+        if (mounted) Navigator.of(context).pop(id);
+        return;
+      }
     }
 
     if (!mounted) return;
@@ -204,12 +224,32 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
     }
   }
 
-  Future<bool?> _confirmDuplicate(List<Food> duplicates) {
+  /// How many duplicates the warning lists before it starts counting.
+  static const int _shown = 3;
+
+  /// What the warning came back with.
+  ///
+  /// Three answers rather than two: go back, save a second copy, or use the
+  /// one already there. The third is the obvious one and was the one missing
+  /// (review N05).
+  Future<_DuplicateChoice?> _confirmDuplicate(List<Food> duplicates) {
     final HearthColors colors = context.colors;
-    return showDialog<bool>(
+
+    // Only when creating. On an edit the editor hands back the id of the food
+    // it was asked to edit, and handing back a different food would answer a
+    // question nobody asked — losing the edit with it.
+    final bool canUseExisting = widget.foodId == null;
+
+    return showDialog<_DuplicateChoice>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
         backgroundColor: colors.surfaceElevated,
+        // Title and content in one scroll view. At three times the text on a
+        // 320-point phone the title alone runs to three lines and the two
+        // actions wrap to two rows, which between them leave the content
+        // negative height — a scrollable content box cannot help with that,
+        // because the overflow is the dialog's own column (spec §6.3).
+        scrollable: true,
         title: Text(
           'Already in your library?',
           style: context.text.sectionHeader,
@@ -225,12 +265,25 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
               style: context.text.body,
             ),
             const SizedBox(height: HearthSpacing.sm),
-            for (final Food duplicate in duplicates.take(3))
+            for (final Food duplicate in duplicates.take(_shown))
+              _DuplicateRow(
+                food: duplicate,
+                onUse: canUseExisting
+                    ? () =>
+                          Navigator.of(context)
+                              .pop(_DuplicateChoice.existing(duplicate.id))
+                    : null,
+              ),
+            // Said rather than silently dropped. The cap is a length choice,
+            // and now that one of these rows is a *choice* it would otherwise
+            // hide candidates without admitting to it — the one somebody
+            // wanted could be the fourth.
+            if (duplicates.length > _shown)
               Text(
-                duplicate.brand == null
-                    ? '· ${duplicate.name}'
-                    : '· ${duplicate.name} (${duplicate.brand})',
-                style: context.text.body.copyWith(color: colors.textSecondary),
+                duplicates.length - _shown == 1
+                    ? 'and 1 more like it'
+                    : 'and ${duplicates.length - _shown} more like it',
+                style: context.text.metadata.copyWith(color: colors.textMuted),
               ),
             const SizedBox(height: HearthSpacing.md),
             Text(
@@ -241,11 +294,13 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
         ),
         actions: <Widget>[
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () =>
+                Navigator.of(context).pop(const _DuplicateChoice.goBack()),
             child: const Text('Go back'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () =>
+                Navigator.of(context).pop(const _DuplicateChoice.saveAnyway()),
             child: const Text('Save anyway'),
           ),
         ],
@@ -1035,6 +1090,78 @@ class _TextFieldState extends State<_TextField> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The three ways out of the duplicate warning (review N05).
+@immutable
+class _DuplicateChoice {
+  const _DuplicateChoice.goBack() : existingId = null, isGoBack = true;
+  const _DuplicateChoice.saveAnyway() : existingId = null, isGoBack = false;
+  const _DuplicateChoice.existing(String id)
+    : existingId = id,
+      isGoBack = false;
+
+  /// The food to use instead, when that is the answer.
+  final String? existingId;
+
+  final bool isGoBack;
+}
+
+/// One food you already have, and the offer to use it.
+///
+/// It shows the serving and the calories as well as the name and the brand,
+/// because the decision is whether this really is the same thing and a name
+/// cannot answer that — N05's own safety note says two foods with similar
+/// names may have different servings or macros.
+class _DuplicateRow extends StatelessWidget {
+  const _DuplicateRow({required this.food, required this.onUse});
+
+  final Food food;
+
+  /// Null while editing, where using a different food would throw the edit
+  /// away and answer with the wrong id.
+  final VoidCallback? onUse;
+
+  String get _title => food.brand == null || food.brand!.isEmpty
+      ? food.name
+      : '${food.name}  ·  ${food.brand}';
+
+  /// Its first serving and what that comes to, or the honest absence.
+  String get _detail {
+    if (food.defaultServing case final ServingOption serving) {
+      return '${ServingFormat.describe(serving)}  ·  '
+          '${serving.macros.kcal.round()} kcal';
+    }
+    return 'no serving recorded';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    // The button under the food rather than beside it. Side by side, a name,
+    // a brand, a serving, a calorie figure and "Use this one" overflowed a
+    // 320-point phone by 27 points at three times the text — and it belongs
+    // to the food above it either way, which reads better than a column of
+    // buttons down the right (spec §6.3).
+    return Padding(
+      padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            _title,
+            style: context.text.body.copyWith(color: colors.textSecondary),
+          ),
+          Text(
+            _detail,
+            style: context.text.metadata.copyWith(color: colors.textMuted),
+          ),
+          if (onUse case final VoidCallback onUse)
+            TextButton(onPressed: onUse, child: const Text('Use this one')),
+        ],
+      ),
     );
   }
 }
