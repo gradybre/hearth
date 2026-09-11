@@ -58,6 +58,7 @@ void main() {
         recipes: galleryRecipes(),
         foods: galleryFoodsFor(scene),
         entries: galleryEntries(day),
+        weekEntries: galleryWeek(day),
         shoppingLines: galleryShoppingLinesFor(scene),
         targets: galleryTargets,
       );

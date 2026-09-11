@@ -8,6 +8,7 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/widgets/macro_rings.dart';
 import '../../app/widgets/minor_nutrient_bars.dart';
+import '../../app/widgets/reading_column.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
@@ -16,20 +17,46 @@ import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
 import '../../domain/planning/week.dart';
+import '../../domain/planning/week_summary.dart';
 import '../../domain/planning/week_template.dart';
 import 'entry_resolver.dart';
-import 'week_strip.dart';
 import 'week_template_sheet.dart';
 
-/// The weekly summary: per-day totals for the four tracked macros (spec §5.6).
+/// The week, as seven days you can read against each other (spec §5.6,
+/// review §7.2).
 ///
-/// This is the step-back view. Tapping a day drops into its detail, which is
-/// where anything actually gets logged.
-class WeekScreen extends ConsumerWidget {
+/// This is the step-back view. It used to be a day selector wearing a week's
+/// name: a strip of seven thirty-point rings above one day's four large ones,
+/// which spent 290 points of a 390x844 phone on one day and 116 on all seven,
+/// and pushed the week's only aggregate off the bottom of the screen
+/// entirely. Comparing two days meant selecting each in turn.
+///
+/// Seven rows now, each carrying its own figures, with the detail behind an
+/// expansion rather than in front of it. Tapping a row still selects the day
+/// without leaving the week, and `Open this day` is still the way into
+/// logging.
+class WeekScreen extends ConsumerStatefulWidget {
   const WeekScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<WeekScreen> createState() => _WeekScreenState();
+}
+
+class _WeekScreenState extends ConsumerState<WeekScreen> {
+  /// The day whose detail is showing, if any.
+  ///
+  /// Nothing is open to begin with, and that is the point: seven rows and the
+  /// week's average all fit a phone, and one expansion is 400 points of rings
+  /// and bars that pushed the average out of the list entirely. §7.2 makes
+  /// expanding an action — "expand a row or open Day for details" — rather
+  /// than a state the screen starts in.
+  ///
+  /// Local rather than derived from the selected day, which persists across
+  /// visits: coming back to the week should show the week.
+  DateTime? _open;
+
+  @override
+  Widget build(BuildContext context) {
     final DateTime selected = ref.watch(selectedDateProvider);
     final List<DateTime> days = weekOf(selected);
     final MacroTargets? targets = ref.watch(dayTargetsProvider).value;
@@ -89,159 +116,376 @@ class WeekScreen extends ConsumerWidget {
             day.key: Macros.sum(day.value),
         };
 
-        final Map<DateTime, int> counts = <DateTime, int>{
+        // What each day amounts to, in the four states §7.2 asks the week to
+        // keep apart. The counts are of *logged* entries rather than of
+        // entries: a Friday with a planned dinner and nothing eaten is not a
+        // day that has been logged, and a day logged as nothing is.
+        final WeekSummary summary = WeekSummary(<WeekDay>[
           for (final DateTime day in days)
-            day: (byDay[day] ?? const <MealPlanEntry>[]).length,
-        };
-        final Macros selectedEaten = eaten[selected] ?? Macros.zero;
-        final List<Macros> selectedParts =
-            eatenParts[selected] ?? const <Macros>[];
-        final List<NutrientCoverage> selectedCoverage =
-            eatenCoverage[selected] ?? const <NutrientCoverage>[];
+            WeekDay(
+              date: day,
+              eaten: eaten[day] ?? Macros.zero,
+              planned: EntryResolver.stillPlanned(
+                resolved[day] ?? const <ResolvedEntry>[],
+              ),
+              loggedCount: (byDay[day] ?? const <MealPlanEntry>[])
+                  .where((MealPlanEntry e) => e.isLogged)
+                  .length,
+              plannedCount: (byDay[day] ?? const <MealPlanEntry>[])
+                  .where((MealPlanEntry e) => !e.isLogged)
+                  .length,
+            ),
+        ]);
 
-        return ListView(
-          padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, gutter * 3),
-          children: <Widget>[
-            _WeekHeader(days: days),
-            const SizedBox(height: HearthSpacing.lg),
-            // The week in one row. Selecting stays here rather than dropping
-            // into the day: the point of a strip is to be able to look across
-            // the week without leaving it.
-            WeekStrip(
-              days: days,
-              selected: selected,
-              eaten: eaten,
-              entryCounts: counts,
-              targets: targets,
-              onSelect: (DateTime day) =>
-                  ref.read(selectedDateProvider.notifier).select(day),
-            ),
-            const SizedBox(height: HearthSpacing.lg),
-            _SelectedDay(
-              day: selected,
-              eaten: selectedEaten,
-              eatenParts: selectedParts,
-              eatenCoverage: selectedCoverage,
-              targets: targets,
-              entryCount: counts[selected] ?? 0,
-              onOpen: () =>
-                  ref.read(planViewProvider.notifier).show(PlanView.day),
-            ),
-            const SizedBox(height: HearthSpacing.lg),
-            _WeekTotals(eaten: eaten.values, targets: targets),
-          ],
+        // Bounded like the other section screens (review §6.2.7): seven rows
+        // of figures stretched across a 1280-point window is not a column
+        // anybody reads down.
+        return ReadingColumn(
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, gutter * 3),
+            children: <Widget>[
+              _WeekHeader(days: days),
+              const SizedBox(height: HearthSpacing.lg),
+              // Seven rows, each with its own figures, and the one that is
+              // selected opened in place. Selecting stays here rather than
+              // dropping into the day: the point of the week is to be able to
+              // look across it without leaving it.
+              _DayRows(
+                summary: summary,
+                selected: selected,
+                targets: targets,
+                eatenParts: eatenParts,
+                eatenCoverage: eatenCoverage,
+                open: _open,
+                onSelect: (DateTime day) {
+                  ref.read(selectedDateProvider.notifier).select(day);
+                  // A second tap closes it again, so a row is a disclosure
+                  // rather than a one-way door.
+                  setState(
+                    () => _open = _open != null && isSameDay(_open!, day)
+                        ? null
+                        : day,
+                  );
+                },
+                onOpen: () =>
+                    ref.read(planViewProvider.notifier).show(PlanView.day),
+              ),
+              const SizedBox(height: HearthSpacing.lg),
+              _WeekTotals(summary: summary, targets: targets),
+            ],
+          ),
         );
       },
     );
   }
 }
 
-/// The day the strip is pointing at, and the way into logging it.
+/// The seven days, one row each, with the selected one opened in place.
 ///
-/// The rings are the same widget the day view uses, so the same four numbers
-/// cannot come to read two different ways on two screens.
-class _SelectedDay extends StatelessWidget {
-  const _SelectedDay({
-    required this.day,
-    required this.eaten,
+/// One card with hairlines between the rows rather than seven cards: the week
+/// is one object and the days are its rows, and seven bordered boxes is the
+/// "a card for nearly everything" complaint (review §6.2.2).
+class _DayRows extends StatelessWidget {
+  const _DayRows({
+    required this.summary,
+    required this.selected,
+    required this.open,
+    required this.targets,
     required this.eatenParts,
     required this.eatenCoverage,
-    required this.targets,
-    required this.entryCount,
+    required this.onSelect,
     required this.onOpen,
   });
 
-  final DateTime day;
-  final Macros eaten;
+  final WeekSummary summary;
 
-  /// The same contributions, unsummed, so the minor-nutrient bars can say how
-  /// much of the day they cover.
-  final List<Macros> eatenParts;
+  /// The day the week is pointing at, marked but not expanded.
+  final DateTime selected;
 
-  /// What those contributions actually speak for, in the same order.
-  final List<NutrientCoverage> eatenCoverage;
+  /// The day whose detail is showing, if any.
+  final DateTime? open;
+
   final MacroTargets? targets;
-  final int entryCount;
+  final Map<DateTime, List<Macros>> eatenParts;
+  final Map<DateTime, List<NutrientCoverage>> eatenCoverage;
+  final ValueChanged<DateTime> onSelect;
   final VoidCallback onOpen;
-
-  static const List<String> _weekdays = <String>[
-    'Mon',
-    'Tue',
-    'Wed',
-    'Thu',
-    'Fri',
-    'Sat',
-    'Sun',
-  ];
-
-  String get _title => isSameDay(day, DateTime.now())
-      ? 'Today'
-      : '${_weekdays[day.weekday - 1]} ${shortDate(day)}';
 
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-
-    return _Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              Expanded(child: Text(_title, style: context.text.sectionHeader)),
-              Text(
-                entryCount == 0
-                    ? 'nothing logged'
-                    : '$entryCount ${entryCount == 1 ? 'item' : 'items'}',
-                style: context.text.metadata.copyWith(color: colors.textMuted),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(HearthRadius.lg),
+        border: Border.all(color: colors.outline),
+      ),
+      // So a row's ink stays inside the rounded corner.
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(HearthRadius.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            for (int i = 0; i < summary.days.length; i++) ...<Widget>[
+              if (i > 0)
+                Divider(height: 1, thickness: 1, color: colors.outline),
+              _DayRow(
+                day: summary.days[i],
+                targets: targets,
+                selected: isSameDay(summary.days[i].date, selected),
+                open: open != null && isSameDay(open!, summary.days[i].date),
+                eatenParts:
+                    eatenParts[summary.days[i].date] ?? const <Macros>[],
+                eatenCoverage:
+                    eatenCoverage[summary.days[i].date] ??
+                    const <NutrientCoverage>[],
+                onSelect: () => onSelect(summary.days[i].date),
+                onOpen: onOpen,
               ),
             ],
-          ),
-          const SizedBox(height: HearthSpacing.md),
-          if (targets == null)
-            Text(
-              'No targets set for this week.',
-              style: context.text.body.copyWith(color: colors.textSecondary),
-            )
-          else ...<Widget>[
-            // Computed once for both, rather than once each: two calls with
-            // the same inputs can drift the moment either gains an argument,
-            // and rings and bars disagreeing about one day would be a bug
-            // nobody could see.
-            if (DayProgress.fromParts(
-                  parts: eatenParts,
-                  coverage: eatenCoverage,
-                  targets: targets!,
-                )
-                case final DayProgress day) ...<Widget>[
-              MacroRings(progress: day),
-              // The same three, on the day the week has selected. A trend is
-              // where these actually mean something, and the week is the only
-              // screen that shows one (spec §5.6).
-              //
-              // Shown whether or not anything has stated a value. The bars say
-              // so themselves — hiding them here made the feature invisible on
-              // exactly the days it most needed explaining.
-              const SizedBox(height: HearthSpacing.lg),
-              MinorNutrientBars(progress: day),
-            ],
           ],
-          const SizedBox(height: HearthSpacing.lg),
-          SizedBox(
-            width: double.infinity,
-            // Height left to Material, which pads its own tap target to 48.
-            // HearthTouch.minTarget is 44 — the iOS figure, and the one this
-            // app is written to — but Android's guideline asks for 48 and the
-            // §6.3 sweep checks both.
-            child: FilledButton(
-              onPressed: onOpen,
-              // The strip no longer navigates, so the way in has to be said
-              // out loud rather than left as a thing you discover.
-              child: const Text('Open this day'),
+        ),
+      ),
+    );
+  }
+}
+
+/// One day, as a line you can read against the six above and below it.
+class _DayRow extends StatelessWidget {
+  const _DayRow({
+    required this.day,
+    required this.targets,
+    required this.selected,
+    required this.open,
+    required this.eatenParts,
+    required this.eatenCoverage,
+    required this.onSelect,
+    required this.onOpen,
+  });
+
+  final WeekDay day;
+  final MacroTargets? targets;
+
+  /// Whether the week is pointing at this day.
+  final bool selected;
+
+  /// Whether its detail is showing.
+  final bool open;
+
+  final List<Macros> eatenParts;
+  final List<NutrientCoverage> eatenCoverage;
+  final VoidCallback onSelect;
+  final VoidCallback onOpen;
+
+  /// What this day says about itself, beside the figures.
+  ///
+  /// Four different facts, and the words are the whole of how they are told
+  /// apart — never the colour of a bar (spec §6.3).
+  String get _state => switch (day.state) {
+    DayLogState.logged => '${day.loggedCount} logged',
+    // Said in full rather than as a zero: a fast and a forgotten day both
+    // show 0, and only one of them is a statement about what was eaten.
+    DayLogState.loggedAsNothing => 'logged as nothing',
+    DayLogState.plannedOnly => 'nothing logged yet',
+    DayLogState.untouched => 'nothing logged',
+  };
+
+  /// The eaten figure, or a dash where there is no figure to give.
+  ///
+  /// A planned day shows what the plan would come to, marked as a plan. An
+  /// untouched one shows nothing at all, because zero is a claim.
+  String _eatenText() => switch (day.state) {
+    DayLogState.logged || DayLogState.loggedAsNothing =>
+      targets?.kcal == null
+          ? '${day.eaten.kcal.round()} kcal'
+          : '${day.eaten.kcal.round()} / ${targets!.kcal.round()} kcal',
+    // Only when the plan actually projects something. An entry whose food
+    // was never matched contributes no calories, and "planned 0 kcal" says
+    // the plan comes to nothing — which is a claim, and a different one.
+    DayLogState.plannedOnly =>
+      day.planned.kcal > 0 ? 'planned ${day.planned.kcal.round()} kcal' : '—',
+    DayLogState.untouched => '—',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final bool today = day.isToday(DateTime.now());
+    final String name =
+        '${shortWeekdayName(day.date)} ${day.date.day}'
+        '${today ? ' · Today' : ''}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Semantics(
+          button: true,
+          selected: selected,
+          expanded: open,
+          // The whole row in one announcement, in the order it is read:
+          // which day, what it came to, and which kind of day it was. The
+          // weekday is spelled out and the date carries its month — a bare
+          // "1" is unreadable in a week that straddles two, and the screen
+          // shows three letters and a numeral.
+          label:
+              '${weekdayName(day.date)} ${shortDate(day.date)}'
+              '${day.isToday(DateTime.now()) ? ', today' : ''}. '
+              '${_eatenText()}. $_state',
+          onTap: onSelect,
+          container: true,
+          excludeSemantics: true,
+          child: Material(
+            color: selected ? colors.surfaceSunken : Colors.transparent,
+            child: InkWell(
+              onTap: onSelect,
+              child: ConstrainedBox(
+                // Android's 48 rather than the shared 44: this is a bare
+                // InkWell, so nothing pads it the way a ListTile pads itself,
+                // and the §6.3 sweep checks both guidelines.
+                constraints: const BoxConstraints(
+                  minHeight: HearthTouch.androidTarget,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: HearthSpacing.md,
+                    vertical: HearthSpacing.sm,
+                  ),
+                  // A wrap, not a row: at three times the text a date, a pair
+                  // of calorie figures and a protein figure are far wider
+                  // than a 320-point phone, and honouring type means the
+                  // layout gives way rather than the words (spec §6.3).
+                  child: Wrap(
+                    spacing: HearthSpacing.md,
+                    runSpacing: HearthSpacing.xxs,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: <Widget>[
+                      // A floor, not a fixed width. 84 points lines the seven
+                      // names up at ordinary text; at three times it, "Mon 7"
+                      // does not fit in 84 and a fixed box wrapped every row
+                      // to three lines. The column alignment is worth having
+                      // and is not worth honouring dynamic type less for
+                      // (spec §6.3).
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 84),
+                        child: Text(
+                          name,
+                          style: context.text.body.copyWith(
+                            fontWeight: today
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        _eatenText(),
+                        style: context.text.body.copyWith(
+                          fontFeatures: const <FontFeature>[
+                            FontFeature.tabularFigures(),
+                          ],
+                        ),
+                      ),
+                      // §7.2 names protein among the four things a row
+                      // carries: it is the number this household steers by,
+                      // and the one a day can miss while its calories look
+                      // right.
+                      if (day.state == DayLogState.logged)
+                        if (targets?.proteinG case final double protein)
+                          Text(
+                            'P ${day.eaten.proteinG.round()}/'
+                            '${protein.round()}',
+                            style: context.text.metadata.copyWith(
+                              color: colors.textSecondary,
+                              fontFeatures: const <FontFeature>[
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                      Text(
+                        _state,
+                        style: context.text.metadata.copyWith(
+                          color: colors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
+        ),
+        if (open)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              HearthSpacing.md,
+              0,
+              HearthSpacing.md,
+              HearthSpacing.md,
+            ),
+            child: _DayDetail(
+              targets: targets,
+              eatenParts: eatenParts,
+              eatenCoverage: eatenCoverage,
+              onOpen: onOpen,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// The rings and the minor nutrients, for the row that is open.
+///
+/// The same widgets the day view uses, so the same four numbers cannot come
+/// to read two different ways on two screens. §7.2 asks for exactly this:
+/// "existing rings/minors move into that expansion".
+class _DayDetail extends StatelessWidget {
+  const _DayDetail({
+    required this.targets,
+    required this.eatenParts,
+    required this.eatenCoverage,
+    required this.onOpen,
+  });
+
+  final MacroTargets? targets;
+  final List<Macros> eatenParts;
+  final List<NutrientCoverage> eatenCoverage;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (targets == null)
+          Text(
+            'No targets set for this week.',
+            style: context.text.body.copyWith(color: colors.textSecondary),
+          )
+        else if (DayProgress.fromParts(
+              parts: eatenParts,
+              coverage: eatenCoverage,
+              targets: targets!,
+            )
+            case final DayProgress progress) ...<Widget>[
+          MacroRings(progress: progress),
+          // The same three, on the day the week has selected. A trend is
+          // where these actually mean something, and the week is the only
+          // screen that shows one (spec §5.6).
+          const SizedBox(height: HearthSpacing.lg),
+          MinorNutrientBars(progress: progress),
         ],
-      ),
+        const SizedBox(height: HearthSpacing.md),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            onPressed: onOpen,
+            // A row selects rather than navigates, so the way in has to be
+            // said out loud rather than left as a thing you discover.
+            child: const Text('Open this day'),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -279,18 +523,17 @@ class _WeekHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) => Row(
     children: <Widget>[
+      // The range, and no page title above it. "This week" sat under a
+      // Day/Week toggle that already says Week, under a "Nutrition" section
+      // header, under "Home" — four headings before any food (review
+      // §6.2.1) — and at twice the text on a 320-point phone those two words
+      // alone were 490 points tall in a 380-point viewport.
       Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text('This week', style: context.text.recipeTitle),
-            Text(
-              _range,
-              style: context.text.metadata.copyWith(
-                color: context.colors.textMuted,
-              ),
-            ),
-          ],
+        child: Text(
+          _range,
+          style: context.text.sectionHeader.copyWith(
+            color: context.colors.textSecondary,
+          ),
         ),
       ),
       IconButton(
@@ -308,17 +551,29 @@ class _WeekHeader extends ConsumerWidget {
         tooltip: 'Next week',
         icon: const Icon(Icons.chevron_right),
       ),
-      // The structural twin of the copy-day button in the day header: the
-      // same question — "put these meals on those days" — one level up.
-      IconButton(
-        onPressed: () => _save(context, ref),
-        tooltip: 'Save this week to use again',
-        icon: const Icon(Icons.bookmark_add_outlined),
-      ),
-      IconButton(
-        onPressed: () => _apply(context, ref),
-        tooltip: 'Use a saved week',
-        icon: const Icon(Icons.bookmarks_outlined),
+      // The two template actions, in words. They were icon-only with their
+      // meaning in a tooltip — a hover, on a device with no pointer — and a
+      // bookmark and a bookmark-with-a-plus are not two things anybody tells
+      // apart at sixteen points (review §7.2, spec §6.3). The three arrows
+      // beside them stay as arrows: previous, today and next are
+      // conventional and unambiguous.
+      PopupMenuButton<VoidCallback>(
+        icon: const Icon(Icons.more_vert),
+        tooltip: 'More',
+        onSelected: (VoidCallback run) => run(),
+        itemBuilder: (BuildContext context) => <PopupMenuEntry<VoidCallback>>[
+          PopupMenuItem<VoidCallback>(
+            value: () => _save(context, ref),
+            child: Text(
+              'Save this week to use again',
+              style: context.text.body,
+            ),
+          ),
+          PopupMenuItem<VoidCallback>(
+            value: () => _apply(context, ref),
+            child: Text('Use a saved week', style: context.text.body),
+          ),
+        ],
       ),
     ],
   );
@@ -387,51 +642,52 @@ class _WeekHeader extends ConsumerWidget {
 /// An average rather than a sum: targets are daily, so a total of seven days
 /// against one day's target would be meaningless, and "you ate 15,000
 /// calories" tells you nothing without dividing it back down yourself.
+///
+/// What counts is having *logged*, not having eaten. This used to filter on
+/// `!macros.isZero`, which quietly dropped a day somebody fasted and stated —
+/// so four days at 2,000 and a Saturday at nothing reported a daily average
+/// of 2,000 rather than 1,600, four hundred calories a day of food nobody
+/// ate. Days with nothing on them are excluded, because there is no number to
+/// average, and the count says how many so an average over five is not read
+/// as an average over seven (review §7.2).
 class _WeekTotals extends StatelessWidget {
-  const _WeekTotals({required this.eaten, required this.targets});
+  const _WeekTotals({required this.summary, required this.targets});
 
-  final Iterable<Macros> eaten;
+  final WeekSummary summary;
   final MacroTargets? targets;
 
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    final List<Macros> loggedDays = eaten
-        .where((Macros m) => !m.isZero)
-        .toList(growable: false);
 
-    if (loggedDays.isEmpty) {
+    if (summary.dailyAverage case final Macros average) {
       return _Card(
-        child: Text(
-          'Nothing logged this week yet.',
-          style: context.text.body.copyWith(color: colors.textSecondary),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text('Daily average', style: context.text.sectionHeader),
+            const SizedBox(height: HearthSpacing.xxs),
+            Text(
+              <String>[
+                summary.loggedDays == 1
+                    ? 'over 1 logged day'
+                    : 'over ${summary.loggedDays} logged days',
+                if (summary.daysNotLogged > 0)
+                  '${summary.daysNotLogged} not logged',
+              ].join(' · '),
+              style: context.text.metadata.copyWith(color: colors.textMuted),
+            ),
+            const SizedBox(height: HearthSpacing.md),
+            _MacroRow(macros: average, targets: targets),
+          ],
         ),
       );
     }
 
-    final Macros total = Macros.sum(loggedDays);
-    final Macros average = total.scaledBy(1 / loggedDays.length);
-
     return _Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: Text('Daily average', style: context.text.sectionHeader),
-              ),
-              Text(
-                loggedDays.length == 1
-                    ? 'over 1 logged day'
-                    : 'over ${loggedDays.length} logged days',
-                style: context.text.metadata.copyWith(color: colors.textMuted),
-              ),
-            ],
-          ),
-          const SizedBox(height: HearthSpacing.md),
-          _MacroRow(macros: average, targets: targets),
-        ],
+      child: Text(
+        'Nothing logged this week yet.',
+        style: context.text.body.copyWith(color: colors.textSecondary),
       ),
     );
   }

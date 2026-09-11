@@ -9,6 +9,7 @@ import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
 import '../../app/widgets/macro_rings.dart';
 import '../../app/widgets/minor_nutrient_bars.dart';
+import '../../app/widgets/reading_column.dart';
 import '../../app/widgets/swipe_to_delete.dart';
 import '../../data/repositories/plan_repository.dart';
 import '../../domain/models/food.dart';
@@ -64,27 +65,34 @@ class DayScreen extends ConsumerWidget {
           foods: foods,
         );
 
-        return ListView(
-          padding: EdgeInsets.fromLTRB(
-            gutter,
-            HearthSpacing.lg,
-            gutter,
-            gutter * 3,
-          ),
-          children: <Widget>[
-            _DayHeader(date: date),
-            const SizedBox(height: HearthSpacing.lg),
-            _RemainingCard(entries: resolved, targets: targets),
-            const SizedBox(height: HearthSpacing.xl),
-            for (final MealSlot slot in MealSlot.values) ...<Widget>[
-              _SlotSection(
-                slot: slot,
-                entries: EntryResolver.inSlot(resolved, slot),
-                date: date,
-              ),
+        // Bounded like the other section screens (review §6.2.7). Plan is the
+        // one #61 missed, and it shows worst on the week — a row of a day's
+        // figures laid across a metre of desk is not a row anybody reads
+        // across. Both halves of the Day/Week toggle, so switching does not
+        // change the width of the page under it.
+        return ReadingColumn(
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              HearthSpacing.lg,
+              gutter,
+              gutter * 3,
+            ),
+            children: <Widget>[
+              _DayHeader(date: date),
               const SizedBox(height: HearthSpacing.lg),
+              _RemainingCard(entries: resolved, targets: targets),
+              const SizedBox(height: HearthSpacing.xl),
+              for (final MealSlot slot in MealSlot.values) ...<Widget>[
+                _SlotSection(
+                  slot: slot,
+                  entries: EntryResolver.inSlot(resolved, slot),
+                  date: date,
+                ),
+                const SizedBox(height: HearthSpacing.lg),
+              ],
             ],
-          ],
+          ),
         );
       },
     );

@@ -976,6 +976,98 @@ List<MealPlanEntry> galleryEntries(DateTime day) => <MealPlanEntry>[
   ),
 ];
 
+/// A week with seven days that differ from each other (review §7.2).
+///
+/// The point of the week screen is comparison, and until this existed there
+/// was nothing to compare: `weekEntriesProvider` was overridden with an empty
+/// map in every test and every render, so the screen had only ever been drawn
+/// with nothing on it. Every state §7.2 asks the week to tell apart is here,
+/// keyed to [days] (Monday first):
+///
+/// * **Mon, Tue, Wed, Thu** — logged, and to different totals, so a row can
+///   be over on one day and under on another.
+/// * **Fri** — planned but nothing logged yet. A projection, not a result.
+/// * **Sat** — a day with entries deliberately logged as nothing, which is not
+///   the same fact as a day nobody touched.
+/// * **Sun** — untouched. In a week whose Thursday is today, it is also in the
+///   future, and §7.2 is explicit that a future day is not a failure.
+Map<DateTime, List<MealPlanEntry>> galleryWeek(DateTime today) {
+  final List<DateTime> days = weekOf(today);
+
+  MealPlanEntry logged(
+    DateTime day,
+    MealSlot slot,
+    String id,
+    Macros macros, {
+    double servings = 1,
+    String label = '1 serving',
+  }) => MealPlanEntry(
+    id: '$id-${day.day}',
+    dayId: 'day-${day.day}',
+    slot: slot,
+    refType: PlanRefType.food,
+    refId: 'f-yog',
+    servings: servings,
+    isPlanned: false,
+    isLogged: true,
+    loggedAt: day,
+    macroSnapshot: MacroSnapshot(
+      macros: macros,
+      servings: servings,
+      capturedAt: day,
+      label: label,
+    ),
+  );
+
+  /// A day's worth: breakfast, lunch and dinner scaled from one shape, so the
+  /// seven days differ by amount rather than by being seven unrelated lists.
+  List<MealPlanEntry> aDay(DateTime day, double of) => <MealPlanEntry>[
+    logged(
+      day,
+      MealSlot.breakfast,
+      'e-b',
+      Macros(kcal: 420 * of, proteinG: 32 * of, carbG: 44 * of, fatG: 12 * of),
+      label: '170 g',
+    ),
+    logged(
+      day,
+      MealSlot.lunch,
+      'e-l',
+      Macros(kcal: 640 * of, proteinG: 46 * of, carbG: 58 * of, fatG: 22 * of),
+    ),
+    logged(
+      day,
+      MealSlot.dinner,
+      'e-d',
+      Macros(kcal: 780 * of, proteinG: 58 * of, carbG: 62 * of, fatG: 30 * of),
+    ),
+  ];
+
+  return <DateTime, List<MealPlanEntry>>{
+    days[0]: aDay(days[0], 1.0),
+    days[1]: aDay(days[1], 1.18),
+    days[2]: aDay(days[2], 0.74),
+    days[3]: aDay(days[3], 0.55),
+    // Planned, not logged: tomorrow's dinner is on the plan and has cost
+    // nothing yet.
+    days[4]: <MealPlanEntry>[
+      MealPlanEntry(
+        id: 'e-planned-${days[4].day}',
+        dayId: 'day-${days[4].day}',
+        slot: MealSlot.dinner,
+        refType: PlanRefType.recipe,
+        refId: 'r-chilli',
+        servings: 1,
+      ),
+    ],
+    // Logged as nothing, which is a statement. An untouched day is not.
+    days[5]: <MealPlanEntry>[
+      logged(days[5], MealSlot.breakfast, 'e-zero', Macros.zero, label: 'none'),
+    ],
+    days[6]: const <MealPlanEntry>[],
+  };
+}
+
 /// One line of the shopping fixture.
 ///
 /// [store] is the shop the line is tagged with, which is the only thing the
@@ -1252,6 +1344,28 @@ const List<Scene> scenes = <Scene>[
       'Guacamole',
       'Tortilla chips',
     ],
+  ),
+  // Week, which the review calls a day selector rather than a comparison
+  // (§7.2): "comparing seven days takes repeated selection and scrolling".
+  Scene(name: 'week', target: LaunchTarget.today, taps: <String>['Week']),
+  Scene(
+    name: 'week-dark',
+    target: LaunchTarget.today,
+    brightness: Brightness.dark,
+    taps: <String>['Week'],
+  ),
+  Scene(
+    name: 'week-large-text',
+    target: LaunchTarget.today,
+    size: Size(320, 568),
+    textScale: 2.0,
+    taps: <String>['Week'],
+  ),
+  Scene(
+    name: 'week-desktop',
+    target: LaunchTarget.today,
+    size: Size(1280, 900),
+    taps: <String>['Week'],
   ),
   // Settings, which the review calls "a long expanded page [that] exposes
   // every option at once" (§7.8). One viewport is all a frame can hold, so

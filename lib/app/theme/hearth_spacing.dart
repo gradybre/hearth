@@ -57,6 +57,13 @@ abstract final class HearthTouch {
   /// Apple's and Material's shared floor.
   static const double minTarget = 44;
 
+  /// Android's floor, which is the higher of the two.
+  ///
+  /// The §6.3 sweep checks both guidelines, so a control built to 44 and not
+  /// padded by Material fails one of them. Material's own widgets pad to 48
+  /// on their own; anything hand-built has to say so.
+  static const double androidTarget = 48;
+
   /// Cook-along and logging are used at arm's length with messy hands, so
   /// their controls get a deliberately larger target (spec §5.2, §5.6).
   static const double kitchenTarget = 60;

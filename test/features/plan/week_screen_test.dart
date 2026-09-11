@@ -37,11 +37,13 @@ void main() {
 
       await showWeek(tester);
 
-      expect(find.text('This week'), findsOneWidget);
+      // The week is named by the toggle above it and dated by its range;
+      // there is no page title under either any more (review §6.2.1).
+      expect(find.textContaining('–'), findsWidgets);
       expect(find.text('Breakfast'), findsNothing);
     });
 
-    testWidgets('the strip carries all seven days, Monday first', (
+    testWidgets('the week carries all seven days, Monday first', (
       WidgetTester tester,
     ) async {
       await openPlan(tester);
@@ -59,25 +61,24 @@ void main() {
         expect(
           find.bySemanticsLabel(RegExp('${day.month}/${day.day}[.,]')),
           findsOneWidget,
-          reason: 'day $i should be in the strip',
+          reason: 'day $i should have a row',
         );
       }
       // Monday first, whatever today happens to be (spec §5.6).
       expect(find.bySemanticsLabel(RegExp('^Monday ')), findsOneWidget);
     });
 
-    testWidgets('today is named, and only to a screen reader is it a word', (
+    testWidgets('today is named, in the row and in its label', (
       WidgetTester tester,
     ) async {
-      // A column is too narrow for "Today", so on screen it is the bold
-      // initial that says so — never colour alone (§6.3). The label spells it
-      // out for anyone who cannot see the weight.
+      // A row has the width for it now, so "Today" is on the screen as well
+      // as in the label — the weight it is drawn in was never the only
+      // signal, and now it is not a signal at all (§6.3).
       await openPlan(tester);
       await showWeek(tester);
 
       expect(find.bySemanticsLabel(RegExp(', today[.]')), findsOneWidget);
-      // And the card below names the selected day, which opens on today.
-      expect(find.text('Today'), findsOneWidget);
+      expect(find.textContaining('· Today'), findsOneWidget);
     });
 
     testWidgets('a date says which month it is in', (
@@ -104,7 +105,10 @@ void main() {
       await showWeek(tester);
 
       expect(find.text('Nothing logged this week yet.'), findsOneWidget);
-      expect(find.text('nothing logged'), findsOneWidget);
+      // One per day, and all seven of them say the same thing: nobody has
+      // logged anything. A day logged as nothing would read differently.
+      expect(find.text('nothing logged'), findsNWidgets(7));
+      expect(find.text('logged as nothing'), findsNothing);
     });
 
     testWidgets('tapping a day selects it without leaving the week', (
@@ -129,20 +133,22 @@ void main() {
       );
       await pumpFrames(tester);
 
-      expect(find.text('This week'), findsOneWidget);
       expect(find.text('Breakfast'), findsNothing);
-      // The card below follows the strip.
-      expect(find.text('Today'), findsNothing);
+      // Still on the week, and the row that was tapped has opened in place.
+      expect(find.text('Open this day'), findsOneWidget);
     });
 
     testWidgets('and the way into logging is said out loud', (
       WidgetTester tester,
     ) async {
-      // The strip no longer navigates, so the day view needs a door rather
-      // than a hint that tapping a row would take you there.
+      // A row selects and expands rather than navigating, so the day view
+      // needs a door rather than a hint that tapping a row would take you
+      // there.
       await openPlan(tester);
       await showWeek(tester);
 
+      await tester.tap(find.bySemanticsLabel(RegExp(', today[.]')));
+      await pumpFrames(tester);
       await tester.tap(find.text('Open this day'));
       await pumpFrames(tester);
 

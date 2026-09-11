@@ -143,6 +143,45 @@ void main() {
     }
   }
 
+  group('the week, and a day opened on it', () {
+    // Seven rows of four figures each, which is the shape that breaks first
+    // at large text — a fixed-width day column wrapped every row to three
+    // lines before it was made a floor instead (review §7.2).
+    for (final Size size in <Size>[phone, smallPhone]) {
+      for (final double scale in scales) {
+        testWidgets('survives ${scale}x text at ${size.width}', (
+          WidgetTester tester,
+        ) async {
+          await open(
+            tester,
+            scale: scale,
+            brightness: Brightness.light,
+            size: size,
+            launchTarget: LaunchTarget.today,
+          );
+          await pumpFrames(tester);
+          await tester.tap(find.text('Week').last);
+          await pumpFrames(tester, frames: 10);
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: 'the week overflowed at ${scale}x on a ${size.width} phone',
+          );
+
+          // And with a row opened, which is where the rings and the three
+          // minor-nutrient bars come back.
+          await tester.tap(find.bySemanticsLabel(RegExp(', today[.]')));
+          await pumpFrames(tester, frames: 10);
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: 'an opened day overflowed at ${scale}x',
+          );
+        });
+      }
+    }
+  });
+
   group('settings, and the six pages behind it', () {
     // Seven screens rather than one since the index landed (review §7.8), and
     // the rows are the shape that breaks first: a label and a value on one

@@ -46,6 +46,12 @@ const List<String> _months = <String>[
 /// private copy of this list, and a fourth was about to.
 String weekdayName(DateTime date) => _weekdays[date.weekday - 1];
 
+/// The weekday in three letters, for a row that has to fit seven of them.
+///
+/// Taken from the same list rather than spelled out again: two lists of
+/// weekdays is two chances for one of them to start on Sunday.
+String shortWeekdayName(DateTime date) => weekdayName(date).substring(0, 3);
+
 /// The month, spelled out.
 String monthName(DateTime date) => _months[date.month - 1];
 
