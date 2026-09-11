@@ -669,15 +669,40 @@ final Provider<AsyncValue<RepairQueue>> repairQueueProvider =
       // Both or neither: a queue built while the foods are still loading
       // would report every matched line as unmatched, which is the one thing
       // a repair list must never do.
-      if (foods.value case final List<Food> library) {
-        return recipes.whenData(
-          (List<Recipe> all) => RepairQueue.build(
-            recipes: all,
-            foods: <String, Food>{for (final Food f in library) f.id: f},
+      //
+      // An error travels rather than being read as "not yet". The screen
+      // draws `loading` as a spinner with no words, so a food store that
+      // threw — a corrupt row, a migration that did not land — would have
+      // spun there until the app was killed, saying nothing.
+      return switch ((recipes, foods)) {
+        (
+          AsyncError<List<Recipe>>(
+            :final Object error,
+            :final StackTrace stackTrace,
           ),
-        );
-      }
-      return const AsyncValue<RepairQueue>.loading();
+          _,
+        ) =>
+          AsyncValue<RepairQueue>.error(error, stackTrace),
+        (
+          _,
+          AsyncError<List<Food>>(
+            :final Object error,
+            :final StackTrace stackTrace,
+          ),
+        ) =>
+          AsyncValue<RepairQueue>.error(error, stackTrace),
+        (
+          AsyncData<List<Recipe>>(value: final List<Recipe> all),
+          AsyncData<List<Food>>(value: final List<Food> library),
+        ) =>
+          AsyncValue<RepairQueue>.data(
+            RepairQueue.build(
+              recipes: all,
+              foods: <String, Food>{for (final Food f in library) f.id: f},
+            ),
+          ),
+        _ => const AsyncValue<RepairQueue>.loading(),
+      };
     });
 
 /// A recipe's per-serving macros, but only when every ingredient counted.

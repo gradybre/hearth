@@ -72,22 +72,28 @@ class FoodRepair {
 /// Everything in the library that is not finished (review N04).
 @immutable
 class RepairQueue {
-  const RepairQueue({required this.recipes, required this.foods});
+  RepairQueue({required this.recipes, required this.foods})
+    : unloggable = <FoodRepair>[
+        for (final FoodRepair f in foods)
+          if (f.kind == FoodRepairKind.cannotBeLogged) f,
+      ],
+      silent = <FoodRepair>[
+        for (final FoodRepair f in foods)
+          if (f.kind == FoodRepairKind.silentOnMinors) f,
+      ];
 
   final List<RecipeRepair> recipes;
   final List<FoodRepair> foods;
 
   /// Foods that cannot be logged as they stand — the ones that are wrong.
-  List<FoodRepair> get unloggable => <FoodRepair>[
-    for (final FoodRepair f in foods)
-      if (f.kind == FoodRepairKind.cannotBeLogged) f,
-  ];
+  ///
+  /// Split once rather than per access: the screen reads both lists three
+  /// times between them while it builds, and `outstanding` and `isEmpty` read
+  /// them again.
+  final List<FoodRepair> unloggable;
 
   /// Foods that simply never stated the three — the ones that are quiet.
-  List<FoodRepair> get silent => <FoodRepair>[
-    for (final FoodRepair f in foods)
-      if (f.kind == FoodRepairKind.silentOnMinors) f,
-  ];
+  final List<FoodRepair> silent;
 
   /// How many things are actually wrong.
   ///
