@@ -182,6 +182,39 @@ void main() {
     });
   });
 
+  testWidgets('the warning survives a small phone at three times the text', (
+    WidgetTester tester,
+  ) async {
+    // Walked here rather than by the flow sweep, and deliberately said out
+    // loud in `swept_surfaces.dart`: the surface guard is per *file*, and
+    // this file already had an entry for its discard dialog — so a second
+    // dialog in it would have shipped with nothing walking it.
+    //
+    // Three duplicates, each with a name, a brand, a serving and a calorie
+    // figure, is taller than a 320-point phone at 3x, which is why the
+    // content scrolls.
+    await pumpHearthApp(
+      tester,
+      size: const Size(320, 568),
+      textScale: 3,
+      foods: <Food>[
+        yogurt(),
+        aFood('Greek yogurt', id: 'f-2', brand: 'Chobani'),
+        aFood('Greek yogurt', id: 'f-3', brand: 'Skyr'),
+      ],
+    );
+    await tester.tap(find.text('Foods').last);
+    await pumpFrames(tester);
+    await tester.tap(find.text('Add food'));
+    await pumpFrames(tester);
+    await tester.tap(find.text('Enter it by hand'));
+    await pumpFrames(tester);
+    await saveAs(tester, 'Greek yogurt');
+
+    expect(find.text('Already in your library?'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('editing a food is never offered somebody else\'s', (
     WidgetTester tester,
   ) async {

@@ -236,38 +236,42 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
       context: context,
       builder: (BuildContext context) => AlertDialog(
         backgroundColor: colors.surfaceElevated,
+        // Title and content in one scroll view. At three times the text on a
+        // 320-point phone the title alone runs to three lines and the two
+        // actions wrap to two rows, which between them leave the content
+        // negative height — a scrollable content box cannot help with that,
+        // because the overflow is the dialog's own column (spec §6.3).
+        scrollable: true,
         title: Text(
           'Already in your library?',
           style: context.text.sectionHeader,
         ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                duplicates.length == 1
-                    ? 'This looks like a food you already have:'
-                    : 'This looks like foods you already have:',
-                style: context.text.body,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              duplicates.length == 1
+                  ? 'This looks like a food you already have:'
+                  : 'This looks like foods you already have:',
+              style: context.text.body,
+            ),
+            const SizedBox(height: HearthSpacing.sm),
+            for (final Food duplicate in duplicates.take(3))
+              _DuplicateRow(
+                food: duplicate,
+                onUse: canUseExisting
+                    ? () =>
+                          Navigator.of(context)
+                              .pop(_DuplicateChoice.existing(duplicate.id))
+                    : null,
               ),
-              const SizedBox(height: HearthSpacing.sm),
-              for (final Food duplicate in duplicates.take(3))
-                _DuplicateRow(
-                  food: duplicate,
-                  onUse: canUseExisting
-                      ? () =>
-                            Navigator.of(context)
-                                .pop(_DuplicateChoice.existing(duplicate.id))
-                      : null,
-                ),
-              const SizedBox(height: HearthSpacing.md),
-              Text(
-                'You can still save it — two things can share a name.',
-                style: context.text.metadata.copyWith(color: colors.textMuted),
-              ),
-            ],
-          ),
+            const SizedBox(height: HearthSpacing.md),
+            Text(
+              'You can still save it — two things can share a name.',
+              style: context.text.metadata.copyWith(color: colors.textMuted),
+            ),
+          ],
         ),
         actions: <Widget>[
           TextButton(
@@ -1117,34 +1121,26 @@ class _DuplicateRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
+    // The button under the food rather than beside it. Side by side, a name,
+    // a brand, a serving, a calorie figure and "Use this one" overflowed a
+    // 320-point phone by 27 points at three times the text — and it belongs
+    // to the food above it either way, which reads better than a column of
+    // buttons down the right (spec §6.3).
     return Padding(
       padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  _title,
-                  style: context.text.body.copyWith(
-                    color: colors.textSecondary,
-                  ),
-                ),
-                Text(
-                  _detail,
-                  style: context.text.metadata.copyWith(
-                    color: colors.textMuted,
-                  ),
-                ),
-              ],
-            ),
+          Text(
+            _title,
+            style: context.text.body.copyWith(color: colors.textSecondary),
           ),
-          if (onUse case final VoidCallback onUse) ...<Widget>[
-            const SizedBox(width: HearthSpacing.sm),
+          Text(
+            _detail,
+            style: context.text.metadata.copyWith(color: colors.textMuted),
+          ),
+          if (onUse case final VoidCallback onUse)
             TextButton(onPressed: onUse, child: const Text('Use this one')),
-          ],
         ],
       ),
     );
