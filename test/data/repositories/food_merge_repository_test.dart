@@ -5,11 +5,15 @@ import 'package:hearth/data/local/food_store.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/data/local/ingredient_match_store.dart';
 import 'package:hearth/data/local/pending_write_store.dart';
+import 'package:hearth/data/local/plan_store.dart';
 import 'package:hearth/data/local/recipe_store.dart';
+import 'package:hearth/data/local/shopping_store.dart';
 import 'package:hearth/data/repositories/food_merge_repository.dart';
 import 'package:hearth/data/repositories/food_repository.dart';
 import 'package:hearth/data/repositories/ingredient_match_repository.dart';
+import 'package:hearth/data/repositories/plan_repository.dart';
 import 'package:hearth/data/repositories/recipe_repository.dart';
+import 'package:hearth/data/repositories/shopping_repository.dart';
 import 'package:hearth/domain/foods/food_merge.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
@@ -57,6 +61,20 @@ void main() {
       matches: IngredientMatchRepository(
         database: db,
         store: IngredientMatchStore(db),
+        queue: queue,
+        householdId: 'household-1',
+        now: () => now,
+      ),
+      plan: PlanRepository(
+        database: db,
+        store: PlanStore(db),
+        queue: queue,
+        userId: 'user-1',
+        clock: () => now,
+      ),
+      shopping: ShoppingRepository(
+        database: db,
+        store: ShoppingStore(db),
         queue: queue,
         householdId: 'household-1',
         now: () => now,
@@ -255,20 +273,56 @@ void main() {
     });
 
     test('and queues every change for the other phone', () async {
+      // Every one, not just the foods. The retirement syncs whatever else
+      // does, so a moved plan entry that never left this device leaves the
+      // partner's phone with a planned meal pointing at a food that has been
+      // deleted there — and a planned entry has no snapshot to fall back on,
+      // so it reads as "Removed food".
       final (Food keep, Food go) = await twoFoods();
+      await _logAMeal(db, foodId: 'f-go', servings: 1, logged: false);
+      await _aShoppingLine(db, foodId: 'f-go');
       await drainQueue();
 
       await merger.apply(await merger.plan(survivor: keep, retiring: go));
 
       final List<String> queued = (await db.select(db.pendingWrites).get())
-          .map((PendingWriteRow r) => '${r.entityTable}:${r.entityId}')
+          .map((PendingWriteRow r) => r.entityTable)
           .toList();
-      expect(queued, contains('foods:f-keep'));
+      expect(queued, contains('foods'));
       expect(
         queued,
-        contains('foods:f-go'),
-        reason: 'the retirement has to travel too',
+        contains('meal_plan_entries'),
+        reason: 'the moved plan entry has to travel',
       );
+      expect(
+        queued,
+        contains('shopping_list_items'),
+        reason: 'the moved shopping line has to travel',
+      );
+    });
+
+    test('and never rewrites a meal logged after the plan was drawn', () async {
+      // The race rule 3 cares about: the plan counts an entry as planned, the
+      // user logs it while reading the review, and the merge then rewrites a
+      // *logged* meal's reference and portion. The snapshot would survive but
+      // the entry would not be the one that was eaten.
+      final (Food keep, Food go) = await twoFoods();
+      await _logAMeal(db, foodId: 'f-go', servings: 1, logged: false);
+      await drainQueue();
+      final MergePlan plan = await merger.plan(survivor: keep, retiring: go);
+      expect(plan.plannedMeals, hasLength(1));
+
+      // Logged in the meantime.
+      await db
+          .update(db.mealPlanEntries)
+          .write(const MealPlanEntriesCompanion(isLogged: Value(true)));
+
+      await merger.apply(plan);
+
+      final MealPlanEntryRow after =
+          (await db.select(db.mealPlanEntries).get()).single;
+      expect(after.refId, 'f-go', reason: 'a logged meal is never repointed');
+      expect(after.servings, 1);
     });
   });
 
@@ -330,6 +384,35 @@ void main() {
       );
     });
   });
+}
+
+/// One shopping line against a food.
+Future<void> _aShoppingLine(HearthDatabase db, {required String foodId}) async {
+  await db
+      .into(db.shoppingLists)
+      .insertOnConflictUpdate(
+        ShoppingListsCompanion.insert(
+          id: 'list-1',
+          householdId: 'household-1',
+          fromDate: DateTime.utc(2026, 9, 7),
+          toDate: DateTime.utc(2026, 9, 13),
+          status: const Value<String>('draft'),
+          updatedAt: DateTime.utc(2026, 9, 10),
+        ),
+      );
+  await db
+      .into(db.shoppingListItems)
+      .insert(
+        ShoppingListItemsCompanion.insert(
+          id: 'line-1',
+          listId: 'list-1',
+          itemKey: 'yogurt',
+          name: 'Greek yogurt',
+          foodId: Value(foodId),
+          sortOrder: const Value<int>(0),
+          updatedAt: DateTime.utc(2026, 9, 10),
+        ),
+      );
 }
 
 /// One plan entry against a food, logged or merely planned.

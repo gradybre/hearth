@@ -381,6 +381,36 @@ class PlanRepository {
     );
   }
 
+  /// Points an entry at a different food, with the count that keeps the
+  /// portion the same (review N05).
+  ///
+  /// Only ever an unlogged entry: a logged one froze its macros and its name
+  /// when it was eaten, and repointing it would make it a record of a meal
+  /// nobody had. The `isLogged` guard is in the statement rather than in the
+  /// caller so it cannot be forgotten — the merge screen counts planned
+  /// entries first and applies later, and a meal logged in between would
+  /// otherwise be rewritten.
+  Future<int> repointUnloggedEntry({
+    required String entryId,
+    required String refId,
+    required double servings,
+  }) async {
+    final DateTime now = _now();
+    return _db.transaction(() async {
+      final int changed = await _store.repointUnloggedEntry(
+        entryId: entryId,
+        refId: refId,
+        servings: servings,
+        updatedAt: now,
+      );
+      if (changed == 0) return 0;
+
+      final MealPlanEntry? entry = await _store.entryById(entryId);
+      if (entry != null) await _queueEntry(entry, now);
+      return changed;
+    });
+  }
+
   Future<void> removeEntry(String entryId) async {
     final DateTime now = _now();
     await _db.transaction(() async {

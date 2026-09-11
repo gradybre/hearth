@@ -667,6 +667,8 @@ final Provider<FoodMergeRepository> foodMergeRepositoryProvider =
         foods: ref.watch(foodRepositoryProvider),
         recipes: ref.watch(recipeRepositoryProvider),
         matches: ref.watch(ingredientMatchRepositoryProvider),
+        plan: ref.watch(planRepositoryProvider),
+        shopping: ref.watch(shoppingRepositoryProvider),
         queue: ref.watch(pendingWriteStoreProvider),
       ),
     );

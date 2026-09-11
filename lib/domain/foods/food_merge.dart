@@ -291,9 +291,14 @@ class MergePlan {
 
 /// Foods in one library that look like the same thing (review N05).
 ///
-/// Grouped on the same test the duplicate warning uses — an identical
-/// barcode, or an identical normalised name — so what the merge screen offers
-/// and what the editor warns about cannot come to disagree.
+/// Grouped on an identical barcode where there is one, and on an identical
+/// normalised name otherwise.
+///
+/// Slightly stricter than the editor's duplicate warning, which matches on
+/// barcode *or* name: two foods called the same thing with two different
+/// barcodes are two different packets, and offering to merge them would be
+/// offering to lose one of the codes. The warning is right to mention them
+/// and this is right not to merge them.
 ///
 /// Groups of one are not groups. Order within a group is the library's, so
 /// the food somebody is most likely to think of as the real one leads.

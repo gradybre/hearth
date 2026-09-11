@@ -8,7 +8,9 @@ import '../local/hearth_database.dart';
 import '../local/pending_write_store.dart';
 import 'food_repository.dart';
 import 'ingredient_match_repository.dart';
+import 'plan_repository.dart';
 import 'recipe_repository.dart';
+import 'shopping_repository.dart';
 
 /// Why a merge cannot go ahead.
 enum MergeRefusal {
@@ -47,17 +49,23 @@ class FoodMergeRepository {
     required FoodRepository foods,
     required RecipeRepository recipes,
     required IngredientMatchRepository matches,
+    required PlanRepository plan,
+    required ShoppingRepository shopping,
     required PendingWriteStore queue,
   }) : _db = database,
        _foods = foods,
        _recipes = recipes,
        _matches = matches,
+       _plan = plan,
+       _shopping = shopping,
        _queue = queue;
 
   final HearthDatabase _db;
   final FoodRepository _foods;
   final RecipeRepository _recipes;
   final IngredientMatchRepository _matches;
+  final PlanRepository _plan;
+  final ShoppingRepository _shopping;
   final PendingWriteStore _queue;
 
   /// What merging [retiring] into [survivor] would do. Writes nothing.
@@ -161,19 +169,19 @@ class FoodMergeRepository {
       }
 
       for (final String id in await _shoppingLineIds(plan.retiring.id)) {
-        await (_db.update(_db.shoppingListItems)
-              ..where(($ShoppingListItemsTable t) => t.id.equals(id)))
-            .write(ShoppingListItemsCompanion(foodId: Value(plan.survivor.id)));
+        await _shopping.repointFood(lineId: id, foodId: plan.survivor.id);
       }
 
       for (final PlannedMealMove move in plan.plannedMeals) {
-        await (_db.update(
-          _db.mealPlanEntries,
-        )..where(($MealPlanEntriesTable t) => t.id.equals(move.entryId))).write(
-          MealPlanEntriesCompanion(
-            refId: Value(plan.survivor.id),
-            servings: Value(move.toServings!),
-          ),
+        // Guarded inside the statement: this list was counted when the review
+        // was drawn, and a meal logged while somebody was reading it must not
+        // have its reference and portion rewritten. The update matches no row
+        // in that case and the entry keeps pointing at the retired food,
+        // which is soft-deleted and still resolves through its snapshot.
+        await _plan.repointUnloggedEntry(
+          entryId: move.entryId,
+          refId: plan.survivor.id,
+          servings: move.toServings!,
         );
       }
 

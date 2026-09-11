@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:uuid/uuid.dart';
 
 import '../../domain/foods/no_match_rule.dart';
@@ -63,6 +64,44 @@ class ShoppingRepository {
   /// Seven days from today, which from a Friday is the weekend and the week
   /// after — the shape of a real shop rather than of a calendar week.
   static const int defaultDays = 7;
+
+  /// Points a line at a different food (review N05).
+  ///
+  /// A line carries no history — unlike a recipe or a food it is a note about
+  /// this week's shop — so this is an ordinary update, queued like any other.
+  Future<int> repointFood({
+    required String lineId,
+    required String foodId,
+  }) async {
+    final DateTime now = _now();
+    return _db.transaction(() async {
+      final int changed =
+          await (_db.update(
+            _db.shoppingListItems,
+          )..where(($ShoppingListItemsTable t) => t.id.equals(lineId))).write(
+            ShoppingListItemsCompanion(
+              foodId: Value(foodId),
+              updatedAt: Value(now),
+            ),
+          );
+      if (changed == 0) return 0;
+
+      final ShoppingItemRow? row =
+          await (_db.select(_db.shoppingListItems)
+                ..where(($ShoppingListItemsTable t) => t.id.equals(lineId)))
+              .getSingleOrNull();
+      if (row != null) {
+        await _queue.enqueue(
+          entityTable: itemsTable,
+          entityId: row.id,
+          operation: WriteOperation.upsert,
+          payload: ShoppingMapper.itemToJson(row),
+          queuedAt: now,
+        );
+      }
+      return changed;
+    });
+  }
 
   Future<ShoppingListSnapshot?> current() =>
       _store.current(householdId: _householdId);
