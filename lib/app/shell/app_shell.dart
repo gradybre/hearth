@@ -259,7 +259,7 @@ class _SettingsButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    void open() => GoRouter.of(context).push('/household');
+    void open() => GoRouter.of(context).push('/settings');
 
     if (compact) {
       return IconButton(

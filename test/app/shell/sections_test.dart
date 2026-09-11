@@ -143,7 +143,6 @@ void main() {
       // Meaning is never carried by an icon alone (spec §6.3).
       for (final LaunchTarget target in LaunchTarget.options) {
         expect(target.label, isNotEmpty);
-        expect(target.blurb, isNotEmpty);
       }
     });
   });

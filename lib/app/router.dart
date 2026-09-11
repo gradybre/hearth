@@ -79,9 +79,50 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
     // `/:section` exactly — moving either below it would route them into the
     // shell instead, so nothing here is safe to reorder.
     //
-    // Still `/household`: the screen grew from the household page into the
-    // settings page, and renaming the path is a separate change that has to
-    // move the library's link with it.
+    // Settings is an index and six pages behind it (review §7.8). The
+    // subpages are two segments, so they cannot collide with `/:section`;
+    // `/settings` itself is one and has to stay above it like the rest.
+    GoRoute(
+      path: '/settings',
+      builder: (BuildContext context, GoRouterState state) =>
+          const SettingsScreen(),
+      routes: <RouteBase>[
+        GoRoute(
+          path: 'account',
+          builder: (BuildContext context, GoRouterState state) =>
+              const AccountSettingsScreen(),
+        ),
+        GoRoute(
+          path: 'household',
+          builder: (BuildContext context, GoRouterState state) =>
+              const HouseholdSettingsScreen(),
+        ),
+        GoRoute(
+          path: 'appearance',
+          builder: (BuildContext context, GoRouterState state) =>
+              const AppearanceSettingsScreen(),
+        ),
+        GoRoute(
+          path: 'start',
+          builder: (BuildContext context, GoRouterState state) =>
+              const StartSettingsScreen(),
+        ),
+        GoRoute(
+          path: 'sync',
+          builder: (BuildContext context, GoRouterState state) =>
+              const SyncSettingsScreen(),
+        ),
+        GoRoute(
+          path: 'data',
+          builder: (BuildContext context, GoRouterState state) =>
+              const DataSettingsScreen(),
+        ),
+      ],
+    ),
+    // The old path, kept working rather than migrated (review §7.8). The
+    // screen grew from the household page into the settings page and the
+    // route never followed; a link somebody saved is not worth breaking to
+    // tidy that up.
     GoRoute(
       path: '/household',
       builder: (BuildContext context, GoRouterState state) =>

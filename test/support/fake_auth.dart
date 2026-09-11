@@ -142,8 +142,14 @@ class FakeAuthGateway implements AuthGateway {
 /// test that leaves either running fails at teardown, and neither has anything
 /// to do with the screen under test.
 class FakeSyncController extends SyncController {
+  FakeSyncController([this._status]);
+
+  /// What it reports, for a test about a screen that says so. Idle by
+  /// default, which is the state that says nothing and gets in no way.
+  final SyncStatus? _status;
+
   @override
-  SyncStatus build() => const SyncStatus.idle();
+  SyncStatus build() => _status ?? const SyncStatus.idle();
 
   @override
   void syncSoon() {}

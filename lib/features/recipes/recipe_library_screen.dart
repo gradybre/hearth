@@ -113,7 +113,7 @@ class RecipeLibraryScreen extends ConsumerWidget {
                           IconButton(
                             icon: const Icon(Icons.people_outline),
                             tooltip: 'Household',
-                            onPressed: () => context.push('/household'),
+                            onPressed: () => context.push('/settings'),
                           ),
                         ],
                       ),

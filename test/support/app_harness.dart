@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/app/shell/launch_target.dart';
 import 'package:hearth/app/shell/sections.dart';
+import 'package:hearth/app/sync_controller.dart';
 import 'package:hearth/data/adapters/label_reader.dart';
 import 'package:hearth/data/adapters/menu_reader.dart';
 import 'package:hearth/data/adapters/nutrition_lookup.dart';
@@ -85,6 +86,15 @@ Future<HearthDatabase> pumpHearthApp(
   /// by neither package — the same reason the list below leaves its own type
   /// to inference. `cast` recovers it from the elements beside it.
   List<Object> extraOverrides = const <Object>[],
+
+  /// What the sync controller reports, for a screen that says so.
+  ///
+  /// A parameter rather than something `extraOverrides` can supply: Riverpod 3
+  /// throws on a provider overridden twice in one container whichever order
+  /// they are in, and this harness already overrides both of these to keep
+  /// teardown from hanging.
+  SyncStatus? syncStatus,
+  int pendingWrites = 0,
   List<Recipe> recipes = const <Recipe>[],
   Stream<List<Recipe>>? recipeStream,
   List<Food> foods = const <Food>[],
@@ -207,9 +217,14 @@ Future<HearthDatabase> pumpHearthApp(
       // Types left to inference: flutter_riverpod 3 does not export the
       // `Override` type name, only the methods that produce one.
       overrides: [
-        // The caller's own, first so they win: a test that needs a repository
-        // to fail has no other way to arrange it, and a failure path nobody
-        // can reach in a test is a failure path nobody has checked.
+        // The caller's own, first: a test that needs a repository to fail has
+        // no other way to arrange it, and a failure path nobody can reach in
+        // a test is a failure path nobody has checked.
+        //
+        // They *add*, they do not win. Riverpod 3 throws on a provider
+        // overridden twice in one container whatever the order, so anything
+        // this harness overrides below needs a parameter of its own instead —
+        // `syncStatus` and `pendingWrites` are here for exactly that reason.
         ...extraOverrides.cast(),
         databaseProvider.overrideWithValue(db),
         // Seeded the way bootstrap seeds it on a device, because the router is
@@ -258,12 +273,14 @@ Future<HearthDatabase> pumpHearthApp(
         // registers a lifecycle observer and a 600ms debounce timer. Either
         // one left running means teardown never completes — the test does not
         // fail, it hangs, which is far worse to diagnose.
-        syncControllerProvider.overrideWith(FakeSyncController.new),
+        syncControllerProvider.overrideWith(
+          () => FakeSyncController(syncStatus),
+        ),
         // And the queue count it displays, which is a live Drift stream —
         // fake async cannot drive real sqlite, so the subscription is still
         // open at teardown and the run hangs rather than fails.
         pendingWriteCountProvider.overrideWith(
-          (Ref ref) => Stream<int>.value(0),
+          (Ref ref) => Stream<int>.value(pendingWrites),
         ),
         screenKeeperProvider.overrideWithValue(FakeScreenKeeper()),
         timerAlertsProvider.overrideWithValue(FakeTimerAlerts()),

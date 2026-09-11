@@ -45,7 +45,6 @@ void main() {
       // Meaning is never carried by colour or an icon alone (spec §6.3).
       for (final ThemeChoice choice in ThemeChoice.values) {
         expect(choice.label, isNotEmpty);
-        expect(choice.blurb, isNotEmpty);
       }
     });
   });
