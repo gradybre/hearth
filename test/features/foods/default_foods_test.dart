@@ -231,6 +231,14 @@ void sweepTests() {
     return db;
   }
 
+  /// The library's maintenance menu, which is where the sweep lives now
+  /// (review §6.2.6): it was an icon-only button with its meaning in a
+  /// tooltip, which is a hover on a device with no pointer.
+  Future<void> openMaintenance(WidgetTester tester) async {
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await pumpFrames(tester, frames: 12);
+  }
+
   group('the sweep', () {
     testWidgets('is offered only when it would find something', (
       WidgetTester tester,
@@ -242,8 +250,11 @@ void sweepTests() {
         foods: <Food>[beef(isDefault: false)],
         recipes: <Recipe>[chilli()],
       );
+      // Behind the labelled menu now (review §6.2.6), and still absent from
+      // it when there is nothing to sweep.
+      await openMaintenance(tester);
       expect(
-        find.byTooltip('Apply defaults to unmatched ingredients'),
+        find.text('Apply defaults to unmatched ingredients'),
         findsNothing,
       );
     });
@@ -257,9 +268,8 @@ void sweepTests() {
         recipes: <Recipe>[chilli()],
       );
 
-      await tester.tap(
-        find.byTooltip('Apply defaults to unmatched ingredients'),
-      );
+      await openMaintenance(tester);
+      await tester.tap(find.text('Apply defaults to unmatched ingredients'));
       await pumpFrames(tester);
 
       expect(find.text('Chilli'), findsOneWidget);
@@ -283,9 +293,8 @@ void sweepTests() {
         foods: <Food>[beef()],
         recipes: <Recipe>[chilli()],
       );
-      await tester.tap(
-        find.byTooltip('Apply defaults to unmatched ingredients'),
-      );
+      await openMaintenance(tester);
+      await tester.tap(find.text('Apply defaults to unmatched ingredients'));
       await pumpFrames(tester);
 
       await tester.tap(find.widgetWithText(FilledButton, 'Apply 1'));
@@ -306,9 +315,8 @@ void sweepTests() {
         foods: <Food>[beef()],
         recipes: <Recipe>[chilli()],
       );
-      await tester.tap(
-        find.byTooltip('Apply defaults to unmatched ingredients'),
-      );
+      await openMaintenance(tester);
+      await tester.tap(find.text('Apply defaults to unmatched ingredients'));
       await pumpFrames(tester);
 
       await tester.tap(find.text('lean ground beef'));

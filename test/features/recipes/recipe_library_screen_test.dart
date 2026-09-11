@@ -178,19 +178,22 @@ void main() {
     ) async {
       // It used to live only in the populated branch, which hid it from
       // exactly the person who needs it: someone with nothing in their
-      // library yet, about to share a code with their partner.
+      // library yet, about to share a code with their partner. It is the
+      // shell's own Settings button now (#58, #61) rather than a second door
+      // in this corner called "Household" — so what this guards is that an
+      // empty library still has one.
       await pumpHearthApp(tester);
       await pumpFrames(tester);
 
       expect(find.text('Your library is empty'), findsOneWidget);
-      expect(find.byTooltip('Household'), findsOneWidget);
+      expect(find.byTooltip('Settings'), findsWidgets);
     });
 
     testWidgets('and from a populated one', (WidgetTester tester) async {
       await pumpHearthApp(tester, recipes: <Recipe>[shortRibs()]);
       await pumpFrames(tester);
 
-      expect(find.byTooltip('Household'), findsOneWidget);
+      expect(find.byTooltip('Settings'), findsWidgets);
     });
   });
 

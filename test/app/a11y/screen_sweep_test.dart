@@ -143,6 +143,39 @@ void main() {
     }
   }
 
+  group('the repair queue', () {
+    // Three sections of rows, each carrying a recipe or food name, a reason
+    // and a list of ingredient names — long strings in a narrow column, which
+    // is the shape that breaks at large text (review N04).
+    for (final Size size in <Size>[phone, smallPhone]) {
+      for (final double scale in scales) {
+        testWidgets('survives ${scale}x text at ${size.width}', (
+          WidgetTester tester,
+        ) async {
+          await open(
+            tester,
+            scale: scale,
+            brightness: Brightness.light,
+            size: size,
+          );
+          await pumpFrames(tester);
+          await tester.tap(find.text('Recipes').last);
+          await pumpFrames(tester, frames: 10);
+          await tester.tap(find.byIcon(Icons.more_vert));
+          await pumpFrames(tester, frames: 10);
+          await tester.tap(find.text('Nutrition repair'));
+          await pumpFrames(tester, frames: 10);
+
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: 'the repair queue overflowed at ${scale}x',
+          );
+        });
+      }
+    }
+  });
+
   group('the week, and a day opened on it', () {
     // Seven rows of four figures each, which is the shape that breaks first
     // at large text — a fixed-width day column wrapped every row to three
@@ -382,11 +415,13 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('the household screen too', (WidgetTester tester) async {
+    testWidgets('the settings screen too', (WidgetTester tester) async {
       await open(tester, scale: 3.0, brightness: Brightness.light);
       await pumpFrames(tester);
 
-      await tester.tap(find.byIcon(Icons.people_outline));
+      // Settings is the shell's own button now, not a "Household" icon in
+      // the recipe library's corner (review §6.2.6, N04's menu).
+      await tester.tap(find.byTooltip('Settings').last);
       await pumpFrames(tester, frames: 10);
 
       expect(tester.takeException(), isNull);

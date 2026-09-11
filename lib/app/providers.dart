@@ -83,6 +83,7 @@ import '../domain/planning/week_template.dart';
 import '../domain/recipes/ingredient_matcher.dart';
 import '../domain/recipes/macro_calculator.dart';
 import '../domain/recipes/recipe_query.dart';
+import '../domain/recipes/repair_queue.dart';
 import 'cook_timers.dart';
 import 'shell/launch_target.dart';
 import 'shell/sections.dart';
@@ -653,6 +654,55 @@ final Provider<AsyncValue<List<Recipe>>> filteredRecipesProvider =
           ),
         ),
       );
+    });
+
+/// Everything in the library that is not finished (review N04).
+///
+/// Both libraries at once, because the two halves answer each other: a recipe
+/// line that cannot be counted is usually a food that has not been matched,
+/// and a food that cannot be logged is usually why.
+final Provider<AsyncValue<RepairQueue>> repairQueueProvider =
+    Provider<AsyncValue<RepairQueue>>((Ref ref) {
+      final AsyncValue<List<Recipe>> recipes = ref.watch(recipeLibraryProvider);
+      final AsyncValue<List<Food>> foods = ref.watch(foodLibraryProvider);
+
+      // Both or neither: a queue built while the foods are still loading
+      // would report every matched line as unmatched, which is the one thing
+      // a repair list must never do.
+      //
+      // An error travels rather than being read as "not yet". The screen
+      // draws `loading` as a spinner with no words, so a food store that
+      // threw — a corrupt row, a migration that did not land — would have
+      // spun there until the app was killed, saying nothing.
+      return switch ((recipes, foods)) {
+        (
+          AsyncError<List<Recipe>>(
+            :final Object error,
+            :final StackTrace stackTrace,
+          ),
+          _,
+        ) =>
+          AsyncValue<RepairQueue>.error(error, stackTrace),
+        (
+          _,
+          AsyncError<List<Food>>(
+            :final Object error,
+            :final StackTrace stackTrace,
+          ),
+        ) =>
+          AsyncValue<RepairQueue>.error(error, stackTrace),
+        (
+          AsyncData<List<Recipe>>(value: final List<Recipe> all),
+          AsyncData<List<Food>>(value: final List<Food> library),
+        ) =>
+          AsyncValue<RepairQueue>.data(
+            RepairQueue.build(
+              recipes: all,
+              foods: <String, Food>{for (final Food f in library) f.id: f},
+            ),
+          ),
+        _ => const AsyncValue<RepairQueue>.loading(),
+      };
     });
 
 /// A recipe's per-serving macros, but only when every ingredient counted.

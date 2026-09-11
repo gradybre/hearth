@@ -153,7 +153,7 @@ void main() {
     final SemanticsHandle handle = tester.ensureSemantics();
 
     await pumpHearthApp(tester, size: const Size(500, 2400));
-    await tester.tap(find.byTooltip('Household'));
+    await tester.tap(find.byTooltip('Settings').last);
     await pumpFrames(tester);
 
     expect(

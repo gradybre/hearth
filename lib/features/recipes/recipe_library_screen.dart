@@ -97,24 +97,7 @@ class RecipeLibraryScreen extends ConsumerWidget {
                               style: context.text.recipeTitle,
                             ),
                           ),
-                          // Only when there is something to sweep. A button that
-                          // can only ever say "nothing to do" is a button that
-                          // teaches people not to press it.
-                          if (sweepable)
-                            IconButton(
-                              icon: const Icon(Icons.push_pin_outlined),
-                              tooltip:
-                                  'Apply defaults to unmatched ingredients',
-                              onPressed: () => context.push('/recipe/defaults'),
-                            ),
-                          // The household lives behind the library rather than in a
-                          // settings pillar of its own: it is a thing you set up
-                          // once and then forget (spec §5.1).
-                          IconButton(
-                            icon: const Icon(Icons.people_outline),
-                            tooltip: 'Household',
-                            onPressed: () => context.push('/settings'),
-                          ),
+                          _MaintenanceMenu(sweepable: sweepable),
                         ],
                       ),
                     ),
@@ -172,6 +155,46 @@ class RecipeLibraryScreen extends ConsumerWidget {
 /// Distinct from the empty-library state, and it names the way out: a screen
 /// that just says "nothing here" while three chips are quietly lit is how
 /// people conclude their recipes are gone.
+/// The library's maintenance, in a labelled menu (review §6.2.6, N04).
+///
+/// This corner used to hold two icon-only buttons whose meaning lived in a
+/// tooltip — a hover, on a device with no pointer — and one of them was
+/// called "Household" and opened Settings. The shell has carried Settings on
+/// every screen since #58 and #61, so that one was a second door with worse
+/// words, and it is gone rather than relabelled.
+///
+/// The same pattern Foods got in #64, deliberately: the review's complaint is
+/// that sibling screens invent their own conventions.
+class _MaintenanceMenu extends StatelessWidget {
+  const _MaintenanceMenu({required this.sweepable});
+
+  /// Whether any unmatched ingredient has a default waiting for it.
+  final bool sweepable;
+
+  @override
+  Widget build(BuildContext context) => PopupMenuButton<String>(
+    icon: const Icon(Icons.more_vert),
+    tooltip: 'More',
+    onSelected: (String path) => context.push(path),
+    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+      PopupMenuItem<String>(
+        value: '/recipe/repair',
+        child: Text('Nutrition repair', style: context.text.body),
+      ),
+      // Only when there is something to sweep. A row that can only ever say
+      // "nothing to do" is a row that teaches people not to press it.
+      if (sweepable)
+        PopupMenuItem<String>(
+          value: '/recipe/defaults',
+          child: Text(
+            'Apply defaults to unmatched ingredients',
+            style: context.text.body,
+          ),
+        ),
+    ],
+  );
+}
+
 class _NoMatches extends StatelessWidget {
   const _NoMatches({
     required this.gutter,
