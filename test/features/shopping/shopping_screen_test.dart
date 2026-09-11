@@ -55,6 +55,26 @@ void main() {
     await pumpFrames(tester, frames: 20);
   }
 
+  /// Building again, once a list exists.
+  ///
+  /// The setup moved behind `Manage list` when the list screen stopped
+  /// leading with 244 points of it (review §6.2.5), so a rebuild is two taps
+  /// rather than one — and is not on the screen you stand in a shop holding.
+  Future<void> rebuild(WidgetTester tester) async {
+    // Whichever shape the screen is in. An empty list still leads with its
+    // setup — the review says those controls are right where they are — and
+    // a list that exists keeps the same three behind `Manage list`. A build
+    // that produced nothing leaves the screen empty, so both paths are real.
+    if (find.text('Manage list').evaluate().isEmpty) {
+      await build(tester);
+      return;
+    }
+    await tester.tap(find.text('Manage list'));
+    await pumpFrames(tester, frames: 12);
+    await tester.tap(find.text('Rebuild from the plan'));
+    await pumpFrames(tester, frames: 20);
+  }
+
   testWidgets('an empty list says what it would be built from', (
     WidgetTester tester,
   ) async {
@@ -154,14 +174,18 @@ void main() {
     await openShopping(tester, entries: <MealPlanEntry>[tonight()]);
     await build(tester);
 
-    await tester.tap(find.byTooltip('Add an item by hand'));
+    // The labelled button in the action bar. Adding by hand used to be a
+    // bare `+` on the setup card, which is gone from the list screen — and
+    // an icon whose meaning lived in a tooltip was never discoverable on a
+    // phone anyway (spec §6.3).
+    await tester.tap(find.text('Add an item'));
     await pumpFrames(tester);
     await tester.enterText(find.byType(TextField).last, 'Coffee');
     await tester.tap(find.text('Add'));
     await pumpFrames(tester, frames: 20);
     expect(find.text('Coffee'), findsOneWidget);
 
-    await build(tester);
+    await rebuild(tester);
     expect(find.text('Coffee'), findsOneWidget);
   });
 
@@ -171,7 +195,7 @@ void main() {
     await tester.tap(find.text('ground beef'));
     await pumpFrames(tester, frames: 20);
 
-    await build(tester);
+    await rebuild(tester);
 
     expect(find.byIcon(Icons.check_circle), findsOneWidget);
   });
@@ -186,7 +210,7 @@ void main() {
     await openShopping(tester, entries: <MealPlanEntry>[tonight()]);
     await build(tester);
 
-    await tester.tap(find.text('Take it shopping'));
+    await tester.tap(find.text('Share or export'));
     await pumpFrames(tester, frames: 10);
 
     expect(find.text('Copy the list'), findsOneWidget);
@@ -202,7 +226,7 @@ void main() {
     await tester.tap(find.text('ground beef'));
     await pumpFrames(tester, frames: 20);
 
-    await tester.tap(find.text('Take it shopping'));
+    await tester.tap(find.text('Share or export'));
     await pumpFrames(tester, frames: 10);
 
     expect(find.text('Everything on the list is ticked off.'), findsOneWidget);
@@ -250,8 +274,8 @@ void main() {
       );
       await tester.tap(find.text('Shopping').last);
       await pumpFrames(tester);
-      await build(tester);
-      await tester.tap(find.text('Take it shopping'));
+      await rebuild(tester);
+      await tester.tap(find.text('Share or export'));
       await pumpFrames(tester, frames: 10);
     }
 
@@ -373,7 +397,11 @@ void main() {
   group('undoing a deletion and nothing else (spec §5.7)', () {
     /// Adds a manual item, so there is a second line to change.
     Future<void> addByHand(WidgetTester tester, String name) async {
-      await tester.tap(find.byTooltip('Add an item by hand'));
+      // The labelled button in the action bar. Adding by hand used to be a
+      // bare `+` on the setup card, which is gone from the list screen — and
+      // an icon whose meaning lived in a tooltip was never discoverable on a
+      // phone anyway (spec §6.3).
+      await tester.tap(find.text('Add an item'));
       await pumpFrames(tester);
       await tester.enterText(find.byType(TextField).last, name);
       await tester.tap(find.text('Add'));
@@ -405,7 +433,7 @@ void main() {
     /// Opens a list of two lines: the plan's beef and a manual coffee.
     Future<void> openTwo(WidgetTester tester) async {
       await openShopping(tester, entries: <MealPlanEntry>[tonight()]);
-      await build(tester);
+      await rebuild(tester);
       await addByHand(tester, 'Coffee');
     }
 

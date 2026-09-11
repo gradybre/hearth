@@ -66,7 +66,7 @@ Deferred by Brendan, not to be built: N06, N07, N09, N10, N11, N12.
 | 2 | Compact Today kept; Week becomes seven-day comparison | ~ (Today cleanup #58; Week in P6) |
 | 3 | Direct gram/ounce entry and Move/Copy | ✓ (#55/#56/#57) |
 | 4 | Restaurant search, selected review, usual orders | ✓ (#59/#60) |
-| 5 | Settings index; shopping prep separated from the trip | ~ (reachable everywhere #58; index in P6) |
+| 5 | Settings index; shopping prep separated from the trip | ~ (Settings reachable #58; trip separated #62; index open) |
 | 6 | Lost-edit and unsafe-Undo protection before visual work | ✓ (#49/#50/#51) |
 | 7 | Import bookkeeping and operational gates before trial | ~ (#52/#53/#54; F07c–d open) |
 | 8 | Optional features approved individually | ✓ (N06/N07/N09–N12 deferred) |

@@ -58,6 +58,7 @@ void main() {
         recipes: galleryRecipes(),
         foods: galleryFoodsFor(scene),
         entries: galleryEntries(day),
+        shoppingLines: galleryShoppingLinesFor(scene),
         targets: galleryTargets,
       );
       await pumpFrames(tester, frames: 20);
