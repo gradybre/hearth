@@ -11,6 +11,7 @@ import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/fixtures.dart';
+import '../../support/swept_surfaces.dart';
 
 /// Every screen, at every text size, in both themes (spec §6.3).
 ///
@@ -269,8 +270,12 @@ void main() {
       await open(tester, scale: 3.0, brightness: Brightness.light);
       await pumpFrames(tester);
 
-      await tester.tap(find.textContaining('Slow-braised beef chilli').first);
-      await pumpFrames(tester, frames: 10);
+      // Scrolled to first. At 3x the library's chrome — the search box and
+      // four filter controls, each wrapped onto a line of its own — is taller
+      // than the screen, so the first card is not built until the list is
+      // dragged (review P6).
+      await SweepTools(tester)
+          .reach(find.textContaining('Slow-braised beef chilli'));
 
       expect(tester.takeException(), isNull);
     });
@@ -396,9 +401,12 @@ void main() {
       // tall on an 844px screen, so its centre sits under the navigation bar —
       // tester.tap ignores occlusion and would hit the bar instead. A person
       // taps a part of the title they can see.
-      final Finder title = find
-          .textContaining('Slow-braised beef chilli')
-          .first;
+      // Brought on screen first: at 3x the library's chrome — the search box
+      // and four filter controls, each wrapped onto a line of its own — is
+      // taller than the screen, so the first card is not built until the list
+      // is dragged (review P6).
+      final Finder title = await SweepTools(tester)
+          .bring(find.textContaining('Slow-braised beef chilli'));
       await tester.tapAt(tester.getTopLeft(title) + const Offset(20, 20));
       await pumpFrames(tester, frames: 10);
 

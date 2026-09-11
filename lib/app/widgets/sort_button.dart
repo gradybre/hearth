@@ -83,9 +83,15 @@ class SortButton<T> extends StatelessWidget {
             borderRadius: BorderRadius.circular(HearthRadius.md),
             border: Border.all(color: colors.outline),
           ),
+          // A floor, never a fixed height (spec §6.3). It was 38 points
+          // tall, which no auditor ever saw: both rails it sits in were
+          // horizontal scroll views, and Flutter's tap-target guideline skips
+          // anything touching a scrollable's edge. The recipe rail wraps
+          // rather than scrolls now, so this is measured for the first time.
+          constraints: const BoxConstraints(minHeight: HearthTouch.minTarget),
           padding: const EdgeInsets.symmetric(
             horizontal: HearthSpacing.md,
-            vertical: HearthSpacing.sm,
+            vertical: HearthSpacing.md,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

@@ -31,14 +31,29 @@ Future<void> type(WidgetTester tester, String text) async {
   await pumpFrames(tester);
 }
 
+/// Taps something in the rail — one of the two toggles, or Filters itself.
 Future<void> tapChip(WidgetTester tester, String label) async {
-  // The chip row scrolls horizontally, so a chip past the right edge has to be
-  // brought into view before it can be tapped.
-  final Finder chip = find.text(label);
+  final Finder chip = find.text(label).last;
   await tester.ensureVisible(chip);
   await pumpFrames(tester);
   await tester.tap(chip);
+  await pumpFrames(tester, frames: 12);
+}
+
+/// Toggles one filter from behind the Filters button, and closes the sheet.
+///
+/// Everything but the two rail toggles lives there now: a chip per cuisine,
+/// per tag and per cookbook made the rail grow with the library (review P6).
+Future<void> pickFilter(WidgetTester tester, String label) async {
+  // "Filters" while nothing behind it is on, "Filters (2)" once something is.
+  final Finder button = find.textContaining(RegExp(r'^Filters')).last;
+  await tester.ensureVisible(button);
   await pumpFrames(tester);
+  await tester.tap(button);
+  await pumpFrames(tester, frames: 12);
+
+  await tapChip(tester, label);
+  await tapChip(tester, 'Done');
 }
 
 void main() {
@@ -97,7 +112,7 @@ void main() {
       await pumpHearthApp(tester, recipes: library());
       await pumpFrames(tester);
 
-      await tapChip(tester, 'Thai');
+      await pickFilter(tester, 'Thai');
 
       expect(find.byType(RecipeCard), findsOneWidget);
       expect(find.text('Pad see ew'), findsOneWidget);
@@ -109,13 +124,13 @@ void main() {
       await pumpHearthApp(tester, recipes: library());
       await pumpFrames(tester);
 
-      await tapChip(tester, 'Thai');
-      await tapChip(tester, 'Under 30 min');
+      await pickFilter(tester, 'Thai');
+      await pickFilter(tester, 'Under 30 min');
       expect(find.byType(RecipeCard), findsOneWidget);
 
       // French and under 30 minutes is nothing in this library.
-      await tapChip(tester, 'Thai');
-      await tapChip(tester, 'French');
+      await pickFilter(tester, 'Thai');
+      await pickFilter(tester, 'French');
       expect(find.text('No recipes match'), findsOneWidget);
     });
 
@@ -125,24 +140,27 @@ void main() {
       await pumpHearthApp(tester, recipes: library());
       await pumpFrames(tester);
 
-      await tapChip(tester, 'Thai');
+      await pickFilter(tester, 'Thai');
       expect(find.byType(RecipeCard), findsOneWidget);
 
-      await tapChip(tester, 'Thai');
+      await pickFilter(tester, 'Thai');
       expect(find.byType(RecipeCard), findsNWidgets(2));
     });
 
-    testWidgets('the clear button counts the filters it will clear', (
+    testWidgets('what is applied is named where you can see it', (
       WidgetTester tester,
     ) async {
+      // The button this replaced was all-or-nothing and said only how many:
+      // undoing one of three meant clearing all three and setting two again.
       await pumpHearthApp(tester, recipes: library());
       await pumpFrames(tester);
 
-      await tapChip(tester, 'Thai');
-      expect(find.text('Clear 1 filter'), findsOneWidget);
+      await pickFilter(tester, 'Thai');
+      expect(find.text('Cuisine · Thai'), findsOneWidget);
 
-      await tapChip(tester, 'Under 30 min');
-      expect(find.text('Clear 2 filters'), findsOneWidget);
+      await pickFilter(tester, 'Under 30 min');
+      expect(find.text('Under 30 min'), findsOneWidget);
+      expect(find.text('Clear filters'), findsOneWidget);
     });
 
     testWidgets('a collection chip is offered for each cookbook', (
@@ -165,7 +183,7 @@ void main() {
       );
       await pumpFrames(tester);
 
-      await tapChip(tester, 'Paella experiments');
+      await pickFilter(tester, 'Paella experiments');
 
       expect(find.byType(RecipeCard), findsOneWidget);
       expect(find.text('Pad see ew'), findsOneWidget);
@@ -234,7 +252,7 @@ void main() {
       await pumpHearthApp(tester, recipes: library());
       await pumpFrames(tester);
 
-      await tapChip(tester, 'Under 600 kcal');
+      await pickFilter(tester, 'Under 600 kcal');
 
       expect(find.text('No recipes match'), findsOneWidget);
       expect(find.textContaining('not all matched to foods'), findsOneWidget);
