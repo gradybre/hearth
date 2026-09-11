@@ -34,14 +34,14 @@ writing: #49–#65 are all on `main`.
 | ID | What | Impl | Test | Review | Deployed | Verified |
 |---|---|---|---|---|---|---|
 | F01a | Dirty-state guard on recipe/food editors | ✓ | ✓ | ✓ #49 | n/a | — |
-| F01b | Recoverable local drafts (N01) | ✓ | ✓ | ✓ #51 | B | — |
+| F01b | Recoverable local drafts (N01) | ✓ | ✓ | ✓ #51 | ✓ | — |
 | F02 | Targeted shopping Undo | ✓ | ✓ | ✓ #50 | n/a | — |
 | F03 | PDF page states: rendered vs extracted | ✓ | ✓ | ✓ #52 | n/a | — |
 | F04 | Accumulated uncertainty; retry-safe batch save | ✓ | ✓ | ✓ #52 | n/a | — |
 | F05 | Calendar-derived day labels; no constant "Today" card | ✓ | ✓ | ✓ #55 | n/a | — |
 | F06 | Direct gram/ounce entry | ✓ | ✓ | ✓ #56 | n/a | — |
 | F07a | Backoff wake-up | ✓ | ✓ | ✓ #53 | n/a | — |
-| F07b | B02 reserve/settle, fail closed; record truncated usage | ✓ | ✓ | ✓ #54 | B | — |
+| F07b | B02 reserve/settle, fail closed; record truncated usage | ✓ | ✓ | ✓ #54 | ✓ | B |
 | F07c | Windows recovery protocol handler | — | — | — | n/a | B — needs a Windows machine or a Windows CI job; see below |
 | F07d | Hosted recovery activation | n/a | n/a | n/a | B | B |
 
@@ -49,11 +49,12 @@ writing: #49–#65 are all on `main`.
 
 | ID | What | Impl | Test | Review | Deployed | Verified |
 |---|---|---|---|---|---|---|
-| N01 | Recoverable drafts | ✓ | ✓ | ✓ #51 | B | — |
+| N01 | Recoverable drafts | ✓ | ✓ | ✓ #51 | ✓ | — |
 | N02 | Move/copy a single meal entry | ✓ | ✓ | ✓ #57 | n/a | — |
 | N03 | Usual restaurant orders | ✓ | ✓ | ✓ #60 | n/a | — |
-| N04 | Recipe nutrition repair queue | — | — | — | n/a | — |
-| N05 | Food reuse, then reviewed merge | — | — | — | — | — |
+| N04 | Recipe nutrition repair queue | ✓ | ✓ | ✓ #68 | n/a | — |
+| N05a | Food reuse — `Use existing` | ✓ | ✓ | ✓ #69 | n/a | — |
+| N05b | Reviewed merge | — | — | — | — | — |
 | N08 | Menu maintenance and provenance | — | — | — | — | — |
 
 Deferred by Brendan, not to be built: N06, N07, N09, N10, N11, N12.
@@ -62,13 +63,13 @@ Deferred by Brendan, not to be built: N06, N07, N09, N10, N11, N12.
 
 | # | Default | Status |
 |---|---|---|
-| 1 | Keep warm identity; fewer repeated cards/headings/copy | ~ (#61 desktop bounds, #62 shopping header, #63 filter rail, #64 one Add menu, #65 settings prose; Week's stacked headings remain) |
-| 2 | Compact Today kept; Week becomes seven-day comparison | ~ (Today cleanup #58; **Week not started** — §7.2, the last of P6) |
+| 1 | Keep warm identity; fewer repeated cards/headings/copy | ✓ (#61 desktop bounds, #62 shopping header, #63 filter rail, #64 one Add menu, #65 settings prose, #67 the week's four stacked headings) |
+| 2 | Compact Today kept; Week becomes seven-day comparison | ✓ (Today cleanup #58; week as seven rows #67) |
 | 3 | Direct gram/ounce entry and Move/Copy | ✓ (#55/#56/#57) |
 | 4 | Restaurant search, selected review, usual orders | ✓ (#59/#60) |
 | 5 | Settings index; shopping prep separated from the trip | ✓ (#58 reachable, #62 trip separated, #65 index) |
 | 6 | Lost-edit and unsafe-Undo protection before visual work | ✓ (#49/#50/#51) |
-| 7 | Import bookkeeping and operational gates before trial | ~ (#52/#53/#54; F07c–d open, and #54's migration is not pushed) |
+| 7 | Import bookkeeping and operational gates before trial | ~ (#52/#53/#54, now deployed; F07c–d open) |
 | 8 | Optional features approved individually | ✓ (N06/N07/N09–N12 deferred) |
 
 ## Packages
@@ -78,11 +79,11 @@ Deferred by Brendan, not to be built: N06, N07, N09, N10, N11, N12.
 | P0 Verify remaining scope | ✓ | baseline `ae57f62`, and the rows below |
 | P1 Protect work | ✓ | #49 dirty guards · #50 targeted Undo · #51 drafts |
 | P2 Import reliability | ✓ | #52 page states and retry-safe batch |
-| P3 Operational completion | ~ | #53 backoff wake-up · #54 AI ceiling (**not pushed**) · F07c–d open |
+| P3 Operational completion | ~ | #53 backoff wake-up · #54 AI ceiling (**pushed and deployed**, not yet exercised) · F07c–d open |
 | P4 Daily logging and navigation | ✓ | #55 day labels · #56 direct grams · #57 Move/Copy · #58 Today and Settings access |
 | P5 Restaurant ordering | ✓ | #59 menu navigation · #60 selected summary and usual orders |
-| P6 Lists and visual consolidation | ~ | #61 desktop bounds · #62 shopping · #63 filters · #64 foods · #65 settings — **Week (§7.2) remains** |
-| P7 Data maintenance | — | N04, N05, N08 — approved, not started |
+| P6 Lists and visual consolidation | ✓ | #61 desktop bounds · #62 shopping · #63 filters · #64 foods · #65 settings · #67 week |
+| P7 Data maintenance | ~ | #68 repair queue (N04) · #69 `Use existing` (N05a) — N05b merge and N08 remain |
 | P8 Optional additions | n/a | deferred by Brendan |
 | P9 Household trial | — | B — needs an installed build on two phones |
 
@@ -143,11 +144,16 @@ reaches is worse than no guard.
 
 ## Schema
 
-`supabase migration list` at the time of writing has **one local-only
-migration**: `20260915090000_ai_reservations`, the AI ledger from #54. Rule 8
-is unsatisfied until it is pushed, and no local check can satisfy it — the
-hosted `reserve_ai_spend` does not exist yet, so the ceiling that fails closed
-would fail closed against a hosted project that has never heard of it.
+**Rule 8 is satisfied.** `supabase migration list` shows all 37 migrations
+with local and remote agreeing; `20260915090000_ai_reservations`, the AI
+ledger from #54, was pushed on 11 September 2026.
+
+Pushing it was only half. The hosted `recipe-ai` function was still at v18,
+built on 5 September — five days older than #54 — so it had never called
+`reserve_ai_spend` and the table sat inert. Deployed as **v19** the same day,
+which is what actually put the ceiling in force. Worth remembering as a shape:
+a migration and the function that uses it are two deployments, and
+`migration list` agreeing says nothing about the second.
 
 Local `schemaVersion` is **26** — `editor_drafts`, added by #51. Device-local
 and never synced, so there is **no Supabase migration and nothing to push**;
@@ -168,11 +174,27 @@ tested from here — there is no Windows machine and no Windows CI job (one of
 WP8's open items). Writing it blind and reporting it done would be a claim
 nothing supports, so it stays named instead.
 
+## Installed builds
+
+A release build of `a7938e1` was signed and installed on Brendan's iPhone on
+11 September 2026 — `com.brendangrady.hearth` 1.0.0 (1), confirmed present
+with `devicectl` rather than assumed from an exit code. It is signed against a
+development team, so iOS expires the provisioning after about a week and the
+app refuses to launch until it is reinstalled.
+
+That is what moves the `Deployed` column to `✓` on the two draft rows: they
+need no server, only a build carrying the local migration.
+
 ## Standing limits
 
 Nothing in this repository can establish these; they are Brendan's to perform
 and report.
 
+- **The AI ceiling actually holding.** The table is there and the function
+  that reads it is live, but nothing has yet reserved, settled, or been
+  refused at the limit on the hosted project — that takes a real request and
+  real money. Importing a recipe is the way to find out, and a bug in #54
+  shows up as a refusal rather than as an overspend.
 - Hosted password recovery: a real email received and its link completing,
   including **cross-device**, which same-device success does not imply.
 - Two-device convergence on real phones.
