@@ -25,7 +25,7 @@ Status: `—` not started · `~` in progress · `✓` done · `n/a` not applicab
 
 `~` on Impl means the code is written and the PR is open, not merged. It
 becomes `✓` when Brendan merges it. Nothing is open at the time of
-writing: #49–#57 are all on `main`.
+writing: #49–#65 are all on `main`.
 
 ---
 
@@ -62,14 +62,44 @@ Deferred by Brendan, not to be built: N06, N07, N09, N10, N11, N12.
 
 | # | Default | Status |
 |---|---|---|
-| 1 | Keep warm identity; fewer repeated cards/headings/copy | ~ (desktop bounds #61; the rest in P6) |
-| 2 | Compact Today kept; Week becomes seven-day comparison | ~ (Today cleanup #58; Week in P6) |
+| 1 | Keep warm identity; fewer repeated cards/headings/copy | ~ (#61 desktop bounds, #62 shopping header, #63 filter rail, #64 one Add menu, #65 settings prose; Week's stacked headings remain) |
+| 2 | Compact Today kept; Week becomes seven-day comparison | ~ (Today cleanup #58; **Week not started** — §7.2, the last of P6) |
 | 3 | Direct gram/ounce entry and Move/Copy | ✓ (#55/#56/#57) |
 | 4 | Restaurant search, selected review, usual orders | ✓ (#59/#60) |
-| 5 | Settings index; shopping prep separated from the trip | ~ (Settings reachable #58; trip separated #62; index open) |
+| 5 | Settings index; shopping prep separated from the trip | ✓ (#58 reachable, #62 trip separated, #65 index) |
 | 6 | Lost-edit and unsafe-Undo protection before visual work | ✓ (#49/#50/#51) |
-| 7 | Import bookkeeping and operational gates before trial | ~ (#52/#53/#54; F07c–d open) |
+| 7 | Import bookkeeping and operational gates before trial | ~ (#52/#53/#54; F07c–d open, and #54's migration is not pushed) |
 | 8 | Optional features approved individually | ✓ (N06/N07/N09–N12 deferred) |
+
+## Packages
+
+| Package | Status | Landed as |
+|---|---|---|
+| P0 Verify remaining scope | ✓ | baseline `ae57f62`, and the rows below |
+| P1 Protect work | ✓ | #49 dirty guards · #50 targeted Undo · #51 drafts |
+| P2 Import reliability | ✓ | #52 page states and retry-safe batch |
+| P3 Operational completion | ~ | #53 backoff wake-up · #54 AI ceiling (**not pushed**) · F07c–d open |
+| P4 Daily logging and navigation | ✓ | #55 day labels · #56 direct grams · #57 Move/Copy · #58 Today and Settings access |
+| P5 Restaurant ordering | ✓ | #59 menu navigation · #60 selected summary and usual orders |
+| P6 Lists and visual consolidation | ~ | #61 desktop bounds · #62 shopping · #63 filters · #64 foods · #65 settings — **Week (§7.2) remains** |
+| P7 Data maintenance | — | N04, N05, N08 — approved, not started |
+| P8 Optional additions | n/a | deferred by Brendan |
+| P9 Household trial | — | B — needs an installed build on two phones |
+
+## Known gaps in the guards themselves
+
+Named rather than assumed, because a guard that is trusted further than it
+reaches is worse than no guard.
+
+- **The swept-surface guard is per *file*, not per sheet.** A second sheet
+  added to a file that already has an entry ships with nothing walking it.
+  Raised as its own task rather than widened inside a feature PR.
+- **`pumpHearthApp` overrides the library streams**, so a food or recipe saved
+  through the app never appears in a list in a widget test. Several assertions
+  have to be written against what moves on screen instead; #64 says so where
+  it matters.
+- **No native build, golden or performance job in CI.** Every timing and every
+  platform claim in this repository is a widget test on a laptop.
 
 ## P0 — baseline
 
@@ -95,10 +125,29 @@ Deferred by Brendan, not to be built: N06, N07, N09, N10, N11, N12.
 - **B02** fails closed: import, generation and label reading refuse while the
   spend counter is unreadable; logging, cooking and everything manual are
   unaffected.
-- **Units** display preference: *As written / Metric / Imperial* (§7.5).
+- **Settings prose** (§6.2.4): a sentence survives if it describes a
+  consequence the label cannot. That cut the three under Light/Dark/Follow the
+  device and the three under the start screens, and kept "this device only —
+  it does not move anyone else's app", all of Cook together's, and everything
+  attached to Your data and Sign out. #65.
+- **Sign out stays on the settings index**, last and alone, rather than moving
+  behind the Account page. It is the one control somebody needs in a hurry,
+  and it is already isolated; burying it is not protecting it. #65.
+- **A scope, not a filter** (§7.5): Foods shows your own or a restaurant's
+  menus, both on screen, either one tap away. A filter that disappears a chain
+  teaches people the menu is gone. #64.
+- **Units** display preference: *As written / Metric / Imperial* (§7.5). Still
+  unbuilt — a new feature rather than a reorganisation, and deliberately not
+  folded into P6.
 - §9.3 acceptance targets adopted as proposed.
 
 ## Schema
+
+`supabase migration list` at the time of writing has **one local-only
+migration**: `20260915090000_ai_reservations`, the AI ledger from #54. Rule 8
+is unsatisfied until it is pushed, and no local check can satisfy it — the
+hosted `reserve_ai_spend` does not exist yet, so the ceiling that fails closed
+would fail closed against a hosted project that has never heard of it.
 
 Local `schemaVersion` is **26** — `editor_drafts`, added by #51. Device-local
 and never synced, so there is **no Supabase migration and nothing to push**;
