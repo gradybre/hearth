@@ -117,7 +117,7 @@ class _Masthead extends StatelessWidget {
         IconButton(
           icon: const Icon(Icons.settings_outlined),
           tooltip: 'Settings',
-          onPressed: () => context.push('/household'),
+          onPressed: () => context.push('/settings'),
         ),
       ],
     );

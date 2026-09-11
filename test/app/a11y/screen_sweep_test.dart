@@ -142,6 +142,58 @@ void main() {
     }
   }
 
+  group('settings, and the six pages behind it', () {
+    // Seven screens rather than one since the index landed (review §7.8), and
+    // the rows are the shape that breaks first: a label and a value on one
+    // line, which is exactly the arrangement that came out 504 points tall
+    // before it was allowed to wrap.
+    const List<String> pages = <String>[
+      'Account',
+      'Cook together',
+      'Appearance',
+      'Opens on',
+      'Syncing',
+      'Your data',
+    ];
+
+    for (final Size size in <Size>[phone, smallPhone]) {
+      for (final double scale in scales) {
+        testWidgets('every page survives ${scale}x text at ${size.width}', (
+          WidgetTester tester,
+        ) async {
+          await open(
+            tester,
+            scale: scale,
+            brightness: Brightness.light,
+            size: size,
+          );
+          await pumpFrames(tester);
+          await tester.tap(find.byTooltip('Settings').last);
+          await pumpFrames(tester, frames: 10);
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: 'the settings index overflowed at ${scale}x',
+          );
+
+          for (final String page in pages) {
+            await tester.ensureVisible(find.text(page));
+            await pumpFrames(tester);
+            await tester.tap(find.text(page));
+            await pumpFrames(tester, frames: 10);
+            expect(
+              tester.takeException(),
+              isNull,
+              reason: '$page overflowed at ${scale}x on a ${size.width} phone',
+            );
+            await tester.pageBack();
+            await pumpFrames(tester, frames: 10);
+          }
+        });
+      }
+    }
+  });
+
   group('the same four tabs on a small phone', () {
     // 320 points, which is an iPhone SE. Everything here is a screen the
     // sweep above already visits at 390 and passes — the width is the whole

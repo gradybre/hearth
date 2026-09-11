@@ -141,11 +141,19 @@ void main() {
       await pumpFrames(tester);
       await tester.tap(find.byTooltip('Settings'));
       await pumpFrames(tester);
+      // A page of its own now (review §7.8): the index says where the choice
+      // stands, and the answers live behind it.
+      await tester.tap(find.text('Opens on'));
+      await pumpFrames(tester);
 
       await tester.tap(find.text('Nutrition'));
       await pumpFrames(tester);
 
-      expect(find.text('Appearance'), findsOneWidget);
+      expect(
+        find.text('Opens on'),
+        findsOneWidget,
+        reason: 'the tap left the settings page it was made on',
+      );
       expect(find.byType(NavigationBar), findsNothing);
     });
   });

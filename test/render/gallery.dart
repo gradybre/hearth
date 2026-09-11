@@ -1059,6 +1059,27 @@ const List<Scene> scenes = <Scene>[
       'Tortilla chips',
     ],
   ),
+  // Settings, which the review calls "a long expanded page [that] exposes
+  // every option at once" (§7.8). One viewport is all a frame can hold, so
+  // what these show is the top of it; how far it runs below the fold is a
+  // number, and `settings_length_test.dart` measures it.
+  Scene(name: 'settings', taps: <String>['Settings']),
+  Scene(
+    name: 'settings-dark',
+    brightness: Brightness.dark,
+    taps: <String>['Settings'],
+  ),
+  Scene(
+    name: 'settings-large-text',
+    size: Size(320, 568),
+    textScale: 2.0,
+    taps: <String>['Settings'],
+  ),
+  Scene(
+    name: 'settings-desktop',
+    size: Size(1280, 900),
+    taps: <String>['Settings'],
+  ),
   // A small phone at double text, which is where a list with no way to jump
   // costs the most: the same forty-four rows, four or five of them on screen.
   Scene(

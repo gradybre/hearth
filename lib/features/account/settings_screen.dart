@@ -14,16 +14,26 @@ import '../../core/build_info.dart';
 import '../../data/adapters/data_export.dart';
 import '../../data/auth/auth_gateway.dart';
 import '../../data/sync/sync_engine.dart';
+import 'settings_kit.dart';
 
-/// Everything that is set rather than cooked: who you are, how Hearth looks,
-/// who you cook with, and how to leave (spec §5.1, §6.1, §7.4).
+/// Everything that is set rather than cooked, as an index (review §7.8).
 ///
-/// Grouped the way a settings screen is read rather than the order the
-/// features were built in. Identity first because it answers "whose app is
-/// this"; appearance next because it is the one people come here to poke;
-/// the household after, since it is set up once and then forgotten; sync and
-/// export below, which are consulted rather than changed; and signing out
-/// last, alone, where nothing else can be hit by mistake.
+/// It used to be all of it at once: seven groups, thirteen tickable rows and
+/// a sentence under each, which measured 1,920 points on a phone and 6,641 on
+/// a small phone at twice the text — thirteen screens, with the way out of
+/// the app at the bottom of them. Now each group is one row that *states*
+/// where it stands, and the changing happens on the page behind it.
+///
+/// The order is how a settings screen is read rather than how the features
+/// were built: identity first because it answers "whose app is this"; the
+/// household next, since it is set up once and then forgotten; the two
+/// device choices after that; and sync and export below, which are consulted
+/// rather than changed.
+///
+/// **Sign out stays here**, last and alone. Two taps away would be worse, not
+/// better: it is the one thing on this screen somebody needs in a hurry, and
+/// it is already isolated so nothing above it can be hit by mistake. Burying
+/// a destructive control is not the same as protecting it.
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -32,41 +42,6 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  final TextEditingController _code = TextEditingController();
-  bool _busy = false;
-  String? _error;
-  String? _notice;
-
-  @override
-  void dispose() {
-    _code.dispose();
-    super.dispose();
-  }
-
-  Future<void> _join() async {
-    if (_busy) return;
-    setState(() {
-      _busy = true;
-      _error = null;
-      _notice = null;
-    });
-    try {
-      await ref.read(authGatewayProvider).joinHousehold(_code.text);
-      if (mounted) {
-        _code.clear();
-        setState(
-          () => _notice =
-              'Joined. Their recipes and foods are yours now, and yours are '
-              'theirs.',
-        );
-      }
-    } on AuthFailure catch (failure) {
-      if (mounted) setState(() => _error = failure.message);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   Future<void> _signOut() async {
     final bool confirmed =
         await showDialog<bool>(
@@ -110,501 +85,312 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
     final HearthAccount? account = ref.watch(accountProvider).value;
-    final double gutter = MediaQuery.sizeOf(context).width >= 840
-        ? HearthSpacing.gutterExpanded
-        : HearthSpacing.gutterCompact;
     final String email = account?.email ?? '';
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      appBar: AppBar(
-        backgroundColor: colors.surface,
-        surfaceTintColor: Colors.transparent,
-        title: Text('Settings', style: context.text.label),
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            gutter,
-            HearthSpacing.lg,
-            gutter,
-            HearthSpacing.xxl,
-          ),
+    return SettingsPage(
+      title: 'Settings',
+      children: <Widget>[
+        SettingsGroup(
           children: <Widget>[
-            SettingsSection(
+            SettingsNavRow(
+              icon: Icons.person_outline,
               title: 'Account',
-              children: <Widget>[
-                if (email.isNotEmpty)
-                  SettingsValueRow(
-                    icon: Icons.person_outline,
-                    title: 'Signed in as',
-                    value: email,
-                  ),
-                // The profile is per-user and private, which is exactly why
-                // it sits here rather than anywhere shared (§8.2).
-                SettingsNavRow(
-                  icon: Icons.restaurant_outlined,
-                  title: 'Your food profile',
-                  subtitle:
-                      'Allergies, dislikes, how you like to eat. Private to '
-                      'you.',
-                  semanticLabel:
-                      'Your food profile. What Hearth reads when it writes '
-                      'you a recipe.',
-                  onTap: () => context.push('/profile'),
-                ),
-                // Only where there is an address to send to. An unconfigured
-                // build has an account with no email and no backend, and a
-                // button that could only ever fail is worse than no button.
-                if (email.isNotEmpty) _PasswordReset(email: email),
-              ],
+              // The address, when there is one. An unconfigured build has an
+              // account with no email and no backend behind it, and the page
+              // behind this row says so rather than the row pretending.
+              value: email.isEmpty ? 'This device' : email,
+              onTap: () => context.push('/settings/account'),
             ),
-            const SizedBox(height: HearthSpacing.xl),
-            const _Appearance(),
-            const SizedBox(height: HearthSpacing.xl),
-            SettingsSection(
+            SettingsNavRow(
+              icon: Icons.people_outline,
               title: 'Cook together',
-              blurb:
-                  'Share this code with the other person. They enter it below '
-                  'and your libraries become one — including everything '
-                  'either of you has already added.',
-              children: <Widget>[
-                if (account?.shareCode != null)
-                  _ShareCode(code: account!.shareCode!),
-                Padding(
-                  padding: const EdgeInsets.all(HearthSpacing.md),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      Text(
-                        'Join a household',
-                        style: context.text.label.copyWith(
-                          color: colors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: HearthSpacing.sm),
-                      TextField(
-                        controller: _code,
-                        autocorrect: false,
-                        textCapitalization: TextCapitalization.characters,
-                        style: context.text.body,
-                        onSubmitted: (_) => _join(),
-                        decoration: InputDecoration(
-                          labelText: 'Their code',
-                          hintText: 'ABCD2345',
-                          filled: true,
-                          fillColor: colors.surfaceSunken,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
-                              HearthRadius.md,
-                            ),
-                            borderSide: BorderSide(color: colors.outline),
-                          ),
-                        ),
-                      ),
-                      if (_error != null) ...<Widget>[
-                        const SizedBox(height: HearthSpacing.md),
-                        SettingsMessage(text: _error!, isError: true),
-                      ],
-                      if (_notice != null) ...<Widget>[
-                        const SizedBox(height: HearthSpacing.md),
-                        SettingsMessage(text: _notice!, isError: false),
-                      ],
-                      const SizedBox(height: HearthSpacing.md),
-                      SizedBox(
-                        height: HearthTouch.minTarget,
-                        child: FilledButton(
-                          onPressed: _busy ? null : _join,
-                          child: Text(_busy ? 'Just a moment…' : 'Join'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: HearthSpacing.xl),
-            const _SyncPanel(),
-            const SizedBox(height: HearthSpacing.xl),
-            const _YourData(),
-            const SizedBox(height: HearthSpacing.xl),
-            // Last and on its own. Nothing sits under it to be hit by
-            // mistake, and nothing above it is destructive.
-            SettingsGroup(
-              children: <Widget>[
-                SettingsActionRow(
-                  icon: Icons.logout,
-                  title: 'Sign out',
-                  subtitle: 'Your recipes stay in the household.',
-                  isDestructive: true,
-                  onTap: _signOut,
-                ),
-              ],
+              value: account?.shareCode == null
+                  ? 'Not sharing yet'
+                  : 'Your code ${account!.shareCode}',
+              onTap: () => context.push('/settings/household'),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ── The pieces a settings screen is made of ──────────────────────────────────
-
-/// A titled group of related settings.
-///
-/// The header sits outside the card, the way a native settings screen puts it
-/// — so the card reads as one object and the label as the name of that object
-/// rather than as its first row.
-class SettingsSection extends StatelessWidget {
-  const SettingsSection({
-    required this.title,
-    required this.children,
-    this.blurb,
-    super.key,
-  });
-
-  final String title;
-
-  /// A sentence under the header, for a group that needs explaining before it
-  /// is touched rather than after.
-  final String? blurb;
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Padding(
-          padding: const EdgeInsets.only(left: HearthSpacing.xs),
-          // A heading for a screen reader too, so the sections can be jumped
-          // between rather than read through (spec §6.3).
-          child: Semantics(
-            header: true,
-            // A node of its own, not an annotation folded into whatever
-            // encloses it. Without this the header, the blurb and every row
-            // under it collapse into a single unreadable announcement — which
-            // is what a settings screen must never sound like (spec §6.3).
-            container: true,
-            child: Text(title, style: context.text.sectionHeader),
-          ),
-        ),
-        if (blurb case final String blurb) ...<Widget>[
-          const SizedBox(height: HearthSpacing.xs),
-          Padding(
-            padding: const EdgeInsets.only(left: HearthSpacing.xs),
-            child: Text(
-              blurb,
-              style: context.text.body.copyWith(color: colors.textSecondary),
+        const SizedBox(height: HearthSpacing.xl),
+        SettingsGroup(
+          children: <Widget>[
+            SettingsNavRow(
+              icon: Icons.palette_outlined,
+              title: 'Appearance',
+              value: ref.watch(themeChoiceProvider).value?.label ?? '',
+              onTap: () => context.push('/settings/appearance'),
             ),
-          ),
-        ],
-        const SizedBox(height: HearthSpacing.sm),
-        SettingsGroup(children: children),
+            SettingsNavRow(
+              icon: Icons.flag_outlined,
+              title: 'Opens on',
+              value: ref.watch(launchTargetProvider).value?.label ?? '',
+              onTap: () => context.push('/settings/start'),
+            ),
+          ],
+        ),
+        const SizedBox(height: HearthSpacing.xl),
+        SettingsGroup(
+          children: <Widget>[
+            SettingsNavRow(
+              icon: Icons.cloud_done_outlined,
+              title: 'Syncing',
+              // The one fact a bug report starts from, on the index rather
+              // than a page in: a device that has not been in step since
+              // Tuesday should not look like one that synced a minute ago.
+              value: switch (ref.watch(lastFullSyncProvider)) {
+                AsyncValue<DateTime?>(:final DateTime value) =>
+                  'Last full sync ${describeAgo(value)}',
+                AsyncValue<DateTime?>(isLoading: true) => '',
+                _ => 'No full sync yet',
+              },
+              onTap: () => context.push('/settings/sync'),
+            ),
+            SettingsNavRow(
+              icon: Icons.download_outlined,
+              title: 'Your data',
+              value: 'Export everything',
+              onTap: () => context.push('/settings/data'),
+            ),
+          ],
+        ),
+        const SizedBox(height: HearthSpacing.xl),
+        // Last and on its own. Nothing sits under it to be hit by mistake,
+        // and nothing above it is destructive.
+        SettingsGroup(
+          children: <Widget>[
+            SettingsActionRow(
+              icon: Icons.logout,
+              title: 'Sign out',
+              subtitle: 'Your recipes stay in the household.',
+              isDestructive: true,
+              onTap: _signOut,
+            ),
+          ],
+        ),
       ],
     );
   }
 }
 
-/// The card the rows of a section sit in, hairlines between them.
-class SettingsGroup extends StatelessWidget {
-  const SettingsGroup({required this.children, super.key});
+// ── The six pages behind it ──────────────────────────────────────────────────
 
-  final List<Widget> children;
+/// Who you are signed in as, and the two things you can do about it.
+class AccountSettingsScreen extends ConsumerWidget {
+  const AccountSettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(HearthRadius.lg),
-        border: Border.all(color: colors.outline),
-      ),
-      // So a row's ink and highlight stay inside the rounded corner.
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(HearthRadius.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final HearthAccount? account = ref.watch(accountProvider).value;
+    final String email = account?.email ?? '';
+
+    return SettingsPage(
+      title: 'Account',
+      children: <Widget>[
+        SettingsGroup(
           children: <Widget>[
-            for (int i = 0; i < children.length; i++) ...<Widget>[
-              if (i > 0)
-                Divider(height: 1, thickness: 1, color: colors.outline),
-              children[i],
-            ],
+            SettingsValueRow(
+              icon: Icons.person_outline,
+              title: 'Signed in as',
+              // A build with no backend has an account and no address; saying
+              // "this device" is true, and leaving the row out would make the
+              // page look broken.
+              value: email.isEmpty ? 'This device only' : email,
+            ),
+            // The profile is per-user and private, which is exactly why it
+            // sits here rather than anywhere shared (§8.2).
+            SettingsNavRow(
+              icon: Icons.restaurant_outlined,
+              title: 'Your food profile',
+              subtitle:
+                  'Allergies, dislikes, how you like to eat. Private to you.',
+              semanticLabel:
+                  'Your food profile. What Hearth reads when it writes you a '
+                  'recipe.',
+              onTap: () => context.push('/profile'),
+            ),
+            // Only where there is an address to send to. A button that could
+            // only ever fail is worse than no button.
+            if (email.isNotEmpty) _PasswordReset(email: email),
           ],
         ),
-      ),
+      ],
     );
   }
 }
 
-/// A row that states something rather than doing something.
-class SettingsValueRow extends StatelessWidget {
-  const SettingsValueRow({
-    required this.icon,
-    required this.title,
-    required this.value,
-    super.key,
-  });
+/// The share code, and the field that joins somebody else's household.
+class HouseholdSettingsScreen extends ConsumerStatefulWidget {
+  const HouseholdSettingsScreen({super.key});
 
-  final IconData icon;
-  final String title;
-  final String value;
+  @override
+  ConsumerState<HouseholdSettingsScreen> createState() =>
+      _HouseholdSettingsState();
+}
+
+class _HouseholdSettingsState extends ConsumerState<HouseholdSettingsScreen> {
+  final TextEditingController _code = TextEditingController();
+  bool _busy = false;
+  String? _error;
+  String? _notice;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _join() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      await ref.read(authGatewayProvider).joinHousehold(_code.text);
+      if (mounted) {
+        _code.clear();
+        setState(
+          () => _notice =
+              'Joined. Their recipes and foods are yours now, and yours are '
+              'theirs.',
+        );
+      }
+    } on AuthFailure catch (failure) {
+      if (mounted) setState(() => _error = failure.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    return Semantics(
-      label: '$title $value',
-      container: true,
-      excludeSemantics: true,
-      child: Padding(
-        padding: const EdgeInsets.all(HearthSpacing.md),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final HearthAccount? account = ref.watch(accountProvider).value;
+
+    return SettingsPage(
+      title: 'Cook together',
+      // Kept word for word rather than trimmed with the rest of the prose
+      // (§6.2.4): joining merges two libraries and cannot be undone here, so
+      // it has to be readable before the button rather than after it.
+      blurb:
+          'Share this code with the other person. They enter it below and '
+          'your libraries become one — including everything either of you has '
+          'already added.',
+      children: <Widget>[
+        SettingsGroup(
           children: <Widget>[
-            Icon(icon, size: 20, color: colors.textMuted),
-            const SizedBox(width: HearthSpacing.md),
-            Expanded(
+            if (account?.shareCode != null)
+              _ShareCode(code: account!.shareCode!),
+            Padding(
+              padding: const EdgeInsets.all(HearthSpacing.md),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   Text(
-                    title,
-                    style: context.text.metadata.copyWith(
-                      color: colors.textMuted,
+                    'Join a household',
+                    style: context.text.label.copyWith(
+                      color: colors.textSecondary,
                     ),
                   ),
-                  const SizedBox(height: HearthSpacing.xxs),
-                  Text(value, style: context.text.body),
+                  const SizedBox(height: HearthSpacing.sm),
+                  TextField(
+                    controller: _code,
+                    autocorrect: false,
+                    textCapitalization: TextCapitalization.characters,
+                    style: context.text.body,
+                    onSubmitted: (_) => _join(),
+                    decoration: InputDecoration(
+                      labelText: 'Their code',
+                      hintText: 'ABCD2345',
+                      filled: true,
+                      fillColor: colors.surfaceSunken,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(HearthRadius.md),
+                        borderSide: BorderSide(color: colors.outline),
+                      ),
+                    ),
+                  ),
+                  if (_error != null) ...<Widget>[
+                    const SizedBox(height: HearthSpacing.md),
+                    SettingsMessage(text: _error!, isError: true),
+                  ],
+                  if (_notice != null) ...<Widget>[
+                    const SizedBox(height: HearthSpacing.md),
+                    SettingsMessage(text: _notice!, isError: false),
+                  ],
+                  const SizedBox(height: HearthSpacing.md),
+                  SizedBox(
+                    height: HearthTouch.minTarget,
+                    child: FilledButton(
+                      onPressed: _busy ? null : _join,
+                      child: Text(_busy ? 'Just a moment…' : 'Join'),
+                    ),
+                  ),
                 ],
               ),
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 }
 
-/// A row that goes somewhere.
-class SettingsNavRow extends StatelessWidget {
-  const SettingsNavRow({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-    this.subtitle,
-    this.semanticLabel,
-    super.key,
-  });
-
-  final IconData icon;
-  final String title;
-  final String? subtitle;
-
-  /// What activating this says out loud. Says what the destination *is*
-  /// rather than repeating the visible word (spec §6.3).
-  final String? semanticLabel;
-
-  final VoidCallback onTap;
+/// Light, dark, or whatever the device is doing.
+class AppearanceSettingsScreen extends StatelessWidget {
+  const AppearanceSettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => _SettingsTappableRow(
-    icon: icon,
-    title: title,
-    subtitle: subtitle,
-    semanticLabel: semanticLabel,
-    trailing: Icon(Icons.chevron_right, color: context.colors.textMuted),
-    onTap: onTap,
+  Widget build(BuildContext context) => const SettingsPage(
+    title: 'Appearance',
+    children: <Widget>[_ThemeChoiceSection()],
   );
 }
 
-/// A row that does something here and now.
-class SettingsActionRow extends StatelessWidget {
-  const SettingsActionRow({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-    this.subtitle,
-    this.semanticLabel,
-    this.isDestructive = false,
-    super.key,
-  });
-
-  final IconData icon;
-  final String title;
-  final String? subtitle;
-  final String? semanticLabel;
-
-  /// Draws the row in the error tone. Never the only signal: the row keeps
-  /// its own icon and its words say what it does (spec §6.3).
-  final bool isDestructive;
-
-  /// Null while the action is already running. The row goes quiet and stops
-  /// answering rather than pretending — a second tap on an export in flight
-  /// builds the file twice.
-  final VoidCallback? onTap;
+/// Which screen Hearth opens on.
+class StartSettingsScreen extends StatelessWidget {
+  const StartSettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => _SettingsTappableRow(
-    icon: icon,
-    title: title,
-    subtitle: subtitle,
-    semanticLabel: semanticLabel,
-    tone: isDestructive ? context.colors.error : null,
-    onTap: onTap,
+  Widget build(BuildContext context) => const SettingsPage(
+    title: 'Opens on',
+    // The half of this page's old prose that survives §6.2.4's cut. It is not
+    // narration: it is the answer to "will this change my partner's phone",
+    // and the answer is no.
+    blurb:
+        'Where Hearth starts when you open it. This device only — it does not '
+        'move anyone else\'s app.',
+    children: <Widget>[_LaunchTargetSection()],
   );
 }
 
-class _SettingsTappableRow extends StatelessWidget {
-  const _SettingsTappableRow({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-    this.subtitle,
-    this.semanticLabel,
-    this.trailing,
-    this.tone,
-  });
-
-  final IconData icon;
-  final String title;
-  final String? subtitle;
-  final String? semanticLabel;
-  final Widget? trailing;
-  final Color? tone;
-  final VoidCallback? onTap;
+/// What sync last did, and a way to ask it again.
+class SyncSettingsScreen extends StatelessWidget {
+  const SyncSettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    final bool enabled = onTap != null;
-    // Muted rather than merely paler: a row that cannot be activated is also
-    // reported as disabled to a screen reader, so the dimming is a second
-    // signal and never the only one (spec §6.3).
-    final Color foreground = enabled
-        ? (tone ?? colors.textPrimary)
-        : colors.textMuted;
-
-    return Semantics(
-      button: true,
-      enabled: enabled,
-      label: semanticLabel ?? <String?>[title, subtitle].nonNulls.join('. '),
-      onTap: onTap,
-      container: true,
-      excludeSemantics: true,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: HearthTouch.minTarget),
-            child: Padding(
-              padding: const EdgeInsets.all(HearthSpacing.md),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Icon(
-                    icon,
-                    size: 20,
-                    color: enabled
-                        ? (tone ?? colors.textSecondary)
-                        : colors.textMuted,
-                  ),
-                  const SizedBox(width: HearthSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          title,
-                          style: context.text.body.copyWith(color: foreground),
-                        ),
-                        if (subtitle case final String subtitle) ...<Widget>[
-                          const SizedBox(height: HearthSpacing.xxs),
-                          Text(
-                            subtitle,
-                            style: context.text.metadata.copyWith(
-                              color: colors.textMuted,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  if (trailing case final Widget trailing) ...<Widget>[
-                    const SizedBox(width: HearthSpacing.sm),
-                    trailing,
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      const SettingsPage(title: 'Syncing', children: <Widget>[_SyncPanel()]);
 }
 
-/// A line of feedback, spoken as well as shown.
-class SettingsMessage extends StatelessWidget {
-  const SettingsMessage({required this.text, required this.isError, super.key});
-
-  final String text;
-  final bool isError;
+/// Taking everything with you.
+class DataSettingsScreen extends StatelessWidget {
+  const DataSettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    return Semantics(
-      liveRegion: true,
-      container: true,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          // An icon as well as the colour, so a problem and a note are not
-          // told apart by hue alone (spec §6.3).
-          Icon(
-            isError ? Icons.error_outline : Icons.check_circle_outline,
-            size: 18,
-            color: isError ? colors.error : colors.textSecondary,
-          ),
-          const SizedBox(width: HearthSpacing.sm),
-          Expanded(child: Text(text, style: context.text.body)),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const SettingsPage(
+    title: 'Your data',
+    blurb:
+        'Everything Hearth holds — your recipes, foods, plans and every meal '
+        'you have logged — as one file you keep. Recipe photos are not '
+        'included.',
+    children: <Widget>[_YourData()],
+  );
 }
 
 // ── Appearance (spec §6.1, §6.2) ─────────────────────────────────────────────
-
-/// How Hearth looks, and where it opens.
-///
-/// Two groups rather than one list: they are both answers to "how is this
-/// device set up", but a theme and a landing screen are not alternatives to
-/// each other, and seven tickable rows in a single card would read as one
-/// question with seven wrong answers.
-class _Appearance extends StatelessWidget {
-  const _Appearance();
-
-  @override
-  Widget build(BuildContext context) => const Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: <Widget>[
-      _ThemeChoiceSection(),
-      // Closer than the gap between top-level sections: these two belong
-      // together, and the spacing is what says so.
-      SizedBox(height: HearthSpacing.lg),
-      _LaunchTargetSection(),
-    ],
-  );
-}
 
 /// Light, dark, or whatever the device is doing.
 ///
@@ -641,18 +427,22 @@ class _ThemeChoiceState extends ConsumerState<_ThemeChoiceSection> {
     final ThemeChoice current =
         ref.watch(themeChoiceProvider).value ?? ThemeChoice.system;
 
-    return SettingsSection(
-      title: 'Appearance',
+    // A group with no header of its own: the page is called Appearance, and
+    // a serif heading repeating that under the title is §6.2.1's complaint
+    // about headings of similar strength.
+    return SettingsGroup(
       children: <Widget>[
         for (final ThemeChoice choice in ThemeChoice.values)
           SettingsChoiceRow(
             label: choice.label,
-            blurb: choice.blurb,
+            // No sentence under the word. "Light by day, dark when your
+            // device says so" explains "Follow the device" to somebody who
+            // has just read "Follow the device" (review §6.2.4).
             icon: choice.icon,
             selected: choice == current,
             onTap: () => _choose(choice),
           ),
-        if (_unsaved) const _CouldNotSave(),
+        if (_unsaved) const SettingsCouldNotSave(),
       ],
     );
   }
@@ -689,116 +479,19 @@ class _LaunchTargetState extends ConsumerState<_LaunchTargetSection> {
     final LaunchTarget current =
         ref.watch(launchTargetProvider).value ?? LaunchTarget.home;
 
-    return SettingsSection(
-      title: 'Opens on',
-      blurb:
-          'Where Hearth starts when you open it. This device only — it does '
-          'not move anyone else\'s app.',
+    // The page carries the title and the one sentence worth keeping; see
+    // `StartSettingsScreen`.
+    return SettingsGroup(
       children: <Widget>[
         for (final LaunchTarget target in LaunchTarget.options)
           SettingsChoiceRow(
             label: target.label,
-            blurb: target.blurb,
             icon: target.icon,
             selected: target == current,
             onTap: () => _choose(target),
           ),
-        if (_unsaved) const _CouldNotSave(),
+        if (_unsaved) const SettingsCouldNotSave(),
       ],
-    );
-  }
-}
-
-/// What a device that refused the write gets told.
-class _CouldNotSave extends StatelessWidget {
-  const _CouldNotSave();
-
-  @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.all(HearthSpacing.md),
-    child: SettingsMessage(
-      text:
-          'That could not be saved on this device, so Hearth has gone back '
-          'to the last choice that was.',
-      isError: true,
-    ),
-  );
-}
-
-/// One answer in a list of mutually exclusive ones, ticked when it is the one
-/// in force.
-class SettingsChoiceRow extends StatelessWidget {
-  const SettingsChoiceRow({
-    required this.label,
-    required this.blurb,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-    super.key,
-  });
-
-  final String label;
-  final String blurb;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-
-    return Semantics(
-      inMutuallyExclusiveGroup: true,
-      selected: selected,
-      button: true,
-      label: '$label. $blurb',
-      onTap: onTap,
-      container: true,
-      excludeSemantics: true,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: HearthTouch.minTarget),
-            child: Padding(
-              padding: const EdgeInsets.all(HearthSpacing.md),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Icon(
-                    icon,
-                    size: 20,
-                    color: selected ? colors.accent : colors.textSecondary,
-                  ),
-                  const SizedBox(width: HearthSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(label, style: context.text.body),
-                        const SizedBox(height: HearthSpacing.xxs),
-                        Text(
-                          blurb,
-                          style: context.text.metadata.copyWith(
-                            color: colors.textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: HearthSpacing.sm),
-                  // The tick is the signal, not the colour of the row: which
-                  // option is chosen must survive being seen in greyscale
-                  // (spec §6.3).
-                  if (selected)
-                    Icon(Icons.check, size: 20, color: colors.accent),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -995,8 +688,7 @@ class _SyncPanel extends ConsumerWidget {
     final SyncStatus status = ref.watch(syncControllerProvider);
     final int queued = ref.watch(pendingWriteCountProvider).value ?? 0;
 
-    return SettingsSection(
-      title: 'Syncing',
+    return SettingsGroup(
       children: <Widget>[
         Padding(
           padding: const EdgeInsets.all(HearthSpacing.md),
@@ -1046,7 +738,7 @@ class _SyncPanel extends ConsumerWidget {
               // answer is still being read, it says nothing about it.
               ?switch (ref.watch(lastFullSyncProvider)) {
                 AsyncValue<DateTime?>(:final DateTime value) =>
-                  'Last full sync ${_ago(value)}',
+                  'Last full sync ${describeAgo(value)}',
                 AsyncValue<DateTime?>(isLoading: true) => null,
                 _ => 'No full sync yet on this device',
               },
@@ -1083,24 +775,6 @@ class _SyncPanel extends ConsumerWidget {
           ),
       ],
     );
-  }
-
-  /// Rough on purpose.
-  ///
-  /// A timestamp to the second invites somebody to compare two devices'
-  /// clocks, which is a question this answers badly — the phones disagree by
-  /// seconds anyway. "About an hour ago" is the resolution the fact actually
-  /// has, and the resolution somebody deciding whether to worry needs.
-  static String _ago(DateTime at) {
-    final Duration since = DateTime.now().toUtc().difference(at.toUtc());
-    if (since.inMinutes < 1) return 'just now';
-    if (since.inMinutes < 60) {
-      return '${since.inMinutes} min ago';
-    }
-    if (since.inHours < 24) {
-      return since.inHours == 1 ? 'an hour ago' : '${since.inHours} hours ago';
-    }
-    return since.inDays == 1 ? 'yesterday' : '${since.inDays} days ago';
   }
 
   static String _describe(SyncStatus status, int queued) {
@@ -1195,33 +869,42 @@ class _YourDataState extends ConsumerState<_YourData> {
   }
 
   @override
-  Widget build(BuildContext context) => SettingsSection(
-    title: 'Your data',
-    blurb:
-        'Everything Hearth holds — your recipes, foods, plans and every meal '
-        'you have logged — as one file you keep. Recipe photos are not '
-        'included.',
-    children: <Widget>[
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          SettingsActionRow(
-            icon: Icons.ios_share,
-            title: _busy ? 'Gathering it up…' : 'Export my data',
-            onTap: _busy ? null : _export,
-          ),
-          if (_error case final String error)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                HearthSpacing.md,
-                0,
-                HearthSpacing.md,
-                HearthSpacing.md,
-              ),
-              child: SettingsMessage(text: error, isError: true),
+  // The words stay: they say what the file holds and what it does not, and
+  // that is a hand-off out of the app (CLAUDE.md rule 4). They move up to the
+  // page's own blurb so the group underneath is just the action.
+  Widget build(BuildContext context) {
+    // Watched, not read at the moment of the tap. `_export` needs the
+    // household and the user to build a file at all, and on its own page
+    // nothing else on screen subscribes to the account — so the first read
+    // was the tap's, the answer was still loading, and the button did
+    // nothing at all and said nothing about it. Watching resolves it while
+    // the page is being looked at, and until it does the row is visibly
+    // unavailable rather than quietly inert.
+    final HearthAccount? account = ref.watch(accountProvider).value;
+
+    return SettingsGroup(
+      children: <Widget>[
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            SettingsActionRow(
+              icon: Icons.ios_share,
+              title: _busy ? 'Gathering it up…' : 'Export my data',
+              onTap: _busy || account == null ? null : _export,
             ),
-        ],
-      ),
-    ],
-  );
+            if (_error case final String error)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  HearthSpacing.md,
+                  0,
+                  HearthSpacing.md,
+                  HearthSpacing.md,
+                ),
+                child: SettingsMessage(text: error, isError: true),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
 }

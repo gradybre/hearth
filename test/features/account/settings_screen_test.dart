@@ -15,6 +15,7 @@ import 'package:hearth/data/auth/auth_gateway.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/data/local/preference_store.dart';
 import 'package:hearth/data/local/recipe_store.dart';
+import 'package:hearth/features/account/settings_kit.dart';
 import 'package:hearth/features/account/settings_screen.dart';
 
 import '../../support/app_harness.dart' show pumpFrames;
@@ -32,6 +33,14 @@ class SettingsHarness {
 
 Future<SettingsHarness> pumpSettings(
   WidgetTester tester, {
+
+  /// Which settings screen this test is about.
+  ///
+  /// There are seven now: an index and the six pages behind it (review §7.8).
+  /// Each is pumped on its own rather than driven through the index, because
+  /// what these tests are about is the controls; how the index behaves has a
+  /// file of its own.
+  Widget page = const SettingsScreen(),
   HearthDatabase? database,
   FileShare? fileShare,
   PreferenceStore? preferences,
@@ -81,10 +90,7 @@ Future<SettingsHarness> pumpSettings(
         if (lastFullSync case final Future<DateTime?> answer)
           lastFullSyncProvider.overrideWith((Ref ref) => answer),
       ],
-      child: MaterialApp(
-        theme: HearthTheme.light(),
-        home: const SettingsScreen(),
-      ),
+      child: MaterialApp(theme: HearthTheme.light(), home: page),
     ),
   );
   await tester.pump();
@@ -138,7 +144,7 @@ void main() {
       // minute ago, because the last attempt failed the same way both times.
 
       testWidgets('says which build is asking', (WidgetTester tester) async {
-        await pumpSettings(tester);
+        await pumpSettings(tester, page: const SyncSettingsScreen());
         await tester.scrollUntilVisible(
           find.textContaining('Hearth ${BuildInfo.appVersion}'),
           200,
@@ -169,7 +175,11 @@ void main() {
         // A read that has not answered, held open on purpose. A real one
         // resolves inside the first pump, so the frame that matters is not
         // otherwise reachable from a test.
-        await pumpSettings(tester, lastFullSync: Completer<DateTime?>().future);
+        await pumpSettings(
+          tester,
+          page: const SyncSettingsScreen(),
+          lastFullSync: Completer<DateTime?>().future,
+        );
 
         expect(
           find.textContaining('No full sync yet'),
@@ -183,7 +193,7 @@ void main() {
       ) async {
         // The honest answer on a device that has never managed one, and the
         // one a blank would hide.
-        await pumpSettings(tester);
+        await pumpSettings(tester, page: const SyncSettingsScreen());
         await tester.scrollUntilVisible(
           find.textContaining('No full sync yet'),
           200,
@@ -194,17 +204,19 @@ void main() {
       });
     });
 
-    testWidgets('sections are headings, so they can be jumped between', (
+    testWidgets('an index row says where its setting stands, out loud too', (
       WidgetTester tester,
     ) async {
-      // A screen reader should be able to skip to Appearance rather than
-      // reading every row above it (spec §6.3).
+      // The section headers this used to check are page titles now. What
+      // replaced them is a row carrying its own value — and a row that
+      // announced "Appearance" and a chevron would have dropped the one thing
+      // it was added to say (spec §6.3).
       final SemanticsHandle handle = tester.ensureSemantics();
       await pumpSettings(tester);
 
       expect(
         tester.getSemantics(find.text('Appearance')),
-        isSemantics(isHeader: true),
+        isSemantics(label: 'Appearance. Follow the device', isButton: true),
       );
       handle.dispose();
     });
@@ -216,9 +228,11 @@ void main() {
       // list cannot land on it.
       await pumpSettings(tester);
 
+      // Export is a page of its own now, so what has to be above Sign out is
+      // the row that leads to it.
       expect(
         tester.getTopLeft(find.text('Sign out')).dy,
-        greaterThan(tester.getTopLeft(find.text('Export my data')).dy),
+        greaterThan(tester.getTopLeft(find.text('Your data')).dy),
       );
     });
   });
@@ -227,7 +241,7 @@ void main() {
     testWidgets('is shown so a partner can type it', (
       WidgetTester tester,
     ) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, page: const HouseholdSettingsScreen());
       expect(find.text('QRSTUV23'), findsOneWidget);
     });
 
@@ -236,7 +250,7 @@ void main() {
     ) async {
       // "QRSTUV23" read as a word is not a code anyone can write down.
       final SemanticsHandle handle = tester.ensureSemantics();
-      await pumpSettings(tester);
+      await pumpSettings(tester, page: const HouseholdSettingsScreen());
 
       expect(
         find.bySemanticsLabel('Your household code is Q R S T U V 2 3'),
@@ -252,7 +266,7 @@ void main() {
       // and the copy button is one of them: a screen-reader user heard the
       // code and then had no way to put it on the clipboard (spec §6.3).
       final SemanticsHandle handle = tester.ensureSemantics();
-      await pumpSettings(tester);
+      await pumpSettings(tester, page: const HouseholdSettingsScreen());
 
       expect(
         tester.getSemantics(find.byTooltip('Copy code')),
@@ -264,7 +278,10 @@ void main() {
 
   group('joining', () {
     testWidgets('sends the code that was typed', (WidgetTester tester) async {
-      final SettingsHarness harness = await pumpSettings(tester);
+      final SettingsHarness harness = await pumpSettings(
+        tester,
+        page: const HouseholdSettingsScreen(),
+      );
 
       await tester.enterText(find.byType(TextField), 'WXYZ2345');
       await tester.tap(find.widgetWithText(FilledButton, 'Join'));
@@ -276,7 +293,7 @@ void main() {
     testWidgets('says what joining did, since it is not undoable here', (
       WidgetTester tester,
     ) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, page: const HouseholdSettingsScreen());
 
       await tester.enterText(find.byType(TextField), 'WXYZ2345');
       await tester.tap(find.widgetWithText(FilledButton, 'Join'));
@@ -290,7 +307,10 @@ void main() {
     ) async {
       // Retyping an eight-character code because of one wrong letter is a
       // small cruelty.
-      final SettingsHarness harness = await pumpSettings(tester);
+      final SettingsHarness harness = await pumpSettings(
+        tester,
+        page: const HouseholdSettingsScreen(),
+      );
       harness.auth.nextFailure = const AuthFailure(
         'No household matches that code. Check it and try again.',
       );
@@ -317,7 +337,10 @@ void main() {
           'No household matches that code. Check it and '
           'try again.';
       final SemanticsHandle handle = tester.ensureSemantics();
-      final SettingsHarness harness = await pumpSettings(tester);
+      final SettingsHarness harness = await pumpSettings(
+        tester,
+        page: const HouseholdSettingsScreen(),
+      );
       harness.auth.nextFailure = const AuthFailure(refusal);
 
       await tester.enterText(find.byType(TextField), 'BADCODE1');
@@ -393,7 +416,7 @@ void main() {
       // auth fires. A screen left holding the old account goes on showing the
       // previous household's code — and whoever types it lands somewhere else
       // entirely.
-      await pumpSettings(tester);
+      await pumpSettings(tester, page: const HouseholdSettingsScreen());
       expect(find.text('QRSTUV23'), findsOneWidget);
 
       await tester.enterText(find.byType(TextField), 'WXYZ2345');
@@ -411,7 +434,7 @@ void main() {
       WidgetTester tester,
     ) async {
       // "Follow the device" is a real answer, not the absence of one.
-      await pumpSettings(tester);
+      await pumpSettings(tester, page: const AppearanceSettingsScreen());
 
       for (final ThemeChoice choice in ThemeChoice.values) {
         expect(find.text(choice.label), findsOneWidget);
@@ -422,7 +445,7 @@ void main() {
       WidgetTester tester,
     ) async {
       final SemanticsHandle handle = tester.ensureSemantics();
-      await pumpSettings(tester);
+      await pumpSettings(tester, page: const AppearanceSettingsScreen());
       await pumpFrames(tester);
 
       expect(
@@ -439,7 +462,7 @@ void main() {
       // (spec §6.3). Scoped to the row rather than counted across the screen:
       // Appearance is now two lists of answers — the theme and the launch
       // screen — and each carries its own tick.
-      await pumpSettings(tester);
+      await pumpSettings(tester, page: const AppearanceSettingsScreen());
       await pumpFrames(tester);
 
       expect(tickOn(ThemeChoice.system.label), findsOneWidget);
@@ -449,7 +472,10 @@ void main() {
     testWidgets('picking dark writes it to the device, not to the household', (
       WidgetTester tester,
     ) async {
-      final SettingsHarness harness = await pumpSettings(tester);
+      final SettingsHarness harness = await pumpSettings(
+        tester,
+        page: const AppearanceSettingsScreen(),
+      );
       await pumpFrames(tester);
 
       await tester.tap(find.text(ThemeChoice.dark.label));
@@ -464,7 +490,7 @@ void main() {
 
     testWidgets('and the tick moves to it', (WidgetTester tester) async {
       final SemanticsHandle handle = tester.ensureSemantics();
-      await pumpSettings(tester);
+      await pumpSettings(tester, page: const AppearanceSettingsScreen());
       await pumpFrames(tester);
 
       await tester.tap(find.text(ThemeChoice.dark.label));
@@ -494,6 +520,7 @@ void main() {
       addTearDown(db.close);
       await pumpSettings(
         tester,
+        page: const AppearanceSettingsScreen(),
         database: db,
         preferences: UnwritablePreferences(db),
       );
@@ -518,7 +545,7 @@ void main() {
     ) async {
       // Read off the section registry rather than listed here, so a pillar
       // added later offers itself without this screen being touched.
-      await pumpSettings(tester);
+      await pumpSettings(tester, page: const StartSettingsScreen());
 
       for (final LaunchTarget target in LaunchTarget.options) {
         expect(find.text(target.label), findsOneWidget);
@@ -534,7 +561,7 @@ void main() {
       WidgetTester tester,
     ) async {
       final SemanticsHandle handle = tester.ensureSemantics();
-      await pumpSettings(tester);
+      await pumpSettings(tester, page: const StartSettingsScreen());
       await pumpFrames(tester);
 
       expect(tickOn(LaunchTarget.home.label), findsOneWidget);
@@ -549,7 +576,10 @@ void main() {
         'household', (WidgetTester tester) async {
       // The whole point of it being device-local: one person opening straight
       // into Nutrition must not move where their partner's app opens.
-      final SettingsHarness harness = await pumpSettings(tester);
+      final SettingsHarness harness = await pumpSettings(
+        tester,
+        page: const StartSettingsScreen(),
+      );
       await pumpFrames(tester);
 
       await tester.tap(find.text('Nutrition'));
@@ -564,7 +594,7 @@ void main() {
 
     testWidgets('and the tick moves to it', (WidgetTester tester) async {
       final SemanticsHandle handle = tester.ensureSemantics();
-      await pumpSettings(tester);
+      await pumpSettings(tester, page: const StartSettingsScreen());
       await pumpFrames(tester);
 
       await tester.tap(find.text('Nutrition'));
@@ -587,6 +617,7 @@ void main() {
       addTearDown(db.close);
       await pumpSettings(
         tester,
+        page: const StartSettingsScreen(),
         database: db,
         preferences: UnwritablePreferences(db),
       );
@@ -603,7 +634,7 @@ void main() {
     testWidgets('it says the choice is this device only', (
       WidgetTester tester,
     ) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, page: const StartSettingsScreen());
       expect(find.textContaining('This device only'), findsOneWidget);
     });
   });
@@ -620,7 +651,10 @@ void main() {
     ) async {
       // A stray tap in a settings list should not put a password-reset email
       // in front of someone.
-      final SettingsHarness harness = await pumpSettings(tester);
+      final SettingsHarness harness = await pumpSettings(
+        tester,
+        page: const AccountSettingsScreen(),
+      );
 
       await tapReset(tester);
 
@@ -629,7 +663,10 @@ void main() {
     });
 
     testWidgets('backing out sends nothing', (WidgetTester tester) async {
-      final SettingsHarness harness = await pumpSettings(tester);
+      final SettingsHarness harness = await pumpSettings(
+        tester,
+        page: const AccountSettingsScreen(),
+      );
 
       await tapReset(tester);
       await tester.tap(find.text('Cancel'));
@@ -643,7 +680,10 @@ void main() {
     ) async {
       // Never to something typed here: the point of the flow is that the
       // person holding the inbox is the person who gets to change it.
-      final SettingsHarness harness = await pumpSettings(tester);
+      final SettingsHarness harness = await pumpSettings(
+        tester,
+        page: const AccountSettingsScreen(),
+      );
 
       await tapReset(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Send link'));
@@ -659,7 +699,7 @@ void main() {
     testWidgets('and says the next step is in an inbox, not here', (
       WidgetTester tester,
     ) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, page: const AccountSettingsScreen());
 
       await tapReset(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Send link'));
@@ -675,7 +715,7 @@ void main() {
       // for, so the link opens whatever web page the project points at. Copy
       // that says "open the link to set a new password" describes a second
       // half of this flow that does not exist yet.
-      await pumpSettings(tester);
+      await pumpSettings(tester, page: const AccountSettingsScreen());
 
       await tapReset(tester);
       expect(
@@ -697,7 +737,10 @@ void main() {
     ) async {
       // Rate limiting is the realistic one, and a silent no-op would have
       // someone waiting on an email that was never sent.
-      final SettingsHarness harness = await pumpSettings(tester);
+      final SettingsHarness harness = await pumpSettings(
+        tester,
+        page: const AccountSettingsScreen(),
+      );
       harness.auth.nextFailure = const AuthFailure(
         'That has been asked for a few times just now. Wait a minute and try '
         'again.',
@@ -717,6 +760,7 @@ void main() {
       // and no backend. A row that could only ever fail is worse than none.
       await pumpSettings(
         tester,
+        page: const AccountSettingsScreen(),
         account: const HearthAccount(
           userId: 'local-user',
           householdId: 'local-household',
@@ -725,7 +769,10 @@ void main() {
       );
 
       expect(find.text('Reset password'), findsNothing);
-      expect(find.text('Signed in as'), findsNothing);
+      // The row stays, and says the true thing instead of an empty one. On
+      // the old single page an account with nothing to say was best left out;
+      // a page called Account with nothing on it about the account is not.
+      expect(find.text('This device only'), findsOneWidget);
     });
   });
 
@@ -743,7 +790,12 @@ void main() {
       );
 
       final FakeFileShare share = FakeFileShare();
-      await pumpSettings(tester, database: db, fileShare: share);
+      await pumpSettings(
+        tester,
+        page: const DataSettingsScreen(),
+        database: db,
+        fileShare: share,
+      );
 
       await tester.tap(find.text('Export my data'));
       await pumpFrames(tester, frames: 20);
@@ -760,7 +812,7 @@ void main() {
       WidgetTester tester,
     ) async {
       // Discovering that afterwards, from a file, would be too late.
-      await pumpSettings(tester);
+      await pumpSettings(tester, page: const DataSettingsScreen());
 
       expect(find.textContaining('photos are not included'), findsOneWidget);
     });
@@ -774,6 +826,7 @@ void main() {
       addTearDown(db.close);
       await pumpSettings(
         tester,
+        page: const DataSettingsScreen(),
         database: db,
         fileShare: FakeFileShare(failWith: StateError('no share sheet')),
       );
