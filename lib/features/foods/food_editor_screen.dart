@@ -181,6 +181,11 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
     if (duplicates.isNotEmpty && mounted) {
       final _DuplicateChoice? choice = await _confirmDuplicate(duplicates);
       if (choice == null || choice.isGoBack) return;
+      // Re-checked after the dialog, not only before it. The guard below has
+      // always been here for this window — a route disposed while a dialog is
+      // open — and the branch underneath reads `ref` and `context`, both of
+      // which throw on a state that has gone.
+      if (!mounted) return;
 
       // Using the one already there writes nothing at all: no second copy, no
       // merge, no remap, no soft-delete (review N05, which asks for this half
@@ -218,6 +223,9 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
       if (mounted) setState(() => _saving = false);
     }
   }
+
+  /// How many duplicates the warning lists before it starts counting.
+  static const int _shown = 3;
 
   /// What the warning came back with.
   ///
@@ -257,7 +265,7 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
               style: context.text.body,
             ),
             const SizedBox(height: HearthSpacing.sm),
-            for (final Food duplicate in duplicates.take(3))
+            for (final Food duplicate in duplicates.take(_shown))
               _DuplicateRow(
                 food: duplicate,
                 onUse: canUseExisting
@@ -265,6 +273,17 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
                           Navigator.of(context)
                               .pop(_DuplicateChoice.existing(duplicate.id))
                     : null,
+              ),
+            // Said rather than silently dropped. The cap is a length choice,
+            // and now that one of these rows is a *choice* it would otherwise
+            // hide candidates without admitting to it — the one somebody
+            // wanted could be the fourth.
+            if (duplicates.length > _shown)
+              Text(
+                duplicates.length - _shown == 1
+                    ? 'and 1 more like it'
+                    : 'and ${duplicates.length - _shown} more like it',
+                style: context.text.metadata.copyWith(color: colors.textMuted),
               ),
             const SizedBox(height: HearthSpacing.md),
             Text(

@@ -84,6 +84,28 @@ void main() {
       expect(find.textContaining('100 kcal'), findsOneWidget);
     });
 
+    testWidgets('and says when it is not showing all of them', (
+      WidgetTester tester,
+    ) async {
+      // The list is capped at three for length. That was a display choice
+      // when every row was a bullet; now that a row is a *choice* it would be
+      // hiding candidates without admitting to it, and the one you wanted
+      // could be the fourth.
+      await openNewFood(
+        tester,
+        foods: <Food>[
+          yogurt(),
+          aFood('Greek yogurt', id: 'f-2', brand: 'Chobani'),
+          aFood('Greek yogurt', id: 'f-3', brand: 'Skyr'),
+          aFood('Greek yogurt', id: 'f-4', brand: 'Siggi'),
+        ],
+      );
+      await saveAs(tester, 'Greek yogurt');
+
+      expect(find.text('Use this one'), findsNWidgets(3));
+      expect(find.textContaining('1 more like it'), findsOneWidget);
+    });
+
     testWidgets('and the other two ways out are still there', (
       WidgetTester tester,
     ) async {
