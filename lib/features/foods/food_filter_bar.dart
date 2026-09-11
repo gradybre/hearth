@@ -8,6 +8,7 @@ import '../../app/theme/hearth_theme.dart';
 import '../../app/widgets/sort_button.dart';
 import '../../domain/foods/food_query.dart';
 import '../../domain/models/food.dart';
+import 'food_scope.dart';
 
 /// Sort and filter chips over the food library.
 ///
@@ -24,12 +25,22 @@ class FoodFilterBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final FoodFilter filter = ref.watch(foodFilterProvider);
     final FoodFilterController control = ref.read(foodFilterProvider.notifier);
+    // The library *in the current scope*: a chip offering Open Food Facts
+    // while you are looking at a restaurant's menu could only ever empty the
+    // list, and the scope is what decides which chips can do anything.
     final List<Food> library =
-        ref.watch(foodLibraryProvider).value ?? const <Food>[];
+        ref.watch(scopedLibraryProvider).value ?? const <Food>[];
 
     // Only the sources and tags the library actually contains: a chip that
     // can only ever return nothing is noise in a row already this long.
-    final List<FoodSource> sources = FoodSearch.sourcesIn(library);
+    //
+    // Restaurant is never among them any more — the scope switch above owns
+    // that distinction now, so in one scope the chip would match everything
+    // and in the other nothing. Both are a chip that cannot do anything.
+    final List<FoodSource> sources = <FoodSource>[
+      for (final FoodSource source in FoodSearch.sourcesIn(library))
+        if (source != FoodSource.restaurant) source,
+    ];
     final List<String> storeTags = FoodSearch.storeTagsIn(library);
 
     return Column(
@@ -112,8 +123,8 @@ class FoodFilterBar extends ConsumerWidget {
     FoodSource.openFoodFacts => 'Open Food Facts',
     FoodSource.usda => 'USDA',
     FoodSource.aiEstimate => 'AI estimate',
-    // The chip that keeps a whole chain's menu out of the way of the
-    // household's own foods, and finds it again when a sheet is reissued.
+    // Never drawn any more — the scope switch owns this one — but the
+    // switch is exhaustive and a source with no name would be a hole.
     FoodSource.restaurant => 'Restaurant',
   };
 }

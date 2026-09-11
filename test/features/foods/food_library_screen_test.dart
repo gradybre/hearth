@@ -126,12 +126,16 @@ void main() {
       WidgetTester tester,
     ) async {
       await openFoods(tester);
+      // One labelled way in (review §6.2.6), and the order inside it is what
+      // carries §5.5: scanning is the faster path for anything with a packet,
+      // and manual entry is what it falls back to rather than what leads.
+      await tester.tap(find.text('Add food'));
+      await pumpFrames(tester);
 
-      // Scanning is the faster path for anything with a packet, and §5.5 puts
-      // manual entry behind it rather than in front.
-      expect(find.text('Scan'), findsOneWidget);
+      final double scan = tester.getTopLeft(find.text('Scan a barcode')).dy;
+      final double byHand = tester.getTopLeft(find.text('Enter it by hand')).dy;
+      expect(scan, lessThan(byHand));
       expect(find.byIcon(Icons.qr_code_scanner), findsOneWidget);
-      expect(find.byIcon(Icons.add), findsOneWidget);
     });
   });
 

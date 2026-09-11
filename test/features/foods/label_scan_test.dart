@@ -120,7 +120,11 @@ Future<void> openEditor(
   PhotoPicker? picker,
 }) async {
   await openFoods(tester, reader: reader, picker: picker);
-  await tester.tap(find.byTooltip('Add a food by hand'));
+  // One labelled way in now (review §6.2.6): the ways a food gets in are
+  // rows in the Add food sheet rather than a stack of floating buttons.
+  await tester.tap(find.text('Add food'));
+  await pumpFrames(tester);
+  await tester.tap(find.text('Enter it by hand'));
   await pumpFrames(tester);
 }
 
@@ -238,9 +242,11 @@ void main() {
     WidgetTester tester,
   ) async {
     await openFoods(tester, reader: FakeLabelReader());
-    expect(find.byTooltip('Read a label from a photo'), findsOneWidget);
+    await tester.tap(find.text('Add food'));
+    await pumpFrames(tester);
+    expect(find.text('Read a label'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Read a label from a photo'));
+    await tester.tap(find.text('Read a label'));
     await pumpFrames(tester);
     await takePhoto(tester);
 
@@ -256,7 +262,12 @@ void main() {
     WidgetTester tester,
   ) async {
     await openFoods(tester);
-    expect(find.byTooltip('Read a label from a photo'), findsNothing);
+    await tester.tap(find.text('Add food'));
+    await pumpFrames(tester);
+
+    // Hidden rather than disabled: an unconfigured build has no way to read
+    // a label at all, and a camera that leads nowhere is worse than none.
+    expect(find.text('Read a label'), findsNothing);
   });
 
   testWidgets('an existing food keeps the servings it already had', (

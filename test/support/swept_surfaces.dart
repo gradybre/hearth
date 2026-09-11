@@ -258,6 +258,18 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     arrived: find.text('Write a recipe'),
     farEnd: find.text('Generate with AI'),
   ),
+  SweptSurface(
+    name: 'the ways to add a food',
+    opensFrom: 'lib/features/foods/add_food_sheet.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Foods');
+      await tools.reach(find.text('Add food'));
+    },
+    arrived: find.text('Scan a barcode'),
+    // The last row, and the one a short screen loses first. The harness has
+    // no label reader, so the middle row is not there to reach.
+    farEnd: find.text('Enter it by hand'),
+  ),
 ];
 
 /// Surfaces that open a sheet or a dialog and are **not** swept yet.
