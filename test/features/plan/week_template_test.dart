@@ -30,8 +30,18 @@ void main() {
     await pumpFrames(tester);
   }
 
+  /// Both week actions live behind the labelled overflow now (review §7.2):
+  /// they were icon-only, with their meaning in a tooltip, which is a hover on
+  /// a device with no pointer.
+  Future<void> chooseFromMenu(WidgetTester tester, String label) async {
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await pumpFrames(tester, frames: 10);
+    await tester.tap(find.text(label));
+    await pumpFrames(tester, frames: 10);
+  }
+
   Future<void> save(WidgetTester tester, String name) async {
-    await tester.tap(find.byTooltip('Save this week to use again'));
+    await chooseFromMenu(tester, 'Save this week to use again');
     await pumpFrames(tester, frames: 10);
     await tester.enterText(
       find.widgetWithText(TextField, 'Call it something'),
@@ -72,8 +82,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Next week'));
     await pumpFrames(tester);
-    await tester.tap(find.byTooltip('Use a saved week'));
-    await pumpFrames(tester, frames: 10);
+    await chooseFromMenu(tester, 'Use a saved week');
     await tester.tap(find.text('A good week'));
     await pumpFrames(tester, frames: 20);
 
@@ -89,8 +98,7 @@ void main() {
   ) async {
     await openWeek(tester, entries: <MealPlanEntry>[tonight()]);
 
-    await tester.tap(find.byTooltip('Use a saved week'));
-    await pumpFrames(tester, frames: 10);
+    await chooseFromMenu(tester, 'Use a saved week');
 
     expect(find.textContaining('No saved weeks yet'), findsOneWidget);
   });

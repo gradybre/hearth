@@ -100,6 +100,23 @@ Future<HearthDatabase> pumpHearthApp(
   List<Food> foods = const <Food>[],
   List<MealPlanEntry> entries = const <MealPlanEntry>[],
 
+  /// A whole week, for the screen that compares seven days.
+  ///
+  /// Separate from [entries], which is one day's worth and feeds the day
+  /// view. Without this the week provider was overridden with an empty map in
+  /// every test and every gallery render, so the one screen whose entire job
+  /// is comparing seven days had never been drawn with anything on it.
+  Map<DateTime, List<MealPlanEntry>> weekEntries =
+      const <DateTime, List<MealPlanEntry>>{},
+
+  /// The day the planner is standing on.
+  ///
+  /// Today unless a test says otherwise. A week fixture has to be keyed to
+  /// real dates, and a test that builds one around `DateTime.now()` says
+  /// nothing about what it does on the last Sunday of a month — so the date
+  /// is a fact the test states rather than one it inherits from the clock.
+  DateTime? selectedDate,
+
   /// A shopping list already on the phone (spec §5.7).
   ///
   /// Written through the real repository before the app builds, rather than
@@ -314,6 +331,8 @@ Future<HearthDatabase> pumpHearthApp(
         // none is a different screen entirely — the one that asks you to set
         // some — so a test about the tiles has to be able to say there are.
         dayTargetsProvider.overrideWith((Ref ref) async => targets),
+        if (selectedDate case final DateTime day)
+          selectedDateProvider.overrideWith(() => _FixedDate(day)),
         planChangesProvider.overrideWith(
           (Ref ref) => const Stream<void>.empty(),
         ),
@@ -326,9 +345,7 @@ Future<HearthDatabase> pumpHearthApp(
           (Ref ref) => const Stream<void>.empty(),
         ),
         recentLogsProvider.overrideWith((Ref ref) async => const <RecentLog>[]),
-        weekEntriesProvider.overrideWith(
-          (Ref ref) async => <DateTime, List<MealPlanEntry>>{},
-        ),
+        weekEntriesProvider.overrideWith((Ref ref) async => weekEntries),
         // Favourites and collections are sqlite-backed streams too, so they
         // need the same treatment — without these the library screen sits on
         // its spinner forever and the test times out rather than failing.
@@ -464,4 +481,14 @@ Future<void> addRecipeVia(WidgetTester tester, String way) async {
   await pumpFrames(tester, frames: 12);
   await tester.tap(find.text(way));
   await pumpFrames(tester, frames: 16);
+}
+
+/// A planner pinned to one day, for [pumpHearthApp]'s `selectedDate`.
+class _FixedDate extends SelectedDate {
+  _FixedDate(this.day);
+
+  final DateTime day;
+
+  @override
+  DateTime build() => dayKey(day);
 }

@@ -211,6 +211,11 @@ void main() {
       await pumpFrames(tester, frames: 12);
       await tester.tap(find.text('Week'));
       await pumpFrames(tester, frames: 12);
+      // The week is seven rows now and the detail is behind one of them
+      // (review §7.2). The guard this test exists for is unchanged: whatever
+      // the day screen shows here, the week has to show too.
+      await tester.tap(find.bySemanticsLabel(RegExp(', today[.]')));
+      await pumpFrames(tester, frames: 12);
 
       expect(find.text('Fibre'), findsOneWidget);
       expect(find.text('Sodium'), findsOneWidget);
