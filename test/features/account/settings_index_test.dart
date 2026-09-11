@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/app/sync_controller.dart';
 import 'package:hearth/app/theme/hearth_spacing.dart';
+import 'package:hearth/features/account/settings_kit.dart';
 
 import '../../support/app_harness.dart';
 
@@ -18,15 +20,33 @@ void main() {
     WidgetTester tester, {
     Size size = const Size(390, 844),
     double scale = 1,
+    SyncStatus? sync,
+    int queued = 0,
   }) async {
-    await pumpHearthApp(tester, size: size, textScale: scale);
+    await pumpHearthApp(
+      tester,
+      size: size,
+      textScale: scale,
+      syncStatus: sync,
+      pendingWrites: queued,
+    );
     await tester.tap(find.byTooltip('Settings').last);
     await pumpFrames(tester, frames: 12);
   }
 
-  /// The settings list's scroll position.
-  ScrollPosition positionOf(WidgetTester tester) =>
-      tester.state<ScrollableState>(find.byType(Scrollable).last).position;
+  /// The settings page's own scroll position.
+  ///
+  /// Named rather than `Scrollable.last`: the shell underneath has scrollables
+  /// of its own, and a height assertion that measured a tab bar would pass
+  /// whatever this page did.
+  ScrollPosition positionOf(WidgetTester tester) => tester
+      .state<ScrollableState>(
+        find.descendant(
+          of: find.byType(SettingsPage),
+          matching: find.byType(Scrollable),
+        ),
+      )
+      .position;
 
   group('the index is short enough to read', () {
     testWidgets('it fits a phone without scrolling at all', (
@@ -173,22 +193,69 @@ void main() {
     // as wide as somebody dragged it and a row of settings is not.
     await openSettings(tester, size: const Size(1280, 900));
 
-    final double row = tester
+    // The card the rows sit in, and the list that holds it. Both, because a
+    // bounded card inside an unbounded list would still be a row of settings
+    // laid across a metre of desk, and measuring only the inner box is how
+    // that would pass.
+    final double card = tester
         .getSize(
           find
               .ancestor(
                 of: find.text('Appearance'),
-                matching: find.byType(Card).evaluate().isEmpty
-                    ? find.byType(DecoratedBox)
-                    : find.byType(Card),
+                matching: find.byType(SettingsGroup),
               )
               .first,
         )
         .width;
+    final double list = tester
+        .getSize(
+          find.descendant(
+            of: find.byType(SettingsPage),
+            matching: find.byType(ListView),
+          ),
+        )
+        .width;
+
     expect(
-      row,
+      list,
       lessThanOrEqualTo(HearthLayout.readingWidth),
-      reason: 'a settings row is $row points wide',
+      reason: 'the settings list is $list points wide',
     );
+    expect(card, lessThanOrEqualTo(list));
+  });
+
+  group('the syncing row', () {
+    testWidgets('leads with the problem rather than the last good pass', (
+      WidgetTester tester,
+    ) async {
+      // A sync that fails quietly is a sync nobody fixes (spec §7.1), and the
+      // index is the screen people look at now. A device that has stopped
+      // being able to send must not read as a device that is fine.
+      await openSettings(
+        tester,
+        sync: const SyncStatus.failed('the server said no'),
+      );
+
+      expect(find.textContaining('the server said no'), findsOneWidget);
+    });
+
+    testWidgets('and says what is waiting when nothing has failed', (
+      WidgetTester tester,
+    ) async {
+      // §7.8's own sketch asks for "Last synced … · Pending …". Writes queued
+      // behind a lift with no signal are not a failure, but they are still
+      // the reason a partner has not seen tonight's plan.
+      await openSettings(tester, queued: 3);
+
+      expect(find.textContaining('3 waiting'), findsOneWidget);
+    });
+
+    testWidgets('and falls back to when it was last in step', (
+      WidgetTester tester,
+    ) async {
+      await openSettings(tester);
+
+      expect(find.textContaining('No full sync yet'), findsOneWidget);
+    });
   });
 }

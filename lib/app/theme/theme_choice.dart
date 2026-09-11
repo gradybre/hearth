@@ -10,30 +10,19 @@ import 'package:flutter/material.dart';
 /// Deliberately device-local. Nothing here is a household decision — the phone
 /// in your hand and the Mac on the desk are allowed to disagree.
 enum ThemeChoice {
-  system(
-    label: 'Follow the device',
-    blurb: 'Light by day, dark when your device says so.',
-    icon: Icons.brightness_auto_outlined,
-  ),
-  light(
-    label: 'Light',
-    blurb: 'Paper cream, whatever the device is doing.',
-    icon: Icons.light_mode_outlined,
-  ),
-  dark(
-    label: 'Dark',
-    blurb: 'Low light, whatever the device is doing.',
-    icon: Icons.dark_mode_outlined,
-  );
+  system(label: 'Follow the device', icon: Icons.brightness_auto_outlined),
+  light(label: 'Light', icon: Icons.light_mode_outlined),
+  dark(label: 'Dark', icon: Icons.dark_mode_outlined);
 
-  const ThemeChoice({
-    required this.label,
-    required this.blurb,
-    required this.icon,
-  });
+  const ThemeChoice({required this.label, required this.icon});
 
+  /// What the row says, and all it says.
+  ///
+  /// There used to be a sentence under each of these — "Paper cream, whatever
+  /// the device is doing" under the word *Light* — which is the word twice
+  /// (review §6.2.4). It was carried here, so it is dropped here rather than
+  /// left in the model for a screen to remember not to draw.
   final String label;
-  final String blurb;
 
   /// Carried alongside the label so the chosen option is never distinguished
   /// by colour alone (spec §6.3).

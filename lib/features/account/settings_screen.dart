@@ -99,7 +99,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               // The address, when there is one. An unconfigured build has an
               // account with no email and no backend behind it, and the page
               // behind this row says so rather than the row pretending.
-              value: email.isEmpty ? 'This device' : email,
+              value: email.isEmpty ? 'This device only' : email,
               onTap: () => context.push('/settings/account'),
             ),
             SettingsNavRow(
@@ -132,20 +132,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SizedBox(height: HearthSpacing.xl),
         SettingsGroup(
           children: <Widget>[
-            SettingsNavRow(
-              icon: Icons.cloud_done_outlined,
-              title: 'Syncing',
-              // The one fact a bug report starts from, on the index rather
-              // than a page in: a device that has not been in step since
-              // Tuesday should not look like one that synced a minute ago.
-              value: switch (ref.watch(lastFullSyncProvider)) {
-                AsyncValue<DateTime?>(:final DateTime value) =>
-                  'Last full sync ${describeAgo(value)}',
-                AsyncValue<DateTime?>(isLoading: true) => '',
-                _ => 'No full sync yet',
-              },
-              onTap: () => context.push('/settings/sync'),
-            ),
+            const _SyncRow(),
             SettingsNavRow(
               icon: Icons.download_outlined,
               title: 'Your data',
@@ -169,6 +156,44 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// The index's line about sync.
+///
+/// It says the *problem* first and the last good pass only when there is no
+/// problem to report. A sync that fails quietly is a sync nobody fixes
+/// (spec §7.1), and this row is now the whole of what most people will ever
+/// read about it — a device with three writes it has stopped trying must not
+/// look like a device that synced five minutes ago, which is exactly what
+/// leading with the timestamp would have done. §7.8 asks for the same thing
+/// in its own sketch: "Last synced … · Pending …".
+class _SyncRow extends ConsumerWidget {
+  const _SyncRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final SyncStatus status = ref.watch(syncControllerProvider);
+    final int queued = ref.watch(pendingWriteCountProvider).value ?? 0;
+
+    return SettingsNavRow(
+      // The icon moves with the words rather than instead of them, so the
+      // state never rests on an icon or a colour alone (spec §6.3).
+      icon: status.hasProblem ? Icons.error_outline : Icons.cloud_done_outlined,
+      title: 'Syncing',
+      value: status.hasProblem || status.isSyncing || queued > 0
+          ? _SyncPanel.describe(status, queued)
+          : switch (ref.watch(lastFullSyncProvider)) {
+              AsyncValue<DateTime?>(:final DateTime value) =>
+                'Last full sync ${describeAgo(value)}',
+              // Loading is not the same answer as "never", and saying it is
+              // would be this row telling the kind of lie the panel behind it
+              // exists to prevent.
+              AsyncValue<DateTime?>(isLoading: true) => '',
+              _ => 'No full sync yet',
+            },
+      onTap: () => context.push('/settings/sync'),
     );
   }
 }
@@ -707,7 +732,7 @@ class _SyncPanel extends ConsumerWidget {
               const SizedBox(width: HearthSpacing.md),
               Expanded(
                 child: Text(
-                  _describe(status, queued),
+                  describe(status, queued),
                   style: context.text.body.copyWith(
                     color: colors.textSecondary,
                   ),
@@ -777,7 +802,8 @@ class _SyncPanel extends ConsumerWidget {
     );
   }
 
-  static String _describe(SyncStatus status, int queued) {
+  /// What the panel — and the index row that leads to it — says out loud.
+  static String describe(SyncStatus status, int queued) {
     if (status.isSyncing) return 'Syncing…';
     if (status.error != null) return 'Last sync failed: ${status.error}';
 

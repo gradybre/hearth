@@ -13,64 +13,6 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/widgets/reading_column.dart';
 
-/// A titled group of related settings.
-///
-/// The header sits outside the card, the way a native settings screen puts it
-/// — so the card reads as one object and the label as the name of that object
-/// rather than as its first row.
-class SettingsSection extends StatelessWidget {
-  const SettingsSection({
-    required this.title,
-    required this.children,
-    this.blurb,
-    super.key,
-  });
-
-  final String title;
-
-  /// A sentence under the header, for a group that needs explaining before it
-  /// is touched rather than after.
-  final String? blurb;
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Padding(
-          padding: const EdgeInsets.only(left: HearthSpacing.xs),
-          // A heading for a screen reader too, so the sections can be jumped
-          // between rather than read through (spec §6.3).
-          child: Semantics(
-            header: true,
-            // A node of its own, not an annotation folded into whatever
-            // encloses it. Without this the header, the blurb and every row
-            // under it collapse into a single unreadable announcement — which
-            // is what a settings screen must never sound like (spec §6.3).
-            container: true,
-            child: Text(title, style: context.text.sectionHeader),
-          ),
-        ),
-        if (blurb case final String blurb) ...<Widget>[
-          const SizedBox(height: HearthSpacing.xs),
-          Padding(
-            padding: const EdgeInsets.only(left: HearthSpacing.xs),
-            child: Text(
-              blurb,
-              style: context.text.body.copyWith(color: colors.textSecondary),
-            ),
-          ),
-        ],
-        const SizedBox(height: HearthSpacing.sm),
-        SettingsGroup(children: children),
-      ],
-    );
-  }
-}
-
 /// The card the rows of a section sit in, hairlines between them.
 class SettingsGroup extends StatelessWidget {
   const SettingsGroup({required this.children, super.key});

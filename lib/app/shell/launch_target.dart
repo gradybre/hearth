@@ -23,7 +23,6 @@ class LaunchTarget {
     required this.stored,
     required this.path,
     required this.label,
-    required this.blurb,
     required this.icon,
   });
 
@@ -32,7 +31,6 @@ class LaunchTarget {
     stored: 'home',
     path: '/',
     label: 'The home screen',
-    blurb: 'Every section, and you choose where to go.',
     icon: Icons.cottage_outlined,
   );
 
@@ -50,7 +48,6 @@ class LaunchTarget {
     stored: 'today',
     path: '/plan',
     label: 'Today',
-    blurb: 'The day you are in, ready to log against.',
     icon: Icons.today_outlined,
   );
 
@@ -62,7 +59,6 @@ class LaunchTarget {
     stored: 'section:${section.id}',
     path: section.path,
     label: section.label,
-    blurb: section.blurb,
     icon: section.icon,
   );
 
@@ -81,8 +77,13 @@ class LaunchTarget {
   /// The route the app starts at.
   final String path;
 
+  /// What the row says, and all it says.
+  ///
+  /// Each of these carried a sentence of its own — "The day you are in, ready
+  /// to log against" under the word *Today* — which is the word twice (review
+  /// §6.2.4). `BuiltSection.blurb` still exists and is still drawn, on the
+  /// home screen's cards, where it names a room somebody has not opened.
   final String label;
-  final String blurb;
 
   /// Carried alongside the label so the chosen option is never distinguished
   /// by colour alone (spec §6.3).
