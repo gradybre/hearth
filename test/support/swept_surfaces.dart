@@ -288,6 +288,12 @@ const Map<String, String> notSweptYet = <String, String>{
       'three times the text by use_existing_test.dart — this guard is per '
       'file, so one entry covers both and the second one would have '
       'shipped unwalked without somebody noticing. Task e31da6f0.',
+  'lib/features/foods/menu_import_screen.dart':
+      'The reimport review, which asks what to do with menu rows the new '
+      'document does not mention. Walked at three times the text by '
+      'menu_reimport_screen_test.dart instead — it needs a restaurant '
+      'menu already saved and a pasted document that disagrees with it, '
+      'and the sweep fixture has no reason to carry either.',
   'lib/features/foods/merge_screen.dart':
       'The merge review sheet. Walked at three times the text by '
       'merge_screen_test.dart instead — it needs two foods that look '
