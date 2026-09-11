@@ -266,6 +266,43 @@ void main() {
     });
   });
 
+  testWidgets('an opened row opens its own day, not whichever is selected', (
+    WidgetTester tester,
+  ) async {
+    // Reachable, and the expansion is what makes it so: the open row is
+    // remembered across a change of week, and the *selected* day is not.
+    //
+    // Open Wednesday. Step to next week — nothing matches, so nothing is
+    // expanded. Step back with the today button, which selects today rather
+    // than Wednesday: Wednesday's row re-opens, showing Wednesday's rings,
+    // above a button that would have opened Thursday.
+    await openWeek(tester);
+
+    await tester.tap(find.bySemanticsLabel(RegExp('Wednesday 9/9[.,]')));
+    await pumpFrames(tester, frames: 12);
+    await tester.tap(find.byTooltip('Next week'));
+    await pumpFrames(tester, frames: 12);
+    await tester.tap(find.byTooltip('Go to this week'));
+    await pumpFrames(tester, frames: 12);
+
+    expect(
+      find.text('Open this day'),
+      findsOneWidget,
+      reason: 'the row did not re-open, so this proves nothing',
+    );
+    await tester.ensureVisible(find.text('Open this day'));
+    await pumpFrames(tester);
+    await tester.tap(find.text('Open this day'));
+    await pumpFrames(tester, frames: 12);
+
+    // The day screen names the day it is showing (#55).
+    expect(
+      find.textContaining('Wednesday'),
+      findsWidgets,
+      reason: 'the button under Wednesday opened a different day',
+    );
+  });
+
   testWidgets('the week template actions say what they do in words', (
     WidgetTester tester,
   ) async {

@@ -167,8 +167,15 @@ class _WeekScreenState extends ConsumerState<WeekScreen> {
                         : day,
                   );
                 },
-                onOpen: () =>
-                    ref.read(planViewProvider.notifier).show(PlanView.day),
+                // The row's own day, not whichever the week has selected. The
+                // open row is remembered across a change of week and the
+                // selection is not, so stepping to next week and back with
+                // the today button re-opened Wednesday's detail above a
+                // button that opened Thursday.
+                onOpen: (DateTime day) {
+                  ref.read(selectedDateProvider.notifier).select(day);
+                  ref.read(planViewProvider.notifier).show(PlanView.day);
+                },
               ),
               const SizedBox(height: HearthSpacing.lg),
               _WeekTotals(summary: summary, targets: targets),
@@ -209,7 +216,7 @@ class _DayRows extends StatelessWidget {
   final Map<DateTime, List<Macros>> eatenParts;
   final Map<DateTime, List<NutrientCoverage>> eatenCoverage;
   final ValueChanged<DateTime> onSelect;
-  final VoidCallback onOpen;
+  final ValueChanged<DateTime> onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -240,7 +247,7 @@ class _DayRows extends StatelessWidget {
                     eatenCoverage[summary.days[i].date] ??
                     const <NutrientCoverage>[],
                 onSelect: () => onSelect(summary.days[i].date),
-                onOpen: onOpen,
+                onOpen: () => onOpen(summary.days[i].date),
               ),
             ],
           ],
@@ -310,6 +317,9 @@ class _DayRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
+    // One read of the clock for the row, not one for the label and one for
+    // the weight: two calls can straddle midnight and disagree about which
+    // day is today, on the one screen whose job is attributing food to days.
     final bool today = day.isToday(DateTime.now());
     final String name =
         '${shortWeekdayName(day.date)} ${day.date.day}'
@@ -329,7 +339,7 @@ class _DayRow extends StatelessWidget {
           // shows three letters and a numeral.
           label:
               '${weekdayName(day.date)} ${shortDate(day.date)}'
-              '${day.isToday(DateTime.now()) ? ', today' : ''}. '
+              '${today ? ', today' : ''}. '
               '${_eatenText()}. $_state',
           onTap: onSelect,
           container: true,

@@ -68,12 +68,18 @@ class WeekDay {
 
 /// Seven days, and what they come to together.
 class WeekSummary {
-  const WeekSummary(this.days);
+  WeekSummary(this.days)
+    : _counted = days
+          .where((WeekDay d) => d.countsTowardAverage)
+          .toList(growable: false);
 
   final List<WeekDay> days;
 
-  List<WeekDay> get _counted =>
-      days.where((WeekDay d) => d.countsTowardAverage).toList(growable: false);
+  /// The days in the denominator, worked out once.
+  ///
+  /// Three getters want this and a row rebuild asks all three, so computing
+  /// it per call was three walks and three lists for one answer.
+  final List<WeekDay> _counted;
 
   /// How many days are in the average's denominator.
   int get loggedDays => _counted.length;
