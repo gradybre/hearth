@@ -262,12 +262,14 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('the household screen', (WidgetTester tester) async {
+    testWidgets('the settings screen', (WidgetTester tester) async {
       final SemanticsHandle handle = tester.ensureSemantics();
       await open(tester, Brightness.light);
       await pumpFrames(tester);
 
-      await tester.tap(find.byIcon(Icons.people_outline));
+      // Settings is the shell's own button now, not a "Household" icon in
+      // the recipe library's corner (review §6.2.6, N04's menu).
+      await tester.tap(find.byTooltip('Settings').last);
       await pumpFrames(tester, frames: 10);
 
       await check(tester);

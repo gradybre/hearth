@@ -22,6 +22,7 @@ import '../features/recipes/recipe_editor_args.dart';
 import '../features/recipes/recipe_editor_screen.dart';
 import '../features/recipes/recipe_import_controller.dart';
 import '../features/recipes/recipe_import_screen.dart';
+import '../features/recipes/repair_screen.dart';
 import 'providers.dart';
 import 'shell/app_shell.dart';
 import 'shell/destinations.dart';
@@ -137,6 +138,11 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
       path: '/recipe/write',
       builder: (BuildContext context, GoRouterState state) =>
           const RecipeChatScreen(),
+    ),
+    GoRoute(
+      path: '/recipe/repair',
+      builder: (BuildContext context, GoRouterState state) =>
+          const RepairScreen(),
     ),
     GoRoute(
       path: '/recipe/defaults',

@@ -1345,6 +1345,16 @@ const List<Scene> scenes = <Scene>[
       'Tortilla chips',
     ],
   ),
+  // The repair queue, which has no "before" — it is the screen N04 asks for
+  // and there was nothing in its place. The gallery recipes carry unmatched
+  // lines, which is what makes it worth a picture at all.
+  Scene(name: 'repair', taps: <String>['Recipes', 'More', 'Nutrition repair']),
+  Scene(
+    name: 'repair-large-text',
+    size: Size(320, 568),
+    textScale: 2.0,
+    taps: <String>['Recipes', 'More', 'Nutrition repair'],
+  ),
   // Week, which the review calls a day selector rather than a comparison
   // (§7.2): "comparing seven days takes repeated selection and scrolling".
   Scene(name: 'week', target: LaunchTarget.today, taps: <String>['Week']),
