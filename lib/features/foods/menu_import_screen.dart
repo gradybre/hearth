@@ -308,6 +308,11 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
       return;
     }
 
+    // Cleared here, not only set below: `_save` can be pressed again after a
+    // failure, and a retirement list left over from a run whose review was
+    // answered differently would retire foods this attempt never asked about.
+    _retiring = const <String>[];
+
     // Review before commit, for what the write leaves behind as well as for
     // what it writes (CLAUDE.md rule 4). A second import of a menu whose
     // portions moved would otherwise quietly give the restaurant two of
@@ -372,8 +377,29 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
       // Retired only after every incoming row is safely in, and only ever a
       // soft delete: a menu food can be on a past log, and an absence cannot
       // travel to the other phone (rule 3).
-      for (final String id in _retiring) {
-        await repository.delete(id);
+      //
+      // Its own try, because its failure is a different fact. Sharing the one
+      // below reported "12 of 12 saved before that stopped, and the rest
+      // could not be saved" when every row was in and a *retirement* had
+      // failed — which is not true, and tells somebody to retry a save that
+      // already worked.
+      int retired = 0;
+      try {
+        for (final String id in _retiring) {
+          await repository.delete(id);
+          retired++;
+        }
+      } on Object {
+        if (mounted) {
+          setState(
+            () => _saveError =
+                'All $done saved. ${_retiring.length - retired} of '
+                '${_retiring.length} could not be taken off the menu — they '
+                'are still there, and nothing was lost. Try the import again '
+                'to retire them.',
+          );
+        }
+        return;
       }
       if (mounted) Navigator.of(context).pop(usable.length);
     } on Object {
