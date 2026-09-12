@@ -140,9 +140,13 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
           heatC: heatC,
           coolC: coolC,
         ),
-        // Mode, Eco and the fan change more than a number, so there is nothing
-        // honest to show until the thermostat has answered.
-        _ => now,
+        // A switch that springs back the instant it is flipped reads as
+        // broken, and then sits wrong until the next reading a minute later.
+        SetMode(:final ThermostatMode mode) => now.copyWith(mode: mode),
+        SetEco(:final bool on) => now.copyWith(
+          eco: on ? EcoMode.manualEco : EcoMode.off,
+        ),
+        SetFanTimer(:final bool on) => now.copyWith(fan: FanState(isOn: on)),
       };
       _queued = command;
     });
@@ -260,7 +264,18 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
     }
 
     final ThermostatState? state = _shown;
-    if (state == null) return _unlinked(context, gutter);
+    if (state == null) {
+      // Only the server saying so, or a dead credential, means there is
+      // nothing connected. Anything else — no signal, a rate limit, a
+      // thermostat that did not answer — is a link that exists and could not
+      // be read, and offering Connect there invites a fresh consent flow
+      // against a link that is perfectly fine.
+      final bool reallyUnlinked =
+          _needsRelink || (_link != null && !_link!.isLinked);
+      return reallyUnlinked
+          ? _unlinked(context, gutter)
+          : _unreachable(context, gutter);
+    }
 
     return RefreshIndicator(
       onRefresh: _refresh,
@@ -346,6 +361,32 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
       ],
     ];
   }
+
+  /// Linked, and not readable this minute.
+  Widget _unreachable(BuildContext context, double gutter) => CentredMessage(
+    gutter: gutter,
+    children: <Widget>[
+      Text(
+        'Thermostat',
+        style: context.text.sectionHeader,
+        textAlign: TextAlign.center,
+      ),
+      const SizedBox(height: HearthSpacing.sm),
+      Text(
+        _error ?? 'The thermostat did not answer.',
+        style: context.text.body.copyWith(color: context.colors.textSecondary),
+        textAlign: TextAlign.center,
+      ),
+      const SizedBox(height: HearthSpacing.lg),
+      SizedBox(
+        height: HearthTouch.minTarget,
+        child: OutlinedButton(
+          onPressed: _busy ? null : () => unawaited(_refresh()),
+          child: const Text('Try again'),
+        ),
+      ),
+    ],
+  );
 
   Widget _unlinked(BuildContext context, double gutter) {
     final HearthColors colors = context.colors;
@@ -683,6 +724,28 @@ class _FooterState extends State<_Footer> {
   /// press is cheaper than a modal nobody can reach in a widget test.
   bool _sure = false;
 
+  /// And the question expires.
+  ///
+  /// Left armed, a stray press minutes later destroys the credential with no
+  /// second thought asked for — the confirmation would have been spent on a
+  /// press nobody remembers making.
+  static const Duration _armedFor = Duration(seconds: 5);
+  Timer? _disarm;
+
+  @override
+  void dispose() {
+    _disarm?.cancel();
+    super.dispose();
+  }
+
+  void _arm() {
+    setState(() => _sure = true);
+    _disarm?.cancel();
+    _disarm = Timer(_armedFor, () {
+      if (mounted) setState(() => _sure = false);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
@@ -706,9 +769,10 @@ class _FooterState extends State<_Footer> {
                 ? null
                 : () {
                     if (!_sure) {
-                      setState(() => _sure = true);
+                      _arm();
                       return;
                     }
+                    _disarm?.cancel();
                     unawaited(widget.onDisconnect());
                   },
             child: Text(

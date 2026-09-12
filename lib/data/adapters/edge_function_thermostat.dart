@@ -124,11 +124,11 @@ class EdgeFunctionThermostat implements ThermostatGateway {
     if (envelope['linked'] != true) return const ThermostatLink.unlinked();
     final Object? device = envelope['device'];
     if (device is! Map) {
-      // Linked, but the function could not read the device. Treated as not
-      // linked rather than as a half-drawn screen: there is nothing to show
-      // and nothing to send, which is what unlinked means to everything
-      // above here.
-      return const ThermostatLink.unlinked();
+      // Linked, and nothing to show. That is a failure, not an absence: the
+      // server said this household *has* a thermostat, so reporting no
+      // thermostat would put a Connect button in front of somebody whose link
+      // is fine, and pressing it starts a consent flow for no reason.
+      throw const ThermostatException('The thermostat did not answer.');
     }
     return ThermostatLink.linked(
       state: stateFrom(device),

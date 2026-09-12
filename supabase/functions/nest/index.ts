@@ -248,18 +248,32 @@ async function unlink(env: Env, household: string): Promise<Response> {
 
 // ── Reading the device ──────────────────────────────────────────────────────
 
+/// The thermostat as it is now.
+///
+/// Throws rather than returning null when it cannot be read. Answering
+/// `{linked: true, device: null}` would be the server saying "you have a
+/// thermostat and here is nothing", which the app can only read as having no
+/// thermostat — so spending the hour's budget would put a Connect button in
+/// front of somebody whose link is perfectly good, and pressing it would start
+/// a fresh consent flow for no reason.
 async function read(
   env: Env,
   household: string,
   row: LinkRow,
-): Promise<Snapshot | null> {
+): Promise<Snapshot> {
   const token = await accessToken(env, household, row);
 
   let deviceName = row.device_name;
   if (!deviceName) {
-    if (!(await takeCall(env, household))) return null;
+    if (!(await takeCall(env, household))) throw overBudget();
     const thermostats = thermostatsIn(await sdm(env, token, '/devices'));
-    if (thermostats.length === 0) return null;
+    if (thermostats.length === 0) {
+      throw new TokenRefused(
+        404,
+        'No thermostat is shared with Hearth any more. Link again and tick '
+          + 'it in Google\u2019s device list.',
+      );
+    }
     deviceName = thermostats[0].name;
     await rpc(env, 'nest_link_pin_device', {
       p_household: household,
@@ -268,11 +282,30 @@ async function read(
     });
   }
 
-  if (!(await takeCall(env, household))) return null;
+  if (!(await takeCall(env, household))) throw overBudget();
   const path = `/${deviceName.replace(/^enterprises\/[^/]+\//, '')}`;
   const device = await sdm(env, token, path, {}, deviceName);
+  const snapshot = snapshotOf(device);
+  if (!snapshot) {
+    throw new TokenRefused(
+      502,
+      'The thermostat answered with something Hearth cannot read.',
+    );
+  }
   await note(env, household, true, null);
-  return snapshotOf(device);
+  return snapshot;
+}
+
+/// The hour's requests are spent.
+///
+/// A `TokenRefused` rather than a bare error so the caller answers it as
+/// weather — the link is fine and asking again later works.
+function overBudget(): TokenRefused {
+  return new TokenRefused(
+    429,
+    'Hearth has asked the thermostat as often as Google allows this hour. '
+      + 'Try again shortly.',
+  );
 }
 
 async function accessToken(

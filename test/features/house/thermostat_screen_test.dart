@@ -318,6 +318,70 @@ void main() {
     });
   });
 
+  group('a thermostat that is linked but cannot be read right now', () {
+    testWidgets('is not reported as no thermostat at all', (
+      WidgetTester tester,
+    ) async {
+      // Google allows a hundred requests an hour per device. Spending them —
+      // two phones, a long afternoon — must not make the screen say there is
+      // nothing connected, because the obvious response to that is to press
+      // Connect and start a fresh consent flow against a link that is fine.
+      final FakeThermostat fake = FakeThermostat(state: aThermostat());
+      await openHouse(tester, fake);
+      expect(find.text('70°'), findsOneWidget);
+
+      fake.failWith = const ThermostatException(
+        'Hearth has asked the thermostat as often as Google allows this hour.',
+      );
+      await tester.tap(find.byTooltip('Warmer'));
+      await tester.pump(ThermostatScreen.settleAfter);
+      await pumpFrames(tester);
+
+      expect(find.text('Connect Google Nest'), findsNothing);
+      expect(find.textContaining('as often as Google allows'), findsOneWidget);
+      expect(find.text('70°'), findsOneWidget, reason: 'the last reading held');
+    });
+
+    testWidgets('and a failure before the first reading says what happened', (
+      WidgetTester tester,
+    ) async {
+      // Not "Connect Google Nest": the server never said this household has
+      // no thermostat, only that it could not be reached this second.
+      await openHouse(
+        tester,
+        FakeThermostat(
+          failWith: const ThermostatException(
+            'Could not reach the thermostat.',
+          ),
+        ),
+      );
+
+      expect(find.textContaining('Could not reach'), findsOneWidget);
+      expect(find.text('Connect Google Nest'), findsNothing);
+      expect(find.text('Try again'), findsOneWidget);
+    });
+  });
+
+  group('a switch that has been flipped', () {
+    testWidgets('stays flipped while the command is in flight', (
+      WidgetTester tester,
+    ) async {
+      // Without this the switch springs straight back and sits wrong until
+      // the next poll, up to a minute later, which reads as broken.
+      final FakeThermostat fake = FakeThermostat(state: aThermostat());
+      await openHouse(tester, fake);
+
+      await tester.tap(find.byType(Switch).first);
+      await tester.pump();
+
+      expect(
+        tester.widget<Switch>(find.byType(Switch).first).value,
+        isTrue,
+        reason: 'Eco came back off before the thermostat had answered',
+      );
+    });
+  });
+
   group('disconnecting', () {
     testWidgets('asks once before destroying the household\'s credential', (
       WidgetTester tester,
@@ -335,6 +399,23 @@ void main() {
 
       expect(fake.unlinks, 1);
       expect(find.text('Connect Google Nest'), findsOneWidget);
+    });
+
+    testWidgets('and the confirmation does not stay armed for ever', (
+      WidgetTester tester,
+    ) async {
+      // Left armed, a stray press minutes later destroys the household's
+      // credential with no second thought asked for.
+      final FakeThermostat fake = FakeThermostat(state: aThermostat());
+      await openHouse(tester, fake);
+
+      await tester.tap(find.text('Disconnect'));
+      await pumpFrames(tester);
+      expect(find.textContaining('Really disconnect'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 6));
+      expect(find.text('Disconnect'), findsOneWidget);
+      expect(find.textContaining('Really disconnect'), findsNothing);
     });
   });
 
