@@ -1785,7 +1785,12 @@ begin
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public'
-    and p.proname like 'nest\_link\_%'
+    -- Every door into `private`, not just the ones named `nest_link_*`. The
+    -- pattern was written when they all were; `nest_start_link`,
+    -- `nest_claim_link` and `nest_take_device_call` are not, so three of the
+    -- four — including the one behind the public callback — had stopped being
+    -- checked. Nothing was exposed, which is exactly why nobody noticed.
+    and p.proname like 'nest\_%'
     and (
       has_function_privilege('anon', p.oid, 'EXECUTE')
       or has_function_privilege('authenticated', p.oid, 'EXECUTE')

@@ -807,8 +807,8 @@ pillar. What has changed is that one tab of one room now does something.
 - **Everything the device reports, and nothing it does not.** The Fan trait is absent on a
   thermostat with no fan wire and `availableModes` varies by model, so the screen is a picture
   of *this* thermostat rather than of the API. A control that could only ever fail is not drawn.
-- **Three new server-side secrets** (§8.1): `SDM_PROJECT_ID`, `GOOGLE_OAUTH_CLIENT_ID`,
-  `GOOGLE_OAUTH_CLIENT_SECRET`. The household's Google **refresh token** is stricter still — it
+- **Four new server-side secrets** (§8.1): `SDM_PROJECT_ID`, `GOOGLE_OAUTH_CLIENT_ID`,
+  `GOOGLE_OAUTH_CLIENT_SECRET`, `NEST_CALLBACK_URL`. The household's Google **refresh token** is stricter still — it
   is a live bearer credential for the heating, so it lives in a `private` schema PostgREST does
   not expose, with RLS on and no policies, reachable only by the Edge Function's secret key.
   `supabase/tests/schema_guards.sql` was widened so `private` is not simply a place the existing
@@ -823,6 +823,12 @@ pillar. What has changed is that one tab of one room now does something.
   two phones cannot coordinate one between themselves; the screen polls once a minute and only
   while it is in front of you; a burst of taps on − or + is one command, not five; and a command
   never re-reads, because a command plus a read would let one drag exhaust the allowance.
+- **The consent redirect comes back to Hearth**, not to `https://www.google.com` as Google's
+  guide prescribes. That redirect is a universal link claimed by the Google iOS app, so on a
+  phone the flow dead-ends with the authorization code never visible to anybody. `nest-callback`
+  is therefore the project's **first publicly reachable endpoint** — Google redirects a browser
+  to it and browsers carry no JWT — and its whole surface is one GET trusting a single-use
+  256-bit nonce, stored hashed, ten minutes to live, spent by an atomic test-and-set.
 - **Setup is recorded in `docs/NEST_SETUP.md`**, because it is a one-time sequence through two
   Google consoles that will need repeating in a year when something breaks.
 

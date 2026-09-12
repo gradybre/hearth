@@ -13,65 +13,89 @@ import '../../support/app_harness.dart';
 /// Everything here runs against a fake gateway. What cannot be covered from a
 /// keyboard is named in the group at the bottom.
 class FakeThermostat implements ThermostatGateway {
-  FakeThermostat({this.state, this.failWith});
+  FakeThermostat({
+    ThermostatState? state,
+    List<ThermostatState>? devices,
+    this.failWith,
+  }) : devices = devices ?? <ThermostatState>[?state];
 
-  ThermostatState? state;
+  List<ThermostatState> devices;
   ThermostatException? failWith;
 
+  /// The one thermostat, for the many tests that only need one.
+  set state(ThermostatState? value) => devices = <ThermostatState>[?value];
+
   final List<ThermostatCommand> sent = <ThermostatCommand>[];
+  final List<String> sentTo = <String>[];
   int statusCalls = 0;
   int unlinks = 0;
-  String? codeGiven;
+  int consentUrls = 0;
 
   @override
   String get displayName => 'Google Nest';
 
-  @override
-  Future<Uri> consentUrl() async => Uri.parse('https://example.test/consent');
+  /// What the server says when asked to open a consent attempt.
+  ThermostatException? failConsentWith;
 
   @override
-  Future<String> link(String code) async {
-    codeGiven = code;
-    state = aThermostat();
-    return 'Hallway';
+  Future<Uri> consentUrl() async {
+    consentUrls++;
+    final ThermostatException? failure = failConsentWith;
+    if (failure != null) throw failure;
+    return Uri.parse('https://example.test/consent');
   }
+
+  /// What the callback does, out of band, once Google has redirected.
+  void linkFinishesInTheBrowser() => devices = <ThermostatState>[aThermostat()];
 
   @override
   Future<ThermostatLink> status() async {
     statusCalls++;
     final ThermostatException? failure = failWith;
     if (failure != null) throw failure;
-    final ThermostatState? now = state;
-    return now == null
+    return devices.isEmpty
         ? const ThermostatLink.unlinked()
-        : ThermostatLink.linked(state: now, linkedByYou: true);
+        : ThermostatLink.linked(devices: devices, linkedByYou: true);
   }
 
   @override
-  Future<void> send(ThermostatCommand command) async {
+  Future<void> send(
+    ThermostatCommand command, {
+    required String deviceId,
+  }) async {
     final ThermostatException? failure = failWith;
     if (failure != null) throw failure;
     sent.add(command);
+    sentTo.add(deviceId);
   }
 
   @override
   Future<void> unlink() async {
     unlinks++;
-    state = null;
+    devices = <ThermostatState>[];
   }
 }
 
 ThermostatState aThermostat({
+  String id = 'enterprises/p/devices/downstairs',
+  String label = 'Hallway',
+  double? ambientC,
   ThermostatMode mode = ThermostatMode.heat,
   double? heatC,
   double? coolC,
+
+  /// Explicitly no heat target, which `heatC: null` cannot say while the
+  /// parameter has a default behind it — `null ?? 68` is 68, and a helper
+  /// that quietly ignores the value a test passed makes the test a lie.
+  bool noHeat = false,
   EcoMode eco = EcoMode.off,
   FanState? fan,
   HvacStatus hvac = HvacStatus.heating,
   Set<ThermostatMode>? availableModes,
 }) => ThermostatState(
-  label: 'Hallway',
-  ambientC: Temp.fToC(70),
+  id: id,
+  label: label,
+  ambientC: ambientC ?? Temp.fToC(70),
   humidityPercent: 43,
   mode: mode,
   availableModes:
@@ -83,7 +107,7 @@ ThermostatState aThermostat({
         ThermostatMode.heatCool,
       },
   hvac: hvac,
-  heatC: heatC ?? Temp.fToC(68),
+  heatC: noHeat ? null : (heatC ?? Temp.fToC(68)),
   coolC: coolC,
   eco: eco,
   fan: fan,
@@ -200,7 +224,7 @@ void main() {
       await openHouse(
         tester,
         FakeThermostat(
-          state: aThermostat(mode: ThermostatMode.off, heatC: null),
+          state: aThermostat(mode: ThermostatMode.off, noHeat: true),
         ),
       );
 
@@ -247,6 +271,207 @@ void main() {
     });
   });
 
+  group('changing the mode', () {
+    testWidgets('leaves exactly one chip ticked', (WidgetTester tester) async {
+      // Two ticks is not a state the thermostat can be in. It happened
+      // because the fill read the tapped mode and the tick read the confirmed
+      // one, so a pending change showed both at once — and the tick is there
+      // precisely so the choice is not carried by colour alone.
+      final FakeThermostat fake = FakeThermostat(
+        state: aThermostat(
+          mode: ThermostatMode.heatCool,
+          heatC: Temp.fToC(70),
+          coolC: Temp.fToC(73),
+        ),
+      );
+      await openHouse(tester, fake);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Cool'));
+      await tester.pump();
+
+      final Iterable<ChoiceChip> chips = tester.widgetList<ChoiceChip>(
+        find.byType(ChoiceChip),
+      );
+      expect(chips.where((ChoiceChip c) => c.selected).length, 1);
+      expect(chips.where((ChoiceChip c) => c.avatar != null).length, 1);
+    });
+
+    testWidgets('and says it is switching rather than showing the old mode\'s '
+        'controls', (WidgetTester tester) async {
+      // Tapping Cool while the thermostat is in Heat · Cool left both of
+      // that mode's targets on screen under a Cool chip — a contradiction,
+      // held for as long as the next reading took. Better to admit the
+      // question is open than to answer it with the previous answer.
+      final FakeThermostat fake = FakeThermostat(
+        state: aThermostat(
+          mode: ThermostatMode.heatCool,
+          heatC: Temp.fToC(70),
+          coolC: Temp.fToC(73),
+        ),
+      );
+      await openHouse(tester, fake);
+      expect(find.text('Heat to'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Cool'));
+      await tester.pump();
+
+      expect(find.text('Heat to'), findsNothing);
+      expect(find.text('Cool to'), findsNothing);
+      expect(find.textContaining('Switching to Cool'), findsOneWidget);
+    });
+
+    testWidgets('and asks again soon, not in a minute', (
+      WidgetTester tester,
+    ) async {
+      // A mode change is the one command that leaves the screen unable to
+      // show anything until it is confirmed, so waiting a full polling
+      // interval means a minute of "Switching to…".
+      final FakeThermostat fake = FakeThermostat(
+        state: aThermostat(
+          mode: ThermostatMode.heatCool,
+          heatC: Temp.fToC(70),
+          coolC: Temp.fToC(73),
+        ),
+      );
+      await openHouse(tester, fake);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Cool'));
+      await tester.pump(ThermostatScreen.settleAfter);
+      await pumpFrames(tester);
+
+      fake.state = aThermostat(
+        mode: ThermostatMode.cool,
+        noHeat: true,
+        coolC: Temp.fToC(73),
+      );
+      await tester.pump(ThermostatScreen.confirmAfter);
+      await pumpFrames(tester);
+
+      expect(find.text('Target'), findsOneWidget);
+      expect(find.textContaining('Switching to'), findsNothing);
+    });
+
+    testWidgets('does not invent targets the thermostat has not confirmed', (
+      WidgetTester tester,
+    ) async {
+      // Cool reports one setpoint; Heat · Cool reports two. Flipping the mode
+      // on screen the instant it is tapped makes the screen believe there are
+      // two targets while the numbers it has are still the old mode's — so it
+      // draws half a range and calls it Heat · Cool, which is what Brendan
+      // saw. Which controls exist is not something the app gets to guess.
+      final FakeThermostat fake = FakeThermostat(
+        state: aThermostat(
+          mode: ThermostatMode.cool,
+          noHeat: true,
+          coolC: Temp.fToC(75),
+        ),
+      );
+      await openHouse(tester, fake);
+      expect(find.text('Target'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Heat · Cool'));
+      await tester.pump();
+
+      // The chip answers the tap, because a control that does not is broken.
+      expect(
+        tester
+            .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Heat · Cool'))
+            .selected,
+        isTrue,
+      );
+      // And the targets are withheld, not guessed at.
+      expect(find.text('Cool to'), findsNothing);
+      expect(find.text('Heat to'), findsNothing);
+      expect(find.textContaining('Switching to Heat · Cool'), findsOneWidget);
+    });
+
+    testWidgets('and takes the thermostat\'s word once it answers', (
+      WidgetTester tester,
+    ) async {
+      final FakeThermostat fake = FakeThermostat(
+        state: aThermostat(
+          mode: ThermostatMode.cool,
+          noHeat: true,
+          coolC: Temp.fToC(75),
+        ),
+      );
+      await openHouse(tester, fake);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Heat · Cool'));
+      await tester.pump(ThermostatScreen.settleAfter);
+      await pumpFrames(tester);
+
+      fake.state = aThermostat(
+        mode: ThermostatMode.heatCool,
+        heatC: Temp.fToC(68),
+        coolC: Temp.fToC(75),
+      );
+      await tester.pump(ThermostatScreen.pollEvery);
+      await pumpFrames(tester);
+
+      expect(find.text('Heat to'), findsOneWidget);
+      expect(find.text('Cool to'), findsOneWidget);
+    });
+
+    testWidgets('and half a range says so rather than showing half', (
+      WidgetTester tester,
+    ) async {
+      // If the thermostat really does report Heat · Cool with one setpoint,
+      // that is worth saying out loud — a single target under a two-target
+      // mode reads as Hearth having lost one.
+      await openHouse(
+        tester,
+        FakeThermostat(
+          state: aThermostat(
+            mode: ThermostatMode.heatCool,
+            noHeat: true,
+            coolC: Temp.fToC(75),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('only one'), findsOneWidget);
+    });
+  });
+
+  group('a target that cannot be moved', () {
+    testWidgets('says why instead of doing nothing', (
+      WidgetTester tester,
+    ) async {
+      // A range command carries both numbers, so with only one of them the
+      // domain refuses — correctly. The screen then pressed a button that did
+      // nothing at all, which is indistinguishable from Hearth being broken.
+      final FakeThermostat fake = FakeThermostat(
+        state: aThermostat(
+          mode: ThermostatMode.heatCool,
+          noHeat: true,
+          coolC: Temp.fToC(75),
+        ),
+      );
+      await openHouse(tester, fake);
+
+      await tester.tap(find.byTooltip('Warmer'));
+      await tester.pump();
+
+      expect(fake.sent, isEmpty);
+      expect(find.textContaining('needs both'), findsOneWidget);
+    });
+
+    testWidgets('and at the top of the range it says that', (
+      WidgetTester tester,
+    ) async {
+      await openHouse(
+        tester,
+        FakeThermostat(state: aThermostat(heatC: ThermostatLimits.maxC)),
+      );
+
+      await tester.tap(find.byTooltip('Warmer'));
+      await tester.pump();
+
+      expect(find.textContaining('as warm as'), findsOneWidget);
+    });
+  });
+
   group('Heat · Cool', () {
     testWidgets('shows both targets and moves one at a time', (
       WidgetTester tester,
@@ -273,6 +498,152 @@ void main() {
     });
   });
 
+  group('a house with two thermostats', () {
+    FakeThermostat aHouse() => FakeThermostat(
+      devices: <ThermostatState>[
+        aThermostat(
+          id: 'enterprises/p/devices/down',
+          label: 'Downstairs',
+          ambientC: Temp.fToC(73),
+          heatC: Temp.fToC(70),
+        ),
+        aThermostat(
+          id: 'enterprises/p/devices/up',
+          label: 'Upstairs',
+          ambientC: Temp.fToC(68),
+          heatC: Temp.fToC(66),
+        ),
+      ],
+    );
+
+    testWidgets('shows both, rather than whichever Google listed first', (
+      WidgetTester tester,
+    ) async {
+      // The first cut took `thermostats[0]` and pinned it, so the other floor
+      // did not exist as far as Hearth was concerned — and a house with one
+      // thermostat could not tell the difference.
+      await openHouse(tester, aHouse());
+
+      expect(find.text('Downstairs'), findsOneWidget);
+      expect(find.text('Upstairs'), findsOneWidget);
+      expect(find.text('70°'), findsOneWidget);
+      expect(find.text('66°'), findsOneWidget);
+    });
+
+    testWidgets('and a press goes to the one you pressed', (
+      WidgetTester tester,
+    ) async {
+      // Both cards carry a control called "Warmer". Sending to the wrong one
+      // turns the heating up in the wrong half of the house, which is the
+      // kind of wrong nobody notices until they are cold.
+      final FakeThermostat fake = aHouse();
+      await openHouse(tester, fake);
+
+      await tester.tap(find.byTooltip('Warmer').last);
+      await tester.pump(ThermostatScreen.settleAfter);
+      await pumpFrames(tester);
+
+      expect(fake.sentTo, <String>['enterprises/p/devices/up']);
+      expect(Temp.displayF((fake.sent.single as SetHeat).heatC), 67);
+    });
+
+    testWidgets('and one thermostat\'s mode change leaves the other alone', (
+      WidgetTester tester,
+    ) async {
+      final FakeThermostat fake = aHouse();
+      await openHouse(tester, fake);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Cool').first);
+      await tester.pump();
+
+      // Downstairs is switching; Upstairs still shows its target.
+      expect(find.textContaining('Switching to Cool'), findsOneWidget);
+      expect(find.text('66°'), findsOneWidget);
+    });
+
+    testWidgets('and a reading in a different order does not move a press', (
+      WidgetTester tester,
+    ) async {
+      // Keyed by device, not by position. Google does not promise an order,
+      // and a list that came back the other way round would otherwise hand
+      // Downstairs's pending change to Upstairs.
+      final FakeThermostat fake = aHouse();
+      await openHouse(tester, fake);
+
+      fake.devices = fake.devices.reversed.toList();
+      await tester.pump(ThermostatScreen.pollEvery);
+      await pumpFrames(tester);
+
+      expect(find.text('Downstairs'), findsOneWidget);
+      expect(find.text('Upstairs'), findsOneWidget);
+      expect(find.text('70°'), findsOneWidget);
+      expect(find.text('66°'), findsOneWidget);
+    });
+  });
+
+  group('two presses in the same breath', () {
+    testWidgets('both reach their thermostat, not just the first', (
+      WidgetTester tester,
+    ) async {
+      // One debounce timer covers the whole screen, so pressing Downstairs and
+      // then Upstairs inside it queues two commands and sends them together.
+      // The loop used to stop at the first failure with the rest already
+      // taken out of the queue — so the upstairs press was thrown away with
+      // no sign of it.
+      final FakeThermostat fake = FakeThermostat(
+        devices: <ThermostatState>[
+          aThermostat(
+            id: 'enterprises/p/devices/down',
+            label: 'Downstairs',
+            ambientC: Temp.fToC(73),
+            heatC: Temp.fToC(70),
+          ),
+          aThermostat(
+            id: 'enterprises/p/devices/up',
+            label: 'Upstairs',
+            ambientC: Temp.fToC(68),
+            heatC: Temp.fToC(66),
+          ),
+        ],
+      );
+      await openHouse(tester, fake);
+
+      await tester.tap(find.byTooltip('Warmer').first);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.byTooltip('Warmer').last);
+      await tester.pump(ThermostatScreen.settleAfter);
+      await pumpFrames(tester);
+
+      expect(fake.sentTo, hasLength(2));
+      expect(fake.sentTo.toSet(), <String>{
+        'enterprises/p/devices/down',
+        'enterprises/p/devices/up',
+      });
+    });
+
+    testWidgets('and a warmer press is not eaten by a fan tap', (
+      WidgetTester tester,
+    ) async {
+      // Keyed by device, the queue held one command per thermostat — so a
+      // second press of a *different* control on the same one replaced the
+      // first. The screen kept showing the setpoint it had dropped until the
+      // next reading quietly put it back.
+      final FakeThermostat fake = FakeThermostat(
+        state: aThermostat(fan: const FanState(isOn: false)),
+      );
+      await openHouse(tester, fake);
+
+      await tester.tap(find.byTooltip('Warmer'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.byType(Switch).last);
+      await tester.pump(ThermostatScreen.settleAfter);
+      await pumpFrames(tester);
+
+      expect(fake.sent.whereType<SetHeat>(), hasLength(1));
+      expect(fake.sent.whereType<SetFanTimer>(), hasLength(1));
+    });
+  });
+
   group('when there is nothing connected', () {
     testWidgets('the screen offers to connect rather than drawing a dial', (
       WidgetTester tester,
@@ -283,18 +654,78 @@ void main() {
       expect(find.byTooltip('Warmer'), findsNothing);
     });
 
-    testWidgets('and pasting the code finishes it', (
+    testWidgets('and the link arrives on its own once Google is done', (
       WidgetTester tester,
     ) async {
+      // Nothing comes back through the app: Google redirects the browser to
+      // an Edge Function, which finishes the exchange. So the screen waits
+      // and keeps asking, rather than offering a field to paste a code into —
+      // which on a phone is a field nobody can fill, because `google.com` is
+      // a universal link and iOS hands the redirect to the Google app.
       final FakeThermostat fake = FakeThermostat();
       await openHouse(tester, fake);
 
-      await tester.enterText(find.byType(TextField), '4/0AbCd');
-      await tester.tap(find.text('Finish connecting'));
+      await tester.tap(find.text('Connect Google Nest'));
+      await pumpFrames(tester, frames: 10);
+      expect(fake.consentUrls, 1);
+      expect(find.textContaining('Finish in your browser'), findsOneWidget);
+      expect(find.textContaining('Tick the thermostat'), findsOneWidget);
+
+      fake.linkFinishesInTheBrowser();
+      await tester.pump(ThermostatScreen.whileConnecting);
       await pumpFrames(tester, frames: 10);
 
-      expect(fake.codeGiven, '4/0AbCd');
       expect(find.text('70°'), findsOneWidget);
+    });
+
+    testWidgets('and a link that will not start stops the waiting', (
+      WidgetTester tester,
+    ) async {
+      // Nothing was opened, so there is nothing to wait for. Left waiting,
+      // the screen polls every three seconds for a flow that never started —
+      // twenty calls a minute for as long as it is open.
+      final FakeThermostat fake = FakeThermostat()
+        ..failConsentWith = const ThermostatException(
+          'Hearth could not work out where to send you to sign in.',
+        );
+      await openHouse(tester, fake);
+
+      await tester.tap(find.text('Connect Google Nest'));
+      await pumpFrames(tester, frames: 10);
+
+      expect(find.textContaining('where to send you'), findsOneWidget);
+      expect(find.textContaining('Finish in your browser'), findsNothing);
+
+      final int after = fake.statusCalls;
+      await tester.pump(ThermostatScreen.whileConnecting);
+      await pumpFrames(tester);
+      await tester.pump(ThermostatScreen.whileConnecting);
+      await pumpFrames(tester);
+      expect(
+        fake.statusCalls,
+        after,
+        reason: 'it kept polling for a flow that never started',
+      );
+    });
+
+    testWidgets('and waiting asks often enough to notice', (
+      WidgetTester tester,
+    ) async {
+      // The answer arrives out of band, so there is nothing else to watch for
+      // it. An unlinked household is served from the server's own row without
+      // touching Google, so these cost nothing against the hourly ceiling.
+      final FakeThermostat fake = FakeThermostat();
+      await openHouse(tester, fake);
+      final int before = fake.statusCalls;
+
+      await tester.tap(find.text('Connect Google Nest'));
+      await pumpFrames(tester, frames: 10);
+      await tester.pump(ThermostatScreen.whileConnecting);
+      await pumpFrames(tester);
+      await tester.pump(ThermostatScreen.whileConnecting);
+      await pumpFrames(tester);
+
+      expect(fake.statusCalls, greaterThan(before + 1));
     });
 
     testWidgets('a dead credential says reconnect, not "something went wrong"', (

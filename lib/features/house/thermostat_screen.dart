@@ -37,13 +37,31 @@ class ThermostatScreen extends ConsumerStatefulWidget {
   /// allowance. A burst of taps is one decision and becomes one command.
   static const Duration settleAfter = Duration(milliseconds: 600);
 
+  /// How often to ask while Google is open in the browser.
+  static const Duration whileConnecting = Duration(seconds: 3);
+
+  /// How soon to ask again after sending a command.
+  ///
+  /// A mode change leaves the screen with nothing honest to show until the
+  /// thermostat answers — the old mode's targets are the wrong controls and
+  /// the new mode's are not known yet — so waiting a whole polling interval
+  /// means a minute of "Switching to…". One extra read against a hundred an
+  /// hour is a cheap way to make that a few seconds.
+  static const Duration confirmAfter = Duration(seconds: 5);
+
   @override
   ConsumerState<ThermostatScreen> createState() => _ThermostatScreenState();
 }
 
 class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
   ThermostatLink? _link;
-  ThermostatState? _shown;
+
+  /// What each thermostat is showing, keyed by [ThermostatState.id].
+  ///
+  /// A map rather than one state, because a house has more than one — and
+  /// keyed rather than positional, so a reading that comes back in a
+  /// different order does not move somebody's press onto the other floor.
+  Map<String, ThermostatState> _shown = <String, ThermostatState>{};
   String? _error;
   bool _needsRelink = false;
   bool _busy = false;
@@ -52,9 +70,37 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
 
   Timer? _poll;
   Timer? _settle;
-  ThermostatCommand? _queued;
 
-  final TextEditingController _code = TextEditingController();
+  /// Commands waiting for the presses to stop, by device *and kind*.
+  ///
+  /// Keyed by both, not by device alone. "A burst of taps is one decision"
+  /// holds for repeated presses of one control; it is false across controls.
+  /// Keyed by device, tapping the fan within the debounce of a setpoint press
+  /// replaced the setpoint command — which was then never sent, while the
+  /// screen went on showing the new number until the next reading quietly put
+  /// the old one back.
+  final Map<_Queued, ThermostatCommand> _queued =
+      <_Queued, ThermostatCommand>{};
+
+  /// Modes tapped but not yet confirmed, by device.
+  ///
+  /// Held apart from [_shown] on purpose. Folding it in would change which
+  /// *controls* the screen believes exist — Cool reports one setpoint and
+  /// Heat · Cool reports two — so the screen would draw half a range out of
+  /// the previous mode's numbers and label it with the new mode. Which
+  /// controls exist is not something the app gets to guess; a chip answering
+  /// a tap is.
+  final Map<String, ThermostatMode> _pendingMode = <String, ThermostatMode>{};
+
+  /// True between opening Google and the link appearing.
+  ///
+  /// Nothing comes back through the app — Google redirects the browser to an
+  /// Edge Function, which finishes the exchange — so the only way to find out
+  /// is to keep asking. The first design had the user copy a code out of the
+  /// address bar, and it does not work on a phone: `google.com` is a universal
+  /// link claimed by the Google app, so iOS hands the redirect there and the
+  /// code is never visible to anybody.
+  bool _waiting = false;
 
   ThermostatGateway? get _gateway => ref.read(thermostatProvider);
 
@@ -75,15 +121,21 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
     // may want — and in a widget test it is a run that hangs rather than fails.
     _poll?.cancel();
     _settle?.cancel();
-    _code.dispose();
     super.dispose();
   }
 
   void _schedulePoll() {
     _poll?.cancel();
-    _poll = Timer(ThermostatScreen.pollEvery, () {
-      if (mounted) unawaited(_refresh());
-    });
+    // Faster while a consent flow is open in the browser, because the answer
+    // arrives out of band and there is nothing else to watch for it. The
+    // server serves an unlinked household from its own row without touching
+    // Google, so these cost nothing against the device's hourly ceiling.
+    _poll = Timer(
+      _waiting ? ThermostatScreen.whileConnecting : ThermostatScreen.pollEvery,
+      () {
+        if (mounted) unawaited(_refresh());
+      },
+    );
   }
 
   Future<void> _refresh() async {
@@ -97,16 +149,24 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
       if (!mounted) return;
       setState(() {
         _link = link;
-        // What the thermostat says replaces what we hoped it would say. A
+        // What the thermostats say replaces what we hoped they would say. A
         // pending press is either confirmed by this or quietly corrected —
-        // and either way the number on screen is now the device's own.
-        _shown = link.state;
+        // and either way the numbers on screen are now the devices' own.
+        _shown = <String, ThermostatState>{
+          for (final ThermostatState device in link.devices) device.id: device,
+        };
+        _pendingMode.clear();
         _readAt = DateTime.now();
         _error = null;
         _needsRelink = false;
         _loadedOnce = true;
       });
-      if (link.isLinked) _schedulePoll();
+      if (link.isLinked) {
+        _waiting = false;
+        _schedulePoll();
+      } else if (_waiting) {
+        _schedulePoll();
+      }
     } on ThermostatException catch (failure) {
       if (!mounted) return;
       setState(() {
@@ -120,11 +180,25 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
     }
   }
 
-  /// Shows a press immediately and sends it once the presses stop.
-  void _press(ThermostatCommand? command) {
-    final ThermostatState? now = _shown;
-    if (command == null || now == null) return;
+  /// A press of − or +, which the state turns into a command or a reason.
+  void _step(ThermostatState now, int degrees, {required bool heat}) {
+    final ThermostatCommand? command = degrees > 0
+        ? now.warmer(degrees, heat: heat)
+        : now.cooler(-degrees, heat: heat);
+    if (command != null) {
+      _press(now, command);
+      return;
+    }
+    // A button that does nothing is indistinguishable from a broken app.
+    setState(
+      () => _error =
+          now.stepRefusal(degrees, heat: heat) ??
+          'That target cannot be changed just now.',
+    );
+  }
 
+  /// Shows a press immediately and sends it once the presses stop.
+  void _press(ThermostatState now, ThermostatCommand command) {
     final String? refusal = now.refuse(command);
     if (refusal != null) {
       setState(() => _error = refusal);
@@ -133,22 +207,23 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
 
     setState(() {
       _error = null;
-      _shown = switch (command) {
-        SetHeat(:final double heatC) => now.withSetpoints(heatC: heatC),
-        SetCool(:final double coolC) => now.withSetpoints(coolC: coolC),
-        SetRange(:final double heatC, :final double coolC) => now.withSetpoints(
-          heatC: heatC,
-          coolC: coolC,
-        ),
-        // A switch that springs back the instant it is flipped reads as
-        // broken, and then sits wrong until the next reading a minute later.
-        SetMode(:final ThermostatMode mode) => now.copyWith(mode: mode),
-        SetEco(:final bool on) => now.copyWith(
-          eco: on ? EcoMode.manualEco : EcoMode.off,
-        ),
-        SetFanTimer(:final bool on) => now.copyWith(fan: FanState(isOn: on)),
+      if (command is SetMode) _pendingMode[now.id] = command.mode;
+      _shown = <String, ThermostatState>{
+        ..._shown,
+        now.id: switch (command) {
+          SetHeat(:final double heatC) => now.withSetpoints(heatC: heatC),
+          SetCool(:final double coolC) => now.withSetpoints(coolC: coolC),
+          SetRange(:final double heatC, :final double coolC) =>
+            now.withSetpoints(heatC: heatC, coolC: coolC),
+          // Not the mode: see [_pendingMode]. The chip is updated separately.
+          SetMode() => now,
+          SetEco(:final bool on) => now.copyWith(
+            eco: on ? EcoMode.manualEco : EcoMode.off,
+          ),
+          SetFanTimer(:final bool on) => now.copyWith(fan: FanState(isOn: on)),
+        },
       };
-      _queued = command;
+      _queued[(device: now.id, kind: command.runtimeType)] = command;
     });
 
     _settle?.cancel();
@@ -158,26 +233,50 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
   }
 
   Future<void> _send() async {
-    final ThermostatCommand? command = _queued;
     final ThermostatGateway? gateway = _gateway;
-    if (command == null || gateway == null) return;
-    _queued = null;
+    if (gateway == null || _queued.isEmpty) return;
 
-    try {
-      await gateway.send(command);
-      if (!mounted) return;
-      // Not re-read here: a command plus a read is two requests against a
-      // five-a-minute ceiling. The next poll confirms it.
-      _schedulePoll();
-    } on ThermostatException catch (failure) {
-      if (!mounted) return;
+    final Map<_Queued, ThermostatCommand> going =
+        Map<_Queued, ThermostatCommand>.from(_queued);
+    _queued.clear();
+
+    ThermostatException? failed;
+    for (final MapEntry<_Queued, ThermostatCommand> entry in going.entries) {
+      try {
+        await gateway.send(entry.value, deviceId: entry.key.device);
+      } on ThermostatException catch (error) {
+        // Kept going. Stopping at the first failure left every later command
+        // already taken out of the queue and never sent — press Downstairs,
+        // press Upstairs, watch Downstairs be rate-limited, and the upstairs
+        // press is gone with nothing said about it.
+        failed ??= error;
+      }
+    }
+    if (!mounted) return;
+
+    final ThermostatException? failure = failed;
+    if (failure != null) {
       setState(() {
         _error = failure.message;
         _needsRelink = failure.needsRelink;
-        // The press is taken back, because the thermostat did not take it.
-        _shown = _link?.state;
+        // Every press is taken back, because what did land will be in the
+        // reading that follows and what did not never will be.
+        _shown = <String, ThermostatState>{
+          for (final ThermostatState device
+              in _link?.devices ?? const <ThermostatState>[])
+            device.id: device,
+        };
+        _pendingMode.clear();
       });
     }
+
+    // Not re-read *immediately*: a command plus a read is two requests against
+    // a five-a-minute ceiling, so a drag would exhaust it. Asking again
+    // shortly is different — the presses have already settled.
+    _poll?.cancel();
+    _poll = Timer(ThermostatScreen.confirmAfter, () {
+      if (mounted) unawaited(_refresh());
+    });
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -201,15 +300,62 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
     }
   }
 
-  Future<void> _connect() => _run(() async {
-    final Uri url = await _gateway!.consentUrl();
-    await launchUrl(url, mode: LaunchMode.externalApplication);
-  });
+  /// Opens the consent flow and starts waiting for it to land.
+  ///
+  /// Not through [_run], because that refreshes on success and a refresh
+  /// clears the error — and the one error worth keeping here is "your browser
+  /// did not open", which is the only part of this the app can see fail.
+  Future<void> _connect() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final Uri url = await _gateway!.consentUrl();
+      // Waiting before launching, and polling from here on: the answer comes
+      // back through a redirect to an Edge Function, so the app has nothing to
+      // watch except the link appearing.
+      setState(() => _waiting = true);
+      _schedulePoll();
 
-  Future<void> _finish() => _run(() async {
-    await _gateway!.link(_code.text);
-    _code.clear();
-  });
+      // A real browser, not an in-app view: Google refuses embedded webviews
+      // for OAuth, and the signed-in Google session is in the real browser
+      // anyway.
+      final bool opened = await launchUrl(
+        url,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) {
+        throw const ThermostatException(
+          'Hearth could not open your browser.',
+          isRetryable: false,
+        );
+      }
+    } on ThermostatException catch (failure) {
+      if (mounted) {
+        setState(() {
+          _error = failure.message;
+          _needsRelink = failure.needsRelink;
+          // Nothing was started, so there is nothing to wait for. Left
+          // waiting, the screen polls every three seconds for a flow that
+          // never opened — twenty calls a minute for as long as it is open.
+          _waiting = false;
+          _poll?.cancel();
+        });
+      }
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _error = 'Hearth could not open your browser.';
+          _waiting = false;
+          _poll?.cancel();
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   Future<void> _disconnect() => _run(() => _gateway!.unlink());
 
@@ -263,8 +409,7 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
       );
     }
 
-    final ThermostatState? state = _shown;
-    if (state == null) {
+    if (_shown.isEmpty) {
       // Only the server saying so, or a dead credential, means there is
       // nothing connected. Anything else — no signal, a rate limit, a
       // thermostat that did not answer — is a link that exists and could not
@@ -277,56 +422,25 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
           : _unreachable(context, gutter);
     }
 
+    final List<ThermostatState> devices = _shown.values.toList(growable: false);
+
     return RefreshIndicator(
       onRefresh: _refresh,
       child: ListView(
         padding: EdgeInsets.all(gutter),
         children: <Widget>[
           if (_error != null) _Message(text: _error!, isError: true),
-          _Ambient(state: state, readAt: _readAt),
-          const SizedBox(height: HearthSpacing.lg),
-          if (state.eco.isOn)
-            const _Message(
-              text:
-                  'Eco is holding the temperature. Turn Eco off to change '
-                  'it.',
-              isError: false,
-            )
-          else if (state.mode == ThermostatMode.off)
-            const _Message(
-              text:
-                  'The thermostat is off. Choose Heat, Cool or Heat · Cool '
-                  'to set a temperature.',
-              isError: false,
-            )
-          else
-            ..._targets(context, state),
-          const SizedBox(height: HearthSpacing.lg),
-          _Modes(
-            state: state,
-            onPick: (ThermostatMode m) => _press(SetMode(m)),
-          ),
-          const SizedBox(height: HearthSpacing.md),
-          _Toggle(
-            label: 'Eco',
-            detail: 'Google’s own saving temperatures.',
-            value: state.eco.isOn,
-            onChanged: (bool on) => _press(SetEco(on: on)),
-          ),
-          // Only where the thermostat actually has a fan. A control that
-          // could only ever fail is worse than no control (spec §11).
-          if (state.hasFan) ...<Widget>[
-            const SizedBox(height: HearthSpacing.sm),
-            _Toggle(
-              label: 'Fan',
-              detail: state.fan!.isOn
-                  ? 'Running.'
-                  : 'Run the fan for fifteen minutes.',
-              value: state.fan!.isOn,
-              onChanged: (bool on) => _press(
-                SetFanTimer(on: on, duration: const Duration(minutes: 15)),
-              ),
-            ),
+          for (final ThermostatState state in devices) ...<Widget>[
+            // Each thermostat whole, one after another, rather than a picker.
+            // A house with two has two answers to "how warm is it" and both
+            // are worth seeing at once; a switcher would hide half the house
+            // behind a tap.
+            ..._card(context, state),
+            if (state != devices.last) ...<Widget>[
+              const SizedBox(height: HearthSpacing.xl),
+              Divider(color: context.colors.outline, height: 1),
+              const SizedBox(height: HearthSpacing.xl),
+            ],
           ],
           const SizedBox(height: HearthSpacing.xl),
           _Footer(link: _link, busy: _busy, onDisconnect: _disconnect),
@@ -335,31 +449,129 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
     );
   }
 
-  List<Widget> _targets(BuildContext context, ThermostatState state) {
-    final bool both = state.mode == ThermostatMode.heatCool;
+  /// One thermostat, whole.
+  List<Widget> _card(BuildContext context, ThermostatState state) {
+    final ThermostatMode? pending = _pendingMode[state.id];
     return <Widget>[
-      if (state.heatC != null)
-        _Target(
-          label: both ? 'Heat to' : 'Target',
-          valueC: state.heatC!,
-          busy: _busy,
-          onStep: (int by) =>
-              _press(by > 0 ? state.warmer(by) : state.cooler(-by)),
-        ),
-      if (both && state.coolC != null) ...<Widget>[
-        const SizedBox(height: HearthSpacing.md),
-        _Target(
-          label: 'Cool to',
-          valueC: state.coolC!,
-          busy: _busy,
-          onStep: (int by) => _press(
-            by > 0
-                ? state.warmer(by, heat: false)
-                : state.cooler(-by, heat: false),
+      _Ambient(state: state, readAt: _readAt),
+      const SizedBox(height: HearthSpacing.lg),
+      if (state.eco.isOn)
+        const _Message(
+          text: 'Eco is holding the temperature. Turn Eco off to change it.',
+          isError: false,
+        )
+      else if (state.mode == ThermostatMode.off)
+        const _Message(
+          text:
+              'The thermostat is off. Choose Heat, Cool or Heat · Cool to set '
+              'a temperature.',
+          isError: false,
+        )
+      // A mode change is the one command that makes the controls themselves
+      // wrong: Heat · Cool has two targets and Cool has one, so leaving the
+      // old mode's on screen under the new mode's chip is a contradiction
+      // held for as long as the next reading takes. Better to admit the
+      // question is open.
+      else if (pending != null && pending != state.mode)
+        _Message(text: 'Switching to ${pending.label}…', isError: false)
+      else ...<Widget>[
+        ..._targets(context, state),
+        // A mode that takes two targets, showing one, reads as Hearth having
+        // lost the other. Saying which is missing is the difference between a
+        // gap and a bug.
+        if (state.mode == ThermostatMode.heatCool &&
+            (state.heatC == null) != (state.coolC == null))
+          const _Message(
+            text:
+                'The thermostat is set to Heat · Cool but sent back only one '
+                'target. Set the other in the Nest app and it will show here.',
+            isError: false,
+          ),
+      ],
+      const SizedBox(height: HearthSpacing.lg),
+      _Modes(
+        state: state,
+        pending: pending,
+        onPick: (ThermostatMode m) => _press(state, SetMode(m)),
+      ),
+      const SizedBox(height: HearthSpacing.md),
+      _Toggle(
+        label: 'Eco',
+        detail: 'Google\u2019s own saving temperatures.',
+        value: state.eco.isOn,
+        onChanged: (bool on) => _press(state, SetEco(on: on)),
+      ),
+      // Only where the thermostat actually has a fan. A control that could
+      // only ever fail is worse than no control (spec §11).
+      if (state.hasFan) ...<Widget>[
+        const SizedBox(height: HearthSpacing.sm),
+        _Toggle(
+          label: 'Fan',
+          detail: state.fan!.isOn
+              ? 'Running.'
+              : 'Run the fan for fifteen minutes.',
+          value: state.fan!.isOn,
+          onChanged: (bool on) => _press(
+            state,
+            SetFanTimer(on: on, duration: const Duration(minutes: 15)),
           ),
         ),
       ],
     ];
+  }
+
+  /// The targets this mode actually has.
+  ///
+  /// One each in Heat and Cool, two in Heat · Cool. Written as a switch on the
+  /// mode rather than as "show the heat one, and the cool one as well if it is
+  /// a range", which is what it was — and which rendered *no* target at all in
+  /// Cool, because the heat setpoint a cooling thermostat does not report was
+  /// the only one it ever looked at.
+  List<Widget> _targets(BuildContext context, ThermostatState state) {
+    switch (state.mode) {
+      case ThermostatMode.heat:
+        if (state.heatC == null) return const <Widget>[];
+        return <Widget>[
+          _Target(
+            label: 'Target',
+            valueC: state.heatC!,
+            busy: _busy,
+            onStep: (int by) => _step(state, by, heat: true),
+          ),
+        ];
+      case ThermostatMode.cool:
+        if (state.coolC == null) return const <Widget>[];
+        return <Widget>[
+          _Target(
+            label: 'Target',
+            valueC: state.coolC!,
+            busy: _busy,
+            onStep: (int by) => _step(state, by, heat: false),
+          ),
+        ];
+      case ThermostatMode.heatCool:
+        return <Widget>[
+          if (state.heatC case final double heatC)
+            _Target(
+              label: 'Heat to',
+              valueC: heatC,
+              busy: _busy,
+              onStep: (int by) => _step(state, by, heat: true),
+            ),
+          if (state.heatC != null && state.coolC != null)
+            const SizedBox(height: HearthSpacing.md),
+          if (state.coolC case final double coolC)
+            _Target(
+              label: 'Cool to',
+              valueC: coolC,
+              busy: _busy,
+              onStep: (int by) => _step(state, by, heat: false),
+            ),
+        ];
+      case ThermostatMode.off:
+      case ThermostatMode.unknown:
+        return const <Widget>[];
+    }
   }
 
   /// Linked, and not readable this minute.
@@ -412,32 +624,22 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
           height: HearthTouch.minTarget,
           child: FilledButton(
             onPressed: _busy ? null : _connect,
-            child: Text(_busy ? 'Just a moment…' : 'Connect Google Nest'),
+            child: Text(
+              _busy
+                  ? 'Just a moment…'
+                  : (_waiting ? 'Open Google again' : 'Connect Google Nest'),
+            ),
           ),
         ),
-        const SizedBox(height: HearthSpacing.lg),
-        Text(
-          'Google will finish in your browser and land on a page whose '
-          'address contains a code. Paste it here.',
-          style: context.text.metadata.copyWith(color: colors.textMuted),
-        ),
-        const SizedBox(height: HearthSpacing.sm),
-        TextField(
-          controller: _code,
-          decoration: const InputDecoration(
-            labelText: 'Code from the address bar',
+        if (_waiting) ...<Widget>[
+          const SizedBox(height: HearthSpacing.md),
+          Text(
+            'Finish in your browser, then come back. Tick the thermostat in '
+            'Google\u2019s device list — it is easy to miss, and without it '
+            'there is nothing for Hearth to control.',
+            style: context.text.metadata.copyWith(color: colors.textMuted),
           ),
-          autocorrect: false,
-          enableSuggestions: false,
-        ),
-        const SizedBox(height: HearthSpacing.sm),
-        SizedBox(
-          height: HearthTouch.minTarget,
-          child: OutlinedButton(
-            onPressed: _busy ? null : _finish,
-            child: const Text('Finish connecting'),
-          ),
-        ),
+        ],
       ],
     );
   }
@@ -640,9 +842,16 @@ class _Step extends StatelessWidget {
 
 /// The modes this thermostat actually offers.
 class _Modes extends StatelessWidget {
-  const _Modes({required this.state, required this.onPick});
+  const _Modes({
+    required this.state,
+    required this.pending,
+    required this.onPick,
+  });
 
   final ThermostatState state;
+
+  /// Tapped, not yet confirmed. The chip shows it; nothing else does.
+  final ThermostatMode? pending;
   final ValueChanged<ThermostatMode> onPick;
 
   @override
@@ -662,10 +871,10 @@ class _Modes extends StatelessWidget {
         for (final ThermostatMode mode in offered)
           ChoiceChip(
             label: Text(mode.label),
-            selected: state.mode == mode,
+            selected: (pending ?? state.mode) == mode,
             // Selected carries a tick as well as a fill, so the choice is not
             // made by colour alone (spec §6.3).
-            avatar: state.mode == mode
+            avatar: (pending ?? state.mode) == mode
                 ? const Icon(Icons.check, size: 18)
                 : null,
             onSelected: (_) => onPick(mode),
@@ -819,3 +1028,6 @@ class _Message extends StatelessWidget {
     );
   }
 }
+
+/// One waiting command's identity: which thermostat, and which control.
+typedef _Queued = ({String device, Type kind});

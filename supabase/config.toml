@@ -414,3 +414,10 @@ enabled = true
 # declarative_schema_path = "./schemas"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# Google redirects a browser here after the consent screen, and a browser
+# carries no JWT — so this one function has to accept an unauthenticated GET.
+# Its whole surface is a single-use nonce this project minted itself; see the
+# header of supabase/functions/nest-callback/index.ts.
+[functions.nest-callback]
+verify_jwt = false

@@ -206,6 +206,7 @@ final class SetFanTimer extends ThermostatCommand {
 @immutable
 class ThermostatState {
   const ThermostatState({
+    required this.id,
     required this.label,
     required this.ambientC,
     required this.mode,
@@ -218,8 +219,14 @@ class ThermostatState {
     this.fan,
   });
 
-  /// What the Nest app calls it — "Hallway", usually. Shown so a house with
-  /// two thermostats one day does not have two identical screens.
+  /// Which thermostat this is, as the API names it.
+  ///
+  /// A house has more than one — Downstairs and Upstairs — so a command has to
+  /// say which one it is for, and a screen has to keep two readings apart.
+  final String id;
+
+  /// What the Nest app calls it — "Downstairs". Shown so two thermostats are
+  /// not two identical screens.
   final String label;
 
   final double ambientC;
@@ -356,6 +363,50 @@ class ThermostatState {
   ThermostatCommand? cooler(int degrees, {bool heat = true}) =>
       _nudge(-degrees, heat: heat);
 
+  /// Why − and + cannot move a target, or null if they can.
+  ///
+  /// A control that does nothing is indistinguishable from an app that is
+  /// broken, and [warmer] returning null says nothing about which of four
+  /// quite different reasons it was. This is the sentence that goes on screen
+  /// beside the button that would not move.
+  String? stepRefusal(int degrees, {bool heat = true}) {
+    if (eco.isOn) {
+      return 'Eco is holding the temperature. Turn Eco off to change it.';
+    }
+    if (mode == ThermostatMode.off) return 'The thermostat is off.';
+    if (mode == ThermostatMode.unknown) {
+      return 'Hearth does not recognise the mode this thermostat is in.';
+    }
+
+    if (mode == ThermostatMode.heatCool) {
+      // A range command carries both numbers — half a range is not a range,
+      // and sending one would move the other target to nothing.
+      if (heatC == null || coolC == null) {
+        return 'Heat · Cool needs both targets, and the thermostat sent back '
+            'only one. Set the other in the Nest app.';
+      }
+    } else if ((heat ? heatC : coolC) == null &&
+        (mode == ThermostatMode.heat ? heatC : coolC) == null) {
+      return 'The thermostat has not said what it is aiming for yet.';
+    }
+
+    final double? from = switch (mode) {
+      ThermostatMode.heat => heatC,
+      ThermostatMode.cool => coolC,
+      ThermostatMode.heatCool => heat ? heatC : coolC,
+      _ => null,
+    };
+    if (from == null) {
+      return 'The thermostat has not said what it is aiming for yet.';
+    }
+    if (Temp.stepF(from, degrees) == from) {
+      return degrees > 0
+          ? 'That is as warm as this thermostat goes.'
+          : 'That is as cool as this thermostat goes.';
+    }
+    return null;
+  }
+
   ThermostatCommand? _nudge(int degrees, {required bool heat}) {
     if (!setpointsAreYours) return null;
 
@@ -422,6 +473,7 @@ class ThermostatState {
     double? heatC,
     double? coolC,
   }) => ThermostatState(
+    id: id,
     label: label,
     ambientC: ambientC,
     humidityPercent: humidityPercent,
@@ -446,6 +498,7 @@ class ThermostatState {
   /// than one round trip.
   ThermostatState withSetpoints({double? heatC, double? coolC}) =>
       ThermostatState(
+        id: id,
         label: label,
         ambientC: ambientC,
         humidityPercent: humidityPercent,
@@ -461,6 +514,7 @@ class ThermostatState {
   @override
   bool operator ==(Object other) =>
       other is ThermostatState &&
+      other.id == id &&
       other.label == label &&
       other.ambientC == ambientC &&
       other.humidityPercent == humidityPercent &&
@@ -478,6 +532,7 @@ class ThermostatState {
 
   @override
   int get hashCode => Object.hash(
+    id,
     label,
     ambientC,
     humidityPercent,

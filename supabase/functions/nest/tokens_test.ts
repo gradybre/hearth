@@ -4,12 +4,19 @@ import {
   exchange,
   GrantRevoked,
   isFresh,
-  REDIRECT_URI,
   refresh,
   SCOPE,
   SKEW_MS,
   TokenRefused,
 } from './tokens.ts';
+
+/// Where Google is told to send the browser back to.
+///
+/// A function of Hearth's own, on a Supabase domain no app claims. Google's
+/// guide prescribes `https://www.google.com`, which is unusable on a phone:
+/// it is a universal link claimed by the Google app, so iOS hands the redirect
+/// there and the code never reaches anybody.
+const CALLBACK = 'https://project.supabase.co/functions/v1/nest-callback';
 
 const now = new Date('2026-09-13T12:00:00Z');
 
@@ -32,18 +39,34 @@ function answering(
 }
 
 Deno.test('the consent URL carries everything the flow needs', () => {
-  const url = new URL(consentUrl('proj-uuid', 'client-abc'));
+  const url = new URL(consentUrl('proj-uuid', 'client-abc', CALLBACK, 'n0nce'));
 
   assertEquals(url.origin, 'https://nestservices.google.com');
   assertEquals(url.pathname, '/partnerconnections/proj-uuid/auth');
   assertEquals(url.searchParams.get('client_id'), 'client-abc');
   assertEquals(url.searchParams.get('scope'), SCOPE);
   assertEquals(url.searchParams.get('response_type'), 'code');
-  assertEquals(url.searchParams.get('redirect_uri'), REDIRECT_URI);
+  assertEquals(url.searchParams.get('redirect_uri'), CALLBACK);
+  // The nonce the callback will check. It is the only thing that endpoint
+  // trusts, because Google redirects a browser to it and browsers carry no
+  // token.
+  assertEquals(url.searchParams.get('state'), 'n0nce');
   // Both of these, or the second link back returns no refresh token and the
   // thermostat stops answering an hour later.
   assertEquals(url.searchParams.get('access_type'), 'offline');
   assertEquals(url.searchParams.get('prompt'), 'consent');
+});
+
+Deno.test('and it is not the address bar the code used to land in', () => {
+  // Regression: Google's own guide prescribes `https://www.google.com`, which
+  // on iOS is a universal link claimed by the Google app — the redirect went
+  // to that app, which had nothing to do with it, and the flow dead-ended
+  // with the code never visible to anybody.
+  const url = new URL(consentUrl('p', 'c', CALLBACK, 'n'));
+  assertEquals(
+    url.searchParams.get('redirect_uri')!.includes('google.com'),
+    false,
+  );
 });
 
 Deno.test('a refresh returns a token that expires when Google said', async () => {
@@ -147,7 +170,7 @@ Deno.test('an exchange without a refresh token is refused', async () => {
         code: '4/0Ab',
         clientId: 'c',
         clientSecret: 's',
-        redirectUri: REDIRECT_URI,
+        redirectUri: CALLBACK,
         now,
       }),
     TokenRefused,
@@ -168,7 +191,7 @@ Deno.test('and an exchange that works carries both tokens', async () => {
     code: '4/0Ab',
     clientId: 'c',
     clientSecret: 's',
-    redirectUri: REDIRECT_URI,
+    redirectUri: CALLBACK,
     now,
   });
 
@@ -177,7 +200,7 @@ Deno.test('and an exchange that works carries both tokens', async () => {
   // The redirect the consent URL carried, byte for byte, or Google answers
   // `redirect_uri_mismatch`.
   const sent = new URLSearchParams(await calls[0].text());
-  assertEquals(sent.get('redirect_uri'), REDIRECT_URI);
+  assertEquals(sent.get('redirect_uri'), CALLBACK);
   assertEquals(sent.get('grant_type'), 'authorization_code');
 });
 

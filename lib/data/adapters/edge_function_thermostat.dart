@@ -5,11 +5,17 @@ import 'thermostat.dart';
 
 /// A Google Nest, through the `nest` Edge Function (spec §11).
 ///
-/// The function holds three secrets the app must never see: the Device Access
-/// project id, the OAuth client id, and the client secret. The household's
-/// refresh token never leaves the server at all — it is a key to Brendan's
-/// house, and the app ships a publishable key anybody can read out of the
-/// bundle (CLAUDE.md rule 1, §8.1).
+/// The function holds the OAuth **client secret**, which the app must never
+/// see, and the household's **refresh token**, which never leaves the server
+/// at all — it is a key to Brendan's house, and the app ships a publishable
+/// key anybody can read out of the bundle (CLAUDE.md rule 1, §8.1).
+///
+/// The Device Access project id and the OAuth client id are server-side too,
+/// but not secret: `link-start` returns a consent URL carrying both, because
+/// every OAuth redirect in the world carries them. They live on the server so
+/// the URL is built in one place, not because the client may not know them —
+/// and this comment used to claim otherwise, which is the wrong thing for a
+/// future reader to believe when deciding what may cross this seam.
 ///
 /// It also narrows Google's response into the small shape [stateFrom] reads,
 /// for the same reason [EdgeFunctionRecipeAi] does: a trait rename at Google
@@ -27,7 +33,7 @@ class EdgeFunctionThermostat implements ThermostatGateway {
   @override
   Future<Uri> consentUrl() async {
     final Map<Object?, Object?> data = await _invoke(<String, Object?>{
-      'action': 'consent-url',
+      'action': 'link-start',
     });
     final Object? url = data['url'];
     final Uri? parsed = url is String ? Uri.tryParse(url) : null;
@@ -38,23 +44,6 @@ class EdgeFunctionThermostat implements ThermostatGateway {
       );
     }
     return parsed;
-  }
-
-  @override
-  Future<String> link(String code) async {
-    final String trimmed = code.trim();
-    if (trimmed.isEmpty) {
-      throw const ThermostatException(
-        'Paste the code from the address bar first.',
-        isRetryable: false,
-      );
-    }
-    final Map<Object?, Object?> data = await _invoke(<String, Object?>{
-      'action': 'link',
-      'code': trimmed,
-    });
-    final Object? label = data['deviceLabel'];
-    return label is String && label.isNotEmpty ? label : 'Thermostat';
   }
 
   @override
@@ -69,9 +58,13 @@ class EdgeFunctionThermostat implements ThermostatGateway {
   /// next poll, at most a minute away, is what confirms it against the
   /// thermostat's own account of itself.
   @override
-  Future<void> send(ThermostatCommand command) async {
+  Future<void> send(
+    ThermostatCommand command, {
+    required String deviceId,
+  }) async {
     await _invoke(<String, Object?>{
       'action': 'command',
+      'deviceId': deviceId,
       'command': wireFor(command),
     });
   }
@@ -122,16 +115,23 @@ class EdgeFunctionThermostat implements ThermostatGateway {
   /// this directly.
   static ThermostatLink linkFrom(Map<Object?, Object?> envelope) {
     if (envelope['linked'] != true) return const ThermostatLink.unlinked();
-    final Object? device = envelope['device'];
-    if (device is! Map) {
+
+    final Object? listed = envelope['devices'];
+    final List<ThermostatState> devices = <ThermostatState>[
+      if (listed is List)
+        for (final Object? device in listed)
+          if (device is Map) stateFrom(device),
+    ];
+
+    if (devices.isEmpty) {
       // Linked, and nothing to show. That is a failure, not an absence: the
-      // server said this household *has* a thermostat, so reporting no
-      // thermostat would put a Connect button in front of somebody whose link
-      // is fine, and pressing it starts a consent flow for no reason.
+      // server said this household *has* thermostats, so reporting none would
+      // put a Connect button in front of somebody whose link is fine, and
+      // pressing it starts a consent flow for no reason.
       throw const ThermostatException('The thermostat did not answer.');
     }
     return ThermostatLink.linked(
-      state: stateFrom(device),
+      devices: devices,
       linkedAt: _time(envelope['linkedAt']),
       linkedByYou: envelope['linkedByYou'] == true,
     );
@@ -147,6 +147,7 @@ class EdgeFunctionThermostat implements ThermostatGateway {
     final Object? modes = device['availableModes'];
 
     return ThermostatState(
+      id: _text(device['id']) ?? '',
       label:
           device['label'] is String && (device['label']! as String).isNotEmpty
           ? device['label']! as String

@@ -13,22 +13,30 @@
 
 export const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
-/// Google's own Device Access guide prescribes this, and the Partner
-/// Connections flow is built around it. One constant, because the consent URL
-/// and the token exchange must carry the same value byte for byte or the
-/// exchange fails with `redirect_uri_mismatch` — the commonest failure in this
-/// whole flow, and the least self-explanatory.
-export const REDIRECT_URI = 'https://www.google.com';
-
 export const SCOPE = 'https://www.googleapis.com/auth/sdm.service';
 
 /// Where to send somebody to grant access.
 ///
 /// Built here rather than in `index.ts` so it can be tested: `index.ts` calls
 /// `Deno.serve` at module scope, so importing it from a test starts a server.
-export function consentUrl(projectId: string, clientId: string): string {
+///
+/// [redirectUri] is passed rather than fixed. Google's own guide prescribes
+/// `https://www.google.com`, and on a phone that is unusable — it is a
+/// universal link claimed by the Google app, so iOS hands the redirect there
+/// and the flow dead-ends with the code never visible to anybody. Hearth
+/// redirects to a function of its own instead, on a domain no app claims.
+///
+/// [state] is the single-use nonce the callback will check. It is the only
+/// thing that endpoint trusts, because Google redirects a browser to it and
+/// browsers carry no token.
+export function consentUrl(
+  projectId: string,
+  clientId: string,
+  redirectUri: string,
+  state: string,
+): string {
   const query = new URLSearchParams({
-    redirect_uri: REDIRECT_URI,
+    redirect_uri: redirectUri,
     access_type: 'offline',
     // Without this, a second link returns no refresh token at all and the
     // thermostat stops answering an hour later.
@@ -36,6 +44,7 @@ export function consentUrl(projectId: string, clientId: string): string {
     client_id: clientId,
     response_type: 'code',
     scope: SCOPE,
+    state,
   });
   return `https://nestservices.google.com/partnerconnections/${projectId}`
     + `/auth?${query.toString()}`;
