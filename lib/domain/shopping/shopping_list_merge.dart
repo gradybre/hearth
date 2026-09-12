@@ -1,3 +1,4 @@
+import 'shopping_contribution.dart';
 import 'shopping_line.dart';
 
 /// Rebuilding a list without throwing away what was done to it (spec §5.7).
@@ -36,24 +37,44 @@ abstract final class ShoppingListMerge {
       seen.add(line.key);
       final ShoppingLine? now = byKey[line.key];
 
+      final List<ShoppingContribution> was = line.contributions.isEmpty
+          ? ShoppingContributions.legacy(line)
+          : line.contributions;
+      final List<ShoppingContribution> mine = ShoppingContributions.replacePlan(
+        was,
+        null,
+      );
+
       if (now == null) {
-        // The plan no longer calls for it. Dropped — unless somebody has
-        // touched it, in which case the touch is the reason to keep it: a
-        // ticked line is a note that you have the thing, and an edited one is
-        // a decision that outlived the recipe that prompted it.
-        if (line.isManual || line.isChecked || line.isEdited) merged.add(line);
+        // The plan no longer calls for it. What somebody asked for themselves
+        // still does, so the line stays with the plan's share taken out of
+        // it — which is the whole reason the asks are kept apart.
+        if (mine.isNotEmpty) {
+          merged.add(ShoppingContributions.settle(line, contributions: mine));
+          continue;
+        }
+        // Nothing of anybody's left. Dropped — unless somebody has touched
+        // it, in which case the touch is the reason to keep it: a ticked line
+        // is a note that you have the thing, and an edited one is a decision
+        // that outlived the recipe that prompted it.
+        if (line.isManual || line.isChecked || line.isEdited) {
+          merged.add(ShoppingContributions.settle(line, contributions: mine));
+        }
         continue;
       }
 
       merged.add(
-        line.copyWith(
-          // The plan's half of the line, refreshed.
-          planned: now.planned,
-          hasUnquantified: now.hasUnquantified,
-          sourceRecipeIds: now.sourceRecipeIds,
-          // Where the food or its store tag has since been filled in.
-          foodId: now.foodId,
-          storeTag: now.storeTag ?? line.storeTag,
+        ShoppingContributions.settle(
+          line.copyWith(
+            sourceRecipeIds: now.sourceRecipeIds,
+            // Where the food or its store tag has since been filled in.
+            foodId: now.foodId,
+            storeTag: now.storeTag ?? line.storeTag,
+          ),
+          // The plan's share refreshed, everybody else's left exactly as it
+          // was. A rebuild is authoritative about the plan and about nothing
+          // else on the line.
+          contributions: ShoppingContributions.replacePlan(was, _planOf(now)),
         ),
       );
     }
@@ -70,6 +91,22 @@ abstract final class ShoppingListMerge {
     }
 
     return merged;
+  }
+
+  /// The plan's ask out of a freshly built line.
+  static ShoppingContribution? _planOf(ShoppingLine rebuilt) {
+    for (final ShoppingContribution c in rebuilt.contributions) {
+      if (c.kind == ShoppingSourceKind.plan) return c;
+    }
+    // A line built by something that has not been taught contributions yet.
+    // Reading its total as the plan's ask is what it is.
+    return rebuilt.planned.isEmpty && !rebuilt.hasUnquantified
+        ? null
+        : ShoppingContribution(
+            kind: ShoppingSourceKind.plan,
+            quantities: rebuilt.planned,
+            hasUnquantified: rebuilt.hasUnquantified,
+          );
   }
 
   /// A fresh list given the order of the last one.

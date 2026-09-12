@@ -11723,6 +11723,18 @@ class $ShoppingListItemsTable extends ShoppingListItems
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _contributionsMeta = const VerificationMeta(
+    'contributions',
+  );
+  @override
+  late final GeneratedColumn<String> contributions = GeneratedColumn<String>(
+    'contributions',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -11757,6 +11769,7 @@ class $ShoppingListItemsTable extends ShoppingListItems
     storeTag,
     sortOrder,
     sourceRecipeIds,
+    contributions,
     updatedAt,
   ];
   @override
@@ -11932,6 +11945,15 @@ class $ShoppingListItemsTable extends ShoppingListItems
         ),
       );
     }
+    if (data.containsKey('contributions')) {
+      context.handle(
+        _contributionsMeta,
+        contributions.isAcceptableOrUnknown(
+          data['contributions']!,
+          _contributionsMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -12033,6 +12055,10 @@ class $ShoppingListItemsTable extends ShoppingListItems
         DriftSqlType.string,
         data['${effectivePrefix}source_recipe_ids'],
       )!,
+      contributions: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}contributions'],
+      )!,
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -12081,6 +12107,18 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
   /// Comma-separated, like the other places this cache stores a small list —
   /// it is only ever read back whole.
   final String sourceRecipeIds;
+
+  /// What each source asked for, adding up to the planned amount.
+  ///
+  /// JSON list of {kind, ref_id, label, servings, has_unquantified,
+  /// quantities:[{canonical, kind, unit}]}. The list is filled two ways now —
+  /// from the plan, and by adding a recipe to it directly — and a total
+  /// cannot be taken apart again: without this a rebuild would either wipe
+  /// what somebody added by hand or silently double it (spec §5.7).
+  ///
+  /// Empty on every row written before this column existed, which reads as
+  /// the plan having asked for the whole line — which is what it was.
+  final String contributions;
   final DateTime updatedAt;
   const ShoppingItemRow({
     required this.id,
@@ -12104,6 +12142,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
     this.storeTag,
     required this.sortOrder,
     required this.sourceRecipeIds,
+    required this.contributions,
     required this.updatedAt,
   });
   @override
@@ -12152,6 +12191,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
     }
     map['sort_order'] = Variable<int>(sortOrder);
     map['source_recipe_ids'] = Variable<String>(sourceRecipeIds);
+    map['contributions'] = Variable<String>(contributions);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -12201,6 +12241,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
           : Value(storeTag),
       sortOrder: Value(sortOrder),
       sourceRecipeIds: Value(sourceRecipeIds),
+      contributions: Value(contributions),
       updatedAt: Value(updatedAt),
     );
   }
@@ -12232,6 +12273,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
       storeTag: serializer.fromJson<String?>(json['storeTag']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       sourceRecipeIds: serializer.fromJson<String>(json['sourceRecipeIds']),
+      contributions: serializer.fromJson<String>(json['contributions']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -12260,6 +12302,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
       'storeTag': serializer.toJson<String?>(storeTag),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'sourceRecipeIds': serializer.toJson<String>(sourceRecipeIds),
+      'contributions': serializer.toJson<String>(contributions),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -12286,6 +12329,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
     Value<String?> storeTag = const Value.absent(),
     int? sortOrder,
     String? sourceRecipeIds,
+    String? contributions,
     DateTime? updatedAt,
   }) => ShoppingItemRow(
     id: id ?? this.id,
@@ -12315,6 +12359,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
     storeTag: storeTag.present ? storeTag.value : this.storeTag,
     sortOrder: sortOrder ?? this.sortOrder,
     sourceRecipeIds: sourceRecipeIds ?? this.sourceRecipeIds,
+    contributions: contributions ?? this.contributions,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   ShoppingItemRow copyWithCompanion(ShoppingListItemsCompanion data) {
@@ -12364,6 +12409,9 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
       sourceRecipeIds: data.sourceRecipeIds.present
           ? data.sourceRecipeIds.value
           : this.sourceRecipeIds,
+      contributions: data.contributions.present
+          ? data.contributions.value
+          : this.contributions,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -12392,6 +12440,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
           ..write('storeTag: $storeTag, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('sourceRecipeIds: $sourceRecipeIds, ')
+          ..write('contributions: $contributions, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -12420,6 +12469,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
     storeTag,
     sortOrder,
     sourceRecipeIds,
+    contributions,
     updatedAt,
   ]);
   @override
@@ -12447,6 +12497,7 @@ class ShoppingItemRow extends DataClass implements Insertable<ShoppingItemRow> {
           other.storeTag == this.storeTag &&
           other.sortOrder == this.sortOrder &&
           other.sourceRecipeIds == this.sourceRecipeIds &&
+          other.contributions == this.contributions &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -12472,6 +12523,7 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
   final Value<String?> storeTag;
   final Value<int> sortOrder;
   final Value<String> sourceRecipeIds;
+  final Value<String> contributions;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const ShoppingListItemsCompanion({
@@ -12496,6 +12548,7 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
     this.storeTag = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.sourceRecipeIds = const Value.absent(),
+    this.contributions = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -12521,6 +12574,7 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
     this.storeTag = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.sourceRecipeIds = const Value.absent(),
+    this.contributions = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -12550,6 +12604,7 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
     Expression<String>? storeTag,
     Expression<int>? sortOrder,
     Expression<String>? sourceRecipeIds,
+    Expression<String>? contributions,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -12575,6 +12630,7 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
       if (storeTag != null) 'store_tag': storeTag,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (sourceRecipeIds != null) 'source_recipe_ids': sourceRecipeIds,
+      if (contributions != null) 'contributions': contributions,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -12602,6 +12658,7 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
     Value<String?>? storeTag,
     Value<int>? sortOrder,
     Value<String>? sourceRecipeIds,
+    Value<String>? contributions,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -12627,6 +12684,7 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
       storeTag: storeTag ?? this.storeTag,
       sortOrder: sortOrder ?? this.sortOrder,
       sourceRecipeIds: sourceRecipeIds ?? this.sourceRecipeIds,
+      contributions: contributions ?? this.contributions,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -12698,6 +12756,9 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
     if (sourceRecipeIds.present) {
       map['source_recipe_ids'] = Variable<String>(sourceRecipeIds.value);
     }
+    if (contributions.present) {
+      map['contributions'] = Variable<String>(contributions.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -12731,6 +12792,7 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
           ..write('storeTag: $storeTag, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('sourceRecipeIds: $sourceRecipeIds, ')
+          ..write('contributions: $contributions, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -21456,6 +21518,7 @@ typedef $$ShoppingListItemsTableCreateCompanionBuilder =
       Value<String?> storeTag,
       Value<int> sortOrder,
       Value<String> sourceRecipeIds,
+      Value<String> contributions,
       required DateTime updatedAt,
       Value<int> rowid,
     });
@@ -21482,6 +21545,7 @@ typedef $$ShoppingListItemsTableUpdateCompanionBuilder =
       Value<String?> storeTag,
       Value<int> sortOrder,
       Value<String> sourceRecipeIds,
+      Value<String> contributions,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -21597,6 +21661,11 @@ class $$ShoppingListItemsTableFilterComposer
 
   ColumnFilters<String> get sourceRecipeIds => $composableBuilder(
     column: $table.sourceRecipeIds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get contributions => $composableBuilder(
+    column: $table.contributions,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -21720,6 +21789,11 @@ class $$ShoppingListItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get contributions => $composableBuilder(
+    column: $table.contributions,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -21822,6 +21896,11 @@ class $$ShoppingListItemsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get contributions => $composableBuilder(
+    column: $table.contributions,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 }
@@ -21887,6 +21966,7 @@ class $$ShoppingListItemsTableTableManager
                 Value<String?> storeTag = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<String> sourceRecipeIds = const Value.absent(),
+                Value<String> contributions = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ShoppingListItemsCompanion(
@@ -21911,6 +21991,7 @@ class $$ShoppingListItemsTableTableManager
                 storeTag: storeTag,
                 sortOrder: sortOrder,
                 sourceRecipeIds: sourceRecipeIds,
+                contributions: contributions,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -21937,6 +22018,7 @@ class $$ShoppingListItemsTableTableManager
                 Value<String?> storeTag = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<String> sourceRecipeIds = const Value.absent(),
+                Value<String> contributions = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => ShoppingListItemsCompanion.insert(
@@ -21961,6 +22043,7 @@ class $$ShoppingListItemsTableTableManager
                 storeTag: storeTag,
                 sortOrder: sortOrder,
                 sourceRecipeIds: sourceRecipeIds,
+                contributions: contributions,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),

@@ -2,6 +2,7 @@ import 'package:collection/collection.dart';
 import 'package:meta/meta.dart';
 
 import '../units/quantity.dart';
+import 'shopping_contribution.dart';
 
 /// One line of a shopping list (spec §5.7).
 ///
@@ -30,6 +31,7 @@ class ShoppingLine {
     this.hasUnquantified = false,
     this.sortOrder = 0,
     this.sourceRecipeIds = const <String>[],
+    this.contributions = const <ShoppingContribution>[],
   });
 
   /// A manual line — coffee, paper towels — which no recipe asked for.
@@ -50,6 +52,13 @@ class ShoppingLine {
     storeTag: storeTag,
     isManual: true,
     sortOrder: sortOrder,
+    contributions: <ShoppingContribution>[
+      if (planned.isNotEmpty)
+        ShoppingContribution(
+          kind: ShoppingSourceKind.manual,
+          quantities: planned,
+        ),
+    ],
   );
 
   /// What duplicates were matched on — a food id where one is attached, the
@@ -97,6 +106,19 @@ class ShoppingLine {
 
   final List<String> sourceRecipeIds;
 
+  /// What each source asked for, adding up to [planned].
+  ///
+  /// The list is filled two ways now — from the plan, and by adding a recipe
+  /// to it directly — and a total cannot be taken apart again. Keeping the
+  /// asks is what lets a rebuild replace the plan's share without touching
+  /// anybody's, and what makes taking one recipe back off the list possible
+  /// at all (spec §5.7).
+  ///
+  /// Maintained only through [ShoppingContributions.settle], which is what
+  /// keeps it in step with [planned]. Empty on a row written before this
+  /// existed; [ShoppingContributions.legacy] is how those are read.
+  final List<ShoppingContribution> contributions;
+
   /// Value equality, so "has this line changed since?" is a question that can
   /// be asked (spec §5.7).
   ///
@@ -121,6 +143,10 @@ class ShoppingLine {
       const ListEquality<String>().equals(
         other.sourceRecipeIds,
         sourceRecipeIds,
+      ) &&
+      const ListEquality<ShoppingContribution>().equals(
+        other.contributions,
+        contributions,
       );
 
   @override
@@ -137,6 +163,7 @@ class ShoppingLine {
     hasUnquantified,
     sortOrder,
     const ListEquality<String>().hash(sourceRecipeIds),
+    const ListEquality<ShoppingContribution>().hash(contributions),
   );
 
   /// Whether the amount was decided by hand rather than by the recipes.
@@ -204,6 +231,7 @@ class ShoppingLine {
     bool? hasUnquantified,
     int? sortOrder,
     List<String>? sourceRecipeIds,
+    List<ShoppingContribution>? contributions,
   }) => ShoppingLine(
     key: key,
     name: name ?? this.name,
@@ -217,6 +245,7 @@ class ShoppingLine {
     hasUnquantified: hasUnquantified ?? this.hasUnquantified,
     sortOrder: sortOrder ?? this.sortOrder,
     sourceRecipeIds: sourceRecipeIds ?? this.sourceRecipeIds,
+    contributions: contributions ?? this.contributions,
   );
 
   /// Ticked, or un-ticked.

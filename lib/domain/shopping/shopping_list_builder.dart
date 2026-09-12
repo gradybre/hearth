@@ -6,6 +6,7 @@ import '../recipes/ingredient_consolidator.dart';
 import '../text/text_normaliser.dart';
 import '../units/quantity.dart';
 import '../units/unit.dart';
+import 'shopping_contribution.dart';
 import 'shopping_line.dart';
 
 /// Turning a stretch of the plan into a shopping list (spec §5.7).
@@ -48,7 +49,7 @@ abstract final class ShoppingListBuilder {
     ];
 
     final List<ShoppingLine> lines = <ShoppingLine>[
-      ..._fromRecipes(wanted, recipes),
+      ..._fromRecipes(wanted, recipes, foods),
       ..._fromFoods(wanted, foods),
     ];
 
@@ -64,9 +65,16 @@ abstract final class ShoppingListBuilder {
   /// A recipe planned twice contributes twice, and one planned at half its
   /// yield contributes half — which is what `servingsFor` is for, and why the
   /// servings are summed across entries before being handed over.
+  ///
+  /// [foods] is here for one reason: a line's shop comes from the food behind
+  /// it, and until this took the library the recipe path had no way to read
+  /// one. Every ingredient matched to a tagged food still landed under
+  /// "Anywhere", which is nearly every line on any real list — so the store
+  /// grouping the screen is built around had almost nothing to group.
   static List<ShoppingLine> _fromRecipes(
     List<MealPlanEntry> entries,
     Map<String, Recipe> recipes,
+    Map<String, Food> foods,
   ) {
     final Map<String, double> servings = <String, double>{};
     for (final MealPlanEntry entry in entries) {
@@ -91,13 +99,16 @@ abstract final class ShoppingListBuilder {
 
     return <ShoppingLine>[
       for (final ConsolidatedIngredient line in merged)
-        ShoppingLine(
-          key: line.key,
-          name: line.displayName,
-          planned: line.quantities,
-          foodId: line.foodId,
-          hasUnquantified: line.hasUnquantified,
-          sourceRecipeIds: line.sourceRecipeIds,
+        _planLine(
+          ShoppingLine(
+            key: line.key,
+            name: line.displayName,
+            planned: line.quantities,
+            foodId: line.foodId,
+            storeTag: foods[line.foodId]?.storeTag,
+            hasUnquantified: line.hasUnquantified,
+            sourceRecipeIds: line.sourceRecipeIds,
+          ),
         ),
     ];
   }
@@ -122,22 +133,44 @@ abstract final class ShoppingListBuilder {
     return <ShoppingLine>[
       for (final MapEntry<String, double> planned in servings.entries)
         if (foods[planned.key] case final Food food)
-          ShoppingLine(
-            key: food.id,
-            name: food.name,
-            planned: <Quantity>[_portions(food, planned.value)],
-            foodId: food.id,
-            storeTag: food.storeTag,
+          _planLine(
+            ShoppingLine(
+              key: food.id,
+              name: food.name,
+              planned: <Quantity>[portionsOf(food, planned.value)],
+              foodId: food.id,
+              storeTag: food.storeTag,
+            ),
           ),
     ];
   }
+
+  /// The same line, with what it holds recorded as the plan's ask.
+  ///
+  /// Everything this class produces is the plan's, by definition — so the
+  /// whole of the line is one [ShoppingSourceKind.plan] contribution, and
+  /// [ShoppingListMerge.into] can replace exactly that much of a line the
+  /// next time somebody rebuilds (spec §5.7).
+  static ShoppingLine _planLine(ShoppingLine line) => line.copyWith(
+    contributions: <ShoppingContribution>[
+      ShoppingContribution(
+        kind: ShoppingSourceKind.plan,
+        quantities: line.planned,
+        hasUnquantified: line.hasUnquantified,
+      ),
+    ],
+  );
 
   /// How much of a food a number of its servings comes to.
   ///
   /// In the food's own serving unit where it has one — three 170 g pots is
   /// 510 g — and as a bare count of servings where it does not, which is
   /// still more use at the shop than nothing.
-  static Quantity _portions(Food food, double servings) {
+  ///
+  /// Public because adding a food straight to the list asks the same question
+  /// and must get the same answer — a second implementation would be a second
+  /// opinion about what three yoghurts comes to.
+  static Quantity portionsOf(Food food, double servings) {
     final ServingOption? option = food.defaultServing;
     if (option == null) return Quantity.of(servings, Units.item);
     return option.amount.scaledBy(servings);

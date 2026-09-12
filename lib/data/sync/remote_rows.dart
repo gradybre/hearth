@@ -316,6 +316,12 @@ class RemoteRows {
             ),
             // jsonb arrives decoded; the local column holds the text.
             plannedRest: jsonEncode(json['planned_rest'] ?? const <Object?>[]),
+            // Absent from a row a phone on an older build wrote. Empty reads
+            // as the plan having asked for the whole line, which is what it
+            // meant on that build (spec §5.7).
+            contributions: jsonEncode(
+              json['contributions'] ?? const <Object?>[],
+            ),
             updatedAt: _time(json['updated_at']),
           ),
         );

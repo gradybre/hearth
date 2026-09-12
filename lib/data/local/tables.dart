@@ -484,6 +484,18 @@ class ShoppingListItems extends Table {
   /// Comma-separated, like the other places this cache stores a small list —
   /// it is only ever read back whole.
   TextColumn get sourceRecipeIds => text().withDefault(const Constant(''))();
+
+  /// What each source asked for, adding up to the planned amount.
+  ///
+  /// JSON list of {kind, ref_id, label, servings, has_unquantified,
+  /// quantities:[{canonical, kind, unit}]}. The list is filled two ways now —
+  /// from the plan, and by adding a recipe to it directly — and a total
+  /// cannot be taken apart again: without this a rebuild would either wipe
+  /// what somebody added by hand or silently double it (spec §5.7).
+  ///
+  /// Empty on every row written before this column existed, which reads as
+  /// the plan having asked for the whole line — which is what it was.
+  TextColumn get contributions => text().withDefault(const Constant('[]'))();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override

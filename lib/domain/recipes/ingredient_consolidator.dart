@@ -147,25 +147,22 @@ abstract final class IngredientConsolidator {
   ) {
     final String displayName = entries.first.ingredient.name;
 
-    // Sum within each bucket first — that part is always exact.
-    final Map<String, Quantity> byBucket = <String, Quantity>{};
     bool hasUnquantified = false;
+    final List<Quantity> amounts = <Quantity>[];
     for (final _Entry entry in entries) {
       final Quantity? quantity = entry.ingredient.quantity;
       if (quantity == null) {
         hasUnquantified = true;
         continue;
       }
-      final String bucket = _bucketFor(quantity);
-      final Quantity? existing = byBucket[bucket];
-      byBucket[bucket] = existing == null ? quantity : existing + quantity;
+      amounts.add(quantity);
     }
 
-    final List<Quantity> quantities = _unify(
-      byBucket,
-      displayName,
-      densityLookup,
-      system,
+    final List<Quantity> quantities = combine(
+      amounts,
+      displayName: displayName,
+      densityLookup: densityLookup,
+      system: system,
     );
 
     return ConsolidatedIngredient(
@@ -181,6 +178,35 @@ abstract final class IngredientConsolidator {
           .toSet()
           .toList(growable: false),
     );
+  }
+
+  /// Adds quantities of the same thing together.
+  ///
+  /// The arithmetic of a shopping line, extracted from the middle of
+  /// [mergeRecipes] so that it has one implementation rather than two. A line
+  /// now totals up several *contributions* — what the plan asks for, plus
+  /// each recipe somebody added to the list by hand — and summing those has
+  /// to mean exactly what summing an ingredient across recipes has always
+  /// meant: volume pools with volume, mass with mass, a clove never with a
+  /// head, and the two collapse into grams only where a density says they
+  /// may (spec §5.7).
+  ///
+  /// [displayName] is what the density table is asked about, so pass the
+  /// line's name where there is one.
+  static List<Quantity> combine(
+    Iterable<Quantity> quantities, {
+    String displayName = '',
+    DensityLookup densityLookup = DensityTable.lookup,
+    UnitSystem system = UnitSystem.imperial,
+  }) {
+    // Sum within each bucket first — that part is always exact.
+    final Map<String, Quantity> byBucket = <String, Quantity>{};
+    for (final Quantity quantity in quantities) {
+      final String bucket = _bucketFor(quantity);
+      final Quantity? existing = byBucket[bucket];
+      byBucket[bucket] = existing == null ? quantity : existing + quantity;
+    }
+    return _unify(byBucket, displayName, densityLookup, system);
   }
 
   /// What may be added to what.

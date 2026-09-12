@@ -51,11 +51,21 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 28;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (Migrator m, int from, int to) async {
+      // v28 records what each source asked for on a shopping line, so a
+      // rebuild can replace the plan's share without touching a recipe
+      // somebody added to the list themselves (spec §5.7).
+      if (from < 28) {
+        await _addColumnIfMissing(
+          m,
+          shoppingListItems,
+          shoppingListItems.contributions,
+        );
+      }
       // v27 records where a restaurant's menu came from (review N08).
       // Additive, and household-scoped like the imports it describes.
       if (from < 27) {
