@@ -104,7 +104,7 @@ const List<AppSection> appSections = <AppSection>[
   BuiltSection(
     id: 'nutrition',
     label: 'Nutrition',
-    blurb: 'Recipes, the week\'s plan, the shopping list, and what you ate.',
+    blurb: 'Recipes, meal plans, shopping lists, and nutrition logs.',
     icon: Icons.soup_kitchen_outlined,
     destinations: foodDestinations,
   ),
@@ -114,19 +114,19 @@ const List<AppSection> appSections = <AppSection>[
   PlannedSection(
     id: 'fitness',
     label: 'Fitness',
-    blurb: 'Training, sessions, and what the week actually looked like.',
+    blurb: 'Workouts, sessions, and training records.',
     icon: Icons.fitness_center_outlined,
   ),
   PlannedSection(
     id: 'health',
     label: 'Health',
-    blurb: 'The numbers worth watching, and appointments worth remembering.',
+    blurb: 'Measurements, appointments, and records.',
     icon: Icons.monitor_heart_outlined,
   ),
   PlannedSection(
     id: 'home',
     label: 'The house',
-    blurb: 'The thermostat, and whatever else the house needs asking.',
+    blurb: 'Thermostat and household controls.',
     icon: Icons.thermostat_outlined,
   ),
 ];
