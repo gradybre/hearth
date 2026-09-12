@@ -1265,7 +1265,7 @@ const List<Scene> scenes = <Scene>[
   // because `LaunchTarget.section` needs a section from the registry and this
   // list is const.
   //
-  // The house is the one worth having a picture of: it has a single tab, so
+  // House is the one worth having a picture of: it has a single tab, so
   // it is the only room in the app that draws no tab bar at all.
   Scene(
     name: 'fitness-today',
@@ -1277,17 +1277,13 @@ const List<Scene> scenes = <Scene>[
     target: LaunchTarget.home,
     taps: <String>['Health'],
   ),
-  Scene(
-    name: 'the-house',
-    target: LaunchTarget.home,
-    taps: <String>['The house'],
-  ),
+  Scene(name: 'the-house', target: LaunchTarget.home, taps: <String>['House']),
   // And at three times the text on a small phone, which is where two centred
   // sentences in the middle of an empty screen stop being centred.
   Scene(
     name: 'the-house-large-text',
     target: LaunchTarget.home,
-    taps: <String>['The house'],
+    taps: <String>['House'],
     size: Size(320, 568),
     textScale: 3.0,
   ),

@@ -95,7 +95,7 @@ void main() {
   });
 
   group('a room with a single tab', () {
-    // The house has one destination (spec §11), and `NavigationBar` asserts
+    // House has one destination (spec §11), and `NavigationBar` asserts
     // it has at least two. So the shell drew nothing at all rather than a
     // thermostat: an assertion in the bottom bar takes the body down with it,
     // and `/thermostat` rendered zero widgets of text.

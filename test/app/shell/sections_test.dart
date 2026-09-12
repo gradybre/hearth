@@ -22,7 +22,7 @@ void main() {
     });
 
     test('every room has tabs, and Nutrition still holds its four', () {
-      // Fitness, Health and The house are walkable now — each has its tabs,
+      // Fitness, Health and House are walkable now — each has its tabs,
       // and each tab says on the screen behind it that it is not built yet.
       // What `isBuilt` claims is true of the rooms, not of the furniture.
       expect(builtSections.map((AppSection s) => s.id), <String>[
@@ -172,12 +172,12 @@ void main() {
     test(
       'a section named "home" could not be mistaken for the home screen',
       () {
-        // Which is why the stored form is prefixed. The house section's id is
-        // literally `home`, and now that it has tabs the two really are two
+        // Which is why the stored form is prefixed. The House section's id
+        // is literally `home`, and now that it has tabs the two really are two
         // different destinations rather than one falling back to the other.
         //
         // No device can hold the old meaning: `section:home` was never
-        // offerable while The house had nowhere to go, so nothing stored it.
+        // offerable while House had nowhere to go, so nothing stored it.
         expect(LaunchTarget.parse('home'), LaunchTarget.home);
         expect(LaunchTarget.parse('section:home').path, '/thermostat');
         expect(LaunchTarget.section(_nutrition).stored, 'section:nutrition');

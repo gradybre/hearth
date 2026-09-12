@@ -126,7 +126,7 @@ const List<AppDestination> healthDestinations = <AppDestination>[
   ),
 ];
 
-/// The house's tabs (spec §11).
+/// House's tabs (spec §11).
 const List<AppDestination> houseDestinations = <AppDestination>[
   AppDestination(
     path: '/thermostat',

@@ -129,7 +129,7 @@ Core entities (Postgres tables, RLS-scoped):
 
 ### 5.0 Sections (the shape of the app)
 
-Hearth is one app made of **sections** — Nutrition today, and fitness, health and the house
+Hearth is one app made of **sections** — Nutrition today, and Fitness, Health and House
 later. A section is a *concept the app holds*, not a screen someone hardcoded: an id, a name,
 a sentence saying what it is for, an icon, and its own set of tabs. Everything in §5.1–§5.8
 belongs to the Nutrition section.
@@ -782,7 +782,7 @@ by being added to the **section registry** (§5.0) with its destinations and scr
 it is named on the home screen and nothing more.
 
 **Walkable, not built.** Brendan lifted these three on 12 September 2026: Fitness, Health and
-The house are in the registry with their tabs, so the shape of the app can be walked. Every one
+House are in the registry with their tabs, so the shape of the app can be walked. Every one
 of those tabs opens a screen that says what will live there and that it is not built yet. This
 is deliberately *not* a change to "v1 ships one pillar only" — nothing behind those tabs is
 built, no models, no schema, no sync. Building one is still a separate decision that amends
@@ -792,7 +792,7 @@ this section again.
 |---|---|
 | **Fitness** | Today · Workouts · History |
 | **Health** | Numbers · Appointments |
-| **The house** | Thermostat |
+| **House** | Thermostat |
 
 Three consequences worth naming, because they are easy to trip over later:
 
@@ -804,8 +804,8 @@ Three consequences worth naming, because they are easy to trip over later:
   wall of promises the line exists to prevent, and opening Hearth on "Not built yet." every
   launch is not a preference anybody means to express. Furnishing a room takes it out of both
   with no copy to rewrite.
-- `section:home` as a stored launch preference now opens The house rather than falling back to
-  the home screen. Nothing can hold the old meaning — it was never offerable while The house
+- `section:home` as a stored launch preference now opens House rather than falling back to
+  the home screen. Nothing can hold the old meaning — it was never offerable while House
   had nowhere to go, and it is not offerable now either; `parse` still resolves it so a device
   that stored a room before it emptied is not sent home for it.
 

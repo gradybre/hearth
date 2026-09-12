@@ -97,7 +97,7 @@ class AppShell extends StatelessWidget {
             const CookTimerBar(),
             // A tab bar for one tab is a row that can only ever say where you
             // already are — and `NavigationBar` refuses fewer than two
-            // outright, which is how The house's single tab rendered a blank
+            // outright, which is how House's single tab rendered a blank
             // screen rather than a thermostat (spec §11).
             if (!wide && section.destinations.length > 1) _bottomTabs(context),
           ],

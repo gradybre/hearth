@@ -147,7 +147,7 @@ void main() {
   }
 
   group('the rooms that are walkable but not furnished', () {
-    // Fitness, Health and The house have their tabs and nothing behind them
+    // Fitness, Health and House have their tabs and nothing behind them
     // (spec §11). A screen whose whole content is two centred sentences is
     // exactly the shape that stops being centred at three times the text.
     //

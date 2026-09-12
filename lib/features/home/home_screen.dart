@@ -242,8 +242,8 @@ class _ComingLater extends StatelessWidget {
 
     final HearthColors colors = context.colors;
     // A colon and commas rather than a sentence with "and" in it: the names
-    // are proper nouns, and one of them is "The house" — which reads as a
-    // typo halfway through a sentence and as a list item perfectly well.
+    // are proper nouns, and a proper noun joined by "and" halfway through a
+    // sentence reads as the sentence continuing. A list item does not.
     final String listed = <String>[
       for (final AppSection section in later) section.label,
     ].join(', ');

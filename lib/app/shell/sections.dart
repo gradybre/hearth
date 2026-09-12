@@ -146,7 +146,7 @@ const List<AppSection> appSections = <AppSection>[
   ),
   BuiltSection(
     id: 'home',
-    label: 'The house',
+    label: 'House',
     blurb: 'Thermostat and household controls.',
     icon: Icons.thermostat_outlined,
     destinations: houseDestinations,
