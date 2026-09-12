@@ -21,20 +21,19 @@ class FakeThermostat implements ThermostatGateway {
   final List<ThermostatCommand> sent = <ThermostatCommand>[];
   int statusCalls = 0;
   int unlinks = 0;
-  String? codeGiven;
+  int consentUrls = 0;
 
   @override
   String get displayName => 'Google Nest';
 
   @override
-  Future<Uri> consentUrl() async => Uri.parse('https://example.test/consent');
-
-  @override
-  Future<String> link(String code) async {
-    codeGiven = code;
-    state = aThermostat();
-    return 'Hallway';
+  Future<Uri> consentUrl() async {
+    consentUrls++;
+    return Uri.parse('https://example.test/consent');
   }
+
+  /// What the callback does, out of band, once Google has redirected.
+  void linkFinishesInTheBrowser() => state = aThermostat();
 
   @override
   Future<ThermostatLink> status() async {
@@ -283,18 +282,48 @@ void main() {
       expect(find.byTooltip('Warmer'), findsNothing);
     });
 
-    testWidgets('and pasting the code finishes it', (
+    testWidgets('and the link arrives on its own once Google is done', (
       WidgetTester tester,
     ) async {
+      // Nothing comes back through the app: Google redirects the browser to
+      // an Edge Function, which finishes the exchange. So the screen waits
+      // and keeps asking, rather than offering a field to paste a code into —
+      // which on a phone is a field nobody can fill, because `google.com` is
+      // a universal link and iOS hands the redirect to the Google app.
       final FakeThermostat fake = FakeThermostat();
       await openHouse(tester, fake);
 
-      await tester.enterText(find.byType(TextField), '4/0AbCd');
-      await tester.tap(find.text('Finish connecting'));
+      await tester.tap(find.text('Connect Google Nest'));
+      await pumpFrames(tester, frames: 10);
+      expect(fake.consentUrls, 1);
+      expect(find.textContaining('Finish in your browser'), findsOneWidget);
+      expect(find.textContaining('Tick the thermostat'), findsOneWidget);
+
+      fake.linkFinishesInTheBrowser();
+      await tester.pump(ThermostatScreen.whileConnecting);
       await pumpFrames(tester, frames: 10);
 
-      expect(fake.codeGiven, '4/0AbCd');
       expect(find.text('70°'), findsOneWidget);
+    });
+
+    testWidgets('and waiting asks often enough to notice', (
+      WidgetTester tester,
+    ) async {
+      // The answer arrives out of band, so there is nothing else to watch for
+      // it. An unlinked household is served from the server's own row without
+      // touching Google, so these cost nothing against the hourly ceiling.
+      final FakeThermostat fake = FakeThermostat();
+      await openHouse(tester, fake);
+      final int before = fake.statusCalls;
+
+      await tester.tap(find.text('Connect Google Nest'));
+      await pumpFrames(tester, frames: 10);
+      await tester.pump(ThermostatScreen.whileConnecting);
+      await pumpFrames(tester);
+      await tester.pump(ThermostatScreen.whileConnecting);
+      await pumpFrames(tester);
+
+      expect(fake.statusCalls, greaterThan(before + 1));
     });
 
     testWidgets('a dead credential says reconnect, not "something went wrong"', (

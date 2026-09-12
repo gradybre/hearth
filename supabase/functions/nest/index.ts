@@ -24,7 +24,6 @@ import {
   type FreshToken,
   GrantRevoked,
   isFresh,
-  REDIRECT_URI,
   refresh,
   TokenRefused,
 } from './tokens.ts';
@@ -65,8 +64,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
   try {
     switch (action) {
-      case 'consent-url':
-        return json({ url: consentUrl(env.projectId, env.clientId) });
+      case 'link-start':
+        return await linkStart(env, household, auth);
       case 'link':
         return await link(env, household, auth, body);
       case 'status':
@@ -107,6 +106,41 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
 // ── Actions ─────────────────────────────────────────────────────────────────
 
+/// How long a consent attempt stays open.
+///
+/// Long enough for a Google password prompt, two-factor, and the device
+/// picker on a phone; short enough that an attempt somebody abandoned is not a
+/// standing invitation.
+const LINK_MINUTES = 10;
+
+/// Opens a consent attempt and hands back where to send the browser.
+///
+/// The nonce goes out in `state` and its hash goes to the database, so the
+/// callback — which has to accept an unauthenticated GET, because Google
+/// redirects a browser and browsers carry no JWT — has exactly one thing to
+/// trust and it is something this project minted itself.
+async function linkStart(
+  env: Env,
+  household: string,
+  auth: string,
+): Promise<Response> {
+  const user = await currentUser(env, auth);
+  if (!user) return json({ error: 'Sign in again and retry.' }, 401);
+
+  const nonce = base64Url(crypto.getRandomValues(new Uint8Array(32)));
+  const expires = await rpcOne(env, 'nest_start_link', {
+    p_household: household,
+    p_user: user,
+    p_token_hash: await sha256Hex(nonce),
+    p_minutes: LINK_MINUTES,
+  });
+
+  return json({
+    url: consentUrl(env.projectId, env.clientId, env.callbackUrl, nonce),
+    expiresAt: typeof expires === 'string' ? expires : null,
+  });
+}
+
 async function link(
   env: Env,
   household: string,
@@ -126,7 +160,7 @@ async function link(
     code,
     clientId: env.clientId,
     clientSecret: env.clientSecret,
-    redirectUri: REDIRECT_URI,
+    redirectUri: env.callbackUrl,
     now: new Date(),
   });
 
@@ -510,6 +544,7 @@ interface Env {
   projectId: string;
   clientId: string;
   clientSecret: string;
+  callbackUrl: string;
   url: string;
   secret: string;
 }
@@ -519,6 +554,11 @@ function readEnv(): Env | { error: string } {
     'SDM_PROJECT_ID',
     'GOOGLE_OAUTH_CLIENT_ID',
     'GOOGLE_OAUTH_CLIENT_SECRET',
+    // Explicit rather than inferred from `request.url`, which inside a
+    // function is the internal URL. `redirect_uri` must match byte for byte
+    // between the consent request and the token exchange, and
+    // `redirect_uri_mismatch` is the least self-explanatory failure in OAuth.
+    'NEST_CALLBACK_URL',
     'SUPABASE_URL',
     'SUPABASE_SERVICE_ROLE_KEY',
   ];
@@ -528,8 +568,26 @@ function readEnv(): Env | { error: string } {
     // Configuration reported as configuration, never as an empty result.
     return { error: `${missing.join(', ')} is not set on this project` };
   }
-  const [projectId, clientId, clientSecret, url, secret] = values as string[];
-  return { projectId, clientId, clientSecret, url, secret };
+  const [projectId, clientId, clientSecret, callbackUrl, url, secret] =
+    values as string[];
+  return { projectId, clientId, clientSecret, callbackUrl, url, secret };
+}
+
+function base64Url(bytes: Uint8Array): string {
+  return btoa(String.fromCharCode(...bytes))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replaceAll('=', '');
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 function safeDecode(value: string): string {

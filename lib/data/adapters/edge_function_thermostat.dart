@@ -27,7 +27,7 @@ class EdgeFunctionThermostat implements ThermostatGateway {
   @override
   Future<Uri> consentUrl() async {
     final Map<Object?, Object?> data = await _invoke(<String, Object?>{
-      'action': 'consent-url',
+      'action': 'link-start',
     });
     final Object? url = data['url'];
     final Uri? parsed = url is String ? Uri.tryParse(url) : null;
@@ -38,23 +38,6 @@ class EdgeFunctionThermostat implements ThermostatGateway {
       );
     }
     return parsed;
-  }
-
-  @override
-  Future<String> link(String code) async {
-    final String trimmed = code.trim();
-    if (trimmed.isEmpty) {
-      throw const ThermostatException(
-        'Paste the code from the address bar first.',
-        isRetryable: false,
-      );
-    }
-    final Map<Object?, Object?> data = await _invoke(<String, Object?>{
-      'action': 'link',
-      'code': trimmed,
-    });
-    final Object? label = data['deviceLabel'];
-    return label is String && label.isNotEmpty ? label : 'Thermostat';
   }
 
   @override

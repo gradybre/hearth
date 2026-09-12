@@ -81,18 +81,19 @@ abstract interface class ThermostatGateway {
   /// Named on the settings page, so "connected to" has something to say.
   String get displayName;
 
-  /// Where to send somebody to grant access.
+  /// Opens a consent attempt and says where to send the browser.
   ///
-  /// Built on the server: the URL carries the OAuth client id and the Device
-  /// Access project id, and neither of those belongs in the app bundle
-  /// (CLAUDE.md rule 1).
+  /// Built on the server: the URL carries the OAuth client id, the Device
+  /// Access project id and a single-use nonce, none of which belongs in the
+  /// app bundle (CLAUDE.md rule 1).
+  ///
+  /// Nothing comes back through the app. Google redirects the browser to a
+  /// function of Hearth's own, which finishes the exchange — so the app finds
+  /// out by asking [status] again, not by being handed a code. The first
+  /// design did hand back a code for the user to paste, and it does not work
+  /// on a phone: `google.com` is a universal link claimed by the Google app,
+  /// so iOS hands the redirect there and the code is never visible.
   Future<Uri> consentUrl();
-
-  /// Exchanges the code the consent flow handed back.
-  ///
-  /// Returns what the thermostat is called, so the settings page can confirm
-  /// with the device's own name rather than a tick.
-  Future<String> link(String code);
 
   /// What the thermostat is doing, or [ThermostatLink.unlinked].
   Future<ThermostatLink> status();

@@ -22,8 +22,21 @@ thermostat merely shared with a second account usually cannot grant access.
    See the warning below — this step is not optional for long.
 6. **Credentials → Create credentials → OAuth client ID → Web application**.
    Authorised redirect URI, exactly, with no trailing slash:
-   `https://www.google.com`. Leave JavaScript origins empty.
-   Keep the **Client ID** and **Client Secret**.
+
+   ```
+   https://<project-ref>.supabase.co/functions/v1/nest-callback
+   ```
+
+   Leave JavaScript origins empty. Keep the **Client ID** and **Client
+   Secret**.
+
+   **Not `https://www.google.com`**, which is what Google's own guide says.
+   That works on a desktop and fails completely on a phone: `google.com` is a
+   universal link claimed by the Google app, so iOS hands the redirect to that
+   app, which has nothing to do with it, and the flow dead-ends with the
+   authorization code never visible to anybody. Hearth redirects to a function
+   of its own instead, on a domain no app claims, and that function finishes
+   the exchange — so there is nothing to copy out of an address bar.
 
 ## 2. Device Access Console
 
@@ -55,7 +68,15 @@ GOOGLE_OAUTH_CLIENT_ID=…
 GOOGLE_OAUTH_CLIENT_SECRET=…
 ```
 
-Then `supabase functions deploy nest`.
+One more, so both functions agree on the redirect byte for byte —
+`redirect_uri_mismatch` is the least self-explanatory failure in OAuth:
+
+```bash
+supabase secrets set \
+  NEST_CALLBACK_URL=https://<project-ref>.supabase.co/functions/v1/nest-callback
+```
+
+Then `supabase functions deploy nest nest-callback`.
 
 ## 4. Linking, in the app
 
@@ -65,9 +86,13 @@ House → Thermostat → **Connect Google Nest**. Google opens in a browser.
 commonest real-world failure: the link "succeeds" and there is nothing to
 control. Hearth refuses such a link and says so, rather than saving it.
 
-Google then lands on `https://www.google.com/?code=…`. Copy the `code` value
-out of the address bar and paste it into Hearth. Percent-encoded (`4%2F0A…`)
-is fine; it is decoded server-side.
+Google then redirects to Hearth's own callback, which finishes the exchange and
+shows a page saying so. Close the tab and go back to Hearth; the screen is
+polling every three seconds while it waits and picks the link up on its own.
+Nothing has to be copied.
+
+The attempt is good for ten minutes. After that, start again from Hearth —
+the nonce is single-use, so a stale tab cannot finish a link behind you.
 
 ---
 

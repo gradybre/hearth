@@ -37,6 +37,9 @@ class ThermostatScreen extends ConsumerStatefulWidget {
   /// allowance. A burst of taps is one decision and becomes one command.
   static const Duration settleAfter = Duration(milliseconds: 600);
 
+  /// How often to ask while Google is open in the browser.
+  static const Duration whileConnecting = Duration(seconds: 3);
+
   @override
   ConsumerState<ThermostatScreen> createState() => _ThermostatScreenState();
 }
@@ -54,7 +57,15 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
   Timer? _settle;
   ThermostatCommand? _queued;
 
-  final TextEditingController _code = TextEditingController();
+  /// True between opening Google and the link appearing.
+  ///
+  /// Nothing comes back through the app — Google redirects the browser to an
+  /// Edge Function, which finishes the exchange — so the only way to find out
+  /// is to keep asking. The first design had the user copy a code out of the
+  /// address bar, and it does not work on a phone: `google.com` is a universal
+  /// link claimed by the Google app, so iOS hands the redirect there and the
+  /// code is never visible to anybody.
+  bool _waiting = false;
 
   ThermostatGateway? get _gateway => ref.read(thermostatProvider);
 
@@ -75,15 +86,21 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
     // may want — and in a widget test it is a run that hangs rather than fails.
     _poll?.cancel();
     _settle?.cancel();
-    _code.dispose();
     super.dispose();
   }
 
   void _schedulePoll() {
     _poll?.cancel();
-    _poll = Timer(ThermostatScreen.pollEvery, () {
-      if (mounted) unawaited(_refresh());
-    });
+    // Faster while a consent flow is open in the browser, because the answer
+    // arrives out of band and there is nothing else to watch for it. The
+    // server serves an unlinked household from its own row without touching
+    // Google, so these cost nothing against the device's hourly ceiling.
+    _poll = Timer(
+      _waiting ? ThermostatScreen.whileConnecting : ThermostatScreen.pollEvery,
+      () {
+        if (mounted) unawaited(_refresh());
+      },
+    );
   }
 
   Future<void> _refresh() async {
@@ -106,7 +123,12 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
         _needsRelink = false;
         _loadedOnce = true;
       });
-      if (link.isLinked) _schedulePoll();
+      if (link.isLinked) {
+        _waiting = false;
+        _schedulePoll();
+      } else if (_waiting) {
+        _schedulePoll();
+      }
     } on ThermostatException catch (failure) {
       if (!mounted) return;
       setState(() {
@@ -201,15 +223,53 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
     }
   }
 
-  Future<void> _connect() => _run(() async {
-    final Uri url = await _gateway!.consentUrl();
-    await launchUrl(url, mode: LaunchMode.externalApplication);
-  });
+  /// Opens the consent flow and starts waiting for it to land.
+  ///
+  /// Not through [_run], because that refreshes on success and a refresh
+  /// clears the error — and the one error worth keeping here is "your browser
+  /// did not open", which is the only part of this the app can see fail.
+  Future<void> _connect() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final Uri url = await _gateway!.consentUrl();
+      // Waiting before launching, and polling from here on: the answer comes
+      // back through a redirect to an Edge Function, so the app has nothing to
+      // watch except the link appearing.
+      setState(() => _waiting = true);
+      _schedulePoll();
 
-  Future<void> _finish() => _run(() async {
-    await _gateway!.link(_code.text);
-    _code.clear();
-  });
+      // A real browser, not an in-app view: Google refuses embedded webviews
+      // for OAuth, and the signed-in Google session is in the real browser
+      // anyway.
+      final bool opened = await launchUrl(
+        url,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) {
+        throw const ThermostatException(
+          'Hearth could not open your browser.',
+          isRetryable: false,
+        );
+      }
+    } on ThermostatException catch (failure) {
+      if (mounted) {
+        setState(() {
+          _error = failure.message;
+          _needsRelink = failure.needsRelink;
+        });
+      }
+    } on Object {
+      if (mounted) {
+        setState(() => _error = 'Hearth could not open your browser.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   Future<void> _disconnect() => _run(() => _gateway!.unlink());
 
@@ -412,32 +472,22 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
           height: HearthTouch.minTarget,
           child: FilledButton(
             onPressed: _busy ? null : _connect,
-            child: Text(_busy ? 'Just a moment…' : 'Connect Google Nest'),
+            child: Text(
+              _busy
+                  ? 'Just a moment…'
+                  : (_waiting ? 'Open Google again' : 'Connect Google Nest'),
+            ),
           ),
         ),
-        const SizedBox(height: HearthSpacing.lg),
-        Text(
-          'Google will finish in your browser and land on a page whose '
-          'address contains a code. Paste it here.',
-          style: context.text.metadata.copyWith(color: colors.textMuted),
-        ),
-        const SizedBox(height: HearthSpacing.sm),
-        TextField(
-          controller: _code,
-          decoration: const InputDecoration(
-            labelText: 'Code from the address bar',
+        if (_waiting) ...<Widget>[
+          const SizedBox(height: HearthSpacing.md),
+          Text(
+            'Finish in your browser, then come back. Tick the thermostat in '
+            'Google\u2019s device list — it is easy to miss, and without it '
+            'there is nothing for Hearth to control.',
+            style: context.text.metadata.copyWith(color: colors.textMuted),
           ),
-          autocorrect: false,
-          enableSuggestions: false,
-        ),
-        const SizedBox(height: HearthSpacing.sm),
-        SizedBox(
-          height: HearthTouch.minTarget,
-          child: OutlinedButton(
-            onPressed: _busy ? null : _finish,
-            child: const Text('Finish connecting'),
-          ),
-        ),
+        ],
       ],
     );
   }
