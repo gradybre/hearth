@@ -1,3 +1,4 @@
+import 'package:hearth/domain/shopping/shopping_contribution.dart';
 import 'package:hearth/domain/shopping/shopping_edit.dart';
 import 'package:hearth/domain/shopping/shopping_line.dart';
 import 'package:hearth/domain/units/quantity.dart';
@@ -181,5 +182,50 @@ void main() {
 
     expect(lines.single.name, 'Coffee');
     expect(lines.single.isChecked, isTrue);
+  });
+
+  group('an amount set on a typed-in line is recorded as an ask', () {
+    // `planned` is the sum of a line's contributions and nothing else may
+    // set it (see ShoppingContributions). Writing the amount straight into
+    // `planned` leaves the two disagreeing — the line says two pounds and
+    // nobody asked for any — and the next thing to settle the line would
+    // recompute the total back to nothing.
+    test('so the line can still say where its amount came from', () {
+      final List<ShoppingLine> after = apply(
+        const ShoppingEdit(
+          kind: ShoppingEditKind.setAmount,
+          name: 'Coffee',
+          amount: 2,
+          unitId: 'lb',
+        ),
+        <ShoppingLine>[ShoppingLine.manual(key: 'coffee', name: 'Coffee')],
+      );
+
+      expect(after.single.planned.single.amountIn(Units.pound), 2);
+      expect(after.single.contributions.single.kind, ShoppingSourceKind.manual);
+      expect(
+        after.single.contributions.single.quantities.single.amountIn(
+          Units.pound,
+        ),
+        2,
+      );
+    });
+
+    test('and settling it again does not lose the amount', () {
+      final List<ShoppingLine> after = apply(
+        const ShoppingEdit(
+          kind: ShoppingEditKind.setAmount,
+          name: 'Coffee',
+          amount: 2,
+          unitId: 'lb',
+        ),
+        <ShoppingLine>[ShoppingLine.manual(key: 'coffee', name: 'Coffee')],
+      );
+      final ShoppingLine resettled = ShoppingContributions.settle(
+        after.single,
+        contributions: after.single.contributions,
+      );
+      expect(resettled.planned.single.amountIn(Units.pound), 2);
+    });
   });
 }

@@ -82,7 +82,7 @@ abstract final class ShoppingMapper {
   /// The trailing planned amounts, or the contributions, as a list for a
   /// jsonb column — never as a string holding JSON.
   static List<Object?> jsonListFrom(String raw) {
-    final Object? decoded = raw.trim().isEmpty ? null : jsonDecode(raw);
+    final Object? decoded = raw.trim().isEmpty ? null : _tryDecode(raw);
     return decoded is List<Object?> ? decoded : const <Object?>[];
   }
 
@@ -117,7 +117,10 @@ abstract final class ShoppingMapper {
   /// heard of is exactly that case — a newer build wrote it.
   static List<ShoppingContribution> contributionsFromJson(Object? value) {
     final Object? decoded = switch (value) {
-      final String raw => raw.trim().isEmpty ? null : jsonDecode(raw),
+      // A column holding something that is not JSON at all reads as nothing.
+      // `jsonDecode` throws, and a throw here comes out of loading the list —
+      // so one unreadable row would take the whole shopping list with it.
+      final String raw => raw.trim().isEmpty ? null : _tryDecode(raw),
       final List<Object?> list => list,
       _ => null,
     };
@@ -129,8 +132,11 @@ abstract final class ShoppingMapper {
           if (_kind(entry['kind']) case final ShoppingSourceKind kind)
             ShoppingContribution(
               kind: kind,
-              refId: entry['ref_id'] as String?,
-              label: entry['label'] as String?,
+              // Read rather than cast. A cast throws on a field of the wrong
+              // type, which is the same failure as above by another route —
+              // and this is data a newer build may have written.
+              refId: _string(entry['ref_id']),
+              label: _string(entry['label']),
               servings: switch (entry['servings']) {
                 final num n => n.toDouble(),
                 _ => null,
@@ -144,6 +150,16 @@ abstract final class ShoppingMapper {
             ),
     ];
   }
+
+  static Object? _tryDecode(String raw) {
+    try {
+      return jsonDecode(raw);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static String? _string(Object? value) => value is String ? value : null;
 
   static ShoppingSourceKind? _kind(Object? value) {
     for (final ShoppingSourceKind kind in ShoppingSourceKind.values) {

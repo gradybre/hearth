@@ -3,6 +3,7 @@ import 'package:meta/meta.dart';
 import '../text/text_normaliser.dart';
 import '../units/quantity.dart';
 import '../units/unit.dart';
+import 'shopping_contribution.dart';
 import 'shopping_line.dart';
 import 'shopping_list_builder.dart';
 
@@ -120,7 +121,19 @@ abstract final class ShoppingEdits {
     final Quantity? quantity = edit.quantity;
     if (quantity == null) return line;
     if (line.isManual && line.planned.isEmpty) {
-      return line.copyWith(planned: <Quantity>[quantity]);
+      // Through the asks rather than straight into `planned`: the total is
+      // the sum of a line's contributions and nothing else may set it, or
+      // the next thing to settle the line recomputes the amount back to
+      // nothing (see [ShoppingContributions]).
+      return ShoppingContributions.settle(
+        line,
+        contributions: <ShoppingContribution>[
+          ShoppingContribution(
+            kind: ShoppingSourceKind.manual,
+            quantities: <Quantity>[quantity],
+          ),
+        ],
+      );
     }
     return line.copyWith(wanted: quantity);
   }

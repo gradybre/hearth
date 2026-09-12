@@ -179,7 +179,13 @@ class ShoppingRepository {
     required Recipe recipe,
     required double servings,
     required Map<String, Food> foods,
-  }) {
+  }) async {
+    // [IngredientConsolidator.mergeRecipes] falls back to a scale factor of
+    // one when the servings asked for are not positive, so a zero here would
+    // quietly put a whole recipe on the list — the opposite of what was
+    // asked, and invisible once it is there.
+    _positive(servings);
+
     final List<ConsolidatedIngredient> wanted =
         IngredientConsolidator.mergeRecipes(
           <Recipe>[recipe],
@@ -214,22 +220,37 @@ class ShoppingRepository {
   Future<List<ShoppingLine>> addFood({
     required Food food,
     required double servings,
-  }) => _add(<_Ask>[
-    (
-      key: food.id,
-      name: food.name,
-      foodId: food.id,
-      storeTag: food.storeTag,
-      sourceRecipeIds: const <String>[],
-      contribution: ShoppingContribution(
-        kind: ShoppingSourceKind.food,
-        refId: food.id,
-        label: food.name,
-        servings: servings,
-        quantities: <Quantity>[ShoppingListBuilder.portionsOf(food, servings)],
+  }) async {
+    _positive(servings);
+    return _add(<_Ask>[
+      (
+        key: food.id,
+        name: food.name,
+        foodId: food.id,
+        storeTag: food.storeTag,
+        sourceRecipeIds: const <String>[],
+        contribution: ShoppingContribution(
+          kind: ShoppingSourceKind.food,
+          refId: food.id,
+          label: food.name,
+          servings: servings,
+          quantities: <Quantity>[
+            ShoppingListBuilder.portionsOf(food, servings),
+          ],
+        ),
       ),
-    ),
-  ]);
+    ]);
+  }
+
+  /// Nothing is added for no servings, and asking says so.
+  ///
+  /// Thrown from inside an `async` body deliberately, so it arrives through
+  /// the returned future like every other failure from this class rather than
+  /// synchronously past a caller's `catchError`.
+  static void _positive(double servings) {
+    if (servings > 0) return;
+    throw ArgumentError.value(servings, 'servings', 'has to be more than none');
+  }
 
   /// Takes one source's ask back off every line it contributed to.
   ///

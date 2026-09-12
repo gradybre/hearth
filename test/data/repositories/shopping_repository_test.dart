@@ -325,6 +325,33 @@ void main() {
       expect(back.quantities.single.amountIn(Units.pound), 1);
     });
 
+    test(
+      'asking for no servings is refused, not silently a whole recipe',
+      () async {
+        // `IngredientConsolidator` falls back to a scale factor of 1 when the
+        // servings asked for are not positive — so a zero here would put a
+        // full recipe's ingredients on the list, which is the opposite of what
+        // was asked and impossible to notice afterwards.
+        await expectLater(
+          repository.addRecipe(recipe: chilli(), servings: 0, foods: library()),
+          throwsArgumentError,
+        );
+        await expectLater(
+          repository.addRecipe(
+            recipe: chilli(),
+            servings: -2,
+            foods: library(),
+          ),
+          throwsArgumentError,
+        );
+        await expectLater(
+          repository.addFood(food: aFood('Milk', id: 'f-milk'), servings: 0),
+          throwsArgumentError,
+        );
+        expect(await repository.current(), isNull);
+      },
+    );
+
     test('and taking the recipe back off clears the line', () async {
       await repository.addRecipe(
         recipe: chilli(),
