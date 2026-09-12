@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:hearth/app/shell/destinations.dart';
 import 'package:hearth/app/shell/launch_target.dart';
+import 'package:hearth/app/shell/sections.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
@@ -142,6 +145,54 @@ void main() {
       });
     }
   }
+
+  group('the rooms that are walkable but not furnished', () {
+    // Fitness, Health and The house have their tabs and nothing behind them
+    // (spec §11). A screen whose whole content is two centred sentences is
+    // exactly the shape that stops being centred at three times the text.
+    //
+    // Driven by the router rather than by tapping through the shell: at three
+    // times the text the navigation bar has not built the labels a walk would
+    // need, and this is a test about the screens, not about reaching them.
+    for (final Size size in <Size>[phone, smallPhone]) {
+      for (final double scale in scales) {
+        testWidgets('survive ${scale}x text at ${size.width}', (
+          WidgetTester tester,
+        ) async {
+          await open(
+            tester,
+            scale: scale,
+            brightness: Brightness.light,
+            size: size,
+          );
+          await pumpFrames(tester);
+
+          final GoRouter router = GoRouter.of(
+            tester.element(find.byType(Scaffold).first),
+          );
+          for (final BuiltSection section in builtSections) {
+            if (section.id == 'nutrition') continue;
+            for (final AppDestination tab in section.destinations) {
+              router.go(tab.path);
+              await pumpFrames(tester, frames: 10);
+              expect(
+                find.text(tab.label),
+                findsWidgets,
+                reason: '${tab.path} did not open ${tab.label}',
+              );
+              expect(
+                tester.takeException(),
+                isNull,
+                reason:
+                    '${section.label} / ${tab.label} overflowed at ${scale}x '
+                    'on a ${size.width} phone',
+              );
+            }
+          }
+        });
+      }
+    }
+  });
 
   group('the repair queue', () {
     // Three sections of rows, each carrying a recipe or food name, a reason

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/shell/destinations.dart';
 import 'package:hearth/app/shell/launch_target.dart';
@@ -5,6 +6,11 @@ import 'package:hearth/app/shell/sections.dart';
 
 /// The section registry is the thing that makes "add a pillar" a small change
 /// (spec §6.2). These are the promises the rest of the app leans on.
+/// Nutrition, by name — `builtSections.single` was true only while it was the
+/// only room with tabs in it.
+BuiltSection get _nutrition =>
+    builtSections.firstWhere((BuiltSection s) => s.id == 'nutrition');
+
 void main() {
   group('what a section is', () {
     test('a section is built exactly when it has somewhere to go', () {
@@ -15,19 +21,48 @@ void main() {
       }
     });
 
-    test('Nutrition is the one that is built, and it holds the four tabs', () {
-      expect(builtSections.map((AppSection s) => s.id), <String>['nutrition']);
-      expect(builtSections.single.destinations, foodDestinations);
+    test('every room has tabs, and Nutrition still holds its four', () {
+      // Fitness, Health and The house are walkable now — each has its tabs,
+      // and each tab says on the screen behind it that it is not built yet.
+      // What `isBuilt` claims is true of the rooms, not of the furniture.
+      expect(builtSections.map((AppSection s) => s.id), <String>[
+        'nutrition',
+        'fitness',
+        'health',
+        'home',
+      ]);
+      expect(
+        builtSections
+            .firstWhere((BuiltSection s) => s.id == 'nutrition')
+            .destinations,
+        foodDestinations,
+      );
     });
 
-    test('the ones that are not built are still named and described', () {
-      // They render as a sentence on the home screen, and the day one is built
-      // its card is already written — so an empty label is a real gap.
-      for (final AppSection section in unbuiltSections) {
+    test('every room is named and described, built or not', () {
+      // The card is written before the room is furnished, so an empty label
+      // is a real gap whichever kind a section is.
+      for (final AppSection section in appSections) {
         expect(section.label, isNotEmpty);
         expect(section.blurb, isNotEmpty);
       }
-      expect(unbuiltSections, isNotEmpty);
+    });
+
+    test('nothing is planned, and the machinery for planning one survives', () {
+      // `PlannedSection` is what stops a section claiming to be built with no
+      // screens behind it, and the home screen's footer names whatever is in
+      // this list. Both are unreachable while it is empty — kept, because the
+      // next room starts here and the type is what makes `isBuilt` honest.
+      expect(unbuiltSections, isEmpty);
+
+      const PlannedSection next = PlannedSection(
+        id: 'garden',
+        label: 'Garden',
+        blurb: 'Beds, plantings, and what came up.',
+        icon: Icons.local_florist_outlined,
+      );
+      expect(next.isBuilt, isFalse);
+      expect(next.destinations, isEmpty);
     });
 
     test('ids are unique, because the launch preference stores one', () {
@@ -64,7 +99,13 @@ void main() {
     test('entering a section lands on its first tab', () {
       // Hearth opened on the recipe library before there was a home screen,
       // and going into Nutrition should still land there.
-      expect(builtSections.single.path, '/recipes');
+      expect(
+        builtSections.firstWhere((BuiltSection s) => s.id == 'nutrition').path,
+        '/recipes',
+      );
+      for (final BuiltSection section in builtSections) {
+        expect(section.path, section.destinations.first.path);
+      }
     });
 
     test('every tab says what it is out loud', () {
@@ -93,10 +134,15 @@ void main() {
       expect(sectionForPath('/recipe/abc'), isNull);
     });
 
-    test('a section that is only named cannot be looked up by id', () {
-      // Nothing should be able to hand out a way into an empty room.
-      expect(sectionById('nutrition')?.label, 'Nutrition');
-      expect(sectionById('fitness'), isNull);
+    test('every room can be looked up by id, now that every room has tabs', () {
+      // `sectionById` hands out a way *in*, so it only ever answers for a
+      // built section. That used to exclude Fitness; it no longer does, and
+      // the guarantee it enforces is unchanged — an id with no tabs behind it
+      // still gets nothing.
+      for (final BuiltSection section in builtSections) {
+        expect(sectionById(section.id)?.label, section.label);
+      }
+      expect(sectionById('garden'), isNull);
     });
   });
 
@@ -117,26 +163,33 @@ void main() {
       // out. Home is always a defensible answer; failing to open is not.
       expect(LaunchTarget.parse('midnight'), LaunchTarget.home);
       expect(LaunchTarget.parse(''), LaunchTarget.home);
-      expect(LaunchTarget.parse('section:fitness'), LaunchTarget.home);
+      // `section:fitness` used to stand for "a section that has since been
+      // taken out", and Fitness is a real destination now. A name nothing
+      // answers to makes the point without dating.
+      expect(LaunchTarget.parse('section:garden'), LaunchTarget.home);
     });
 
     test(
       'a section named "home" could not be mistaken for the home screen',
       () {
         // Which is why the stored form is prefixed. The house section's id is
-        // literally `home`.
+        // literally `home`, and now that it has tabs the two really are two
+        // different destinations rather than one falling back to the other.
+        //
+        // No device can hold the old meaning: `section:home` was never
+        // offerable while The house had nowhere to go, so nothing stored it.
         expect(LaunchTarget.parse('home'), LaunchTarget.home);
-        expect(LaunchTarget.parse('section:home'), LaunchTarget.home);
-        expect(
-          LaunchTarget.section(builtSections.single).stored,
-          'section:nutrition',
-        );
+        expect(LaunchTarget.parse('section:home').path, '/thermostat');
+        expect(LaunchTarget.section(_nutrition).stored, 'section:nutrition');
       },
     );
 
     test('each option maps to the route the app would open at', () {
       expect(LaunchTarget.home.path, '/');
-      expect(LaunchTarget.section(builtSections.single).path, '/recipes');
+      expect(LaunchTarget.section(_nutrition).path, '/recipes');
+      for (final BuiltSection section in builtSections) {
+        expect(LaunchTarget.section(section).path, section.path);
+      }
     });
 
     test('every option says what it is in words as well as an icon', () {

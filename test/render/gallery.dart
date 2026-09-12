@@ -207,6 +207,12 @@ Future<void> pressLabel(WidgetTester tester, String label) async {
     throw StateError('Nothing on screen is labelled "$label" to press.');
   }
   await tester.ensureVisible(target);
+  // `ensureVisible` starts the scroll and pumps once; a scroll animation is
+  // not one frame long. Without settling it, the card is still where it was
+  // and the tap lands outside the window — which is how the launcher's last
+  // card became untappable at three times the text on a small phone, and
+  // nothing before that scene had a label below the fold to press.
+  await tester.pumpAndSettle();
   await tester.tap(target);
 }
 
@@ -1254,6 +1260,37 @@ const List<Scene> scenes = <Scene>[
     textScale: 2.0,
   ),
   Scene(name: 'home', target: LaunchTarget.home),
+  // The three rooms that are walkable and not furnished (spec §11). Reached
+  // by pressing a card on the launcher rather than by a launch target,
+  // because `LaunchTarget.section` needs a section from the registry and this
+  // list is const.
+  //
+  // The house is the one worth having a picture of: it has a single tab, so
+  // it is the only room in the app that draws no tab bar at all.
+  Scene(
+    name: 'fitness-today',
+    target: LaunchTarget.home,
+    taps: <String>['Fitness'],
+  ),
+  Scene(
+    name: 'health-numbers',
+    target: LaunchTarget.home,
+    taps: <String>['Health'],
+  ),
+  Scene(
+    name: 'the-house',
+    target: LaunchTarget.home,
+    taps: <String>['The house'],
+  ),
+  // And at three times the text on a small phone, which is where two centred
+  // sentences in the middle of an empty screen stop being centred.
+  Scene(
+    name: 'the-house-large-text',
+    target: LaunchTarget.home,
+    taps: <String>['The house'],
+    size: Size(320, 568),
+    textScale: 3.0,
+  ),
   Scene(name: 'recipes', taps: <String>['Recipes']),
   Scene(
     name: 'recipes-desktop',

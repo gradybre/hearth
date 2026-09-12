@@ -80,7 +80,8 @@ void main() {
       await tester.tap(find.text('Home'));
       await pumpFrames(tester, frames: 10);
 
-      expect(find.textContaining('Still being built'), findsOneWidget);
+      // On the home screen, which is what the timer has to survive.
+      expect(find.text('Hearth'), findsOneWidget);
       expect(
         find.text('Cover and cook'),
         findsOneWidget,

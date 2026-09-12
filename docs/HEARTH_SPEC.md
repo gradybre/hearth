@@ -781,11 +781,26 @@ Captured as future modules so the shell and data layer accommodate them. A pilla
 by being added to the **section registry** (§5.0) with its destinations and screens; until then
 it is named on the home screen and nothing more.
 
-Named in the registry already, because they are the ones asked for next:
+**Walkable, not built.** Brendan lifted these three on 12 September 2026: Fitness, Health and
+The house are in the registry with their tabs, so the shape of the app can be walked. Every one
+of those tabs opens a screen that says what will live there and that it is not built yet. This
+is deliberately *not* a change to "v1 ships one pillar only" — nothing behind those tabs is
+built, no models, no schema, no sync. Building one is still a separate decision that amends
+this section again.
 
-- **Fitness** — training, sessions, what the week actually looked like.
-- **Health** — the numbers worth watching, appointments worth remembering.
-- **The house** — the thermostat, and whatever else the house needs asking.
+| Section | Tabs |
+|---|---|
+| **Fitness** | Today · Workouts · History |
+| **Health** | Numbers · Appointments |
+| **The house** | Thermostat |
+
+Two consequences worth naming, because they are easy to trip over later:
+
+- `isBuilt` is derived from having destinations, so all four sections now report as built. That
+  is true of the rooms and false of their contents, and the screens are what say so.
+- `section:home` as a stored launch preference now opens The house rather than falling back to
+  the home screen. Nothing can hold the old meaning — it was never offerable while The house
+  had nowhere to go.
 
 Captured here but deliberately **not** in the registry yet — a home screen that names seven
 unbuilt rooms is a wall of promises rather than a quiet line:

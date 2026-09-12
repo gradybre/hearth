@@ -108,26 +108,30 @@ const List<AppSection> appSections = <AppSection>[
     icon: Icons.soup_kitchen_outlined,
     destinations: foodDestinations,
   ),
-  // Named but not built (spec §11). They carry a full description rather than
-  // a bare label so that building one is a matter of handing it destinations —
-  // the card it will need is already written.
-  PlannedSection(
+  // Walkable before they are furnished (spec §11): each has its tabs, and
+  // each tab says what will live behind it. `isBuilt` is derived from having
+  // destinations, so these now report as built — which is true of the rooms
+  // and not of what is in them. The screens are the ones that say so.
+  BuiltSection(
     id: 'fitness',
     label: 'Fitness',
     blurb: 'Workouts, sessions, and training records.',
     icon: Icons.fitness_center_outlined,
+    destinations: fitnessDestinations,
   ),
-  PlannedSection(
+  BuiltSection(
     id: 'health',
     label: 'Health',
     blurb: 'Measurements, appointments, and records.',
     icon: Icons.monitor_heart_outlined,
+    destinations: healthDestinations,
   ),
-  PlannedSection(
+  BuiltSection(
     id: 'home',
     label: 'The house',
     blurb: 'Thermostat and household controls.',
     icon: Icons.thermostat_outlined,
+    destinations: houseDestinations,
   ),
 ];
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/app/shell/app_shell.dart';
 import 'package:hearth/app/shell/destinations.dart';
@@ -90,6 +91,59 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
 
       expect(find.text('Your library is empty'), findsOneWidget);
+    });
+  });
+
+  group('a room with a single tab', () {
+    // The house has one destination (spec §11), and `NavigationBar` asserts
+    // it has at least two. So the shell drew nothing at all rather than a
+    // thermostat: an assertion in the bottom bar takes the body down with it,
+    // and `/thermostat` rendered zero widgets of text.
+    //
+    // Driven through the router because the harness opens on Recipes and the
+    // way to another room is the route, not a tab.
+    Future<void> goToTheHouse(WidgetTester tester, Size size) async {
+      await _pumpAt(tester, size);
+      await pumpFrames(tester);
+      GoRouter.of(tester.element(find.byType(Scaffold).first))
+          .go('/thermostat');
+      await pumpFrames(tester, frames: 10);
+    }
+
+    testWidgets('opens its screen on a phone rather than a blank page', (
+      WidgetTester tester,
+    ) async {
+      await goToTheHouse(tester, phone);
+
+      expect(find.text('Thermostat'), findsWidgets);
+      expect(find.text('Not built yet.'), findsOneWidget);
+    });
+
+    testWidgets('and shows no tab bar, which could only say where you are', (
+      WidgetTester tester,
+    ) async {
+      // One tab is a row with nothing to choose. The section bar above the
+      // content already names the room and carries the way out of it, so
+      // there is nothing lost by leaving the bar off.
+      await goToTheHouse(tester, phone);
+
+      expect(find.byType(NavigationBar), findsNothing);
+    });
+
+    testWidgets('while a wide window keeps its sidebar', (
+      WidgetTester tester,
+    ) async {
+      // The sidebar builds a row per destination and asserts nothing, so one
+      // tab is a rail with one row — and it still carries the way home and
+      // the way into Settings, which is most of what it is for.
+      await goToTheHouse(tester, desktop);
+
+      expect(find.text('Not built yet.'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(houseDestinations.single.semanticLabel),
+        findsOneWidget,
+      );
+      expect(find.text('Settings'), findsWidgets);
     });
   });
 

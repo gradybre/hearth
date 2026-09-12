@@ -33,36 +33,38 @@ void main() {
       }
     });
 
-    testWidgets('a section that is not built is named but cannot be tapped', (
+    testWidgets('every section on the home screen is somewhere you can go', (
       WidgetTester tester,
     ) async {
       // A dead tile teaches people that tapping does nothing, and they carry
-      // that lesson into the tiles that work. So the rooms that do not exist
-      // yet are one sentence, not a grid of disappointments.
+      // that lesson into the tiles that work. Every room has its tabs now, so
+      // every card announces itself and every card opens — what is unfinished
+      // is said on the screen behind it, not by a card that refuses.
       await pumpHome(tester);
       await pumpFrames(tester);
 
       final SemanticsHandle handle = tester.ensureSemantics();
-      for (final AppSection section in unbuiltSections) {
+      for (final AppSection section in appSections) {
         expect(
           find.bySemanticsLabel(section.semanticLabel),
-          findsNothing,
-          reason: '${section.label} announced itself as somewhere to go',
+          findsOneWidget,
+          reason: '${section.label} is not on the home screen',
         );
       }
-      expect(find.textContaining('Still being built'), findsOneWidget);
       handle.dispose();
     });
 
-    testWidgets('the sentence names them, so building one rewrites no copy', (
+    testWidgets('and nothing is listed as still being built', (
       WidgetTester tester,
     ) async {
+      // The footer names what has no tabs yet. Nothing has, so it says
+      // nothing — `_ComingLater` returns an empty box rather than a heading
+      // over an empty list.
       await pumpHome(tester);
       await pumpFrames(tester);
 
-      for (final AppSection section in unbuiltSections) {
-        expect(find.textContaining(section.label), findsOneWidget);
-      }
+      expect(unbuiltSections, isEmpty);
+      expect(find.textContaining('Still being built'), findsNothing);
     });
 
     testWidgets('tapping Nutrition goes into the section', (

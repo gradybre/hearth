@@ -20,9 +20,16 @@ void main() {
   }
 
   /// The home screen, by the two things only it says.
+  ///
+  /// The second used to be the "Still being built" footer, which is gone now
+  /// that every section has its tabs — a home screen with nothing unbuilt to
+  /// name says nothing there, correctly. The tagline is the durable half.
   void expectHome() {
     expect(find.text('Hearth'), findsOneWidget);
-    expect(find.textContaining('Still being built'), findsOneWidget);
+    expect(
+      find.textContaining('Everything the house keeps track of'),
+      findsOneWidget,
+    );
   }
 
   testWidgets('a path that names no section goes home', (
