@@ -66,8 +66,13 @@ class LaunchTarget {
   static List<LaunchTarget> get options => <LaunchTarget>[
     home,
     today,
+    // Only the rooms with something in them. Every room has tabs since spec
+    // §11, so `builtSections` alone would offer to open Hearth on "Not built
+    // yet." every launch — which is not a preference anybody means to
+    // express. [parse] deliberately still resolves one, so a device that
+    // stored a room before it emptied is not sent home for it.
     for (final BuiltSection section in builtSections)
-      LaunchTarget.section(section),
+      if (section.isFurnished) LaunchTarget.section(section),
   ];
 
   /// What goes in the preference row. Prefixed rather than bare, so a section

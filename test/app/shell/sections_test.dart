@@ -184,6 +184,18 @@ void main() {
       },
     );
 
+    test('a room with nothing in it is not offered as a start screen', () {
+      // Opening Hearth on a page that says "Not built yet." every launch is
+      // not a preference anybody means to express. The list is derived from
+      // `builtSections`, and since spec §11 that is every room — so it has to
+      // ask the further question the launcher asks.
+      expect(LaunchTarget.options.map((LaunchTarget t) => t.stored), <String>[
+        'home',
+        'today',
+        'section:nutrition',
+      ]);
+    });
+
     test('each option maps to the route the app would open at', () {
       expect(LaunchTarget.home.path, '/');
       expect(LaunchTarget.section(_nutrition).path, '/recipes');

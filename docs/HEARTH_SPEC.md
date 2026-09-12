@@ -794,13 +794,20 @@ this section again.
 | **Health** | Numbers · Appointments |
 | **The house** | Thermostat |
 
-Two consequences worth naming, because they are easy to trip over later:
+Three consequences worth naming, because they are easy to trip over later:
 
 - `isBuilt` is derived from having destinations, so all four sections now report as built. That
   is true of the rooms and false of their contents, and the screens are what say so.
+- Whether a room has anything *in* it is `isFurnished`, which asks its tabs what they build.
+  The home screen's "Still being built:" line and the launch-preference list both read that
+  rather than `isBuilt` — a launcher showing four identical doors to three empty rooms is the
+  wall of promises the line exists to prevent, and opening Hearth on "Not built yet." every
+  launch is not a preference anybody means to express. Furnishing a room takes it out of both
+  with no copy to rewrite.
 - `section:home` as a stored launch preference now opens The house rather than falling back to
   the home screen. Nothing can hold the old meaning — it was never offerable while The house
-  had nowhere to go.
+  had nowhere to go, and it is not offerable now either; `parse` still resolves it so a device
+  that stored a room before it emptied is not sent home for it.
 
 Captured here but deliberately **not** in the registry yet — a home screen that names seven
 unbuilt rooms is a wall of promises rather than a quiet line:
