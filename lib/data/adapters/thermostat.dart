@@ -23,22 +23,28 @@ class ThermostatLink {
   const ThermostatLink.unlinked()
     : state = null,
       linkedAt = null,
-      linkedBy = null;
+      linkedByYou = false;
 
   const ThermostatLink.linked({
     required ThermostatState this.state,
     this.linkedAt,
-    this.linkedBy,
+    this.linkedByYou = false,
   });
 
   /// What the thermostat reports. Null when nothing is connected.
   final ThermostatState? state;
 
-  /// When the account was connected, and by which member — shown on the
-  /// settings page, because "who turned this on" is the first question the
-  /// other person in the house asks.
+  /// When the account was connected.
   final DateTime? linkedAt;
-  final String? linkedBy;
+
+  /// Whether *you* connected it, rather than the other person in the house.
+  ///
+  /// A boolean rather than a name, because the only thing the screen has to
+  /// say is whose Google account has to reconnect when the link dies — and in
+  /// a two-person household that is a question with two answers. The server
+  /// stores a user id; putting that on screen would say nothing, and resolving
+  /// it to a name would be another query for the same sentence.
+  final bool linkedByYou;
 
   bool get isLinked => state != null;
 }
@@ -91,12 +97,13 @@ abstract interface class ThermostatGateway {
   /// What the thermostat is doing, or [ThermostatLink.unlinked].
   Future<ThermostatLink> status();
 
-  /// Sends a command and returns the state the device reports *afterwards*,
-  /// rather than the state the caller asked for.
+  /// Sends a command.
   ///
-  /// The difference matters: a thermostat can accept a setpoint and round it,
-  /// and a screen that keeps showing what it asked for is quietly wrong.
-  Future<ThermostatLink> send(ThermostatCommand command);
+  /// Returns nothing rather than the new state: reading back costs a second
+  /// request against a five-a-minute device ceiling, which one drag of a
+  /// setpoint would exhaust. The caller shows what it asked for and lets the
+  /// next [status] correct it.
+  Future<void> send(ThermostatCommand command);
 
   /// Forgets the account. The credential is destroyed, not marked.
   Future<void> unlink();

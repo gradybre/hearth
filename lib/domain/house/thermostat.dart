@@ -407,6 +407,36 @@ class ThermostatState {
     return other <= ceiling ? other : Temp.clampC(ceiling);
   }
 
+  /// The same state with whatever was just asked for folded in.
+  ///
+  /// Not only the setpoints: a mode, Eco and the fan all have controls that
+  /// show their own value, and a switch that springs back the instant it is
+  /// flipped reads as broken — it then sits wrong until the next reading, up
+  /// to a minute later. Optimism with a short shelf life, like
+  /// [withSetpoints]: the thermostat's own account replaces this.
+  ThermostatState copyWith({
+    ThermostatMode? mode,
+    HvacStatus? hvac,
+    EcoMode? eco,
+    FanState? fan,
+    double? heatC,
+    double? coolC,
+  }) => ThermostatState(
+    label: label,
+    ambientC: ambientC,
+    humidityPercent: humidityPercent,
+    mode: mode ?? this.mode,
+    availableModes: availableModes,
+    hvac: hvac ?? this.hvac,
+    heatC: heatC ?? this.heatC,
+    coolC: coolC ?? this.coolC,
+    eco: eco ?? this.eco,
+    // Never conjured: a thermostat with no fan trait has no fan, and a fan
+    // control appearing because somebody pressed something would be the
+    // screen inventing hardware.
+    fan: this.fan == null ? null : (fan ?? this.fan),
+  );
+
   /// The same state with one setpoint moved, for showing a press immediately
   /// while the command is in flight.
   ///

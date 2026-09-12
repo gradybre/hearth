@@ -794,6 +794,38 @@ this section again.
 | **Health** | Numbers · Appointments |
 | **House** | Thermostat |
 
+**House's thermostat is built.** Brendan asked for it on 13 September 2026, and §11's own
+sentence above — that building one of these is a separate decision that amends this section
+again — is what this paragraph is. It does not lift anything else: Fitness and Health still
+draw the placeholder behind every tab, and "v1 ships one pillar only" still describes the food
+pillar. What has changed is that one tab of one room now does something.
+
+- **Google Nest, through the Smart Device Management API.** The household links one Google
+  account; both phones then read and control the thermostat. Ambient temperature, humidity and
+  what the HVAC is doing; target temperature, mode, Eco, and the fan timer where the device
+  reports one.
+- **Everything the device reports, and nothing it does not.** The Fan trait is absent on a
+  thermostat with no fan wire and `availableModes` varies by model, so the screen is a picture
+  of *this* thermostat rather than of the API. A control that could only ever fail is not drawn.
+- **Three new server-side secrets** (§8.1): `SDM_PROJECT_ID`, `GOOGLE_OAUTH_CLIENT_ID`,
+  `GOOGLE_OAUTH_CLIENT_SECRET`. The household's Google **refresh token** is stricter still — it
+  is a live bearer credential for the heating, so it lives in a `private` schema PostgREST does
+  not expose, with RLS on and no policies, reachable only by the Edge Function's secret key.
+  `supabase/tests/schema_guards.sql` was widened so `private` is not simply a place the existing
+  checks cannot see.
+- **Unlinking destroys the credential and keeps the record.** Rule 3's soft-delete exists so a
+  deletion can travel to the other phone; this row never leaves the server, so that argument
+  does not reach it — while a button labelled Disconnect that leaves a working credential in the
+  database is a lie. The row survives as a tombstone, which is the only thing that can tell
+  "somebody disconnected it" from "Google stopped accepting it".
+- **Rate limits are the design constraint, not a detail.** Google allows 100 requests an hour
+  per device and 5 commands a minute. So: the hourly budget is counted on the server, because
+  two phones cannot coordinate one between themselves; the screen polls once a minute and only
+  while it is in front of you; a burst of taps on − or + is one command, not five; and a command
+  never re-reads, because a command plus a read would let one drag exhaust the allowance.
+- **Setup is recorded in `docs/NEST_SETUP.md`**, because it is a one-time sequence through two
+  Google consoles that will need repeating in a year when something breaks.
+
 Three consequences worth naming, because they are easy to trip over later:
 
 - `isBuilt` is derived from having destinations, so all four sections now report as built. That

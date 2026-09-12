@@ -61,13 +61,20 @@ class EdgeFunctionThermostat implements ThermostatGateway {
   Future<ThermostatLink> status() async =>
       linkFrom(await _invoke(<String, Object?>{'action': 'status'}));
 
+  /// Sends a command. Returns nothing, deliberately.
+  ///
+  /// A command followed by a read is two requests against a five-a-minute
+  /// device ceiling, so one drag of a setpoint would exhaust it. The server
+  /// answers `{applied: true}` and the screen folds in what it asked for; the
+  /// next poll, at most a minute away, is what confirms it against the
+  /// thermostat's own account of itself.
   @override
-  Future<ThermostatLink> send(ThermostatCommand command) async => linkFrom(
+  Future<void> send(ThermostatCommand command) async {
     await _invoke(<String, Object?>{
       'action': 'command',
       'command': wireFor(command),
-    }),
-  );
+    });
+  }
 
   @override
   Future<void> unlink() async {
@@ -117,18 +124,16 @@ class EdgeFunctionThermostat implements ThermostatGateway {
     if (envelope['linked'] != true) return const ThermostatLink.unlinked();
     final Object? device = envelope['device'];
     if (device is! Map) {
-      // Linked, but the function could not read the device. Treated as not
-      // linked rather than as a half-drawn screen: there is nothing to show
-      // and nothing to send, which is what unlinked means to everything
-      // above here.
-      return const ThermostatLink.unlinked();
+      // Linked, and nothing to show. That is a failure, not an absence: the
+      // server said this household *has* a thermostat, so reporting no
+      // thermostat would put a Connect button in front of somebody whose link
+      // is fine, and pressing it starts a consent flow for no reason.
+      throw const ThermostatException('The thermostat did not answer.');
     }
     return ThermostatLink.linked(
       state: stateFrom(device),
       linkedAt: _time(envelope['linkedAt']),
-      linkedBy: envelope['linkedBy'] is String
-          ? envelope['linkedBy']! as String
-          : null,
+      linkedByYou: envelope['linkedByYou'] == true,
     );
   }
 

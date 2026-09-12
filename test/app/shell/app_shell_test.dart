@@ -116,7 +116,6 @@ void main() {
       await goToTheHouse(tester, phone);
 
       expect(find.text('Thermostat'), findsWidgets);
-      expect(find.text('Not built yet.'), findsOneWidget);
     });
 
     testWidgets('and shows no tab bar, which could only say where you are', (
@@ -138,7 +137,7 @@ void main() {
       // the way into Settings, which is most of what it is for.
       await goToTheHouse(tester, desktop);
 
-      expect(find.text('Not built yet.'), findsOneWidget);
+      expect(find.text('Thermostat'), findsWidgets);
       expect(
         find.bySemanticsLabel(houseDestinations.single.semanticLabel),
         findsOneWidget,
