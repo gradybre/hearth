@@ -33,36 +33,63 @@ void main() {
       }
     });
 
-    testWidgets('a section that is not built is named but cannot be tapped', (
+    testWidgets('every section on the home screen is somewhere you can go', (
       WidgetTester tester,
     ) async {
       // A dead tile teaches people that tapping does nothing, and they carry
-      // that lesson into the tiles that work. So the rooms that do not exist
-      // yet are one sentence, not a grid of disappointments.
+      // that lesson into the tiles that work. Every room has its tabs now, so
+      // every card announces itself and every card opens — what is unfinished
+      // is said on the screen behind it, not by a card that refuses.
       await pumpHome(tester);
       await pumpFrames(tester);
 
       final SemanticsHandle handle = tester.ensureSemantics();
-      for (final AppSection section in unbuiltSections) {
+      for (final AppSection section in appSections) {
         expect(
           find.bySemanticsLabel(section.semanticLabel),
-          findsNothing,
-          reason: '${section.label} announced itself as somewhere to go',
+          findsOneWidget,
+          reason: '${section.label} is not on the home screen',
         );
       }
-      expect(find.textContaining('Still being built'), findsOneWidget);
       handle.dispose();
     });
 
-    testWidgets('the sentence names them, so building one rewrites no copy', (
+    testWidgets('and the empty rooms are still named as empty', (
       WidgetTester tester,
     ) async {
+      // Four identical cards, three of them opening on "Not built yet.", is
+      // less honest than the wall of promises the footer was written to
+      // avoid. Giving the rooms tabs took that footer away with it, because
+      // it read `unbuiltSections` — which is now permanently empty — and
+      // nothing replaced it. So it asks the rooms whether anything is behind
+      // their tabs instead.
       await pumpHome(tester);
       await pumpFrames(tester);
 
-      for (final AppSection section in unbuiltSections) {
-        expect(find.textContaining(section.label), findsOneWidget);
+      expect(find.textContaining('Still being built'), findsOneWidget);
+      for (final AppSection section in appSections) {
+        expect(
+          find.textContaining(section.label),
+          section.isFurnished ? findsOneWidget : findsNWidgets(2),
+          reason: section.isFurnished
+              ? '${section.label} is furnished and should be named once'
+              : '${section.label} should be on a card and in the footer',
+        );
       }
+    });
+
+    testWidgets('which is asked of the screens, not of a flag', (
+      WidgetTester tester,
+    ) async {
+      // The same reason `isBuilt` is derived: a boolean saying "furnished"
+      // can disagree with a room whose every tab draws the placeholder, and
+      // the one that would be believed is the boolean.
+      expect(
+        appSections
+            .where((AppSection s) => s.isFurnished)
+            .map((AppSection s) => s.id),
+        <String>['nutrition'],
+      );
     });
 
     testWidgets('tapping Nutrition goes into the section', (

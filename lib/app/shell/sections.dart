@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'destinations.dart';
+import 'unbuilt_screen.dart';
 
 /// A room in the house (spec §6.2).
 ///
@@ -50,6 +51,23 @@ sealed class AppSection {
   /// "available" can disagree with a section that has no screens, and the one
   /// that would be believed is the boolean. This cannot lie.
   bool get isBuilt => destinations.isNotEmpty;
+
+  /// Whether anything is behind the tabs yet.
+  ///
+  /// [isBuilt] answers a narrower question than it reads as: since spec §11
+  /// every room has tabs, so every room is "built" and the word no longer
+  /// separates Nutrition from three empty rooms. The launcher and the launch
+  /// preference both need that separation — four identical cards, three of
+  /// them opening on "Not built yet.", is the wall of promises the home
+  /// screen's footer exists to avoid.
+  ///
+  /// Asked of the screens rather than declared, for the same reason [isBuilt]
+  /// is derived: a flag saying "furnished" can disagree with a room whose
+  /// every tab draws the placeholder, and the flag is the one that would be
+  /// believed. Building one costs a const constructor and `any` stops at the
+  /// first real screen.
+  bool get isFurnished =>
+      destinations.any((AppDestination d) => d.builder() is! UnbuiltScreen);
 
   /// Spoken as one thought: what the room is, then what is in it (spec §6.3).
   String get semanticLabel => '$label. $blurb';
@@ -108,26 +126,30 @@ const List<AppSection> appSections = <AppSection>[
     icon: Icons.soup_kitchen_outlined,
     destinations: foodDestinations,
   ),
-  // Named but not built (spec §11). They carry a full description rather than
-  // a bare label so that building one is a matter of handing it destinations —
-  // the card it will need is already written.
-  PlannedSection(
+  // Walkable before they are furnished (spec §11): each has its tabs, and
+  // each tab says what will live behind it. `isBuilt` is derived from having
+  // destinations, so these now report as built — which is true of the rooms
+  // and not of what is in them. The screens are the ones that say so.
+  BuiltSection(
     id: 'fitness',
     label: 'Fitness',
     blurb: 'Workouts, sessions, and training records.',
     icon: Icons.fitness_center_outlined,
+    destinations: fitnessDestinations,
   ),
-  PlannedSection(
+  BuiltSection(
     id: 'health',
     label: 'Health',
     blurb: 'Measurements, appointments, and records.',
     icon: Icons.monitor_heart_outlined,
+    destinations: healthDestinations,
   ),
-  PlannedSection(
+  BuiltSection(
     id: 'home',
     label: 'The house',
     blurb: 'Thermostat and household controls.',
     icon: Icons.thermostat_outlined,
+    destinations: houseDestinations,
   ),
 ];
 

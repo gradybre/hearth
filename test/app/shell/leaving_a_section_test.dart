@@ -73,7 +73,7 @@ void main() {
     await pumpFrames(tester);
 
     expect(find.byType(NavigationBar), findsNothing);
-    expect(find.textContaining('Still being built'), findsOneWidget);
+    expect(find.text('Hearth'), findsOneWidget);
   });
 
   testWidgets('and it says out loud what it leaves, not just "Home"', (

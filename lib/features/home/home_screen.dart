@@ -220,15 +220,24 @@ class _SectionCard extends ConsumerWidget {
 /// What the house does not have yet.
 ///
 /// A sentence, not a control: nothing here can be tapped, so nothing here can
-/// disappoint. Its words come from the registry, so building Fitness moves it
-/// out of this line and into a card of its own with no copy to rewrite — and
-/// when the last one is built the line stops rendering entirely.
+/// disappoint. Its words come from the registry, so furnishing Fitness takes
+/// it out of this line with no copy to rewrite — and when the last one is
+/// furnished the line stops rendering entirely.
+///
+/// It reads [AppSection.isFurnished] rather than `unbuiltSections`, which is
+/// the narrower question of whether a room has tabs at all. Since spec §11
+/// every room has tabs, so `unbuiltSections` is empty and this line had
+/// stopped rendering while three of the four cards above it still opened on
+/// "Not built yet." — four identical doors and no way to tell which rooms are
+/// empty, which is precisely what this line exists to prevent.
 class _ComingLater extends StatelessWidget {
   const _ComingLater();
 
   @override
   Widget build(BuildContext context) {
-    final List<PlannedSection> later = unbuiltSections;
+    final List<AppSection> later = appSections
+        .where((AppSection s) => !s.isFurnished)
+        .toList(growable: false);
     if (later.isEmpty) return const SizedBox.shrink();
 
     final HearthColors colors = context.colors;
@@ -236,7 +245,7 @@ class _ComingLater extends StatelessWidget {
     // are proper nouns, and one of them is "The house" — which reads as a
     // typo halfway through a sentence and as a list item perfectly well.
     final String listed = <String>[
-      for (final PlannedSection section in later) section.label,
+      for (final AppSection section in later) section.label,
     ].join(', ');
 
     return Padding(

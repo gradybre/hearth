@@ -16,6 +16,14 @@ import '../../support/app_harness.dart';
 /// starting route, so an answer that arrives a frame late is not a wrong colour
 /// — it is the home screen appearing and then being replaced by a section, or
 /// the other way round, every single launch.
+/// Nutrition, by name.
+///
+/// These used to say `builtSections.single`, which was true while it was the
+/// only room with tabs in it. Every section has tabs now, so the one this
+/// suite is about has to be named.
+BuiltSection get _nutrition =>
+    builtSections.firstWhere((BuiltSection s) => s.id == 'nutrition');
+
 void main() {
   group('remembering the choice across launches', () {
     late HearthDatabase db;
@@ -40,7 +48,7 @@ void main() {
     });
 
     test('choosing Nutrition outlives the container that chose it', () async {
-      final LaunchTarget nutrition = LaunchTarget.section(builtSections.single);
+      final LaunchTarget nutrition = LaunchTarget.section(_nutrition);
       final ProviderContainer first = containerOn(db);
       await first.read(launchTargetProvider.future);
       await first.read(launchTargetProvider.notifier).choose(nutrition);
@@ -57,7 +65,7 @@ void main() {
       await container.read(launchTargetProvider.future);
       await container
           .read(launchTargetProvider.notifier)
-          .choose(LaunchTarget.section(builtSections.single));
+          .choose(LaunchTarget.section(_nutrition));
 
       expect(
         await PreferenceStore(db).read(PreferenceStore.launchTarget),
@@ -78,7 +86,7 @@ void main() {
       await expectLater(
         container
             .read(launchTargetProvider.notifier)
-            .choose(LaunchTarget.section(builtSections.single)),
+            .choose(LaunchTarget.section(_nutrition)),
         throwsStateError,
         reason: 'the failure went nowhere the screen could see it',
       );
@@ -93,7 +101,7 @@ void main() {
         overrides: [
           databaseProvider.overrideWithValue(db),
           bootLaunchTargetProvider.overrideWithValue(
-            LaunchTarget.section(builtSections.single),
+            LaunchTarget.section(_nutrition),
           ),
         ],
       );
@@ -109,13 +117,13 @@ void main() {
     ) async {
       await pumpHearthApp(
         tester,
-        launchTarget: LaunchTarget.section(builtSections.single),
+        launchTarget: LaunchTarget.section(_nutrition),
       );
 
       // Before any frames are pumped past the first: no flash of a home screen
       // on the way in.
       expect(find.byType(NavigationBar), findsOneWidget);
-      expect(find.textContaining('Still being built'), findsNothing);
+      expect(find.text('Hearth'), findsNothing);
     });
 
     testWidgets('and a device that asked for home never sees a section', (
