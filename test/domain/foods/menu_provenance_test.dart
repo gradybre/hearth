@@ -39,7 +39,7 @@ void main() {
       // A menu with no source and no document date still has a count and a
       // date it was read, and saying those plainly beats padding with
       // "unknown".
-      final String line = from().describe(DateTime(2026, 9, 11));
+      final String line = from().describe;
 
       expect(line, contains('44 items'));
       expect(line, contains('read 11 September'));
@@ -50,7 +50,7 @@ void main() {
       final String line = from(
         source: 'chopt.com',
         documentDate: DateTime(2026, 3, 4),
-      ).describe(DateTime(2026, 9, 11));
+      ).describe;
 
       expect(line, contains('chopt.com'));
       expect(line, contains('dated 4 March'));
@@ -62,10 +62,7 @@ void main() {
     });
 
     test('counts one item in the singular', () {
-      expect(
-        from(itemCount: 1).describe(DateTime(2026, 9, 11)),
-        contains('1 item'),
-      );
+      expect(from(itemCount: 1).describe, contains('1 item'));
     });
   });
 }

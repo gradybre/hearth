@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/data/local/pending_write_store.dart';
 import 'package:hearth/data/repositories/menu_import_repository.dart';
+import 'package:hearth/data/sync/remote_rows.dart';
 import 'package:hearth/domain/foods/menu_provenance.dart';
 
 /// Recording where a menu came from (review N08).
@@ -85,6 +86,8 @@ void main() {
     expect(queued.payload, contains('"document_date":"2026-03-04"'));
   });
 
+  dateParsing();
+
   test('two households do not see each other\'s menus', () async {
     await repository.record(restaurant: 'Chopt', itemCount: 44);
 
@@ -96,5 +99,43 @@ void main() {
     );
 
     expect(await theirs.forRestaurant('Chopt'), isNull);
+  });
+}
+
+/// A date arriving from the other phone is a date, not a moment (review N08).
+///
+/// `document_date` is a Postgres `date` — "2026-03-04", no time and no zone.
+/// Run through the timestamp parser the other columns use it becomes an
+/// instant and then a UTC one, which for anyone east of Greenwich lands on
+/// the previous day: a menu printed on the 4th reads as the 3rd. The same
+/// class of bug `calendarDaysBetween` exists for.
+void dateParsing() {
+  test('a document date survives the trip as the day it was', () async {
+    final HearthDatabase db = HearthDatabase.forTesting(
+      NativeDatabase.memory(),
+    );
+    addTearDown(db.close);
+
+    await RemoteRows(db).applyMenuImport(<String, Object?>{
+      'id': 'import-1',
+      'household_id': 'household-1',
+      'restaurant_key': 'chopt',
+      'restaurant': 'Chopt',
+      'item_count': 44,
+      'document_date': '2026-03-04',
+      'imported_at': '2026-09-11T12:00:00Z',
+      'updated_at': '2026-09-11T12:00:00Z',
+    });
+
+    // The whole date, not its year, month and day read off an instant that
+    // happens to land right here. Checking the parts passes in every zone
+    // west of Greenwich whatever the code does, which is worse than no test
+    // — the machine that would catch it is in Sydney.
+    final MenuImportRow row = (await db.select(db.menuImports).get()).single;
+    expect(
+      row.documentDate,
+      DateTime(2026, 3, 4),
+      reason: 'a date pushed through a timestamp parser becomes an instant',
+    );
   });
 }

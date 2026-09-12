@@ -45,7 +45,12 @@ class MenuProvenance {
   /// Only what is known. A menu with no source and no document date still has
   /// a count and a date it was read, and saying those two plainly beats
   /// padding the line with "unknown".
-  String describe(DateTime now) => <String>[
+  ///
+  /// Takes no clock, deliberately. It used to, and never read it — a
+  /// parameter that makes every caller reach for `DateTime.now()` while the
+  /// answer does not move is a lie about what the line depends on. [ageAt] is
+  /// the one that needs a clock, and has one.
+  String get describe => <String>[
     '$itemCount ${itemCount == 1 ? 'item' : 'items'}',
     if (source case final String source when source.isNotEmpty) source,
     if (documentDate case final DateTime printed)

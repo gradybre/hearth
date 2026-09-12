@@ -411,7 +411,7 @@ class _Restaurants extends StatelessWidget {
                         if (provenance[normaliseKey(name)]
                             case final MenuProvenance from)
                           Text(
-                            from.describe(DateTime.now()),
+                            from.describe,
                             style: context.text.metadata.copyWith(
                               color: colors.textMuted,
                             ),
