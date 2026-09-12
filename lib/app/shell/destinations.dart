@@ -62,7 +62,8 @@ const List<AppDestination> foodDestinations = <AppDestination>[
     label: 'Shopping',
     icon: Icons.shopping_basket_outlined,
     selectedIcon: Icons.shopping_basket,
-    semanticLabel: 'Shopping. The list built from this week\'s plan.',
+    semanticLabel:
+        'Shopping. Add recipes and foods, and Hearth works out what to buy.',
     builder: ShoppingScreen.new,
   ),
   AppDestination(

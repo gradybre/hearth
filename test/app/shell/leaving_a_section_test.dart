@@ -147,7 +147,7 @@ void main() {
       await tester.tap(find.text('Shopping').last);
       await pumpFrames(tester);
 
-      expect(find.text('Shopping for'), findsOneWidget);
+      expect(find.text('Nothing on the list yet.'), findsOneWidget);
     });
   });
 }

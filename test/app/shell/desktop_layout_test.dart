@@ -116,7 +116,7 @@ void main() {
         tester,
         find
             .ancestor(
-              of: find.text('Shopping for'),
+              of: find.text('Nothing on the list yet.'),
               matching: find.byType(Card).evaluate().isEmpty
                   ? find.byType(Padding)
                   : find.byType(Card),

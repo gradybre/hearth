@@ -68,7 +68,9 @@ void main() {
     // The action bar, when there is one: it sits *above* the tab bar, so
     // measuring against the tabs called a row visible that the bar was
     // covering. The list ends where the bar begins.
-    final Finder bar = find.text('Nothing leaves the app until you tap that.');
+    final Finder bar = find.text(
+      'Nothing leaves the app until you tap Share or export.',
+    );
     if (bar.evaluate().isNotEmpty) return tester.getTopLeft(bar).dy;
     return tester.getTopLeft(find.text('Recipes').last).dy;
   }
@@ -108,23 +110,25 @@ void main() {
     );
   });
 
-  testWidgets('the range is stated, quietly, with what is left', (
+  testWidgets('the header is what is left, and no longer a date range', (
     WidgetTester tester,
   ) async {
-    // Still said — you have to be able to tell you are looking at the right
-    // list — but as a line rather than as the largest thing on the screen.
+    // The dates shrank from a title-faced picker to a line beside the count,
+    // and then went entirely: a list filled by adding recipes to it does not
+    // cover a stretch of days, so a range printed over it was describing the
+    // last build rather than the list (spec §5.7, as amended).
     await openShopping(tester);
 
-    expect(find.textContaining('9/'), findsWidgets);
     expect(
       find.textContaining('6 items'),
       findsOneWidget,
       reason: 'the count of what is left is the fact a shop wants',
     );
+    expect(find.textContaining('9/'), findsNothing);
   });
 
   group('setup moves behind Manage list', () {
-    testWidgets('the seasonings switch and rebuild leave the list screen', (
+    testWidgets('the seasonings switch and the build leave the list screen', (
       WidgetTester tester,
     ) async {
       await openShopping(tester);
@@ -134,7 +138,7 @@ void main() {
       expect(find.text('Manage list'), findsOneWidget);
     });
 
-    testWidgets('and are all still there behind it', (
+    testWidgets('and are all still there behind it, dates included', (
       WidgetTester tester,
     ) async {
       await openShopping(tester);
@@ -142,20 +146,38 @@ void main() {
       await pumpFrames(tester, frames: 12);
 
       expect(find.text('Include seasonings'), findsOneWidget);
-      expect(find.textContaining('Rebuild'), findsWidgets);
-      expect(find.textContaining('9/'), findsWidgets);
+      expect(find.text('Build from the plan'), findsOneWidget);
+      expect(
+        find.textContaining('9/'),
+        findsWidgets,
+        reason: 'the range is a parameter of the build, shown beside it',
+      );
     });
 
-    testWidgets('an empty list keeps its setup up front', (
+    testWidgets('and the list as a whole can be cleared from there', (
       WidgetTester tester,
     ) async {
-      // The review is explicit that the empty state's controls are already
-      // right: "range, Build from plan, Add item are appropriate primary
-      // controls". An empty list is a setup task; a full one is not.
+      // Destructive, so it is at the far end of the sheet rather than on the
+      // screen you are holding in a shop — and it asks before it happens.
+      await openShopping(tester);
+      await tester.tap(find.text('Manage list'));
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('Clear the list'), findsOneWidget);
+    });
+
+    testWidgets('an empty list leads with the two ways to fill it', (
+      WidgetTester tester,
+    ) async {
+      // An empty list is a setup task; a full one is not. What it asks is
+      // which way in you want, not which dates — those belong to one of the
+      // two answers and are asked on the next screen.
       await openShopping(tester, lines: const <ShoppingLine>[]);
 
+      expect(find.text('Add to list'), findsOneWidget);
       expect(find.text('Build from the plan'), findsOneWidget);
       expect(find.text('Manage list'), findsNothing);
+      expect(find.textContaining('9/'), findsNothing);
     });
   });
 

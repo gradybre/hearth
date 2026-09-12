@@ -50,38 +50,53 @@ void main() {
     await pumpFrames(tester);
   }
 
-  Future<void> build(WidgetTester tester) async {
-    await tester.tap(find.text('Build from the plan'));
-    await pumpFrames(tester, frames: 20);
-  }
-
-  /// Building again, once a list exists.
+  /// Building from the plan, which is two taps from either shape of the
+  /// screen (spec §5.7, as amended).
   ///
-  /// The setup moved behind `Manage list` when the list screen stopped
-  /// leading with 244 points of it (review §6.2.5), so a rebuild is two taps
-  /// rather than one — and is not on the screen you stand in a shop holding.
-  Future<void> rebuild(WidgetTester tester) async {
-    // Whichever shape the screen is in. An empty list still leads with its
-    // setup — the review says those controls are right where they are — and
-    // a list that exists keeps the same three behind `Manage list`. A build
-    // that produced nothing leaves the screen empty, so both paths are real.
-    if (find.text('Manage list').evaluate().isEmpty) {
-      await build(tester);
-      return;
-    }
-    await tester.tap(find.text('Manage list'));
+  /// It is behind `Manage list` once a list exists, and behind the empty
+  /// card's own `Build from the plan` before one does — and both open the
+  /// same sheet, because the build is over a stretch of days and the days are
+  /// the first thing you would want to see. `.last` is the sheet's own
+  /// button: the card underneath the modal wears the same words.
+  Future<void> build(WidgetTester tester) async {
+    await tester.tap(
+      find.text(
+        find.text('Manage list').evaluate().isEmpty
+            ? 'Build from the plan'
+            : 'Manage list',
+      ),
+    );
     await pumpFrames(tester, frames: 12);
-    await tester.tap(find.text('Rebuild from the plan'));
+    await tester.tap(find.text('Build from the plan').last);
+    await pumpFrames(tester, frames: 24);
+  }
+
+  /// The same act, once a list exists. Kept as its own name because that is
+  /// what the tests below are saying.
+  Future<void> rebuild(WidgetTester tester) => build(tester);
+
+  /// Puts something the library has never heard of on the list.
+  ///
+  /// Through the add sheet, which is the primary action now: the name-only
+  /// dialog it replaced was a second door onto the same act, and a shopping
+  /// list is mostly things no recipe asked for.
+  Future<void> addByHand(WidgetTester tester, String name) async {
+    await tester.tap(find.text('Add to list').last);
+    await pumpFrames(tester, frames: 16);
+    await tester.enterText(find.byType(TextField).last, name);
+    await pumpFrames(tester, frames: 8);
+    await tester.tap(find.text('Add "$name" as an item'));
     await pumpFrames(tester, frames: 20);
   }
 
-  testWidgets('an empty list says what it would be built from', (
+  testWidgets('an empty list offers both ways to fill it', (
     WidgetTester tester,
   ) async {
     await openShopping(tester);
 
     expect(find.text('Nothing on the list yet.'), findsOneWidget);
-    expect(find.text('Shopping for'), findsOneWidget);
+    expect(find.text('Add to list'), findsOneWidget);
+    expect(find.text('Build from the plan'), findsOneWidget);
   });
 
   testWidgets('building pulls the plan in, without the spices', (
@@ -100,9 +115,16 @@ void main() {
     WidgetTester tester,
   ) async {
     await openShopping(tester, entries: <MealPlanEntry>[tonight()]);
+
+    // The switch sits beside the build it qualifies, on the same sheet: it
+    // says nothing about a recipe added by hand, only about what a build from
+    // the plan pulls in.
+    await tester.tap(find.text('Build from the plan'));
+    await pumpFrames(tester, frames: 12);
     await tester.tap(find.byType(Switch));
     await pumpFrames(tester);
-    await build(tester);
+    await tester.tap(find.text('Build from the plan').last);
+    await pumpFrames(tester, frames: 24);
 
     expect(find.text('cumin'), findsOneWidget);
   });
@@ -174,15 +196,7 @@ void main() {
     await openShopping(tester, entries: <MealPlanEntry>[tonight()]);
     await build(tester);
 
-    // The labelled button in the action bar. Adding by hand used to be a
-    // bare `+` on the setup card, which is gone from the list screen — and
-    // an icon whose meaning lived in a tooltip was never discoverable on a
-    // phone anyway (spec §6.3).
-    await tester.tap(find.text('Add an item'));
-    await pumpFrames(tester);
-    await tester.enterText(find.byType(TextField).last, 'Coffee');
-    await tester.tap(find.text('Add'));
-    await pumpFrames(tester, frames: 20);
+    await addByHand(tester, 'Coffee');
     expect(find.text('Coffee'), findsOneWidget);
 
     await rebuild(tester);
@@ -395,19 +409,6 @@ void main() {
   });
 
   group('undoing a deletion and nothing else (spec §5.7)', () {
-    /// Adds a manual item, so there is a second line to change.
-    Future<void> addByHand(WidgetTester tester, String name) async {
-      // The labelled button in the action bar. Adding by hand used to be a
-      // bare `+` on the setup card, which is gone from the list screen — and
-      // an icon whose meaning lived in a tooltip was never discoverable on a
-      // phone anyway (spec §6.3).
-      await tester.tap(find.text('Add an item'));
-      await pumpFrames(tester);
-      await tester.enterText(find.byType(TextField).last, name);
-      await tester.tap(find.text('Add'));
-      await pumpFrames(tester, frames: 20);
-    }
-
     Future<void> swipeAndDelete(WidgetTester tester, String name) async {
       await tester.drag(find.text(name), const Offset(-200, 0));
       await pumpFrames(tester, frames: 20);

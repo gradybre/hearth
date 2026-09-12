@@ -1294,7 +1294,13 @@ const List<Scene> scenes = <Scene>[
     size: Size(1280, 900),
   ),
   Scene(name: 'foods', taps: <String>['Foods']),
+  // The empty list, which since §5.7 was amended is the app asking which of
+  // the two ways in you want rather than a date picker and a Build button.
   Scene(name: 'shopping', taps: <String>['Shopping']),
+  // And the sheet that is now the primary way a list gets filled. Reached by
+  // pressing what a person presses: it is a modal, so no launch target opens
+  // it, and it had no picture at all.
+  Scene(name: 'shopping-add', taps: <String>['Shopping', 'Add to list']),
   // The same tab with a shop's worth of list on it, which is the state the
   // screen is actually used in and the one nothing had a picture of. The
   // empty scene above cannot show the complaint: with no lines, the setup
