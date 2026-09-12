@@ -12,10 +12,12 @@ import '../../data/adapters/photo_picker.dart';
 import '../../data/adapters/recipe_ai.dart';
 import '../../data/repositories/food_repository.dart';
 import '../../domain/foods/menu_import.dart';
+import '../../domain/foods/menu_reimport.dart';
 import '../../domain/foods/pdf_batches.dart';
+import '../../domain/foods/restaurant_menu.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
-import '../../domain/text/text_normaliser.dart';
+import '../../domain/models/macros.dart';
 import '../../domain/units/quantity.dart';
 
 /// Adding a whole restaurant menu by pasting it (spec §5.2).
@@ -57,6 +59,9 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
 
   /// What went wrong on the way to the library, if anything did.
   String? _saveError;
+
+  /// Menu foods this import supersedes, once the review has been seen.
+  List<String> _retiring = const <String>[];
 
   /// The PDF being read, once one has been chosen.
   ///
@@ -262,6 +267,37 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
     ];
   }
 
+  /// The rows this document would write, with the ids the save will use.
+  ///
+  /// Derived here and handed to the comparison, so what the review promises
+  /// and what the save performs cannot come apart.
+  List<({String id, String name, String? section, Macros macros})> _incoming(
+    String restaurant,
+  ) => <({String id, String name, String? section, Macros macros})>[
+    for (final MenuImportLine line in _lines)
+      if (line.isUsable)
+        (
+          id: menuFoodId(
+            restaurant: restaurant,
+            name: line.name,
+            portion: QuantityFormat.format(line.portion!),
+            section: line.section,
+          ),
+          name: line.name,
+          section: line.section,
+          macros: line.macros,
+        ),
+  ];
+
+  /// What this document would change about a menu already saved (review N08).
+  MenuReimport _diff(String restaurant) => MenuReimport.compare(
+    incoming: _incoming(restaurant),
+    existing: RestaurantMenu.itemsFor(
+      restaurant,
+      ref.read(foodLibraryProvider).value ?? const <Food>[],
+    ),
+  );
+
   Future<void> _save() async {
     final List<MenuImportLine> usable = <MenuImportLine>[
       for (final MenuImportLine line in _lines)
@@ -271,6 +307,25 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
       setState(() => _showErrors = true);
       return;
     }
+
+    // Cleared here, not only set below: `_save` can be pressed again after a
+    // failure, and a retirement list left over from a run whose review was
+    // answered differently would retire foods this attempt never asked about.
+    _retiring = const <String>[];
+
+    // Review before commit, for what the write leaves behind as well as for
+    // what it writes (CLAUDE.md rule 4). A second import of a menu whose
+    // portions moved would otherwise quietly give the restaurant two of
+    // everything, and nothing on this screen would have said so.
+    final MenuReimport diff = _diff(_restaurant.text.trim());
+    if (diff.stale.isNotEmpty) {
+      final bool? retire = await _confirmReimport(diff);
+      if (retire == null) return;
+      _retiring = retire ? diff.stale : const <String>[];
+    } else {
+      _retiring = const <String>[];
+    }
+    if (!mounted) return;
 
     setState(() {
       _saving = true;
@@ -283,7 +338,7 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
 
       for (final MenuImportLine line in usable) {
         final Quantity portion = line.portion!;
-        final String id = idForMenuFood(
+        final String id = menuFoodId(
           restaurant: restaurant,
           name: line.name,
           portion: QuantityFormat.format(portion),
@@ -319,6 +374,33 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
         );
         done++;
       }
+      // Retired only after every incoming row is safely in, and only ever a
+      // soft delete: a menu food can be on a past log, and an absence cannot
+      // travel to the other phone (rule 3).
+      //
+      // Its own try, because its failure is a different fact. Sharing the one
+      // below reported "12 of 12 saved before that stopped, and the rest
+      // could not be saved" when every row was in and a *retirement* had
+      // failed — which is not true, and tells somebody to retry a save that
+      // already worked.
+      int retired = 0;
+      try {
+        for (final String id in _retiring) {
+          await repository.delete(id);
+          retired++;
+        }
+      } on Object {
+        if (mounted) {
+          setState(
+            () => _saveError =
+                'All $done saved. ${_retiring.length - retired} of '
+                '${_retiring.length} could not be taken off the menu — they '
+                'are still there, and nothing was lost. Try the import again '
+                'to retire them.',
+          );
+        }
+        return;
+      }
       if (mounted) Navigator.of(context).pop(usable.length);
     } on Object {
       // Said, not swallowed. There was no `catch` here at all: a failure part
@@ -339,30 +421,86 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
     }
   }
 
-  /// The id a menu row always gets.
+  /// Shows what this import leaves behind, and asks (review N08).
   ///
-  /// Derived rather than random, which is what makes a retry safe: the loop
-  /// used to mint a fresh uuid per row, so pressing Save again after a
-  /// failure part way through inserted every already-saved row a second time.
-  /// Deriving it from what identifies the row on the menu means the second
-  /// attempt updates what the first one wrote.
-  ///
-  /// The same pattern as `IngredientMatchStore.idFor` and `PlanStore.idFor`,
-  /// and for the same reason: two attempts at one fact should meet on one row.
-  /// The portion is part of it, and has to be. A menu that lists "Fries"
-  /// twice at two sizes is two foods, and a key on the name alone would
-  /// quietly keep the second and lose the first — a silent collapse that the
-  /// random ids this replaced could not produce.
-  static String idForMenuFood({
-    required String restaurant,
-    required String name,
-    required String portion,
-    String? section,
-  }) => const Uuid().v5(
-    Namespace.url.value,
-    'hearth:menu-food:${normaliseKey(restaurant)}:${normaliseKey(name)}:'
-    '${normaliseKey(section ?? '')}:${normaliseKey(portion)}',
-  );
+  /// Three answers, and the middle one is the point: save the new rows and
+  /// leave the old ones alone. A restaurant that genuinely still serves the
+  /// small fries is not a restaurant whose menu was read wrong.
+  Future<bool?> _confirmReimport(MenuReimport diff) {
+    final HearthColors colors = context.colors;
+    return showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        backgroundColor: colors.surfaceElevated,
+        // Title, content and actions in one scroll view: at three times the
+        // text a title, a count line, five dish names and three actions are
+        // far taller than a phone, and the overflow is the dialog's own
+        // column rather than its content box (spec §6.3).
+        scrollable: true,
+        title: Text(
+          'This menu has moved on',
+          style: context.text.sectionHeader,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              <String>[
+                if (diff.added > 0) '${diff.added} new',
+                if (diff.updated > 0) '${diff.updated} with new numbers',
+                if (diff.unchanged > 0) '${diff.unchanged} unchanged',
+              ].join(' · '),
+              style: context.text.body,
+            ),
+            const SizedBox(height: HearthSpacing.md),
+            Text(
+              'Already on this menu and not in what you pasted:',
+              style: context.text.body,
+            ),
+            const SizedBox(height: HearthSpacing.xs),
+            for (final MenuLineChange line in <MenuLineChange>[
+              ...diff.reportioned,
+              ...diff.missing,
+            ].take(5))
+              Text(
+                line.change == MenuChange.reportioned
+                    ? '${line.name} — at its old portion'
+                    : '${line.name} — not in this document',
+                style: context.text.metadata.copyWith(
+                  color: colors.textSecondary,
+                ),
+              ),
+            if (diff.stale.length > 5)
+              Text(
+                'and ${diff.stale.length - 5} more',
+                style: context.text.metadata.copyWith(color: colors.textMuted),
+              ),
+            const SizedBox(height: HearthSpacing.md),
+            Text(
+              'Retiring them takes them off the menu for future meals. Meals '
+              'you have already logged keep their own numbers either way.',
+              style: context.text.metadata.copyWith(color: colors.textMuted),
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Go back'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep them'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Retire ${diff.stale.length}'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
