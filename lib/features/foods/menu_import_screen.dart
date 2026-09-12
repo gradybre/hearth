@@ -18,6 +18,7 @@ import '../../domain/foods/restaurant_menu.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
+import '../../domain/planning/day_format.dart';
 import '../../domain/units/quantity.dart';
 
 /// Adding a whole restaurant menu by pasting it (spec §5.2).
@@ -40,6 +41,15 @@ class MenuImportScreen extends ConsumerStatefulWidget {
 
 class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
   final TextEditingController _restaurant = TextEditingController();
+
+  /// Where the numbers came from, and the date printed on them (review N08).
+  ///
+  /// Both optional, both asked for once. A menu is somebody else's numbers
+  /// trusted for months, and what that is worth depends on facts the menu
+  /// does not carry — nobody can judge a nutrition sheet without knowing
+  /// whose it is and when it was published.
+  final TextEditingController _source = TextEditingController();
+  DateTime? _documentDate;
   final TextEditingController _pasted = TextEditingController();
   bool _saving = false;
   bool _showErrors = false;
@@ -93,6 +103,7 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
   @override
   void dispose() {
     _restaurant.dispose();
+    _source.dispose();
     _pasted.dispose();
     super.dispose();
   }
@@ -401,6 +412,17 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
         }
         return;
       }
+      // Recorded once every row is in, and only then: provenance for an
+      // import that failed would date a menu by a reading that did not
+      // happen (review N08).
+      await ref
+          .read(menuImportRepositoryProvider)
+          .record(
+            restaurant: restaurant,
+            itemCount: done,
+            source: _source.text.trim().isEmpty ? null : _source.text.trim(),
+            documentDate: _documentDate,
+          );
       if (mounted) Navigator.of(context).pop(usable.length);
     } on Object {
       // Said, not swallowed. There was no `catch` here at all: a failure part
@@ -419,6 +441,23 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  /// Asks for the date printed on the document.
+  ///
+  /// A day rather than a moment: a nutrition sheet is dated, not timestamped.
+  /// The range ends today, because a document cannot have been published
+  /// tomorrow.
+  Future<void> _pickDocumentDate() async {
+    final DateTime today = DateTime.now();
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _documentDate ?? today,
+      firstDate: DateTime(today.year - 10),
+      lastDate: today,
+      helpText: 'Date printed on the menu',
+    );
+    if (picked != null && mounted) setState(() => _documentDate = picked);
   }
 
   /// Shows what this import leaves behind, and asks (review N08).
@@ -719,6 +758,30 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
               ),
             ),
             const SizedBox(height: HearthSpacing.lg),
+            // Under the paste box, not above it. These are facts *about* the
+            // document, and asking for them before there is a document to
+            // describe puts two optional fields between somebody and the one
+            // thing this screen is for (review §6.2.4).
+            Text(
+              'Where these numbers came from',
+              style: context.text.label.copyWith(color: colors.textSecondary),
+            ),
+            const SizedBox(height: HearthSpacing.xs),
+            TextField(
+              controller: _source,
+              style: context.text.body,
+              decoration: const InputDecoration(
+                labelText: 'Source',
+                hintText: 'chipotle.com/nutrition · optional',
+              ),
+            ),
+            const SizedBox(height: HearthSpacing.sm),
+            _DocumentDateRow(
+              date: _documentDate,
+              onPick: _pickDocumentDate,
+              onClear: () => setState(() => _documentDate = null),
+            ),
+            const SizedBox(height: HearthSpacing.lg),
             if (lines.isEmpty)
               Text(
                 'Nothing pasted yet.',
@@ -866,5 +929,44 @@ class _LineRow extends StatelessWidget {
     ];
     final String head = line.isModifier ? 'Takes away · ' : '';
     return '$head$portion · ${parts.join(' · ')}';
+  }
+}
+
+/// The date printed on the document, asked for once and shown as a word.
+class _DocumentDateRow extends StatelessWidget {
+  const _DocumentDateRow({
+    required this.date,
+    required this.onPick,
+    required this.onClear,
+  });
+
+  final DateTime? date;
+  final VoidCallback onPick;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    // A wrap, not a row: a label, a date and two buttons are wider than a
+    // small phone at large text, and the layout is what gives way (§6.3).
+    return Wrap(
+      spacing: HearthSpacing.sm,
+      runSpacing: HearthSpacing.xs,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: <Widget>[
+        Text(
+          date == null
+              ? 'No date on the document'
+              : 'Dated ${date!.day} ${monthName(date!)} ${date!.year}',
+          style: context.text.body.copyWith(color: colors.textSecondary),
+        ),
+        TextButton(
+          onPressed: onPick,
+          child: Text(date == null ? 'Add the date' : 'Change'),
+        ),
+        if (date != null)
+          TextButton(onPressed: onClear, child: const Text('Clear')),
+      ],
+    );
   }
 }

@@ -41,6 +41,7 @@ part 'hearth_database.g.dart';
     PendingWrites,
     ShoppingLists,
     ShoppingListItems,
+    MenuImports,
   ],
 )
 class HearthDatabase extends _$HearthDatabase {
@@ -50,11 +51,16 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (Migrator m, int from, int to) async {
+      // v27 records where a restaurant's menu came from (review N08).
+      // Additive, and household-scoped like the imports it describes.
+      if (from < 27) {
+        await m.createTable(menuImports);
+      }
       // v26 keeps an editor's work across an interruption (review N01).
       // Additive, device-local, and never synced: a half-typed recipe is a
       // fact about this phone rather than about the household.

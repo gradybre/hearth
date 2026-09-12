@@ -6,11 +6,13 @@ import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../domain/foods/menu_provenance.dart';
 import '../../domain/foods/restaurant_menu.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/recipes/macro_calculator.dart';
+import '../../domain/text/text_normaliser.dart';
 import '../plan/logging_intent.dart';
 import 'recipe_draft.dart';
 import 'recipe_editor_args.dart';
@@ -270,6 +272,9 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
         child: chosen == null
             ? _Restaurants(
                 restaurants: restaurants,
+                provenance:
+                    ref.watch(menuProvenanceProvider).value ??
+                    const <String, MenuProvenance>{},
                 onPick: _choose,
                 gutter: gutter,
               )
@@ -305,11 +310,15 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
 class _Restaurants extends StatelessWidget {
   const _Restaurants({
     required this.restaurants,
+    required this.provenance,
     required this.onPick,
     required this.gutter,
   });
 
   final List<String> restaurants;
+
+  /// What is known about where each menu came from, by normalised name.
+  final Map<String, MenuProvenance> provenance;
   final ValueChanged<String> onPick;
   final double gutter;
 
@@ -390,7 +399,26 @@ class _Restaurants extends StatelessWidget {
                 children: <Widget>[
                   Icon(Icons.storefront, size: 20, color: colors.textMuted),
                   const SizedBox(width: HearthSpacing.md),
-                  Expanded(child: Text(name, style: context.text.ingredient)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(name, style: context.text.ingredient),
+                        // Where these numbers came from and how old they are
+                        // (review N08). A menu is somebody else's arithmetic
+                        // trusted for months, and nothing on it says when it
+                        // was published — so the line that can say it, does.
+                        if (provenance[normaliseKey(name)]
+                            case final MenuProvenance from)
+                          Text(
+                            from.describe(DateTime.now()),
+                            style: context.text.metadata.copyWith(
+                              color: colors.textMuted,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                   Icon(Icons.chevron_right, color: colors.textMuted),
                 ],
               ),

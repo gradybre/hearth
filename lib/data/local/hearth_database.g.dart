@@ -12738,6 +12738,605 @@ class ShoppingListItemsCompanion extends UpdateCompanion<ShoppingItemRow> {
   }
 }
 
+class $MenuImportsTable extends MenuImports
+    with TableInfo<$MenuImportsTable, MenuImportRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MenuImportsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _householdIdMeta = const VerificationMeta(
+    'householdId',
+  );
+  @override
+  late final GeneratedColumn<String> householdId = GeneratedColumn<String>(
+    'household_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _restaurantKeyMeta = const VerificationMeta(
+    'restaurantKey',
+  );
+  @override
+  late final GeneratedColumn<String> restaurantKey = GeneratedColumn<String>(
+    'restaurant_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _restaurantMeta = const VerificationMeta(
+    'restaurant',
+  );
+  @override
+  late final GeneratedColumn<String> restaurant = GeneratedColumn<String>(
+    'restaurant',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
+  @override
+  late final GeneratedColumn<String> source = GeneratedColumn<String>(
+    'source',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _documentDateMeta = const VerificationMeta(
+    'documentDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> documentDate = GeneratedColumn<DateTime>(
+    'document_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _itemCountMeta = const VerificationMeta(
+    'itemCount',
+  );
+  @override
+  late final GeneratedColumn<int> itemCount = GeneratedColumn<int>(
+    'item_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _importedAtMeta = const VerificationMeta(
+    'importedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> importedAt = GeneratedColumn<DateTime>(
+    'imported_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    householdId,
+    restaurantKey,
+    restaurant,
+    source,
+    documentDate,
+    itemCount,
+    importedAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'menu_imports';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MenuImportRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('household_id')) {
+      context.handle(
+        _householdIdMeta,
+        householdId.isAcceptableOrUnknown(
+          data['household_id']!,
+          _householdIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_householdIdMeta);
+    }
+    if (data.containsKey('restaurant_key')) {
+      context.handle(
+        _restaurantKeyMeta,
+        restaurantKey.isAcceptableOrUnknown(
+          data['restaurant_key']!,
+          _restaurantKeyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_restaurantKeyMeta);
+    }
+    if (data.containsKey('restaurant')) {
+      context.handle(
+        _restaurantMeta,
+        restaurant.isAcceptableOrUnknown(data['restaurant']!, _restaurantMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_restaurantMeta);
+    }
+    if (data.containsKey('source')) {
+      context.handle(
+        _sourceMeta,
+        source.isAcceptableOrUnknown(data['source']!, _sourceMeta),
+      );
+    }
+    if (data.containsKey('document_date')) {
+      context.handle(
+        _documentDateMeta,
+        documentDate.isAcceptableOrUnknown(
+          data['document_date']!,
+          _documentDateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('item_count')) {
+      context.handle(
+        _itemCountMeta,
+        itemCount.isAcceptableOrUnknown(data['item_count']!, _itemCountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_itemCountMeta);
+    }
+    if (data.containsKey('imported_at')) {
+      context.handle(
+        _importedAtMeta,
+        importedAt.isAcceptableOrUnknown(data['imported_at']!, _importedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_importedAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {householdId, restaurantKey},
+  ];
+  @override
+  MenuImportRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MenuImportRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      householdId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}household_id'],
+      )!,
+      restaurantKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}restaurant_key'],
+      )!,
+      restaurant: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}restaurant'],
+      )!,
+      source: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source'],
+      ),
+      documentDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}document_date'],
+      ),
+      itemCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}item_count'],
+      )!,
+      importedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}imported_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $MenuImportsTable createAlias(String alias) {
+    return $MenuImportsTable(attachedDatabase, alias);
+  }
+}
+
+class MenuImportRow extends DataClass implements Insertable<MenuImportRow> {
+  final String id;
+  final String householdId;
+
+  /// The brand every food on the menu carries, normalised — the same key the
+  /// menu itself is grouped by, so the two cannot come to disagree about
+  /// which restaurant this describes.
+  final String restaurantKey;
+
+  /// As typed, for showing.
+  final String restaurant;
+
+  /// Where the numbers came from: a URL, a file name, or whatever was said.
+  final String? source;
+
+  /// The date printed on the document, which is not the date it was read.
+  /// A sheet published in March and pasted in September is nine months old
+  /// however fresh the import is.
+  final DateTime? documentDate;
+
+  /// How many rows the last import wrote.
+  final int itemCount;
+
+  /// When it was last read.
+  final DateTime importedAt;
+  final DateTime updatedAt;
+  const MenuImportRow({
+    required this.id,
+    required this.householdId,
+    required this.restaurantKey,
+    required this.restaurant,
+    this.source,
+    this.documentDate,
+    required this.itemCount,
+    required this.importedAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['household_id'] = Variable<String>(householdId);
+    map['restaurant_key'] = Variable<String>(restaurantKey);
+    map['restaurant'] = Variable<String>(restaurant);
+    if (!nullToAbsent || source != null) {
+      map['source'] = Variable<String>(source);
+    }
+    if (!nullToAbsent || documentDate != null) {
+      map['document_date'] = Variable<DateTime>(documentDate);
+    }
+    map['item_count'] = Variable<int>(itemCount);
+    map['imported_at'] = Variable<DateTime>(importedAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  MenuImportsCompanion toCompanion(bool nullToAbsent) {
+    return MenuImportsCompanion(
+      id: Value(id),
+      householdId: Value(householdId),
+      restaurantKey: Value(restaurantKey),
+      restaurant: Value(restaurant),
+      source: source == null && nullToAbsent
+          ? const Value.absent()
+          : Value(source),
+      documentDate: documentDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(documentDate),
+      itemCount: Value(itemCount),
+      importedAt: Value(importedAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory MenuImportRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MenuImportRow(
+      id: serializer.fromJson<String>(json['id']),
+      householdId: serializer.fromJson<String>(json['householdId']),
+      restaurantKey: serializer.fromJson<String>(json['restaurantKey']),
+      restaurant: serializer.fromJson<String>(json['restaurant']),
+      source: serializer.fromJson<String?>(json['source']),
+      documentDate: serializer.fromJson<DateTime?>(json['documentDate']),
+      itemCount: serializer.fromJson<int>(json['itemCount']),
+      importedAt: serializer.fromJson<DateTime>(json['importedAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'householdId': serializer.toJson<String>(householdId),
+      'restaurantKey': serializer.toJson<String>(restaurantKey),
+      'restaurant': serializer.toJson<String>(restaurant),
+      'source': serializer.toJson<String?>(source),
+      'documentDate': serializer.toJson<DateTime?>(documentDate),
+      'itemCount': serializer.toJson<int>(itemCount),
+      'importedAt': serializer.toJson<DateTime>(importedAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  MenuImportRow copyWith({
+    String? id,
+    String? householdId,
+    String? restaurantKey,
+    String? restaurant,
+    Value<String?> source = const Value.absent(),
+    Value<DateTime?> documentDate = const Value.absent(),
+    int? itemCount,
+    DateTime? importedAt,
+    DateTime? updatedAt,
+  }) => MenuImportRow(
+    id: id ?? this.id,
+    householdId: householdId ?? this.householdId,
+    restaurantKey: restaurantKey ?? this.restaurantKey,
+    restaurant: restaurant ?? this.restaurant,
+    source: source.present ? source.value : this.source,
+    documentDate: documentDate.present ? documentDate.value : this.documentDate,
+    itemCount: itemCount ?? this.itemCount,
+    importedAt: importedAt ?? this.importedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  MenuImportRow copyWithCompanion(MenuImportsCompanion data) {
+    return MenuImportRow(
+      id: data.id.present ? data.id.value : this.id,
+      householdId: data.householdId.present
+          ? data.householdId.value
+          : this.householdId,
+      restaurantKey: data.restaurantKey.present
+          ? data.restaurantKey.value
+          : this.restaurantKey,
+      restaurant: data.restaurant.present
+          ? data.restaurant.value
+          : this.restaurant,
+      source: data.source.present ? data.source.value : this.source,
+      documentDate: data.documentDate.present
+          ? data.documentDate.value
+          : this.documentDate,
+      itemCount: data.itemCount.present ? data.itemCount.value : this.itemCount,
+      importedAt: data.importedAt.present
+          ? data.importedAt.value
+          : this.importedAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MenuImportRow(')
+          ..write('id: $id, ')
+          ..write('householdId: $householdId, ')
+          ..write('restaurantKey: $restaurantKey, ')
+          ..write('restaurant: $restaurant, ')
+          ..write('source: $source, ')
+          ..write('documentDate: $documentDate, ')
+          ..write('itemCount: $itemCount, ')
+          ..write('importedAt: $importedAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    householdId,
+    restaurantKey,
+    restaurant,
+    source,
+    documentDate,
+    itemCount,
+    importedAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MenuImportRow &&
+          other.id == this.id &&
+          other.householdId == this.householdId &&
+          other.restaurantKey == this.restaurantKey &&
+          other.restaurant == this.restaurant &&
+          other.source == this.source &&
+          other.documentDate == this.documentDate &&
+          other.itemCount == this.itemCount &&
+          other.importedAt == this.importedAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class MenuImportsCompanion extends UpdateCompanion<MenuImportRow> {
+  final Value<String> id;
+  final Value<String> householdId;
+  final Value<String> restaurantKey;
+  final Value<String> restaurant;
+  final Value<String?> source;
+  final Value<DateTime?> documentDate;
+  final Value<int> itemCount;
+  final Value<DateTime> importedAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const MenuImportsCompanion({
+    this.id = const Value.absent(),
+    this.householdId = const Value.absent(),
+    this.restaurantKey = const Value.absent(),
+    this.restaurant = const Value.absent(),
+    this.source = const Value.absent(),
+    this.documentDate = const Value.absent(),
+    this.itemCount = const Value.absent(),
+    this.importedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MenuImportsCompanion.insert({
+    required String id,
+    required String householdId,
+    required String restaurantKey,
+    required String restaurant,
+    this.source = const Value.absent(),
+    this.documentDate = const Value.absent(),
+    required int itemCount,
+    required DateTime importedAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       householdId = Value(householdId),
+       restaurantKey = Value(restaurantKey),
+       restaurant = Value(restaurant),
+       itemCount = Value(itemCount),
+       importedAt = Value(importedAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<MenuImportRow> custom({
+    Expression<String>? id,
+    Expression<String>? householdId,
+    Expression<String>? restaurantKey,
+    Expression<String>? restaurant,
+    Expression<String>? source,
+    Expression<DateTime>? documentDate,
+    Expression<int>? itemCount,
+    Expression<DateTime>? importedAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (householdId != null) 'household_id': householdId,
+      if (restaurantKey != null) 'restaurant_key': restaurantKey,
+      if (restaurant != null) 'restaurant': restaurant,
+      if (source != null) 'source': source,
+      if (documentDate != null) 'document_date': documentDate,
+      if (itemCount != null) 'item_count': itemCount,
+      if (importedAt != null) 'imported_at': importedAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MenuImportsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? householdId,
+    Value<String>? restaurantKey,
+    Value<String>? restaurant,
+    Value<String?>? source,
+    Value<DateTime?>? documentDate,
+    Value<int>? itemCount,
+    Value<DateTime>? importedAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return MenuImportsCompanion(
+      id: id ?? this.id,
+      householdId: householdId ?? this.householdId,
+      restaurantKey: restaurantKey ?? this.restaurantKey,
+      restaurant: restaurant ?? this.restaurant,
+      source: source ?? this.source,
+      documentDate: documentDate ?? this.documentDate,
+      itemCount: itemCount ?? this.itemCount,
+      importedAt: importedAt ?? this.importedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (householdId.present) {
+      map['household_id'] = Variable<String>(householdId.value);
+    }
+    if (restaurantKey.present) {
+      map['restaurant_key'] = Variable<String>(restaurantKey.value);
+    }
+    if (restaurant.present) {
+      map['restaurant'] = Variable<String>(restaurant.value);
+    }
+    if (source.present) {
+      map['source'] = Variable<String>(source.value);
+    }
+    if (documentDate.present) {
+      map['document_date'] = Variable<DateTime>(documentDate.value);
+    }
+    if (itemCount.present) {
+      map['item_count'] = Variable<int>(itemCount.value);
+    }
+    if (importedAt.present) {
+      map['imported_at'] = Variable<DateTime>(importedAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MenuImportsCompanion(')
+          ..write('id: $id, ')
+          ..write('householdId: $householdId, ')
+          ..write('restaurantKey: $restaurantKey, ')
+          ..write('restaurant: $restaurant, ')
+          ..write('source: $source, ')
+          ..write('documentDate: $documentDate, ')
+          ..write('itemCount: $itemCount, ')
+          ..write('importedAt: $importedAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$HearthDatabase extends GeneratedDatabase {
   _$HearthDatabase(QueryExecutor e) : super(e);
   $HearthDatabaseManager get managers => $HearthDatabaseManager(this);
@@ -12773,6 +13372,7 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
   late final $ShoppingListsTable shoppingLists = $ShoppingListsTable(this);
   late final $ShoppingListItemsTable shoppingListItems =
       $ShoppingListItemsTable(this);
+  late final $MenuImportsTable menuImports = $MenuImportsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -12801,6 +13401,7 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
     pendingWrites,
     shoppingLists,
     shoppingListItems,
+    menuImports,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -21392,6 +21993,292 @@ typedef $$ShoppingListItemsTableProcessedTableManager =
       ShoppingItemRow,
       PrefetchHooks Function()
     >;
+typedef $$MenuImportsTableCreateCompanionBuilder =
+    MenuImportsCompanion Function({
+      required String id,
+      required String householdId,
+      required String restaurantKey,
+      required String restaurant,
+      Value<String?> source,
+      Value<DateTime?> documentDate,
+      required int itemCount,
+      required DateTime importedAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$MenuImportsTableUpdateCompanionBuilder =
+    MenuImportsCompanion Function({
+      Value<String> id,
+      Value<String> householdId,
+      Value<String> restaurantKey,
+      Value<String> restaurant,
+      Value<String?> source,
+      Value<DateTime?> documentDate,
+      Value<int> itemCount,
+      Value<DateTime> importedAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$MenuImportsTableFilterComposer
+    extends Composer<_$HearthDatabase, $MenuImportsTable> {
+  $$MenuImportsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get householdId => $composableBuilder(
+    column: $table.householdId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get restaurantKey => $composableBuilder(
+    column: $table.restaurantKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get restaurant => $composableBuilder(
+    column: $table.restaurant,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get documentDate => $composableBuilder(
+    column: $table.documentDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get itemCount => $composableBuilder(
+    column: $table.itemCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get importedAt => $composableBuilder(
+    column: $table.importedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MenuImportsTableOrderingComposer
+    extends Composer<_$HearthDatabase, $MenuImportsTable> {
+  $$MenuImportsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get householdId => $composableBuilder(
+    column: $table.householdId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get restaurantKey => $composableBuilder(
+    column: $table.restaurantKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get restaurant => $composableBuilder(
+    column: $table.restaurant,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get documentDate => $composableBuilder(
+    column: $table.documentDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get itemCount => $composableBuilder(
+    column: $table.itemCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get importedAt => $composableBuilder(
+    column: $table.importedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MenuImportsTableAnnotationComposer
+    extends Composer<_$HearthDatabase, $MenuImportsTable> {
+  $$MenuImportsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get householdId => $composableBuilder(
+    column: $table.householdId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get restaurantKey => $composableBuilder(
+    column: $table.restaurantKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get restaurant => $composableBuilder(
+    column: $table.restaurant,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get source =>
+      $composableBuilder(column: $table.source, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get documentDate => $composableBuilder(
+    column: $table.documentDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get itemCount =>
+      $composableBuilder(column: $table.itemCount, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get importedAt => $composableBuilder(
+    column: $table.importedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$MenuImportsTableTableManager
+    extends
+        RootTableManager<
+          _$HearthDatabase,
+          $MenuImportsTable,
+          MenuImportRow,
+          $$MenuImportsTableFilterComposer,
+          $$MenuImportsTableOrderingComposer,
+          $$MenuImportsTableAnnotationComposer,
+          $$MenuImportsTableCreateCompanionBuilder,
+          $$MenuImportsTableUpdateCompanionBuilder,
+          (
+            MenuImportRow,
+            BaseReferences<_$HearthDatabase, $MenuImportsTable, MenuImportRow>,
+          ),
+          MenuImportRow,
+          PrefetchHooks Function()
+        > {
+  $$MenuImportsTableTableManager(_$HearthDatabase db, $MenuImportsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MenuImportsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MenuImportsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MenuImportsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> householdId = const Value.absent(),
+                Value<String> restaurantKey = const Value.absent(),
+                Value<String> restaurant = const Value.absent(),
+                Value<String?> source = const Value.absent(),
+                Value<DateTime?> documentDate = const Value.absent(),
+                Value<int> itemCount = const Value.absent(),
+                Value<DateTime> importedAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MenuImportsCompanion(
+                id: id,
+                householdId: householdId,
+                restaurantKey: restaurantKey,
+                restaurant: restaurant,
+                source: source,
+                documentDate: documentDate,
+                itemCount: itemCount,
+                importedAt: importedAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String householdId,
+                required String restaurantKey,
+                required String restaurant,
+                Value<String?> source = const Value.absent(),
+                Value<DateTime?> documentDate = const Value.absent(),
+                required int itemCount,
+                required DateTime importedAt,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => MenuImportsCompanion.insert(
+                id: id,
+                householdId: householdId,
+                restaurantKey: restaurantKey,
+                restaurant: restaurant,
+                source: source,
+                documentDate: documentDate,
+                itemCount: itemCount,
+                importedAt: importedAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MenuImportsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$HearthDatabase,
+      $MenuImportsTable,
+      MenuImportRow,
+      $$MenuImportsTableFilterComposer,
+      $$MenuImportsTableOrderingComposer,
+      $$MenuImportsTableAnnotationComposer,
+      $$MenuImportsTableCreateCompanionBuilder,
+      $$MenuImportsTableUpdateCompanionBuilder,
+      (
+        MenuImportRow,
+        BaseReferences<_$HearthDatabase, $MenuImportsTable, MenuImportRow>,
+      ),
+      MenuImportRow,
+      PrefetchHooks Function()
+    >;
 
 class $HearthDatabaseManager {
   final _$HearthDatabase _db;
@@ -21442,4 +22329,6 @@ class $HearthDatabaseManager {
       $$ShoppingListsTableTableManager(_db, _db.shoppingLists);
   $$ShoppingListItemsTableTableManager get shoppingListItems =>
       $$ShoppingListItemsTableTableManager(_db, _db.shoppingListItems);
+  $$MenuImportsTableTableManager get menuImports =>
+      $$MenuImportsTableTableManager(_db, _db.menuImports);
 }

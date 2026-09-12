@@ -74,6 +74,7 @@ class RecordSync {
               hasPendingWrite: _queue.hasPendingFor,
             ),
           ),
+          (table: 'menu_imports', apply: _rows.applyMenuImport),
           // The list before its lines, for the foreign key.
           (table: 'shopping_lists', apply: _rows.applyShoppingList),
           (table: 'shopping_list_items', apply: _rows.applyShoppingItem),
