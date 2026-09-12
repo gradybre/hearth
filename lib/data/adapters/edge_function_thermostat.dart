@@ -5,11 +5,17 @@ import 'thermostat.dart';
 
 /// A Google Nest, through the `nest` Edge Function (spec §11).
 ///
-/// The function holds three secrets the app must never see: the Device Access
-/// project id, the OAuth client id, and the client secret. The household's
-/// refresh token never leaves the server at all — it is a key to Brendan's
-/// house, and the app ships a publishable key anybody can read out of the
-/// bundle (CLAUDE.md rule 1, §8.1).
+/// The function holds the OAuth **client secret**, which the app must never
+/// see, and the household's **refresh token**, which never leaves the server
+/// at all — it is a key to Brendan's house, and the app ships a publishable
+/// key anybody can read out of the bundle (CLAUDE.md rule 1, §8.1).
+///
+/// The Device Access project id and the OAuth client id are server-side too,
+/// but not secret: `link-start` returns a consent URL carrying both, because
+/// every OAuth redirect in the world carries them. They live on the server so
+/// the URL is built in one place, not because the client may not know them —
+/// and this comment used to claim otherwise, which is the wrong thing for a
+/// future reader to believe when deciding what may cross this seam.
 ///
 /// It also narrows Google's response into the small shape [stateFrom] reads,
 /// for the same reason [EdgeFunctionRecipeAi] does: a trait rename at Google

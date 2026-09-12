@@ -20,7 +20,6 @@ import {
 } from './sdm.ts';
 import {
   consentUrl,
-  exchange,
   type FreshToken,
   GrantRevoked,
   isFresh,
@@ -66,8 +65,6 @@ Deno.serve(async (request: Request): Promise<Response> => {
     switch (action) {
       case 'link-start':
         return await linkStart(env, household, auth);
-      case 'link':
-        return await link(env, household, auth, body);
       case 'status':
         return await status(env, household, auth);
       case 'command':
@@ -151,68 +148,6 @@ async function linkStart(
   });
 }
 
-async function link(
-  env: Env,
-  household: string,
-  auth: string,
-  body: Record<string, unknown>,
-): Promise<Response> {
-  const raw = typeof body.code === 'string' ? body.code.trim() : '';
-  if (!raw) return json({ error: 'Paste the code from the address bar.' }, 400);
-
-  // The code arrives percent-encoded in the browser's address bar — `4%2F0A…`
-  // — and pasting it verbatim is the obvious thing to do. Decoding here means
-  // either form works, which is worth more than being strict about a string
-  // somebody copied off a screen.
-  const code = raw.includes('%') ? safeDecode(raw) : raw;
-
-  const token = await exchange(fetch, {
-    code,
-    clientId: env.clientId,
-    clientSecret: env.clientSecret,
-    redirectUri: env.callbackUrl,
-    now: new Date(),
-  });
-
-  // Google requires one devices.list to complete authorization; without it the
-  // project never appears in the Partner Connections Manager.
-  const listed = await sdm(env, token.accessToken, `/devices`);
-  const thermostats = thermostatsIn(listed);
-  if (thermostats.length === 0) {
-    // The commonest real failure: the device picker was left unticked. Saying
-    // so beats saving a link with nothing behind it and an empty screen.
-    return json({
-      error: 'No thermostat was shared with Hearth. Link again and tick the '
-        + 'thermostat in Google’s device list.',
-    }, 400);
-  }
-
-  // Whose Google account this is, asked of the database with the caller's own
-  // JWT. `linked_by` is who has to reconnect when the link dies, so a wrong
-  // value here is a wrong name on the one screen that has to name somebody.
-  const linkedBy = await currentUser(env, auth);
-  if (!linkedBy) return json({ error: 'Sign in again and retry.' }, 401);
-
-  const chosen = thermostats[0];
-  const saved = await rpcOne(env, 'nest_link_save', {
-    p_household: household,
-    p_project_id: env.projectId,
-    p_refresh_token: token.refreshToken,
-    p_linked_by: linkedBy,
-    p_device_name: chosen.name,
-    p_device_label: chosen.label,
-  });
-  if (!saved) return json({ error: 'Could not save the link.' }, 500);
-
-  await rpc(env, 'nest_link_save_access_token', {
-    p_household: household,
-    p_access_token: token.accessToken,
-    p_expires_at: token.expiresAt.toISOString(),
-  });
-
-  return json({ linked: true, deviceLabel: chosen.label });
-}
-
 async function status(
   env: Env,
   household: string,
@@ -249,8 +184,15 @@ async function command(
   const known = (Array.isArray(row.devices) ? row.devices : [])
     .map((d) => (typeof d?.name === 'string' ? d.name : ''))
     .filter((name) => name.length > 0);
-  const device = asked && known.includes(asked)
-    ? asked
+
+  // An id we do not recognise is refused outright. The fallback below is for
+  // a build that predates multi-device and sends none at all — letting it
+  // also swallow a *mismatch* means a phone still showing a card for a
+  // thermostat that has since been unshared would have its press executed on
+  // whichever one remains. Somebody presses + upstairs and the downstairs
+  // heating goes up, and the answer is `{applied: true}`.
+  const device = asked
+    ? (known.includes(asked) ? asked : '')
     : (known.length === 1 ? known[0] : '');
   if (!device) {
     return json({ error: 'Hearth does not know that thermostat.' }, 409);
@@ -316,26 +258,18 @@ async function readAll(
 ): Promise<Snapshot[]> {
   const token = await accessToken(env, household, row);
 
+  // Re-listed when the stored list is empty *or* stale. Frozen after the
+  // first link, a thermostat removed from the Google share stayed in the list
+  // for ever — every poll 404'd on it, the 404 threw out of the loop, and the
+  // screen showed no thermostat at all including the working one. A newly
+  // shared thermostat never appeared either.
   let devices = Array.isArray(row.devices) ? row.devices : [];
   if (devices.length === 0) {
-    // A link made before Hearth kept more than one, or one that has never
-    // been asked. One `devices.list` against the project, not the device.
-    const listed = thermostatsIn(await sdm(env, token, '/devices'));
-    if (listed.length === 0) {
-      throw new TokenRefused(
-        404,
-        'No thermostat is shared with Hearth any more. Link again and tick '
-          + 'it in Google\u2019s device list.',
-      );
-    }
-    devices = listed;
-    await rpc(env, 'nest_link_save_devices', {
-      p_household: household,
-      p_devices: listed,
-    });
+    devices = await relist(env, household, token);
   }
 
   const out: Snapshot[] = [];
+  const gone: string[] = [];
   for (const device of devices) {
     const name = typeof device?.name === 'string' ? device.name : '';
     if (!name) continue;
@@ -346,8 +280,44 @@ async function readAll(
     if (!(await takeCall(env, household, name))) throw overBudget();
 
     const path = `/${name.replace(/^enterprises\/[^/]+\//, '')}`;
-    const snapshot = snapshotOf(await sdm(env, token, path, {}, name));
-    if (snapshot) out.push(snapshot);
+    // A device that cannot be read must not take the others down with it,
+    // so the throw is caught here rather than ending the loop.
+    let payload: unknown = null;
+    try {
+      payload = await sdm(env, token, path, {}, name);
+    } catch (error) {
+      // A dead credential is not a dead device, and must still stop the poll.
+      if (error instanceof GrantRevoked) throw error;
+    }
+
+    const snapshot = payload === null ? null : snapshotOf(payload);
+    if (snapshot) {
+      out.push(snapshot);
+    } else {
+      // Not silently dropped: a thermostat that vanishes from the screen with
+      // no message is the very fault this list exists to fix. Either it is
+      // gone from the share — in which case the list is re-fetched below — or
+      // it is briefly unreadable, and the caller keeps what it had.
+      gone.push(name);
+    }
+  }
+
+  if (gone.length > 0 && out.length > 0) {
+    // One unreadable device among several. Re-list once: if Google no longer
+    // shares it, the stored list is corrected and it stops costing a call
+    // every minute; if it is merely offline it stays, and the next poll tries
+    // again.
+    const fresh = await relist(env, household, token);
+    const names = new Set(fresh.map((d) => d.name));
+    if (gone.some((name) => !names.has(name))) {
+      // The list changed. What was read this time is still worth showing.
+      return out;
+    }
+    throw new TokenRefused(
+      502,
+      `${gone.length === 1 ? 'A thermostat' : 'Some thermostats'} did not `
+        + 'answer. Hearth is still showing the last reading.',
+    );
   }
 
   if (out.length === 0) {
@@ -358,6 +328,36 @@ async function readAll(
   }
   await note(env, household, true, null);
   return out;
+}
+
+/// Asks Google which thermostats this account shares, and records them.
+///
+/// Budgeted like any other call. The claim was lost in the multi-device
+/// rewrite, which left a household whose list cannot be filled polling Google
+/// unmetered for as long as any screen was open — precisely what the ceiling
+/// exists to prevent. There is no device name to count against yet, so it is
+/// counted against the household under a reserved key.
+async function relist(
+  env: Env,
+  household: string,
+  token: string,
+): Promise<Array<{ name: string; label: string }>> {
+  if (!(await takeCall(env, household, `${household}:list`))) {
+    throw overBudget();
+  }
+  const listed = thermostatsIn(await sdm(env, token, '/devices'));
+  if (listed.length === 0) {
+    throw new TokenRefused(
+      404,
+      'No thermostat is shared with Hearth any more. Link again and tick it '
+        + 'in Google\u2019s device list.',
+    );
+  }
+  await rpc(env, 'nest_link_save_devices', {
+    p_household: household,
+    p_devices: listed,
+  });
+  return listed;
 }
 
 /// The hour's requests are spent for one device.
@@ -624,14 +624,6 @@ async function sha256Hex(value: string): Promise<string> {
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
-}
-
-function safeDecode(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
 }
 
 function rateLimited(): Response {

@@ -356,7 +356,7 @@ Deno.test('every mode reserves something, and no more than it could spend', asyn
   }
 });
 
-Deno.test('a recipe shared as words is reserved for like one', async () => {
+Deno.test('a recipe shared as words is reserved for like one', () => {
   // `extract` was reserved from the cap its *fetched page* is sliced to —
   // 60,000 characters — while the shared-text path is sliced to
   // `MAX_URL_BYTES` instead: two megabytes, some 700,000 tokens. So the

@@ -34,9 +34,14 @@ class FakeThermostat implements ThermostatGateway {
   @override
   String get displayName => 'Google Nest';
 
+  /// What the server says when asked to open a consent attempt.
+  ThermostatException? failConsentWith;
+
   @override
   Future<Uri> consentUrl() async {
     consentUrls++;
+    final ThermostatException? failure = failConsentWith;
+    if (failure != null) throw failure;
     return Uri.parse('https://example.test/consent');
   }
 
@@ -576,6 +581,69 @@ void main() {
     });
   });
 
+  group('two presses in the same breath', () {
+    testWidgets('both reach their thermostat, not just the first', (
+      WidgetTester tester,
+    ) async {
+      // One debounce timer covers the whole screen, so pressing Downstairs and
+      // then Upstairs inside it queues two commands and sends them together.
+      // The loop used to stop at the first failure with the rest already
+      // taken out of the queue — so the upstairs press was thrown away with
+      // no sign of it.
+      final FakeThermostat fake = FakeThermostat(
+        devices: <ThermostatState>[
+          aThermostat(
+            id: 'enterprises/p/devices/down',
+            label: 'Downstairs',
+            ambientC: Temp.fToC(73),
+            heatC: Temp.fToC(70),
+          ),
+          aThermostat(
+            id: 'enterprises/p/devices/up',
+            label: 'Upstairs',
+            ambientC: Temp.fToC(68),
+            heatC: Temp.fToC(66),
+          ),
+        ],
+      );
+      await openHouse(tester, fake);
+
+      await tester.tap(find.byTooltip('Warmer').first);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.byTooltip('Warmer').last);
+      await tester.pump(ThermostatScreen.settleAfter);
+      await pumpFrames(tester);
+
+      expect(fake.sentTo, hasLength(2));
+      expect(fake.sentTo.toSet(), <String>{
+        'enterprises/p/devices/down',
+        'enterprises/p/devices/up',
+      });
+    });
+
+    testWidgets('and a warmer press is not eaten by a fan tap', (
+      WidgetTester tester,
+    ) async {
+      // Keyed by device, the queue held one command per thermostat — so a
+      // second press of a *different* control on the same one replaced the
+      // first. The screen kept showing the setpoint it had dropped until the
+      // next reading quietly put it back.
+      final FakeThermostat fake = FakeThermostat(
+        state: aThermostat(fan: const FanState(isOn: false)),
+      );
+      await openHouse(tester, fake);
+
+      await tester.tap(find.byTooltip('Warmer'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.byType(Switch).last);
+      await tester.pump(ThermostatScreen.settleAfter);
+      await pumpFrames(tester);
+
+      expect(fake.sent.whereType<SetHeat>(), hasLength(1));
+      expect(fake.sent.whereType<SetFanTimer>(), hasLength(1));
+    });
+  });
+
   group('when there is nothing connected', () {
     testWidgets('the screen offers to connect rather than drawing a dial', (
       WidgetTester tester,
@@ -608,6 +676,36 @@ void main() {
       await pumpFrames(tester, frames: 10);
 
       expect(find.text('70°'), findsOneWidget);
+    });
+
+    testWidgets('and a link that will not start stops the waiting', (
+      WidgetTester tester,
+    ) async {
+      // Nothing was opened, so there is nothing to wait for. Left waiting,
+      // the screen polls every three seconds for a flow that never started —
+      // twenty calls a minute for as long as it is open.
+      final FakeThermostat fake = FakeThermostat()
+        ..failConsentWith = const ThermostatException(
+          'Hearth could not work out where to send you to sign in.',
+        );
+      await openHouse(tester, fake);
+
+      await tester.tap(find.text('Connect Google Nest'));
+      await pumpFrames(tester, frames: 10);
+
+      expect(find.textContaining('where to send you'), findsOneWidget);
+      expect(find.textContaining('Finish in your browser'), findsNothing);
+
+      final int after = fake.statusCalls;
+      await tester.pump(ThermostatScreen.whileConnecting);
+      await pumpFrames(tester);
+      await tester.pump(ThermostatScreen.whileConnecting);
+      await pumpFrames(tester);
+      expect(
+        fake.statusCalls,
+        after,
+        reason: 'it kept polling for a flow that never started',
+      );
     });
 
     testWidgets('and waiting asks often enough to notice', (

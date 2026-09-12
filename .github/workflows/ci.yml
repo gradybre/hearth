@@ -91,6 +91,13 @@ jobs:
           find supabase/functions -name index.ts -print0 \
             | xargs -0 deno check --allow-import
 
+      # `deno check` is types only. A duplicate `case` in a switch type-checks
+      # perfectly and silently makes the second clause unreachable — which is
+      # how an "update your app" branch shipped that could never run, and how
+      # the dead handler it was meant to replace kept handling things.
+      - name: Lint
+        run: deno lint supabase/functions/
+
       - name: Test
         run: deno test --allow-import supabase/functions/
 

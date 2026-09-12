@@ -70,7 +70,17 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
 
   Timer? _poll;
   Timer? _settle;
-  final Map<String, ThermostatCommand> _queued = <String, ThermostatCommand>{};
+
+  /// Commands waiting for the presses to stop, by device *and kind*.
+  ///
+  /// Keyed by both, not by device alone. "A burst of taps is one decision"
+  /// holds for repeated presses of one control; it is false across controls.
+  /// Keyed by device, tapping the fan within the debounce of a setpoint press
+  /// replaced the setpoint command — which was then never sent, while the
+  /// screen went on showing the new number until the next reading quietly put
+  /// the old one back.
+  final Map<_Queued, ThermostatCommand> _queued =
+      <_Queued, ThermostatCommand>{};
 
   /// Modes tapped but not yet confirmed, by device.
   ///
@@ -213,7 +223,7 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
           SetFanTimer(:final bool on) => now.copyWith(fan: FanState(isOn: on)),
         },
       };
-      _queued[now.id] = command;
+      _queued[(device: now.id, kind: command.runtimeType)] = command;
     });
 
     _settle?.cancel();
@@ -226,29 +236,31 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
     final ThermostatGateway? gateway = _gateway;
     if (gateway == null || _queued.isEmpty) return;
 
-    final Map<String, ThermostatCommand> going =
-        Map<String, ThermostatCommand>.from(_queued);
+    final Map<_Queued, ThermostatCommand> going =
+        Map<_Queued, ThermostatCommand>.from(_queued);
     _queued.clear();
 
-    try {
-      for (final MapEntry<String, ThermostatCommand> entry in going.entries) {
-        await gateway.send(entry.value, deviceId: entry.key);
+    ThermostatException? failed;
+    for (final MapEntry<_Queued, ThermostatCommand> entry in going.entries) {
+      try {
+        await gateway.send(entry.value, deviceId: entry.key.device);
+      } on ThermostatException catch (error) {
+        // Kept going. Stopping at the first failure left every later command
+        // already taken out of the queue and never sent — press Downstairs,
+        // press Upstairs, watch Downstairs be rate-limited, and the upstairs
+        // press is gone with nothing said about it.
+        failed ??= error;
       }
-      if (!mounted) return;
-      // Not re-read *here*: a command plus an immediate read is two requests
-      // against a five-a-minute ceiling, so a drag would exhaust it. Asking
-      // again shortly is different — the presses have already settled.
-      _poll?.cancel();
-      _poll = Timer(ThermostatScreen.confirmAfter, () {
-        if (mounted) unawaited(_refresh());
-      });
-    } on ThermostatException catch (failure) {
-      if (!mounted) return;
+    }
+    if (!mounted) return;
+
+    final ThermostatException? failure = failed;
+    if (failure != null) {
       setState(() {
         _error = failure.message;
         _needsRelink = failure.needsRelink;
-        // The presses are taken back, because the thermostats did not take
-        // them.
+        // Every press is taken back, because what did land will be in the
+        // reading that follows and what did not never will be.
         _shown = <String, ThermostatState>{
           for (final ThermostatState device
               in _link?.devices ?? const <ThermostatState>[])
@@ -257,6 +269,14 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
         _pendingMode.clear();
       });
     }
+
+    // Not re-read *immediately*: a command plus a read is two requests against
+    // a five-a-minute ceiling, so a drag would exhaust it. Asking again
+    // shortly is different — the presses have already settled.
+    _poll?.cancel();
+    _poll = Timer(ThermostatScreen.confirmAfter, () {
+      if (mounted) unawaited(_refresh());
+    });
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -317,11 +337,20 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
         setState(() {
           _error = failure.message;
           _needsRelink = failure.needsRelink;
+          // Nothing was started, so there is nothing to wait for. Left
+          // waiting, the screen polls every three seconds for a flow that
+          // never opened — twenty calls a minute for as long as it is open.
+          _waiting = false;
+          _poll?.cancel();
         });
       }
     } on Object {
       if (mounted) {
-        setState(() => _error = 'Hearth could not open your browser.');
+        setState(() {
+          _error = 'Hearth could not open your browser.';
+          _waiting = false;
+          _poll?.cancel();
+        });
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -999,3 +1028,6 @@ class _Message extends StatelessWidget {
     );
   }
 }
+
+/// One waiting command's identity: which thermostat, and which control.
+typedef _Queued = ({String device, Type kind});

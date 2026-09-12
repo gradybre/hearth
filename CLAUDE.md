@@ -79,11 +79,13 @@ task seems to require breaking one.
    that could not be linked, with nothing in the message pointing near a
    migration. Put the change in a new file, and run
    `dart run tool/record_migrations.dart` so
-   `test/architecture/migrations_are_history_test.dart` keeps holding the line. Three migrations once sat
-   local-only: the phone kept writing `is_default`, the hosted `upsert_food` had never heard of
-   the column, and every pull quietly reverted it — three features silently broken while every
-   local check passed and every commit said "migration applied". Finish a schema change with
-   `supabase db push`, and confirm with `supabase migration list` that local and remote agree.
+   `test/architecture/migrations_are_history_test.dart` keeps holding the line.
+
+   Three migrations once sat local-only: the phone kept writing `is_default`, the hosted
+   `upsert_food` had never heard of the column, and every pull quietly reverted it — three
+   features silently broken while every local check passed and every commit said "migration
+   applied". Finish a schema change with `supabase db push`, and confirm with
+   `supabase migration list` that local and remote agree.
 
 ## Working style
 
