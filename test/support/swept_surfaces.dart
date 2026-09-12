@@ -290,10 +290,16 @@ const Map<String, String> notSweptYet = <String, String>{
       'shipped unwalked without somebody noticing. Task e31da6f0.',
   'lib/features/foods/menu_import_screen.dart':
       'The reimport review, which asks what to do with menu rows the new '
-      'document does not mention. Walked at three times the text by '
-      'menu_reimport_screen_test.dart instead — it needs a restaurant '
-      'menu already saved and a pasted document that disagrees with it, '
-      'and the sweep fixture has no reason to carry either.',
+      'document does not mention. Its behaviour is covered by '
+      'menu_reimport_screen_test.dart; it is NOT walked at large text by '
+      'anything. Reaching it takes two screens and a pasted document, and at '
+      'twice the text on a 320-point phone the lazy lists on the way have '
+      'not built the controls the walk needs — the attempt spent its time '
+      'scrolling rather than saying anything about the dialog. Said plainly '
+      'rather than left as a test that looks like coverage. It is an '
+      'AlertDialog with `scrollable: true`, the shape that held for the '
+      'duplicate warning at three times the text, so the risk is low and '
+      'unmeasured rather than unknown.',
   'lib/features/foods/merge_screen.dart':
       'The merge review sheet. Walked at three times the text by '
       'merge_screen_test.dart instead — it needs two foods that look '
