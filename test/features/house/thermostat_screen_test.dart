@@ -252,6 +252,85 @@ void main() {
   });
 
   group('changing the mode', () {
+    testWidgets('leaves exactly one chip ticked', (WidgetTester tester) async {
+      // Two ticks is not a state the thermostat can be in. It happened
+      // because the fill read the tapped mode and the tick read the confirmed
+      // one, so a pending change showed both at once — and the tick is there
+      // precisely so the choice is not carried by colour alone.
+      final FakeThermostat fake = FakeThermostat(
+        state: aThermostat(
+          mode: ThermostatMode.heatCool,
+          heatC: Temp.fToC(70),
+          coolC: Temp.fToC(73),
+        ),
+      );
+      await openHouse(tester, fake);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Cool'));
+      await tester.pump();
+
+      final Iterable<ChoiceChip> chips = tester.widgetList<ChoiceChip>(
+        find.byType(ChoiceChip),
+      );
+      expect(chips.where((ChoiceChip c) => c.selected).length, 1);
+      expect(chips.where((ChoiceChip c) => c.avatar != null).length, 1);
+    });
+
+    testWidgets('and says it is switching rather than showing the old mode\'s '
+        'controls', (WidgetTester tester) async {
+      // Tapping Cool while the thermostat is in Heat · Cool left both of
+      // that mode's targets on screen under a Cool chip — a contradiction,
+      // held for as long as the next reading took. Better to admit the
+      // question is open than to answer it with the previous answer.
+      final FakeThermostat fake = FakeThermostat(
+        state: aThermostat(
+          mode: ThermostatMode.heatCool,
+          heatC: Temp.fToC(70),
+          coolC: Temp.fToC(73),
+        ),
+      );
+      await openHouse(tester, fake);
+      expect(find.text('Heat to'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Cool'));
+      await tester.pump();
+
+      expect(find.text('Heat to'), findsNothing);
+      expect(find.text('Cool to'), findsNothing);
+      expect(find.textContaining('Switching to Cool'), findsOneWidget);
+    });
+
+    testWidgets('and asks again soon, not in a minute', (
+      WidgetTester tester,
+    ) async {
+      // A mode change is the one command that leaves the screen unable to
+      // show anything until it is confirmed, so waiting a full polling
+      // interval means a minute of "Switching to…".
+      final FakeThermostat fake = FakeThermostat(
+        state: aThermostat(
+          mode: ThermostatMode.heatCool,
+          heatC: Temp.fToC(70),
+          coolC: Temp.fToC(73),
+        ),
+      );
+      await openHouse(tester, fake);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Cool'));
+      await tester.pump(ThermostatScreen.settleAfter);
+      await pumpFrames(tester);
+
+      fake.state = aThermostat(
+        mode: ThermostatMode.cool,
+        noHeat: true,
+        coolC: Temp.fToC(73),
+      );
+      await tester.pump(ThermostatScreen.confirmAfter);
+      await pumpFrames(tester);
+
+      expect(find.text('Target'), findsOneWidget);
+      expect(find.textContaining('Switching to'), findsNothing);
+    });
+
     testWidgets('does not invent targets the thermostat has not confirmed', (
       WidgetTester tester,
     ) async {
@@ -280,10 +359,10 @@ void main() {
             .selected,
         isTrue,
       );
-      // The targets do not, because the thermostat has not said so yet.
+      // And the targets are withheld, not guessed at.
       expect(find.text('Cool to'), findsNothing);
       expect(find.text('Heat to'), findsNothing);
-      expect(find.text('Target'), findsOneWidget);
+      expect(find.textContaining('Switching to Heat · Cool'), findsOneWidget);
     });
 
     testWidgets('and takes the thermostat\'s word once it answers', (

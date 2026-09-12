@@ -40,6 +40,15 @@ class ThermostatScreen extends ConsumerStatefulWidget {
   /// How often to ask while Google is open in the browser.
   static const Duration whileConnecting = Duration(seconds: 3);
 
+  /// How soon to ask again after sending a command.
+  ///
+  /// A mode change leaves the screen with nothing honest to show until the
+  /// thermostat answers — the old mode's targets are the wrong controls and
+  /// the new mode's are not known yet — so waiting a whole polling interval
+  /// means a minute of "Switching to…". One extra read against a hundred an
+  /// hour is a cheap way to make that a few seconds.
+  static const Duration confirmAfter = Duration(seconds: 5);
+
   @override
   ConsumerState<ThermostatScreen> createState() => _ThermostatScreenState();
 }
@@ -219,9 +228,13 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
     try {
       await gateway.send(command);
       if (!mounted) return;
-      // Not re-read here: a command plus a read is two requests against a
-      // five-a-minute ceiling. The next poll confirms it.
-      _schedulePoll();
+      // Not re-read *here*: a command plus an immediate read is two requests
+      // against a five-a-minute ceiling, so a drag would exhaust it. Asking
+      // again shortly is different — the presses have already settled.
+      _poll?.cancel();
+      _poll = Timer(ThermostatScreen.confirmAfter, () {
+        if (mounted) unawaited(_refresh());
+      });
     } on ThermostatException catch (failure) {
       if (!mounted) return;
       setState(() {
@@ -389,6 +402,16 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
               text:
                   'The thermostat is off. Choose Heat, Cool or Heat · Cool '
                   'to set a temperature.',
+              isError: false,
+            )
+          // A mode change is the one command that makes the controls
+          // themselves wrong: Heat · Cool has two targets and Cool has one,
+          // so leaving the old mode's on screen under the new mode's chip is
+          // a contradiction held for as long as the next reading takes.
+          // Better to admit the question is open.
+          else if (_pendingMode != null && _pendingMode != state.mode)
+            _Message(
+              text: 'Switching to ${_pendingMode!.label}…',
               isError: false,
             )
           else ...<Widget>[
@@ -795,7 +818,7 @@ class _Modes extends StatelessWidget {
             selected: (pending ?? state.mode) == mode,
             // Selected carries a tick as well as a fill, so the choice is not
             // made by colour alone (spec §6.3).
-            avatar: state.mode == mode
+            avatar: (pending ?? state.mode) == mode
                 ? const Icon(Icons.check, size: 18)
                 : null,
             onSelected: (_) => onPick(mode),
