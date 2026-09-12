@@ -199,6 +199,37 @@ class RemoteRows {
         );
   }
 
+  /// A menu's provenance arriving from another device (review N08).
+  ///
+  /// One row per restaurant, so the newest import wins by ordinary
+  /// last-write-wins — which is the right answer: whoever read the menu most
+  /// recently knows best how old it is.
+  Future<void> applyMenuImport(Map<String, Object?> json) async {
+    if (_isDeleted(json)) {
+      await (_db.delete(
+        _db.menuImports,
+      )..where(($MenuImportsTable t) => t.id.equals('${json['id']}'))).go();
+      return;
+    }
+    await _db
+        .into(_db.menuImports)
+        .insertOnConflictUpdate(
+          MenuImportRow(
+            id: '${json['id']}',
+            householdId: '${json['household_id']}',
+            restaurantKey: '${json['restaurant_key'] ?? ''}',
+            restaurant: '${json['restaurant'] ?? ''}',
+            source: json['source'] as String?,
+            documentDate: json['document_date'] == null
+                ? null
+                : _time(json['document_date']),
+            itemCount: _int(json['item_count']) ?? 0,
+            importedAt: _time(json['imported_at']),
+            updatedAt: _time(json['updated_at']),
+          ),
+        );
+  }
+
   /// A saved week arriving from another device (spec §5.6).
   Future<void> applyPlanTemplate(Map<String, Object?> json) async {
     if (_isDeleted(json)) {

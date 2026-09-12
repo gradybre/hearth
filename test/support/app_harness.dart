@@ -30,6 +30,7 @@ import 'package:hearth/data/local/recipe_store.dart';
 import 'package:hearth/data/local/shopping_store.dart';
 import 'package:hearth/data/repositories/shopping_repository.dart';
 import 'package:hearth/domain/cooking/cook_session.dart';
+import 'package:hearth/domain/foods/menu_provenance.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/food_profile.dart';
 import 'package:hearth/domain/models/recipe.dart';
@@ -108,6 +109,9 @@ Future<HearthDatabase> pumpHearthApp(
   /// is comparing seven days had never been drawn with anything on it.
   Map<DateTime, List<MealPlanEntry>> weekEntries =
       const <DateTime, List<MealPlanEntry>>{},
+
+  /// Where each restaurant's menu came from, by normalised name (review N08).
+  Map<String, MenuProvenance> menuProvenance = const <String, MenuProvenance>{},
 
   /// The day the planner is standing on.
   ///
@@ -341,6 +345,14 @@ Future<HearthDatabase> pumpHearthApp(
         // never drive is still open at teardown — which hangs the whole run,
         // not just the test. The list itself is read through the real
         // repository, so building and editing are genuinely exercised.
+        // A live sqlite stream, and the same reasoning again: fake async
+        // cannot drive real I/O, so a subscription left open at teardown
+        // hangs the run rather than failing a test. The eat-out screen
+        // watches this for the provenance line under each restaurant.
+        menuProvenanceProvider.overrideWith(
+          (Ref ref) =>
+              Stream<Map<String, MenuProvenance>>.value(menuProvenance),
+        ),
         shoppingChangesProvider.overrideWith(
           (Ref ref) => const Stream<void>.empty(),
         ),

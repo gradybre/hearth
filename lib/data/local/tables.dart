@@ -298,6 +298,55 @@ class PendingWrites extends Table {
 /// Correcting a match is remembered so the same string never has to be fixed
 /// twice: once "evoo" has been pointed at olive oil, every future recipe line
 /// saying "evoo" resolves on its own.
+/// Where a restaurant's menu came from, and when (review N08).
+///
+/// One row per restaurant rather than one per import. What somebody wants to
+/// know standing in front of a menu is *whose numbers are these and how old
+/// are they* — the source, the date on the document, how many rows it had and
+/// when it was last read. A history of every attempt answers a different
+/// question that nobody has asked.
+///
+/// Household-scoped, like the imports it describes. §5.2 seeds chains
+/// globally and those are server-owned; provenance for what this household
+/// pasted in is this household's, and a row here never describes a seeded
+/// catalogue.
+@DataClassName('MenuImportRow')
+class MenuImports extends Table {
+  TextColumn get id => text()();
+  TextColumn get householdId => text()();
+
+  /// The brand every food on the menu carries, normalised — the same key the
+  /// menu itself is grouped by, so the two cannot come to disagree about
+  /// which restaurant this describes.
+  TextColumn get restaurantKey => text()();
+
+  /// As typed, for showing.
+  TextColumn get restaurant => text()();
+
+  /// Where the numbers came from: a URL, a file name, or whatever was said.
+  TextColumn get source => text().nullable()();
+
+  /// The date printed on the document, which is not the date it was read.
+  /// A sheet published in March and pasted in September is nine months old
+  /// however fresh the import is.
+  DateTimeColumn get documentDate => dateTime().nullable()();
+
+  /// How many rows the last import wrote.
+  IntColumn get itemCount => integer()();
+
+  /// When it was last read.
+  DateTimeColumn get importedAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+
+  @override
+  List<Set<Column<Object>>> get uniqueKeys => <Set<Column<Object>>>[
+    <Column<Object>>{householdId, restaurantKey},
+  ];
+}
+
 @DataClassName('IngredientMatchRow')
 class IngredientMatches extends Table {
   TextColumn get id => text()();

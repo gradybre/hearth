@@ -22,7 +22,7 @@ abstract final class BuildInfo {
   /// Worth showing beside the app version rather than instead of it: the two
   /// come apart. A build that failed to migrate is the same app on an older
   /// schema, and that is precisely the state somebody would be reporting.
-  static const int schemaVersion = 26;
+  static const int schemaVersion = 27;
 
   /// The version an export would be written as (spec §7.4).
   ///

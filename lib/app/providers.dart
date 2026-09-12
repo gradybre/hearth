@@ -59,6 +59,7 @@ import '../data/repositories/food_merge_repository.dart';
 import '../data/repositories/food_profile_repository.dart';
 import '../data/repositories/food_repository.dart';
 import '../data/repositories/ingredient_match_repository.dart';
+import '../data/repositories/menu_import_repository.dart';
 import '../data/repositories/plan_repository.dart';
 import '../data/repositories/recipe_repository.dart';
 import '../data/repositories/shopping_repository.dart';
@@ -72,6 +73,7 @@ import '../data/sync/sync_scope.dart';
 import '../domain/cooking/cook_session.dart';
 import '../domain/foods/food_merge.dart';
 import '../domain/foods/food_query.dart';
+import '../domain/foods/menu_provenance.dart';
 import '../domain/foods/no_match_rule.dart';
 import '../domain/models/food.dart';
 import '../domain/models/food_profile.dart';
@@ -658,6 +660,30 @@ final Provider<AsyncValue<List<Recipe>>> filteredRecipesProvider =
         ),
       );
     });
+
+/// Where each restaurant's menu came from (review N08).
+final Provider<MenuImportRepository> menuImportRepositoryProvider =
+    Provider<MenuImportRepository>(
+      (Ref ref) => MenuImportRepository(
+        database: ref.watch(databaseProvider),
+        queue: ref.watch(pendingWriteStoreProvider),
+        householdId: ref.watch(currentHouseholdIdProvider),
+      ),
+    );
+
+/// Every menu's provenance, keyed by the normalised restaurant.
+final StreamProvider<Map<String, MenuProvenance>> menuProvenanceProvider =
+    StreamProvider<Map<String, MenuProvenance>>(
+      (Ref ref) => ref
+          .watch(menuImportRepositoryProvider)
+          .watchAll()
+          .map(
+            (List<MenuProvenance> all) => <String, MenuProvenance>{
+              for (final MenuProvenance one in all)
+                normaliseKey(one.restaurant): one,
+            },
+          ),
+    );
 
 /// Merging two foods that are the same thing (review N05).
 final Provider<FoodMergeRepository> foodMergeRepositoryProvider =
