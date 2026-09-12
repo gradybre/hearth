@@ -13,12 +13,20 @@ import '../../support/app_harness.dart';
 /// Everything here runs against a fake gateway. What cannot be covered from a
 /// keyboard is named in the group at the bottom.
 class FakeThermostat implements ThermostatGateway {
-  FakeThermostat({this.state, this.failWith});
+  FakeThermostat({
+    ThermostatState? state,
+    List<ThermostatState>? devices,
+    this.failWith,
+  }) : devices = devices ?? <ThermostatState>[?state];
 
-  ThermostatState? state;
+  List<ThermostatState> devices;
   ThermostatException? failWith;
 
+  /// The one thermostat, for the many tests that only need one.
+  set state(ThermostatState? value) => devices = <ThermostatState>[?value];
+
   final List<ThermostatCommand> sent = <ThermostatCommand>[];
+  final List<String> sentTo = <String>[];
   int statusCalls = 0;
   int unlinks = 0;
   int consentUrls = 0;
@@ -33,34 +41,40 @@ class FakeThermostat implements ThermostatGateway {
   }
 
   /// What the callback does, out of band, once Google has redirected.
-  void linkFinishesInTheBrowser() => state = aThermostat();
+  void linkFinishesInTheBrowser() => devices = <ThermostatState>[aThermostat()];
 
   @override
   Future<ThermostatLink> status() async {
     statusCalls++;
     final ThermostatException? failure = failWith;
     if (failure != null) throw failure;
-    final ThermostatState? now = state;
-    return now == null
+    return devices.isEmpty
         ? const ThermostatLink.unlinked()
-        : ThermostatLink.linked(state: now, linkedByYou: true);
+        : ThermostatLink.linked(devices: devices, linkedByYou: true);
   }
 
   @override
-  Future<void> send(ThermostatCommand command) async {
+  Future<void> send(
+    ThermostatCommand command, {
+    required String deviceId,
+  }) async {
     final ThermostatException? failure = failWith;
     if (failure != null) throw failure;
     sent.add(command);
+    sentTo.add(deviceId);
   }
 
   @override
   Future<void> unlink() async {
     unlinks++;
-    state = null;
+    devices = <ThermostatState>[];
   }
 }
 
 ThermostatState aThermostat({
+  String id = 'enterprises/p/devices/downstairs',
+  String label = 'Hallway',
+  double? ambientC,
   ThermostatMode mode = ThermostatMode.heat,
   double? heatC,
   double? coolC,
@@ -74,8 +88,9 @@ ThermostatState aThermostat({
   HvacStatus hvac = HvacStatus.heating,
   Set<ThermostatMode>? availableModes,
 }) => ThermostatState(
-  label: 'Hallway',
-  ambientC: Temp.fToC(70),
+  id: id,
+  label: label,
+  ambientC: ambientC ?? Temp.fToC(70),
   humidityPercent: 43,
   mode: mode,
   availableModes:
@@ -475,6 +490,89 @@ void main() {
       final SetRange sent = fake.sent.single as SetRange;
       expect(Temp.displayF(sent.heatC), 69);
       expect(Temp.displayF(sent.coolC), 76, reason: 'the other one held');
+    });
+  });
+
+  group('a house with two thermostats', () {
+    FakeThermostat aHouse() => FakeThermostat(
+      devices: <ThermostatState>[
+        aThermostat(
+          id: 'enterprises/p/devices/down',
+          label: 'Downstairs',
+          ambientC: Temp.fToC(73),
+          heatC: Temp.fToC(70),
+        ),
+        aThermostat(
+          id: 'enterprises/p/devices/up',
+          label: 'Upstairs',
+          ambientC: Temp.fToC(68),
+          heatC: Temp.fToC(66),
+        ),
+      ],
+    );
+
+    testWidgets('shows both, rather than whichever Google listed first', (
+      WidgetTester tester,
+    ) async {
+      // The first cut took `thermostats[0]` and pinned it, so the other floor
+      // did not exist as far as Hearth was concerned — and a house with one
+      // thermostat could not tell the difference.
+      await openHouse(tester, aHouse());
+
+      expect(find.text('Downstairs'), findsOneWidget);
+      expect(find.text('Upstairs'), findsOneWidget);
+      expect(find.text('70°'), findsOneWidget);
+      expect(find.text('66°'), findsOneWidget);
+    });
+
+    testWidgets('and a press goes to the one you pressed', (
+      WidgetTester tester,
+    ) async {
+      // Both cards carry a control called "Warmer". Sending to the wrong one
+      // turns the heating up in the wrong half of the house, which is the
+      // kind of wrong nobody notices until they are cold.
+      final FakeThermostat fake = aHouse();
+      await openHouse(tester, fake);
+
+      await tester.tap(find.byTooltip('Warmer').last);
+      await tester.pump(ThermostatScreen.settleAfter);
+      await pumpFrames(tester);
+
+      expect(fake.sentTo, <String>['enterprises/p/devices/up']);
+      expect(Temp.displayF((fake.sent.single as SetHeat).heatC), 67);
+    });
+
+    testWidgets('and one thermostat\'s mode change leaves the other alone', (
+      WidgetTester tester,
+    ) async {
+      final FakeThermostat fake = aHouse();
+      await openHouse(tester, fake);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Cool').first);
+      await tester.pump();
+
+      // Downstairs is switching; Upstairs still shows its target.
+      expect(find.textContaining('Switching to Cool'), findsOneWidget);
+      expect(find.text('66°'), findsOneWidget);
+    });
+
+    testWidgets('and a reading in a different order does not move a press', (
+      WidgetTester tester,
+    ) async {
+      // Keyed by device, not by position. Google does not promise an order,
+      // and a list that came back the other way round would otherwise hand
+      // Downstairs's pending change to Upstairs.
+      final FakeThermostat fake = aHouse();
+      await openHouse(tester, fake);
+
+      fake.devices = fake.devices.reversed.toList();
+      await tester.pump(ThermostatScreen.pollEvery);
+      await pumpFrames(tester);
+
+      expect(find.text('Downstairs'), findsOneWidget);
+      expect(find.text('Upstairs'), findsOneWidget);
+      expect(find.text('70°'), findsOneWidget);
+      expect(find.text('66°'), findsOneWidget);
     });
   });
 

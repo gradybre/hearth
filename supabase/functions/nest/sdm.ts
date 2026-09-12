@@ -15,6 +15,10 @@ const THERMOSTAT = 'sdm.devices.types.THERMOSTAT';
 
 /// What one thermostat says it is, in the shape the app reads.
 export interface Snapshot {
+  /// The SDM resource name. What a command names, and what the per-device
+  /// rate budget is counted against — a household with two thermostats has
+  /// two of everything, including Google's ceiling.
+  id: string;
   label: string;
   ambientC: number;
   humidityPercent: number | null;
@@ -88,6 +92,7 @@ export function snapshotOf(device: unknown): Snapshot | null {
   );
 
   return {
+    id: asString(record?.name) ?? '',
     label: labelOf(record ?? {}),
     ambientC: ambient,
     humidityPercent: asNumber(

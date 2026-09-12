@@ -82,6 +82,12 @@ Deno.serve(async (request: Request): Promise<Response> => {
       p_device_name: chosen.name,
       p_device_label: chosen.label,
     });
+    // All of them, not just the first. A house with Downstairs and Upstairs
+    // had one of them silently not exist.
+    await rpc(env, 'nest_link_save_devices', {
+      p_household: claim.household_id,
+      p_devices: thermostats,
+    });
     await rpc(env, 'nest_link_save_access_token', {
       p_household: claim.household_id,
       p_access_token: token.accessToken,
@@ -89,8 +95,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
     });
 
     return page(
-      `Hearth is connected to ${escapeHtml(chosen.label)}. `
-        + 'You can close this tab and go back to Hearth.',
+      `Hearth is connected to ${
+        escapeHtml(thermostats.map((t) => t.label).join(' and '))
+      }. You can close this tab and go back to Hearth.`,
       true,
     );
   } catch (error) {

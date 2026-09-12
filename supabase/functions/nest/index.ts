@@ -221,7 +221,7 @@ async function status(
   const row = await readLink(env, household);
   if (!row || !row.refresh_token) return json({ linked: false });
 
-  const device = await read(env, household, row);
+  const devices = await readAll(env, household, row);
   // Whether *you* linked it, rather than the raw uuid of whoever did. A uuid
   // on screen says nothing, and resolving it to a name would be another query
   // for a sentence that only needs to distinguish two people.
@@ -230,7 +230,7 @@ async function status(
     linked: true,
     linkedAt: row.linked_at,
     linkedByYou: me !== null && me === row.linked_by,
-    device,
+    devices,
   });
 }
 
@@ -241,22 +241,33 @@ async function command(
 ): Promise<Response> {
   const row = await readLink(env, household);
   if (!row || !row.refresh_token) return json({ linked: false });
-  if (!row.device_name) {
-    return json({ error: 'Hearth has not found the thermostat yet.' }, 409);
+
+  // Named by the caller, and checked against what this household actually
+  // shared — the device id decides which thermostat moves, so taking it on
+  // trust would let any signed-in member address a device by guessing.
+  const asked = typeof body.deviceId === 'string' ? body.deviceId : '';
+  const known = (Array.isArray(row.devices) ? row.devices : [])
+    .map((d) => (typeof d?.name === 'string' ? d.name : ''))
+    .filter((name) => name.length > 0);
+  const device = asked && known.includes(asked)
+    ? asked
+    : (known.length === 1 ? known[0] : '');
+  if (!device) {
+    return json({ error: 'Hearth does not know that thermostat.' }, 409);
   }
 
   const wire = commandBody(body.command);
   if (!wire) return json({ error: 'That is not a command Hearth sends.' }, 400);
 
   const token = await accessToken(env, household, row);
-  if (!(await takeCall(env, household))) return rateLimited();
+  if (!(await takeCall(env, household, device))) return rateLimited();
 
   await sdm(
     env,
     token,
-    `/${row.device_name.replace(/^enterprises\/[^/]+\//, '')}:executeCommand`,
+    `/${device.replace(/^enterprises\/[^/]+\//, '')}:executeCommand`,
     { method: 'POST', body: JSON.stringify(wire) },
-    row.device_name,
+    device,
   );
   await note(env, household, true, null);
 
@@ -292,55 +303,64 @@ async function unlink(env: Env, household: string): Promise<Response> {
 
 // ── Reading the device ──────────────────────────────────────────────────────
 
-/// The thermostat as it is now.
+/// Every thermostat this household shared, as they are now.
 ///
-/// Throws rather than returning null when it cannot be read. Answering
-/// `{linked: true, device: null}` would be the server saying "you have a
-/// thermostat and here is nothing", which the app can only read as having no
-/// thermostat — so spending the hour's budget would put a Connect button in
-/// front of somebody whose link is perfectly good, and pressing it would start
-/// a fresh consent flow for no reason.
-async function read(
+/// Throws rather than returning an empty list when they cannot be read.
+/// Answering "you have thermostats and here are none" would be the server
+/// saying the household has nothing connected, which puts a Connect button in
+/// front of somebody whose link is fine.
+async function readAll(
   env: Env,
   household: string,
   row: LinkRow,
-): Promise<Snapshot> {
+): Promise<Snapshot[]> {
   const token = await accessToken(env, household, row);
 
-  let deviceName = row.device_name;
-  if (!deviceName) {
-    if (!(await takeCall(env, household))) throw overBudget();
-    const thermostats = thermostatsIn(await sdm(env, token, '/devices'));
-    if (thermostats.length === 0) {
+  let devices = Array.isArray(row.devices) ? row.devices : [];
+  if (devices.length === 0) {
+    // A link made before Hearth kept more than one, or one that has never
+    // been asked. One `devices.list` against the project, not the device.
+    const listed = thermostatsIn(await sdm(env, token, '/devices'));
+    if (listed.length === 0) {
       throw new TokenRefused(
         404,
         'No thermostat is shared with Hearth any more. Link again and tick '
           + 'it in Google\u2019s device list.',
       );
     }
-    deviceName = thermostats[0].name;
-    await rpc(env, 'nest_link_pin_device', {
+    devices = listed;
+    await rpc(env, 'nest_link_save_devices', {
       p_household: household,
-      p_device_name: deviceName,
-      p_device_label: thermostats[0].label,
+      p_devices: listed,
     });
   }
 
-  if (!(await takeCall(env, household))) throw overBudget();
-  const path = `/${deviceName.replace(/^enterprises\/[^/]+\//, '')}`;
-  const device = await sdm(env, token, path, {}, deviceName);
-  const snapshot = snapshotOf(device);
-  if (!snapshot) {
+  const out: Snapshot[] = [];
+  for (const device of devices) {
+    const name = typeof device?.name === 'string' ? device.name : '';
+    if (!name) continue;
+
+    // Per device, because Google's hundred an hour is per device. A household
+    // counter would have throttled a two-thermostat house at half the
+    // allowance it actually has.
+    if (!(await takeCall(env, household, name))) throw overBudget();
+
+    const path = `/${name.replace(/^enterprises\/[^/]+\//, '')}`;
+    const snapshot = snapshotOf(await sdm(env, token, path, {}, name));
+    if (snapshot) out.push(snapshot);
+  }
+
+  if (out.length === 0) {
     throw new TokenRefused(
       502,
       'The thermostat answered with something Hearth cannot read.',
     );
   }
   await note(env, household, true, null);
-  return snapshot;
+  return out;
 }
 
-/// The hour's requests are spent.
+/// The hour's requests are spent for one device.
 ///
 /// A `TokenRefused` rather than a bare error so the caller answers it as
 /// weather — the link is fine and asking again later works.
@@ -379,10 +399,15 @@ async function accessToken(
   return token.accessToken;
 }
 
-/// Claims one request against the hour's budget, or false if it is spent.
-async function takeCall(env: Env, household: string): Promise<boolean> {
-  const taken = await rpcOne(env, 'nest_link_take_call', {
+/// Claims one request against one device's hour, or false if it is spent.
+async function takeCall(
+  env: Env,
+  household: string,
+  device: string,
+): Promise<boolean> {
+  const taken = await rpcOne(env, 'nest_take_device_call', {
     p_household: household,
+    p_device: device,
     p_limit: CALLS_PER_HOUR,
   });
   return typeof taken === 'number';
@@ -445,6 +470,7 @@ interface LinkRow {
   access_token_expires_at: string | null;
   device_name: string | null;
   device_label: string | null;
+  devices: Array<{ name?: string; label?: string }> | null;
   linked_by: string;
   linked_at: string;
 }

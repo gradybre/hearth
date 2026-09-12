@@ -2,6 +2,7 @@ import 'package:hearth/domain/house/thermostat.dart';
 import 'package:test/test.dart';
 
 ThermostatState aThermostat({
+  String id = 'enterprises/p/devices/d-1',
   String label = 'Hallway',
   double ambientC = 21,
   double? humidityPercent = 44,
@@ -13,6 +14,7 @@ ThermostatState aThermostat({
   EcoMode eco = EcoMode.off,
   FanState? fan,
 }) => ThermostatState(
+  id: id,
   label: label,
   ambientC: ambientC,
   humidityPercent: humidityPercent,

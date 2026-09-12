@@ -12,28 +12,62 @@ void main() {
           'linked': true,
           'linkedByYou': true,
           'linkedAt': '2026-09-13T12:00:00Z',
-          'device': <Object?, Object?>{
-            'label': 'Hallway',
-            'ambientC': 21.4,
-            'humidityPercent': 43,
-            'mode': 'HEAT',
-            'availableModes': <Object?>['OFF', 'HEAT'],
-            'hvac': 'HEATING',
-            'heatC': 20.0,
-            'eco': 'OFF',
-          },
+          'devices': <Object?>[
+            <Object?, Object?>{
+              'id': 'enterprises/p/devices/d-1',
+              'label': 'Hallway',
+              'ambientC': 21.4,
+              'humidityPercent': 43,
+              'mode': 'HEAT',
+              'availableModes': <Object?>['OFF', 'HEAT'],
+              'hvac': 'HEATING',
+              'heatC': 20.0,
+              'eco': 'OFF',
+            },
+          ],
         },
       );
 
       expect(link.isLinked, isTrue);
       expect(link.linkedByYou, isTrue);
-      expect(link.state!.label, 'Hallway');
-      expect(link.state!.mode, ThermostatMode.heat);
-      expect(link.state!.availableModes, <ThermostatMode>{
+      expect(link.devices.single.id, 'enterprises/p/devices/d-1');
+      expect(link.devices.single.label, 'Hallway');
+      expect(link.devices.single.mode, ThermostatMode.heat);
+      expect(link.devices.single.availableModes, <ThermostatMode>{
         ThermostatMode.off,
         ThermostatMode.heat,
       });
-      expect(link.state!.hasFan, isFalse);
+      expect(link.devices.single.hasFan, isFalse);
+    });
+
+    test('a house with two thermostats keeps both', () {
+      // The first cut kept `thermostats[0]`, so a second floor did not exist.
+      final ThermostatLink link = EdgeFunctionThermostat.linkFrom(
+        <Object?, Object?>{
+          'linked': true,
+          'devices': <Object?>[
+            <Object?, Object?>{
+              'id': 'down',
+              'label': 'Downstairs',
+              'ambientC': 22,
+              'mode': 'HEAT',
+              'eco': 'OFF',
+            },
+            <Object?, Object?>{
+              'id': 'up',
+              'label': 'Upstairs',
+              'ambientC': 19,
+              'mode': 'HEAT',
+              'eco': 'OFF',
+            },
+          ],
+        },
+      );
+
+      expect(link.devices.map((ThermostatState d) => d.label), <String>[
+        'Downstairs',
+        'Upstairs',
+      ]);
     });
 
     test('and a household that has never linked one', () {
@@ -51,7 +85,7 @@ void main() {
       expect(
         () => EdgeFunctionThermostat.linkFrom(<Object?, Object?>{
           'linked': true,
-          'device': null,
+          'devices': <Object?>[],
         }),
         throwsA(isA<ThermostatException>()),
       );
@@ -61,20 +95,22 @@ void main() {
       final ThermostatLink link = EdgeFunctionThermostat.linkFrom(
         <Object?, Object?>{
           'linked': true,
-          'device': <Object?, Object?>{
-            'label': 'Hallway',
-            'ambientC': 20,
-            'mode': 'DEHUMIDIFY',
-            'availableModes': <Object?>['OFF', 'DEHUMIDIFY'],
-            'hvac': 'DEFROSTING',
-            'eco': 'OFF',
-          },
+          'devices': <Object?>[
+            <Object?, Object?>{
+              'label': 'Hallway',
+              'ambientC': 20,
+              'mode': 'DEHUMIDIFY',
+              'availableModes': <Object?>['OFF', 'DEHUMIDIFY'],
+              'hvac': 'DEFROSTING',
+              'eco': 'OFF',
+            },
+          ],
         },
       );
 
-      expect(link.state!.mode, ThermostatMode.unknown);
-      expect(link.state!.hvac, HvacStatus.unknown);
-      expect(link.state!.availableModes, <ThermostatMode>{
+      expect(link.devices.single.mode, ThermostatMode.unknown);
+      expect(link.devices.single.hvac, HvacStatus.unknown);
+      expect(link.devices.single.availableModes, <ThermostatMode>{
         ThermostatMode.off,
       }, reason: 'an unknown mode is not offered as a button');
     });
@@ -83,7 +119,9 @@ void main() {
       expect(
         () => EdgeFunctionThermostat.linkFrom(<Object?, Object?>{
           'linked': true,
-          'device': <Object?, Object?>{'label': 'Hallway'},
+          'devices': <Object?>[
+            <Object?, Object?>{'label': 'Hallway'},
+          ],
         }),
         throwsA(isA<ThermostatException>()),
       );

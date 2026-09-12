@@ -206,6 +206,7 @@ final class SetFanTimer extends ThermostatCommand {
 @immutable
 class ThermostatState {
   const ThermostatState({
+    required this.id,
     required this.label,
     required this.ambientC,
     required this.mode,
@@ -218,8 +219,14 @@ class ThermostatState {
     this.fan,
   });
 
-  /// What the Nest app calls it — "Hallway", usually. Shown so a house with
-  /// two thermostats one day does not have two identical screens.
+  /// Which thermostat this is, as the API names it.
+  ///
+  /// A house has more than one — Downstairs and Upstairs — so a command has to
+  /// say which one it is for, and a screen has to keep two readings apart.
+  final String id;
+
+  /// What the Nest app calls it — "Downstairs". Shown so two thermostats are
+  /// not two identical screens.
   final String label;
 
   final double ambientC;
@@ -466,6 +473,7 @@ class ThermostatState {
     double? heatC,
     double? coolC,
   }) => ThermostatState(
+    id: id,
     label: label,
     ambientC: ambientC,
     humidityPercent: humidityPercent,
@@ -490,6 +498,7 @@ class ThermostatState {
   /// than one round trip.
   ThermostatState withSetpoints({double? heatC, double? coolC}) =>
       ThermostatState(
+        id: id,
         label: label,
         ambientC: ambientC,
         humidityPercent: humidityPercent,
@@ -505,6 +514,7 @@ class ThermostatState {
   @override
   bool operator ==(Object other) =>
       other is ThermostatState &&
+      other.id == id &&
       other.label == label &&
       other.ambientC == ambientC &&
       other.humidityPercent == humidityPercent &&
@@ -522,6 +532,7 @@ class ThermostatState {
 
   @override
   int get hashCode => Object.hash(
+    id,
     label,
     ambientC,
     humidityPercent,

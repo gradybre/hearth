@@ -52,9 +52,13 @@ class EdgeFunctionThermostat implements ThermostatGateway {
   /// next poll, at most a minute away, is what confirms it against the
   /// thermostat's own account of itself.
   @override
-  Future<void> send(ThermostatCommand command) async {
+  Future<void> send(
+    ThermostatCommand command, {
+    required String deviceId,
+  }) async {
     await _invoke(<String, Object?>{
       'action': 'command',
+      'deviceId': deviceId,
       'command': wireFor(command),
     });
   }
@@ -105,16 +109,23 @@ class EdgeFunctionThermostat implements ThermostatGateway {
   /// this directly.
   static ThermostatLink linkFrom(Map<Object?, Object?> envelope) {
     if (envelope['linked'] != true) return const ThermostatLink.unlinked();
-    final Object? device = envelope['device'];
-    if (device is! Map) {
+
+    final Object? listed = envelope['devices'];
+    final List<ThermostatState> devices = <ThermostatState>[
+      if (listed is List)
+        for (final Object? device in listed)
+          if (device is Map) stateFrom(device),
+    ];
+
+    if (devices.isEmpty) {
       // Linked, and nothing to show. That is a failure, not an absence: the
-      // server said this household *has* a thermostat, so reporting no
-      // thermostat would put a Connect button in front of somebody whose link
-      // is fine, and pressing it starts a consent flow for no reason.
+      // server said this household *has* thermostats, so reporting none would
+      // put a Connect button in front of somebody whose link is fine, and
+      // pressing it starts a consent flow for no reason.
       throw const ThermostatException('The thermostat did not answer.');
     }
     return ThermostatLink.linked(
-      state: stateFrom(device),
+      devices: devices,
       linkedAt: _time(envelope['linkedAt']),
       linkedByYou: envelope['linkedByYou'] == true,
     );
@@ -130,6 +141,7 @@ class EdgeFunctionThermostat implements ThermostatGateway {
     final Object? modes = device['availableModes'];
 
     return ThermostatState(
+      id: _text(device['id']) ?? '',
       label:
           device['label'] is String && (device['label']! as String).isNotEmpty
           ? device['label']! as String

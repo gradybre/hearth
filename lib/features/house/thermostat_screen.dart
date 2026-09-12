@@ -55,7 +55,13 @@ class ThermostatScreen extends ConsumerStatefulWidget {
 
 class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
   ThermostatLink? _link;
-  ThermostatState? _shown;
+
+  /// What each thermostat is showing, keyed by [ThermostatState.id].
+  ///
+  /// A map rather than one state, because a house has more than one — and
+  /// keyed rather than positional, so a reading that comes back in a
+  /// different order does not move somebody's press onto the other floor.
+  Map<String, ThermostatState> _shown = <String, ThermostatState>{};
   String? _error;
   bool _needsRelink = false;
   bool _busy = false;
@@ -64,9 +70,9 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
 
   Timer? _poll;
   Timer? _settle;
-  ThermostatCommand? _queued;
+  final Map<String, ThermostatCommand> _queued = <String, ThermostatCommand>{};
 
-  /// A mode tapped but not yet confirmed.
+  /// Modes tapped but not yet confirmed, by device.
   ///
   /// Held apart from [_shown] on purpose. Folding it in would change which
   /// *controls* the screen believes exist — Cool reports one setpoint and
@@ -74,7 +80,7 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
   /// the previous mode's numbers and label it with the new mode. Which
   /// controls exist is not something the app gets to guess; a chip answering
   /// a tap is.
-  ThermostatMode? _pendingMode;
+  final Map<String, ThermostatMode> _pendingMode = <String, ThermostatMode>{};
 
   /// True between opening Google and the link appearing.
   ///
@@ -133,11 +139,13 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
       if (!mounted) return;
       setState(() {
         _link = link;
-        // What the thermostat says replaces what we hoped it would say. A
+        // What the thermostats say replaces what we hoped they would say. A
         // pending press is either confirmed by this or quietly corrected —
-        // and either way the number on screen is now the device's own.
-        _shown = link.state;
-        _pendingMode = null;
+        // and either way the numbers on screen are now the devices' own.
+        _shown = <String, ThermostatState>{
+          for (final ThermostatState device in link.devices) device.id: device,
+        };
+        _pendingMode.clear();
         _readAt = DateTime.now();
         _error = null;
         _needsRelink = false;
@@ -163,15 +171,12 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
   }
 
   /// A press of − or +, which the state turns into a command or a reason.
-  void _step(int degrees, {required bool heat}) {
-    final ThermostatState? now = _shown;
-    if (now == null) return;
-
+  void _step(ThermostatState now, int degrees, {required bool heat}) {
     final ThermostatCommand? command = degrees > 0
         ? now.warmer(degrees, heat: heat)
         : now.cooler(-degrees, heat: heat);
     if (command != null) {
-      _press(command);
+      _press(now, command);
       return;
     }
     // A button that does nothing is indistinguishable from a broken app.
@@ -183,10 +188,7 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
   }
 
   /// Shows a press immediately and sends it once the presses stop.
-  void _press(ThermostatCommand? command) {
-    final ThermostatState? now = _shown;
-    if (command == null || now == null) return;
-
+  void _press(ThermostatState now, ThermostatCommand command) {
     final String? refusal = now.refuse(command);
     if (refusal != null) {
       setState(() => _error = refusal);
@@ -195,22 +197,23 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
 
     setState(() {
       _error = null;
-      _pendingMode = command is SetMode ? command.mode : _pendingMode;
-      _shown = switch (command) {
-        SetHeat(:final double heatC) => now.withSetpoints(heatC: heatC),
-        SetCool(:final double coolC) => now.withSetpoints(coolC: coolC),
-        SetRange(:final double heatC, :final double coolC) => now.withSetpoints(
-          heatC: heatC,
-          coolC: coolC,
-        ),
-        // Not the mode: see [_pendingMode]. The chip is updated separately.
-        SetMode() => now,
-        SetEco(:final bool on) => now.copyWith(
-          eco: on ? EcoMode.manualEco : EcoMode.off,
-        ),
-        SetFanTimer(:final bool on) => now.copyWith(fan: FanState(isOn: on)),
+      if (command is SetMode) _pendingMode[now.id] = command.mode;
+      _shown = <String, ThermostatState>{
+        ..._shown,
+        now.id: switch (command) {
+          SetHeat(:final double heatC) => now.withSetpoints(heatC: heatC),
+          SetCool(:final double coolC) => now.withSetpoints(coolC: coolC),
+          SetRange(:final double heatC, :final double coolC) =>
+            now.withSetpoints(heatC: heatC, coolC: coolC),
+          // Not the mode: see [_pendingMode]. The chip is updated separately.
+          SetMode() => now,
+          SetEco(:final bool on) => now.copyWith(
+            eco: on ? EcoMode.manualEco : EcoMode.off,
+          ),
+          SetFanTimer(:final bool on) => now.copyWith(fan: FanState(isOn: on)),
+        },
       };
-      _queued = command;
+      _queued[now.id] = command;
     });
 
     _settle?.cancel();
@@ -220,13 +223,17 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
   }
 
   Future<void> _send() async {
-    final ThermostatCommand? command = _queued;
     final ThermostatGateway? gateway = _gateway;
-    if (command == null || gateway == null) return;
-    _queued = null;
+    if (gateway == null || _queued.isEmpty) return;
+
+    final Map<String, ThermostatCommand> going =
+        Map<String, ThermostatCommand>.from(_queued);
+    _queued.clear();
 
     try {
-      await gateway.send(command);
+      for (final MapEntry<String, ThermostatCommand> entry in going.entries) {
+        await gateway.send(entry.value, deviceId: entry.key);
+      }
       if (!mounted) return;
       // Not re-read *here*: a command plus an immediate read is two requests
       // against a five-a-minute ceiling, so a drag would exhaust it. Asking
@@ -240,9 +247,14 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
       setState(() {
         _error = failure.message;
         _needsRelink = failure.needsRelink;
-        // The press is taken back, because the thermostat did not take it.
-        _shown = _link?.state;
-        _pendingMode = null;
+        // The presses are taken back, because the thermostats did not take
+        // them.
+        _shown = <String, ThermostatState>{
+          for (final ThermostatState device
+              in _link?.devices ?? const <ThermostatState>[])
+            device.id: device,
+        };
+        _pendingMode.clear();
       });
     }
   }
@@ -368,8 +380,7 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
       );
     }
 
-    final ThermostatState? state = _shown;
-    if (state == null) {
+    if (_shown.isEmpty) {
       // Only the server saying so, or a dead credential, means there is
       // nothing connected. Anything else — no signal, a rate limit, a
       // thermostat that did not answer — is a link that exists and could not
@@ -382,86 +393,102 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
           : _unreachable(context, gutter);
     }
 
+    final List<ThermostatState> devices = _shown.values.toList(growable: false);
+
     return RefreshIndicator(
       onRefresh: _refresh,
       child: ListView(
         padding: EdgeInsets.all(gutter),
         children: <Widget>[
           if (_error != null) _Message(text: _error!, isError: true),
-          _Ambient(state: state, readAt: _readAt),
-          const SizedBox(height: HearthSpacing.lg),
-          if (state.eco.isOn)
-            const _Message(
-              text:
-                  'Eco is holding the temperature. Turn Eco off to change '
-                  'it.',
-              isError: false,
-            )
-          else if (state.mode == ThermostatMode.off)
-            const _Message(
-              text:
-                  'The thermostat is off. Choose Heat, Cool or Heat · Cool '
-                  'to set a temperature.',
-              isError: false,
-            )
-          // A mode change is the one command that makes the controls
-          // themselves wrong: Heat · Cool has two targets and Cool has one,
-          // so leaving the old mode's on screen under the new mode's chip is
-          // a contradiction held for as long as the next reading takes.
-          // Better to admit the question is open.
-          else if (_pendingMode != null && _pendingMode != state.mode)
-            _Message(
-              text: 'Switching to ${_pendingMode!.label}…',
-              isError: false,
-            )
-          else ...<Widget>[
-            ..._targets(context, state),
-            // A mode that takes two targets, showing one, reads as Hearth
-            // having lost the other. Saying which is missing is the
-            // difference between a gap and a bug.
-            if (state.mode == ThermostatMode.heatCool &&
-                (state.heatC == null) != (state.coolC == null))
-              const _Message(
-                text:
-                    'The thermostat is set to Heat · Cool but sent back only '
-                    'one target. Set the other in the Nest app and it will '
-                    'show here.',
-                isError: false,
-              ),
-          ],
-          const SizedBox(height: HearthSpacing.lg),
-          _Modes(
-            state: state,
-            pending: _pendingMode,
-            onPick: (ThermostatMode m) => _press(SetMode(m)),
-          ),
-          const SizedBox(height: HearthSpacing.md),
-          _Toggle(
-            label: 'Eco',
-            detail: 'Google’s own saving temperatures.',
-            value: state.eco.isOn,
-            onChanged: (bool on) => _press(SetEco(on: on)),
-          ),
-          // Only where the thermostat actually has a fan. A control that
-          // could only ever fail is worse than no control (spec §11).
-          if (state.hasFan) ...<Widget>[
-            const SizedBox(height: HearthSpacing.sm),
-            _Toggle(
-              label: 'Fan',
-              detail: state.fan!.isOn
-                  ? 'Running.'
-                  : 'Run the fan for fifteen minutes.',
-              value: state.fan!.isOn,
-              onChanged: (bool on) => _press(
-                SetFanTimer(on: on, duration: const Duration(minutes: 15)),
-              ),
-            ),
+          for (final ThermostatState state in devices) ...<Widget>[
+            // Each thermostat whole, one after another, rather than a picker.
+            // A house with two has two answers to "how warm is it" and both
+            // are worth seeing at once; a switcher would hide half the house
+            // behind a tap.
+            ..._card(context, state),
+            if (state != devices.last) ...<Widget>[
+              const SizedBox(height: HearthSpacing.xl),
+              Divider(color: context.colors.outline, height: 1),
+              const SizedBox(height: HearthSpacing.xl),
+            ],
           ],
           const SizedBox(height: HearthSpacing.xl),
           _Footer(link: _link, busy: _busy, onDisconnect: _disconnect),
         ],
       ),
     );
+  }
+
+  /// One thermostat, whole.
+  List<Widget> _card(BuildContext context, ThermostatState state) {
+    final ThermostatMode? pending = _pendingMode[state.id];
+    return <Widget>[
+      _Ambient(state: state, readAt: _readAt),
+      const SizedBox(height: HearthSpacing.lg),
+      if (state.eco.isOn)
+        const _Message(
+          text: 'Eco is holding the temperature. Turn Eco off to change it.',
+          isError: false,
+        )
+      else if (state.mode == ThermostatMode.off)
+        const _Message(
+          text:
+              'The thermostat is off. Choose Heat, Cool or Heat · Cool to set '
+              'a temperature.',
+          isError: false,
+        )
+      // A mode change is the one command that makes the controls themselves
+      // wrong: Heat · Cool has two targets and Cool has one, so leaving the
+      // old mode's on screen under the new mode's chip is a contradiction
+      // held for as long as the next reading takes. Better to admit the
+      // question is open.
+      else if (pending != null && pending != state.mode)
+        _Message(text: 'Switching to ${pending.label}…', isError: false)
+      else ...<Widget>[
+        ..._targets(context, state),
+        // A mode that takes two targets, showing one, reads as Hearth having
+        // lost the other. Saying which is missing is the difference between a
+        // gap and a bug.
+        if (state.mode == ThermostatMode.heatCool &&
+            (state.heatC == null) != (state.coolC == null))
+          const _Message(
+            text:
+                'The thermostat is set to Heat · Cool but sent back only one '
+                'target. Set the other in the Nest app and it will show here.',
+            isError: false,
+          ),
+      ],
+      const SizedBox(height: HearthSpacing.lg),
+      _Modes(
+        state: state,
+        pending: pending,
+        onPick: (ThermostatMode m) => _press(state, SetMode(m)),
+      ),
+      const SizedBox(height: HearthSpacing.md),
+      _Toggle(
+        label: 'Eco',
+        detail: 'Google\u2019s own saving temperatures.',
+        value: state.eco.isOn,
+        onChanged: (bool on) => _press(state, SetEco(on: on)),
+      ),
+      // Only where the thermostat actually has a fan. A control that could
+      // only ever fail is worse than no control (spec §11).
+      if (state.hasFan) ...<Widget>[
+        const SizedBox(height: HearthSpacing.sm),
+        _Toggle(
+          label: 'Fan',
+          detail: state.fan!.isOn
+              ? 'Running.'
+              : 'Run the fan for fifteen minutes.',
+          value: state.fan!.isOn,
+          onChanged: (bool on) => _press(
+            state,
+            SetFanTimer(on: on, duration: const Duration(minutes: 15)),
+          ),
+        ),
+      ],
+    ];
   }
 
   /// The targets this mode actually has.
@@ -480,7 +507,7 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
             label: 'Target',
             valueC: state.heatC!,
             busy: _busy,
-            onStep: (int by) => _step(by, heat: true),
+            onStep: (int by) => _step(state, by, heat: true),
           ),
         ];
       case ThermostatMode.cool:
@@ -490,7 +517,7 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
             label: 'Target',
             valueC: state.coolC!,
             busy: _busy,
-            onStep: (int by) => _step(by, heat: false),
+            onStep: (int by) => _step(state, by, heat: false),
           ),
         ];
       case ThermostatMode.heatCool:
@@ -500,7 +527,7 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
               label: 'Heat to',
               valueC: heatC,
               busy: _busy,
-              onStep: (int by) => _step(by, heat: true),
+              onStep: (int by) => _step(state, by, heat: true),
             ),
           if (state.heatC != null && state.coolC != null)
             const SizedBox(height: HearthSpacing.md),
@@ -509,7 +536,7 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
               label: 'Cool to',
               valueC: coolC,
               busy: _busy,
-              onStep: (int by) => _step(by, heat: false),
+              onStep: (int by) => _step(state, by, heat: false),
             ),
         ];
       case ThermostatMode.off:

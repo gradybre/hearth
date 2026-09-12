@@ -21,18 +21,22 @@ import '../../domain/house/thermostat.dart';
 @immutable
 class ThermostatLink {
   const ThermostatLink.unlinked()
-    : state = null,
+    : devices = const <ThermostatState>[],
       linkedAt = null,
       linkedByYou = false;
 
   const ThermostatLink.linked({
-    required ThermostatState this.state,
+    required this.devices,
     this.linkedAt,
     this.linkedByYou = false,
   });
 
-  /// What the thermostat reports. Null when nothing is connected.
-  final ThermostatState? state;
+  /// Every thermostat the household shared, in the order Google listed them.
+  ///
+  /// A list rather than one, because a house has more than one — Downstairs
+  /// and Upstairs — and the first cut kept only the first, so the other did
+  /// not exist as far as Hearth was concerned.
+  final List<ThermostatState> devices;
 
   /// When the account was connected.
   final DateTime? linkedAt;
@@ -46,7 +50,7 @@ class ThermostatLink {
   /// it to a name would be another query for the same sentence.
   final bool linkedByYou;
 
-  bool get isLinked => state != null;
+  bool get isLinked => devices.isNotEmpty;
 }
 
 /// Something went wrong between here and the house.
@@ -98,13 +102,17 @@ abstract interface class ThermostatGateway {
   /// What the thermostat is doing, or [ThermostatLink.unlinked].
   Future<ThermostatLink> status();
 
-  /// Sends a command.
+  /// Sends a command to one thermostat.
+  ///
+  /// [deviceId] is [ThermostatState.id]. Named explicitly rather than implied,
+  /// because a house with two thermostats has two answers to "which one" and
+  /// guessing would turn the heating up in the wrong half of it.
   ///
   /// Returns nothing rather than the new state: reading back costs a second
   /// request against a five-a-minute device ceiling, which one drag of a
   /// setpoint would exhaust. The caller shows what it asked for and lets the
   /// next [status] correct it.
-  Future<void> send(ThermostatCommand command);
+  Future<void> send(ThermostatCommand command, {required String deviceId});
 
   /// Forgets the account. The credential is destroyed, not marked.
   Future<void> unlink();
