@@ -364,6 +364,10 @@ class _MaintenanceMenu extends StatelessWidget {
     onSelected: (String path) => context.push(path),
     itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
       PopupMenuItem<String>(
+        value: '/food/merge',
+        child: Text('Duplicate foods', style: context.text.body),
+      ),
+      PopupMenuItem<String>(
         value: '/food/seasonings',
         child: Text('Seasonings that need no match', style: context.text.body),
       ),

@@ -170,6 +170,30 @@ class PlanStore {
     )..where(($MealPlanEntriesTable e) => e.id.equals(id))).go();
   }
 
+  /// Moves an unlogged entry to a different food, returning how many rows
+  /// changed — zero when it had been logged in the meantime (review N05).
+  ///
+  /// The `isLogged` test is part of the statement on purpose. A logged entry
+  /// is a record of a meal that happened, and its reference and portion are
+  /// not the caller's to rewrite (spec §4).
+  Future<int> repointUnloggedEntry({
+    required String entryId,
+    required String refId,
+    required double servings,
+    required DateTime updatedAt,
+  }) =>
+      (_db.update(_db.mealPlanEntries)..where(
+            ($MealPlanEntriesTable t) =>
+                t.id.equals(entryId) & t.isLogged.equals(false),
+          ))
+          .write(
+            MealPlanEntriesCompanion(
+              refId: Value(refId),
+              servings: Value(servings),
+              updatedAt: Value(updatedAt),
+            ),
+          );
+
   Future<MealPlanEntry?> entryById(String id) async {
     final MealPlanEntryRow? row = await (_db.select(
       _db.mealPlanEntries,

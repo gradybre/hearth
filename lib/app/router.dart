@@ -10,6 +10,7 @@ import '../features/foods/barcode_scan_screen.dart';
 import '../features/foods/food_draft.dart';
 import '../features/foods/food_editor_screen.dart';
 import '../features/foods/menu_import_screen.dart';
+import '../features/foods/merge_screen.dart';
 import '../features/foods/seasonings_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/plan/logging_intent.dart';
@@ -213,6 +214,11 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
               RecipeEditorScreen(recipeId: state.pathParameters['id']),
         ),
       ],
+    ),
+    GoRoute(
+      path: '/food/merge',
+      builder: (BuildContext context, GoRouterState state) =>
+          const MergeScreen(),
     ),
     GoRoute(
       path: '/food/seasonings',

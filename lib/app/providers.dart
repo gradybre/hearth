@@ -55,6 +55,7 @@ import '../data/remote/remote_gateway.dart';
 import '../data/remote/supabase_photo_storage.dart';
 import '../data/remote/supabase_remote_gateway.dart';
 import '../data/repositories/collection_repository.dart';
+import '../data/repositories/food_merge_repository.dart';
 import '../data/repositories/food_profile_repository.dart';
 import '../data/repositories/food_repository.dart';
 import '../data/repositories/ingredient_match_repository.dart';
@@ -69,6 +70,7 @@ import '../data/sync/sync_checkpoints.dart';
 import '../data/sync/sync_engine.dart';
 import '../data/sync/sync_scope.dart';
 import '../domain/cooking/cook_session.dart';
+import '../domain/foods/food_merge.dart';
 import '../domain/foods/food_query.dart';
 import '../domain/foods/no_match_rule.dart';
 import '../domain/models/food.dart';
@@ -84,6 +86,7 @@ import '../domain/recipes/ingredient_matcher.dart';
 import '../domain/recipes/macro_calculator.dart';
 import '../domain/recipes/recipe_query.dart';
 import '../domain/recipes/repair_queue.dart';
+import '../domain/text/text_normaliser.dart';
 import 'cook_timers.dart';
 import 'shell/launch_target.dart';
 import 'shell/sections.dart';
@@ -655,6 +658,34 @@ final Provider<AsyncValue<List<Recipe>>> filteredRecipesProvider =
         ),
       );
     });
+
+/// Merging two foods that are the same thing (review N05).
+final Provider<FoodMergeRepository> foodMergeRepositoryProvider =
+    Provider<FoodMergeRepository>(
+      (Ref ref) => FoodMergeRepository(
+        database: ref.watch(databaseProvider),
+        foods: ref.watch(foodRepositoryProvider),
+        recipes: ref.watch(recipeRepositoryProvider),
+        matches: ref.watch(ingredientMatchRepositoryProvider),
+        plan: ref.watch(planRepositoryProvider),
+        shopping: ref.watch(shoppingRepositoryProvider),
+        queue: ref.watch(pendingWriteStoreProvider),
+      ),
+    );
+
+/// Foods that look like the same thing, for the merge screen.
+///
+/// The same test the duplicate warning uses, so what the screen offers and
+/// what the editor warns about cannot come to disagree.
+final Provider<AsyncValue<List<List<Food>>>> duplicateFoodsProvider =
+    Provider<AsyncValue<List<List<Food>>>>(
+      (Ref ref) => ref
+          .watch(foodLibraryProvider)
+          .whenData(
+            (List<Food> foods) =>
+                duplicateGroups(foods, normalise: normaliseKey),
+          ),
+    );
 
 /// Everything in the library that is not finished (review N04).
 ///
