@@ -74,6 +74,16 @@ Deno.serve(async (request: Request): Promise<Response> => {
         return await command(env, household, body);
       case 'unlink':
         return await unlink(env, household);
+      // Actions an older build still sends. A function is deployed the moment
+      // it is pushed and an app is not — a phone can be days behind — so
+      // dropping a name outright turns every installed copy into one that says
+      // "unknown action" and gives nobody a next step.
+      case 'consent-url':
+      case 'link':
+        return json({
+          error: 'This version of Hearth is out of date. Update it and '
+            + 'connect again.',
+        }, 409);
       default:
         return json({ error: 'unknown action' }, 400);
     }
