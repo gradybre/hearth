@@ -150,8 +150,12 @@ class _AddToListSheetState extends State<_AddToListSheet> {
       _recipe = recipe;
       _food = food;
       // A recipe is usually wanted at the yield it was written for; a food is
-      // usually wanted one at a time.
-      _servings = recipe?.servings ?? 1;
+      // usually wanted one at a time. Clamped like every other path that sets
+      // this, because a recipe saved with a yield of zero would otherwise seed
+      // the stepper with it — and `addRecipe` refuses anything that is not
+      // positive, so the Add button became an unhandled error rather than an
+      // add.
+      _servings = (recipe?.servings ?? 1).clamp(0.5, 99);
     });
   }
 

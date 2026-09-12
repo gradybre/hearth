@@ -396,4 +396,31 @@ void main() {
       expect(find.text('ground beef'), findsOneWidget);
     });
   });
+
+  group('what the review found', () {
+    testWidgets('a recipe with no yield does not crash the add', (
+      WidgetTester tester,
+    ) async {
+      // `_choose` seeds the stepper from the recipe's own servings without the
+      // clamp every other path applies, and `addRecipe` refuses anything that
+      // is not positive — so a recipe saved with a yield of zero turned the
+      // Add button into an unhandled ArgumentError.
+      await pumpHearthApp(
+        tester,
+        recipes: <Recipe>[
+          aRecipe(id: 'r-0', title: 'Mystery stew', servings: 0),
+        ],
+      );
+      await tester.tap(find.text('Shopping').last);
+      await pumpFrames(tester, frames: 12);
+
+      await openAdd(tester);
+      await search(tester, 'Mystery');
+      await tester.tap(find.text('Mystery stew'));
+      await pumpFrames(tester, frames: 8);
+      await confirm(tester);
+
+      expect(tester.takeException(), isNull);
+    });
+  });
 }

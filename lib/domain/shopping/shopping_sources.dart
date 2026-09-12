@@ -60,14 +60,19 @@ abstract final class ShoppingSources {
         found[ask.sourceKey] = ShoppingSource(
           key: ask.sourceKey,
           kind: ask.kind,
-          label: was?.label ?? ask.label ?? _nameFor(ask.kind),
-          // Taken from the first line rather than summed across them. One add
-          // of a four-serving recipe writes "four servings" onto every line it
+          // A real label wherever one is recorded, not merely the first
+          // answer. `was?.label` is never null — it has already fallen back
+          // to "A recipe" — so preferring it outright meant one contribution
+          // written without a label fixed that placeholder for every line
+          // after it, however many of them knew the name.
+          label: ask.label ?? was?.label ?? _nameFor(ask.kind),
+          // Taken from a line rather than summed across them. One add of a
+          // four-serving recipe writes "four servings" onto every line it
           // touches — that is what a contribution records — so adding them up
           // would report a chilli with eight ingredients as thirty-two
           // servings. The asks are already summed *per line* when the same
           // recipe is added twice, which is where that arithmetic belongs.
-          servings: was?.servings ?? ask.servings,
+          servings: ask.servings ?? was?.servings,
           lines: (was?.lines ?? 0) + 1,
         );
       }

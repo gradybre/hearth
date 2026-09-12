@@ -354,19 +354,28 @@ class _Body extends ConsumerWidget {
       case FoodAddition(:final Food food, :final double servings):
         await repository.addFood(food: food, servings: servings);
       case PlainAddition(:final String name):
+        // Re-read rather than added to what this screen last drew. The other
+        // two cases go through the repository, which reads the list itself;
+        // this one writes the whole list back, and the snapshot it was
+        // holding was taken before a sheet somebody spent seconds in. An item
+        // added by hand meanwhile, or a change arrived from the other phone,
+        // would be written out of existence — the same reason `restoreLine`
+        // and the cleared-list undo both re-read.
+        final List<ShoppingLine> now =
+            (await repository.current())?.lines ?? const <ShoppingLine>[];
         final String key = ShoppingListBuilder.keyFor(name: name);
         // Already there is not a failure, but it is invisible — the list
         // simply does not change, which looks exactly like a button that did
         // nothing. Said, rather than left to be guessed at.
-        if (lines.any((ShoppingLine l) => l.key == key)) {
+        if (now.any((ShoppingLine l) => l.key == key)) {
           messenger.showSnackBar(
             SnackBar(content: Text('$name is already on the list.')),
           );
           return;
         }
         await repository.replace(<ShoppingLine>[
-          ...lines,
-          ShoppingLine.manual(key: key, name: name, sortOrder: lines.length),
+          ...now,
+          ShoppingLine.manual(key: key, name: name, sortOrder: now.length),
         ]);
     }
     ref.invalidate(shoppingListProvider);
