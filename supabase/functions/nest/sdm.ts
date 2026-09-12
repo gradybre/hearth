@@ -73,6 +73,20 @@ export function snapshotOf(device: unknown): Snapshot | null {
   );
   const fanTrait = asRecord(traits['sdm.devices.traits.Fan']);
 
+  // Which setpoint fields the device actually sent, by name only.
+  //
+  // A thermostat in HEATCOOL is documented to report both, and one that
+  // reports a single setpoint leaves the screen showing half a range with no
+  // way to tell whether Google said nothing or Hearth dropped it. Names, never
+  // values, and nothing else from the payload: function logs are not a secret
+  // store and this one carries device identifiers.
+  console.log(
+    'setpoint fields:',
+    setpoint ? Object.keys(setpoint).sort().join(',') : 'trait absent',
+    '| mode:',
+    asString(modeTrait?.mode) ?? 'none',
+  );
+
   return {
     label: labelOf(record ?? {}),
     ambientC: ambient,

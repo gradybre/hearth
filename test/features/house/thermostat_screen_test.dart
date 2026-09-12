@@ -64,6 +64,11 @@ ThermostatState aThermostat({
   ThermostatMode mode = ThermostatMode.heat,
   double? heatC,
   double? coolC,
+
+  /// Explicitly no heat target, which `heatC: null` cannot say while the
+  /// parameter has a default behind it — `null ?? 68` is 68, and a helper
+  /// that quietly ignores the value a test passed makes the test a lie.
+  bool noHeat = false,
   EcoMode eco = EcoMode.off,
   FanState? fan,
   HvacStatus hvac = HvacStatus.heating,
@@ -82,7 +87,7 @@ ThermostatState aThermostat({
         ThermostatMode.heatCool,
       },
   hvac: hvac,
-  heatC: heatC ?? Temp.fToC(68),
+  heatC: noHeat ? null : (heatC ?? Temp.fToC(68)),
   coolC: coolC,
   eco: eco,
   fan: fan,
@@ -199,7 +204,7 @@ void main() {
       await openHouse(
         tester,
         FakeThermostat(
-          state: aThermostat(mode: ThermostatMode.off, heatC: null),
+          state: aThermostat(mode: ThermostatMode.off, noHeat: true),
         ),
       );
 
@@ -243,6 +248,128 @@ void main() {
         FakeThermostat(state: aThermostat(fan: const FanState(isOn: false))),
       );
       expect(find.text('Fan'), findsOneWidget);
+    });
+  });
+
+  group('changing the mode', () {
+    testWidgets('does not invent targets the thermostat has not confirmed', (
+      WidgetTester tester,
+    ) async {
+      // Cool reports one setpoint; Heat · Cool reports two. Flipping the mode
+      // on screen the instant it is tapped makes the screen believe there are
+      // two targets while the numbers it has are still the old mode's — so it
+      // draws half a range and calls it Heat · Cool, which is what Brendan
+      // saw. Which controls exist is not something the app gets to guess.
+      final FakeThermostat fake = FakeThermostat(
+        state: aThermostat(
+          mode: ThermostatMode.cool,
+          noHeat: true,
+          coolC: Temp.fToC(75),
+        ),
+      );
+      await openHouse(tester, fake);
+      expect(find.text('Target'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Heat · Cool'));
+      await tester.pump();
+
+      // The chip answers the tap, because a control that does not is broken.
+      expect(
+        tester
+            .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Heat · Cool'))
+            .selected,
+        isTrue,
+      );
+      // The targets do not, because the thermostat has not said so yet.
+      expect(find.text('Cool to'), findsNothing);
+      expect(find.text('Heat to'), findsNothing);
+      expect(find.text('Target'), findsOneWidget);
+    });
+
+    testWidgets('and takes the thermostat\'s word once it answers', (
+      WidgetTester tester,
+    ) async {
+      final FakeThermostat fake = FakeThermostat(
+        state: aThermostat(
+          mode: ThermostatMode.cool,
+          noHeat: true,
+          coolC: Temp.fToC(75),
+        ),
+      );
+      await openHouse(tester, fake);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Heat · Cool'));
+      await tester.pump(ThermostatScreen.settleAfter);
+      await pumpFrames(tester);
+
+      fake.state = aThermostat(
+        mode: ThermostatMode.heatCool,
+        heatC: Temp.fToC(68),
+        coolC: Temp.fToC(75),
+      );
+      await tester.pump(ThermostatScreen.pollEvery);
+      await pumpFrames(tester);
+
+      expect(find.text('Heat to'), findsOneWidget);
+      expect(find.text('Cool to'), findsOneWidget);
+    });
+
+    testWidgets('and half a range says so rather than showing half', (
+      WidgetTester tester,
+    ) async {
+      // If the thermostat really does report Heat · Cool with one setpoint,
+      // that is worth saying out loud — a single target under a two-target
+      // mode reads as Hearth having lost one.
+      await openHouse(
+        tester,
+        FakeThermostat(
+          state: aThermostat(
+            mode: ThermostatMode.heatCool,
+            noHeat: true,
+            coolC: Temp.fToC(75),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('only one'), findsOneWidget);
+    });
+  });
+
+  group('a target that cannot be moved', () {
+    testWidgets('says why instead of doing nothing', (
+      WidgetTester tester,
+    ) async {
+      // A range command carries both numbers, so with only one of them the
+      // domain refuses — correctly. The screen then pressed a button that did
+      // nothing at all, which is indistinguishable from Hearth being broken.
+      final FakeThermostat fake = FakeThermostat(
+        state: aThermostat(
+          mode: ThermostatMode.heatCool,
+          noHeat: true,
+          coolC: Temp.fToC(75),
+        ),
+      );
+      await openHouse(tester, fake);
+
+      await tester.tap(find.byTooltip('Warmer'));
+      await tester.pump();
+
+      expect(fake.sent, isEmpty);
+      expect(find.textContaining('needs both'), findsOneWidget);
+    });
+
+    testWidgets('and at the top of the range it says that', (
+      WidgetTester tester,
+    ) async {
+      await openHouse(
+        tester,
+        FakeThermostat(state: aThermostat(heatC: ThermostatLimits.maxC)),
+      );
+
+      await tester.tap(find.byTooltip('Warmer'));
+      await tester.pump();
+
+      expect(find.textContaining('as warm as'), findsOneWidget);
     });
   });
 

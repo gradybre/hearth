@@ -57,6 +57,16 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
   Timer? _settle;
   ThermostatCommand? _queued;
 
+  /// A mode tapped but not yet confirmed.
+  ///
+  /// Held apart from [_shown] on purpose. Folding it in would change which
+  /// *controls* the screen believes exist — Cool reports one setpoint and
+  /// Heat · Cool reports two — so the screen would draw half a range out of
+  /// the previous mode's numbers and label it with the new mode. Which
+  /// controls exist is not something the app gets to guess; a chip answering
+  /// a tap is.
+  ThermostatMode? _pendingMode;
+
   /// True between opening Google and the link appearing.
   ///
   /// Nothing comes back through the app — Google redirects the browser to an
@@ -118,6 +128,7 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
         // pending press is either confirmed by this or quietly corrected —
         // and either way the number on screen is now the device's own.
         _shown = link.state;
+        _pendingMode = null;
         _readAt = DateTime.now();
         _error = null;
         _needsRelink = false;
@@ -142,6 +153,26 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
     }
   }
 
+  /// A press of − or +, which the state turns into a command or a reason.
+  void _step(int degrees, {required bool heat}) {
+    final ThermostatState? now = _shown;
+    if (now == null) return;
+
+    final ThermostatCommand? command = degrees > 0
+        ? now.warmer(degrees, heat: heat)
+        : now.cooler(-degrees, heat: heat);
+    if (command != null) {
+      _press(command);
+      return;
+    }
+    // A button that does nothing is indistinguishable from a broken app.
+    setState(
+      () => _error =
+          now.stepRefusal(degrees, heat: heat) ??
+          'That target cannot be changed just now.',
+    );
+  }
+
   /// Shows a press immediately and sends it once the presses stop.
   void _press(ThermostatCommand? command) {
     final ThermostatState? now = _shown;
@@ -155,6 +186,7 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
 
     setState(() {
       _error = null;
+      _pendingMode = command is SetMode ? command.mode : _pendingMode;
       _shown = switch (command) {
         SetHeat(:final double heatC) => now.withSetpoints(heatC: heatC),
         SetCool(:final double coolC) => now.withSetpoints(coolC: coolC),
@@ -162,9 +194,8 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
           heatC: heatC,
           coolC: coolC,
         ),
-        // A switch that springs back the instant it is flipped reads as
-        // broken, and then sits wrong until the next reading a minute later.
-        SetMode(:final ThermostatMode mode) => now.copyWith(mode: mode),
+        // Not the mode: see [_pendingMode]. The chip is updated separately.
+        SetMode() => now,
         SetEco(:final bool on) => now.copyWith(
           eco: on ? EcoMode.manualEco : EcoMode.off,
         ),
@@ -198,6 +229,7 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
         _needsRelink = failure.needsRelink;
         // The press is taken back, because the thermostat did not take it.
         _shown = _link?.state;
+        _pendingMode = null;
       });
     }
   }
@@ -359,11 +391,25 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
                   'to set a temperature.',
               isError: false,
             )
-          else
+          else ...<Widget>[
             ..._targets(context, state),
+            // A mode that takes two targets, showing one, reads as Hearth
+            // having lost the other. Saying which is missing is the
+            // difference between a gap and a bug.
+            if (state.mode == ThermostatMode.heatCool &&
+                (state.heatC == null) != (state.coolC == null))
+              const _Message(
+                text:
+                    'The thermostat is set to Heat · Cool but sent back only '
+                    'one target. Set the other in the Nest app and it will '
+                    'show here.',
+                isError: false,
+              ),
+          ],
           const SizedBox(height: HearthSpacing.lg),
           _Modes(
             state: state,
+            pending: _pendingMode,
             onPick: (ThermostatMode m) => _press(SetMode(m)),
           ),
           const SizedBox(height: HearthSpacing.md),
@@ -395,31 +441,58 @@ class _ThermostatScreenState extends ConsumerState<ThermostatScreen> {
     );
   }
 
+  /// The targets this mode actually has.
+  ///
+  /// One each in Heat and Cool, two in Heat · Cool. Written as a switch on the
+  /// mode rather than as "show the heat one, and the cool one as well if it is
+  /// a range", which is what it was — and which rendered *no* target at all in
+  /// Cool, because the heat setpoint a cooling thermostat does not report was
+  /// the only one it ever looked at.
   List<Widget> _targets(BuildContext context, ThermostatState state) {
-    final bool both = state.mode == ThermostatMode.heatCool;
-    return <Widget>[
-      if (state.heatC != null)
-        _Target(
-          label: both ? 'Heat to' : 'Target',
-          valueC: state.heatC!,
-          busy: _busy,
-          onStep: (int by) =>
-              _press(by > 0 ? state.warmer(by) : state.cooler(-by)),
-        ),
-      if (both && state.coolC != null) ...<Widget>[
-        const SizedBox(height: HearthSpacing.md),
-        _Target(
-          label: 'Cool to',
-          valueC: state.coolC!,
-          busy: _busy,
-          onStep: (int by) => _press(
-            by > 0
-                ? state.warmer(by, heat: false)
-                : state.cooler(-by, heat: false),
+    switch (state.mode) {
+      case ThermostatMode.heat:
+        if (state.heatC == null) return const <Widget>[];
+        return <Widget>[
+          _Target(
+            label: 'Target',
+            valueC: state.heatC!,
+            busy: _busy,
+            onStep: (int by) => _step(by, heat: true),
           ),
-        ),
-      ],
-    ];
+        ];
+      case ThermostatMode.cool:
+        if (state.coolC == null) return const <Widget>[];
+        return <Widget>[
+          _Target(
+            label: 'Target',
+            valueC: state.coolC!,
+            busy: _busy,
+            onStep: (int by) => _step(by, heat: false),
+          ),
+        ];
+      case ThermostatMode.heatCool:
+        return <Widget>[
+          if (state.heatC case final double heatC)
+            _Target(
+              label: 'Heat to',
+              valueC: heatC,
+              busy: _busy,
+              onStep: (int by) => _step(by, heat: true),
+            ),
+          if (state.heatC != null && state.coolC != null)
+            const SizedBox(height: HearthSpacing.md),
+          if (state.coolC case final double coolC)
+            _Target(
+              label: 'Cool to',
+              valueC: coolC,
+              busy: _busy,
+              onStep: (int by) => _step(by, heat: false),
+            ),
+        ];
+      case ThermostatMode.off:
+      case ThermostatMode.unknown:
+        return const <Widget>[];
+    }
   }
 
   /// Linked, and not readable this minute.
@@ -690,9 +763,16 @@ class _Step extends StatelessWidget {
 
 /// The modes this thermostat actually offers.
 class _Modes extends StatelessWidget {
-  const _Modes({required this.state, required this.onPick});
+  const _Modes({
+    required this.state,
+    required this.pending,
+    required this.onPick,
+  });
 
   final ThermostatState state;
+
+  /// Tapped, not yet confirmed. The chip shows it; nothing else does.
+  final ThermostatMode? pending;
   final ValueChanged<ThermostatMode> onPick;
 
   @override
@@ -712,7 +792,7 @@ class _Modes extends StatelessWidget {
         for (final ThermostatMode mode in offered)
           ChoiceChip(
             label: Text(mode.label),
-            selected: state.mode == mode,
+            selected: (pending ?? state.mode) == mode,
             // Selected carries a tick as well as a fill, so the choice is not
             // made by colour alone (spec §6.3).
             avatar: state.mode == mode
