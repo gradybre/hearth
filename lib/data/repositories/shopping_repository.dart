@@ -6,9 +6,12 @@ import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/week.dart';
+import '../../domain/recipes/ingredient_consolidator.dart';
+import '../../domain/shopping/shopping_contribution.dart';
 import '../../domain/shopping/shopping_line.dart';
 import '../../domain/shopping/shopping_list_builder.dart';
 import '../../domain/shopping/shopping_list_merge.dart';
+import '../../domain/units/quantity.dart';
 import '../local/hearth_database.dart';
 import '../local/pending_write_store.dart';
 import '../local/shopping_store.dart';
@@ -159,6 +162,162 @@ class ShoppingRepository {
     );
   }
 
+  /// Puts a recipe's ingredients on the list at [servings] (spec §5.7).
+  ///
+  /// The primary way a list gets filled. What it adds is recorded as this
+  /// recipe's own ask rather than folded into the total, so rebuilding from
+  /// the plan afterwards leaves it exactly where it is — and so
+  /// [removeSource] can take it back off again.
+  ///
+  /// Adding the same recipe twice sums, rather than listing it twice: the
+  /// second ask is two more dinners, not a correction of the first.
+  ///
+  /// [foods] is the library, read for one thing only — which shop each line
+  /// belongs to. A line with no matched food has no shop, which is a real
+  /// answer and is how "Anywhere" is said.
+  Future<List<ShoppingLine>> addRecipe({
+    required Recipe recipe,
+    required double servings,
+    required Map<String, Food> foods,
+  }) {
+    final List<ConsolidatedIngredient> wanted =
+        IngredientConsolidator.mergeRecipes(
+          <Recipe>[recipe],
+          servingsFor: <String, double>{recipe.id: servings},
+        );
+
+    return _add(<_Ask>[
+      for (final ConsolidatedIngredient line in wanted)
+        (
+          key: line.key,
+          name: line.displayName,
+          foodId: line.foodId,
+          storeTag: foods[line.foodId]?.storeTag,
+          sourceRecipeIds: line.sourceRecipeIds,
+          contribution: ShoppingContribution(
+            kind: ShoppingSourceKind.recipe,
+            refId: recipe.id,
+            label: recipe.title,
+            servings: servings,
+            quantities: line.quantities,
+            hasUnquantified: line.hasUnquantified,
+          ),
+        ),
+    ]);
+  }
+
+  /// Puts a food on the list at [servings].
+  ///
+  /// In the food's own serving unit where it has one — three 170 g pots is
+  /// 510 g — through the same helper the plan path uses, so the two cannot
+  /// come to different answers about what three yoghurts is.
+  Future<List<ShoppingLine>> addFood({
+    required Food food,
+    required double servings,
+  }) => _add(<_Ask>[
+    (
+      key: food.id,
+      name: food.name,
+      foodId: food.id,
+      storeTag: food.storeTag,
+      sourceRecipeIds: const <String>[],
+      contribution: ShoppingContribution(
+        kind: ShoppingSourceKind.food,
+        refId: food.id,
+        label: food.name,
+        servings: servings,
+        quantities: <Quantity>[ShoppingListBuilder.portionsOf(food, servings)],
+      ),
+    ),
+  ]);
+
+  /// Takes one source's ask back off every line it contributed to.
+  ///
+  /// [sourceKey] is a [ShoppingContribution.sourceKey] — `recipe:<id>` or
+  /// `food:<id>`. A line left with nothing asked for goes, unless somebody
+  /// has ticked or edited it: both are decisions about the shop that outlive
+  /// the recipe that prompted them, exactly as on a rebuild.
+  Future<List<ShoppingLine>> removeSource(String sourceKey) async {
+    final ShoppingListSnapshot? existing = await current();
+    if (existing == null) return const <ShoppingLine>[];
+
+    final List<ShoppingLine> kept = <ShoppingLine>[];
+    for (final ShoppingLine line in existing.lines) {
+      final List<ShoppingContribution> was = line.contributions.isEmpty
+          ? ShoppingContributions.legacy(line)
+          : line.contributions;
+      final List<ShoppingContribution> left = ShoppingContributions.without(
+        was,
+        sourceKey,
+      );
+      if (left.length == was.length) {
+        kept.add(line);
+        continue;
+      }
+      if (left.isEmpty && !line.isChecked && !line.isEdited) continue;
+      kept.add(ShoppingContributions.settle(line, contributions: left));
+    }
+
+    return replace(kept);
+  }
+
+  /// Folds a set of asks into the list as it stands.
+  Future<List<ShoppingLine>> _add(List<_Ask> asks) async {
+    final ShoppingListSnapshot? existing = await current();
+    final List<ShoppingLine> lines = <ShoppingLine>[
+      ...existing?.lines ?? const <ShoppingLine>[],
+    ];
+    int next = lines.fold<int>(
+      0,
+      (int m, ShoppingLine l) => l.sortOrder > m ? l.sortOrder : m,
+    );
+
+    for (final _Ask ask in asks) {
+      final int at = lines.indexWhere((ShoppingLine l) => l.key == ask.key);
+      if (at < 0) {
+        // New to the list, so it goes at the end — where new things belong
+        // until somebody walks them somewhere.
+        lines.add(
+          ShoppingContributions.settle(
+            ShoppingLine(
+              key: ask.key,
+              name: ask.name,
+              planned: const <Quantity>[],
+              foodId: ask.foodId,
+              storeTag: ask.storeTag,
+              sortOrder: ++next,
+              sourceRecipeIds: ask.sourceRecipeIds,
+            ),
+            contributions: <ShoppingContribution>[ask.contribution],
+          ),
+        );
+        continue;
+      }
+
+      final ShoppingLine was = lines[at];
+      lines[at] = ShoppingContributions.settle(
+        was.copyWith(
+          // Where the food or its shop was not known before and is now.
+          foodId: was.foodId ?? ask.foodId,
+          storeTag: was.storeTag ?? ask.storeTag,
+          sourceRecipeIds: <String>{
+            ...was.sourceRecipeIds,
+            ...ask.sourceRecipeIds,
+          }.toList(growable: false),
+        ),
+        contributions: ShoppingContributions.merge(
+          was.contributions.isEmpty
+              ? ShoppingContributions.legacy(was)
+              : was.contributions,
+          <ShoppingContribution>[ask.contribution],
+          displayName: was.name,
+        ),
+      );
+    }
+
+    return replace(lines);
+  }
+
   /// Writes the list back after an edit on the screen.
   Future<List<ShoppingLine>> replace(List<ShoppingLine> lines) async {
     final ShoppingListSnapshot? existing = await current();
@@ -282,3 +441,13 @@ class ShoppingRepository {
     return ordered;
   }
 }
+
+/// One line's worth of an add, on its way into the list.
+typedef _Ask = ({
+  String key,
+  String name,
+  String? foodId,
+  String? storeTag,
+  List<String> sourceRecipeIds,
+  ShoppingContribution contribution,
+});

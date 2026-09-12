@@ -180,6 +180,7 @@ void main() {
           sortOrder: 0,
           hasUnquantified: false,
           plannedRest: '',
+          contributions: '',
           updatedAt: DateTime.utc(2026, 8, 28, 12),
         ),
       );

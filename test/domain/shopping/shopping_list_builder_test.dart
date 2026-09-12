@@ -333,4 +333,96 @@ void main() {
       expect(lines.map((ShoppingLine l) => l.name), <String>['ground beef']);
     });
   });
+
+  group('which shop a line belongs to (spec §5.7)', () {
+    // A line's store comes from the food behind it, and until now only the
+    // *food* path set it: a recipe's ingredients landed under "Anywhere" even
+    // when every one of them was matched to a food with a shop on it. So a
+    // list built from a week of cooking — which is nearly all of any list —
+    // was one undifferentiated pile, and the store grouping the screen is
+    // built around had almost nothing to group.
+    Recipe tagged() => aRecipe(
+      id: 'r-tagged',
+      title: 'Beef thing',
+      servings: 4,
+      sections: <RecipeSection>[
+        aSection(
+          id: 's-t',
+          ingredients: <RecipeIngredient>[
+            anIngredient(
+              'ground beef',
+              amount: 1,
+              unit: Units.pound,
+              sectionId: 's-t',
+              foodId: 'f-beef',
+            ),
+            anIngredient(
+              'cumin',
+              amount: 2,
+              unit: Units.tsp,
+              sectionId: 's-t',
+              foodId: 'f-cumin',
+            ),
+          ],
+        ),
+      ],
+    );
+
+    List<ShoppingLine> built() => ShoppingListBuilder.forRange(
+      from: monday,
+      to: nextWed,
+      entriesByDay: <DateTime, List<MealPlanEntry>>{
+        friday: <MealPlanEntry>[
+          const MealPlanEntry(
+            id: 'e-t',
+            dayId: 'd-t',
+            slot: MealSlot.dinner,
+            refType: PlanRefType.recipe,
+            refId: 'r-tagged',
+            servings: 4,
+          ),
+        ],
+      },
+      recipes: <String, Recipe>{'r-tagged': tagged()},
+      foods: <String, Food>{
+        'f-beef': aFood('Ground beef', id: 'f-beef').withStoreTag('Butcher'),
+        'f-cumin': aFood('Cumin', id: 'f-cumin'),
+      },
+    );
+
+    test('a recipe line carries the shop its food is tagged with', () {
+      expect(
+        named(built(), 'ground beef')?.storeTag,
+        'Butcher',
+        reason: 'the matched food says where to buy it, and the line did not',
+      );
+    });
+
+    test('and a food with no shop leaves the line untagged', () {
+      // "Anywhere" is a real answer, and the absence of a tag is how it is
+      // said. Inventing one would be worse than leaving the group empty.
+      expect(named(built(), 'cumin')?.storeTag, isNull);
+    });
+
+    test('an ingredient matched to nothing has no shop either', () {
+      // Nothing to read a tag off. The line still belongs on the list.
+      final List<ShoppingLine> unmatched = build(
+        byDay: <DateTime, List<MealPlanEntry>>{
+          friday: <MealPlanEntry>[
+            const MealPlanEntry(
+              id: 'e-c',
+              dayId: 'd-c',
+              slot: MealSlot.dinner,
+              refType: PlanRefType.recipe,
+              refId: 'r-chilli',
+              servings: 4,
+            ),
+          ],
+        },
+      );
+      final ShoppingLine? beef = named(unmatched, 'ground beef');
+      expect(beef, isNotNull);
+      expect(beef!.storeTag, isNull);
+    });
+  });
 }

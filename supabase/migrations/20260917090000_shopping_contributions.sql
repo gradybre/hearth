@@ -1,0 +1,35 @@
+-- What each source asked for on a shopping line (spec §5.7).
+--
+-- A shopping list used to be one thing the meal plan owned: every rebuild
+-- recomputed `planned_*` from the week's recipes, and anything else on the
+-- list was a manual item the plan had no vote on. That held while the plan was
+-- the only way to fill a list.
+--
+-- It stops holding the moment a recipe can be added to the list directly. Two
+-- pounds of beef on a line is then the sum of several separate asks — the
+-- plan's Tuesday chilli, and the bolognese somebody added on Saturday — and a
+-- total cannot be taken apart again. The next rebuild would either wipe the
+-- hand-added half or silently double it, and taking one recipe back off the
+-- list would be impossible either way.
+--
+-- So the line keeps the asks and adds them up, rather than keeping only the
+-- sum. `planned_*` stays as the total, recomputed from these on every write,
+-- so a phone on an older build still reads a correct list.
+--
+-- Shape, per entry:
+--   {"kind": "plan|recipe|food|manual",
+--    "ref_id": uuid or null, "label": text or null,
+--    "servings": number or null, "has_unquantified": bool,
+--    "quantities": [{"canonical": number, "kind": "mass|volume|count",
+--                    "unit": text or null}]}
+--
+-- Additive and defaulted, so every row written before this reads as an empty
+-- list — which the client takes as the plan having asked for the whole line.
+-- That is exactly what it meant, so no backfill is needed and an older build
+-- keeps working against the same rows.
+alter table public.shopping_list_items
+  add column if not exists contributions jsonb not null default '[]'::jsonb;
+
+-- No RLS change: the policy is on the table, not the column, and
+-- `shopping_list_is_mine(shopping_list_id)` already covers every row here
+-- (rule 2, see 20260827190400_shopping.sql).

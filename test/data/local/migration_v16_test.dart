@@ -187,6 +187,7 @@ void main() {
             sortOrder: 0,
             sourceRecipeIds: '',
             plannedRest: '[]',
+            contributions: '[]',
             updatedAt: now,
           ),
         );

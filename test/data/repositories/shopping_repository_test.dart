@@ -4,9 +4,15 @@ import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/data/local/pending_write_store.dart';
 import 'package:hearth/data/local/shopping_store.dart';
 import 'package:hearth/data/repositories/shopping_repository.dart';
+import 'package:hearth/domain/models/food.dart';
+import 'package:hearth/domain/models/macros.dart';
+import 'package:hearth/domain/models/recipe.dart';
+import 'package:hearth/domain/shopping/shopping_contribution.dart';
 import 'package:hearth/domain/shopping/shopping_line.dart';
 import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
+
+import '../../support/fixtures.dart';
 
 /// The shopping list reaching the other phone (spec §5.7, §7.2).
 void main() {
@@ -212,5 +218,181 @@ void main() {
     );
     expect(list.payload['from_date'], '2026-09-02');
     expect(list.payload['to_date'], '2026-09-08');
+  });
+
+  group('putting a recipe on the list directly (spec §5.7)', () {
+    Recipe chilli() => aRecipe(
+      id: 'r-chilli',
+      title: 'Weeknight chilli',
+      servings: 4,
+      sections: <RecipeSection>[
+        aSection(
+          id: 's1',
+          ingredients: <RecipeIngredient>[
+            anIngredient(
+              'ground beef',
+              amount: 1,
+              unit: Units.pound,
+              sectionId: 's1',
+              foodId: 'f-beef',
+            ),
+          ],
+        ),
+      ],
+    );
+
+    Map<String, Food> library() => <String, Food>{
+      'f-beef': aFood('Ground beef', id: 'f-beef').withStoreTag('Butcher'),
+    };
+
+    double poundsOn(List<ShoppingLine> lines) =>
+        lines.single.planned.single.amountIn(Units.pound);
+
+    test('expands its ingredients and tags the shop from the food', () async {
+      final List<ShoppingLine> lines = await repository.addRecipe(
+        recipe: chilli(),
+        servings: 4,
+        foods: library(),
+      );
+
+      expect(poundsOn(lines), 1);
+      expect(lines.single.storeTag, 'Butcher');
+      expect(lines.single.foodId, 'f-beef');
+    });
+
+    test('and scales by the servings asked for', () async {
+      final List<ShoppingLine> lines = await repository.addRecipe(
+        recipe: chilli(),
+        servings: 8,
+        foods: library(),
+      );
+      expect(poundsOn(lines), 2);
+    });
+
+    test('adding it twice sums rather than listing it twice', () async {
+      // Two dinners, not a correction of the first.
+      await repository.addRecipe(
+        recipe: chilli(),
+        servings: 4,
+        foods: library(),
+      );
+      final List<ShoppingLine> lines = await repository.addRecipe(
+        recipe: chilli(),
+        servings: 4,
+        foods: library(),
+      );
+
+      expect(lines, hasLength(1));
+      expect(poundsOn(lines), 2);
+      expect(lines.single.contributions.single.servings, 8);
+    });
+
+    test('a food added on its own comes out in its own serving unit', () async {
+      final List<ShoppingLine> lines = await repository.addFood(
+        food: aFood(
+          'Greek yoghurt',
+          id: 'f-yog',
+          servingOptions: <ServingOption>[
+            aServing(
+              amount: 170,
+              unit: Units.gram,
+              macros: const Macros(kcal: 100, proteinG: 10),
+            ),
+          ],
+        ),
+        servings: 3,
+      );
+
+      expect(lines.single.planned.single.amountIn(Units.gram), 510);
+    });
+
+    test('and it survives being written and read back', () async {
+      // The contributions have to make the round trip through sqlite, or the
+      // next rebuild treats the whole line as the plan's and takes it away.
+      await repository.addRecipe(
+        recipe: chilli(),
+        servings: 4,
+        foods: library(),
+      );
+
+      final ShoppingListSnapshot? reread = await repository.current();
+      final ShoppingContribution back =
+          reread!.lines.single.contributions.single;
+      expect(back.kind, ShoppingSourceKind.recipe);
+      expect(back.refId, 'r-chilli');
+      expect(back.label, 'Weeknight chilli');
+      expect(back.servings, 4);
+      expect(back.quantities.single.amountIn(Units.pound), 1);
+    });
+
+    test('and taking the recipe back off clears the line', () async {
+      await repository.addRecipe(
+        recipe: chilli(),
+        servings: 4,
+        foods: library(),
+      );
+      final List<ShoppingLine> after = await repository.removeSource(
+        'recipe:r-chilli',
+      );
+      expect(after, isEmpty);
+    });
+
+    test(
+      'unless the line was ticked, which is a note about the cupboard',
+      () async {
+        await repository.addRecipe(
+          recipe: chilli(),
+          servings: 4,
+          foods: library(),
+        );
+        final ShoppingListSnapshot? saved = await repository.current();
+        await repository.replace(<ShoppingLine>[
+          saved!.lines.single.ticked(true),
+        ]);
+
+        final List<ShoppingLine> after = await repository.removeSource(
+          'recipe:r-chilli',
+        );
+        expect(after, hasLength(1));
+        expect(after.single.planned, isEmpty);
+        expect(after.single.checked, isTrue);
+      },
+    );
+
+    test('and another recipe on the same line is left alone', () async {
+      await repository.addRecipe(
+        recipe: chilli(),
+        servings: 4,
+        foods: library(),
+      );
+      await repository.addRecipe(
+        recipe: aRecipe(
+          id: 'r-bol',
+          title: 'Bolognese',
+          servings: 4,
+          sections: <RecipeSection>[
+            aSection(
+              id: 's2',
+              ingredients: <RecipeIngredient>[
+                anIngredient(
+                  'ground beef',
+                  amount: 2,
+                  unit: Units.pound,
+                  sectionId: 's2',
+                  foodId: 'f-beef',
+                ),
+              ],
+            ),
+          ],
+        ),
+        servings: 4,
+        foods: library(),
+      );
+
+      final List<ShoppingLine> after = await repository.removeSource(
+        'recipe:r-chilli',
+      );
+      expect(after.single.planned.single.amountIn(Units.pound), 2);
+    });
   });
 }

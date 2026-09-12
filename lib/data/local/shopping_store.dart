@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import '../../domain/shopping/shopping_line.dart';
 import '../../domain/units/quantity.dart';
 import '../../domain/units/unit.dart';
+import '../mappers/shopping_mapper.dart';
 import 'hearth_database.dart';
 
 /// A shopping list as the app holds it: the range, and its lines.
@@ -188,6 +189,9 @@ class ShoppingStore {
       sortOrder: line.sortOrder,
       sourceRecipeIds: line.sourceRecipeIds.join(','),
       plannedRest: jsonEncode(rest),
+      contributions: jsonEncode(
+        ShoppingMapper.contributionsToJson(line.contributions),
+      ),
       updatedAt: updatedAt,
     );
   }
@@ -212,6 +216,7 @@ class ShoppingStore {
     sourceRecipeIds: row.sourceRecipeIds.isEmpty
         ? const <String>[]
         : row.sourceRecipeIds.split(','),
+    contributions: ShoppingMapper.contributionsFromJson(row.contributions),
   );
 
   /// The trailing planned amounts, tolerant of an empty or unreadable column.
