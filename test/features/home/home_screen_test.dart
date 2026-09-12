@@ -88,7 +88,8 @@ void main() {
         appSections
             .where((AppSection s) => s.isFurnished)
             .map((AppSection s) => s.id),
-        <String>['nutrition'],
+        <String>['nutrition', 'home'],
+        reason: 'House is furnished now that the thermostat is a real screen',
       );
     });
 

@@ -81,11 +81,18 @@ jobs:
           # Pinned for the same reason Flutter and the Supabase CLI are.
           deno-version: v2.9.6
 
+      # Every function, found rather than listed. Both steps used to name
+      # `recipe-ai` explicitly, so a second function's tests would have been
+      # written, committed, and never once run — which is the same
+      # test-that-cannot-fail this job was added to stop.
       - name: Check types
-        run: deno check --allow-import supabase/functions/recipe-ai/index.ts
+        run: |
+          set -euo pipefail
+          find supabase/functions -name index.ts -print0 \
+            | xargs -0 deno check --allow-import
 
       - name: Test
-        run: deno test supabase/functions/recipe-ai/
+        run: deno test --allow-import supabase/functions/
 
   schema:
     name: Migrations and guards

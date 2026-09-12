@@ -20,6 +20,7 @@ import 'package:hearth/data/adapters/recipe_ai.dart';
 import 'package:hearth/data/adapters/recipe_icon.dart';
 import 'package:hearth/data/adapters/shared_content.dart';
 import 'package:hearth/data/adapters/shopping_assistant.dart';
+import 'package:hearth/data/adapters/thermostat.dart';
 import 'package:hearth/data/auth/local_auth_gateway.dart';
 import 'package:hearth/data/local/collection_store.dart';
 import 'package:hearth/data/local/food_store.dart';
@@ -146,6 +147,17 @@ Future<HearthDatabase> pumpHearthApp(
   RecipeIconSource? recipeIcon,
   PdfPages? pdfPages,
   ShoppingAssistant? shoppingAssistant,
+
+  /// The household's thermostat (spec §11).
+  ///
+  /// Its own named parameter rather than an entry in [extraOverrides], for the
+  /// same reason the others have one: Riverpod 3 throws on a provider
+  /// overridden twice in one container whichever order they arrive in, and the
+  /// harness already overrides this to keep a widget test off the network.
+  ///
+  /// Null is what a build with no backend honestly has, and the screen says so
+  /// rather than drawing a dial that cannot move.
+  ThermostatGateway? thermostat,
   PhotoPicker? photoPicker,
   SharedContentSource? sharedContent,
   FoodProfile? foodProfile,
@@ -284,6 +296,9 @@ Future<HearthDatabase> pumpHearthApp(
         // And the list's chat. Null hides the panel, which is what a build
         // with no backend honestly does.
         shoppingAssistantProvider.overrideWithValue(shoppingAssistant),
+        // The thermostat lives behind an Edge Function and a Google account,
+        // neither of which a widget test has.
+        thermostatProvider.overrideWithValue(thermostat),
         // Photos go to a household bucket over the network; a widget test has
         // neither. Null is also what a build with no backend honestly has.
         photoStorageProvider.overrideWithValue(null),

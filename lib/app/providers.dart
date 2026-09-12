@@ -12,6 +12,7 @@ import '../data/adapters/edge_function_menu_reader.dart';
 import '../data/adapters/edge_function_recipe_ai.dart';
 import '../data/adapters/edge_function_recipe_icon.dart';
 import '../data/adapters/edge_function_shopping_assistant.dart';
+import '../data/adapters/edge_function_thermostat.dart';
 import '../data/adapters/image_picker_photos.dart';
 import '../data/adapters/kitchen_devices.dart';
 import '../data/adapters/label_reader.dart';
@@ -30,6 +31,7 @@ import '../data/adapters/recipe_icon.dart';
 import '../data/adapters/share_plus_file_share.dart';
 import '../data/adapters/shared_content.dart';
 import '../data/adapters/shopping_assistant.dart';
+import '../data/adapters/thermostat.dart';
 import '../data/adapters/usda_nutrition_source.dart';
 import '../data/auth/account_cache.dart';
 import '../data/auth/auth_gateway.dart';
@@ -1322,6 +1324,19 @@ final Provider<RecipeAiSource?> recipeAiProvider = Provider<RecipeAiSource?>(
       ? EdgeFunctionRecipeAi(Supabase.instance.client)
       : null,
 );
+
+/// The household's thermostat (spec §11).
+///
+/// Null when there is no backend to reach: the Google client secret and the
+/// household's refresh token both live server-side, so an unconfigured build
+/// has no way to reach the house and the screen says so rather than drawing a
+/// dial that cannot move.
+final Provider<ThermostatGateway?> thermostatProvider =
+    Provider<ThermostatGateway?>(
+      (Ref ref) => ref.watch(supabaseReadyProvider)
+          ? EdgeFunctionThermostat(Supabase.instance.client)
+          : null,
+    );
 
 /// Reading a nutrition label off a photo (spec §5.5).
 ///

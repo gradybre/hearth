@@ -1713,3 +1713,89 @@ begin
   raise notice 'AI budget reservation guards passed';
 end;
 $$;
+
+-- ── The `private` schema is not a hole in guards 1 and 2 ────────────────────
+--
+-- Both of those scan `nspname = 'public'`, so a table in `private` passes them
+-- vacuously. That is exactly the kind of test-that-could-only-pass this file
+-- exists to avoid, and `private.nest_link` holds a live credential for the
+-- household's heating — so the checks are widened rather than dodged.
+
+do $$
+declare
+  offenders text;
+begin
+  -- RLS on, even though nothing can address these rows through PostgREST.
+  -- The list of exposed schemas is a hosted setting outside this repository,
+  -- so the table must not rely on that setting being right.
+  select string_agg(c.relname, ', ')
+  into offenders
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'private'
+    and c.relkind = 'r'
+    and not c.relrowsecurity;
+
+  if offenders is not null then
+    raise exception 'RLS is not enabled on private tables: %', offenders;
+  end if;
+
+  -- And no policies, which is the correct policy set here: a row nothing but
+  -- the secret key may ever read. A policy appearing on one of these is a
+  -- sign somebody reached for the public-table pattern by habit.
+  select string_agg(c.relname, ', ')
+  into offenders
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'private'
+    and c.relkind = 'r'
+    and exists (select 1 from pg_policy p where p.polrelid = c.oid);
+
+  if offenders is not null then
+    raise exception
+      'private tables must have no policies, but these do: %', offenders;
+  end if;
+
+  raise notice 'private schema RLS guards passed';
+end;
+$$;
+
+do $$
+begin
+  -- The client's two roles cannot so much as enter the schema.
+  if has_schema_privilege('anon', 'private', 'USAGE') then
+    raise exception 'anon has USAGE on schema private';
+  end if;
+  if has_schema_privilege('authenticated', 'private', 'USAGE') then
+    raise exception 'authenticated has USAGE on schema private';
+  end if;
+
+  raise notice 'private schema access guards passed';
+end;
+$$;
+
+do $$
+declare
+  offenders text;
+begin
+  -- Nor execute any of the doors into it. These are `security definer`, so an
+  -- execute grant would hand the caller the table's whole contents.
+  select string_agg(p.proname, ', ')
+  into offenders
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname like 'nest\_link\_%'
+    and (
+      has_function_privilege('anon', p.oid, 'EXECUTE')
+      or has_function_privilege('authenticated', p.oid, 'EXECUTE')
+    );
+
+  if offenders is not null then
+    raise exception
+      'the client can execute nest_link functions: %', offenders;
+  end if;
+
+  raise notice 'nest link function guards passed';
+end;
+$$;

@@ -61,13 +61,20 @@ class EdgeFunctionThermostat implements ThermostatGateway {
   Future<ThermostatLink> status() async =>
       linkFrom(await _invoke(<String, Object?>{'action': 'status'}));
 
+  /// Sends a command. Returns nothing, deliberately.
+  ///
+  /// A command followed by a read is two requests against a five-a-minute
+  /// device ceiling, so one drag of a setpoint would exhaust it. The server
+  /// answers `{applied: true}` and the screen folds in what it asked for; the
+  /// next poll, at most a minute away, is what confirms it against the
+  /// thermostat's own account of itself.
   @override
-  Future<ThermostatLink> send(ThermostatCommand command) async => linkFrom(
+  Future<void> send(ThermostatCommand command) async {
     await _invoke(<String, Object?>{
       'action': 'command',
       'command': wireFor(command),
-    }),
-  );
+    });
+  }
 
   @override
   Future<void> unlink() async {
@@ -126,9 +133,7 @@ class EdgeFunctionThermostat implements ThermostatGateway {
     return ThermostatLink.linked(
       state: stateFrom(device),
       linkedAt: _time(envelope['linkedAt']),
-      linkedBy: envelope['linkedBy'] is String
-          ? envelope['linkedBy']! as String
-          : null,
+      linkedByYou: envelope['linkedByYou'] == true,
     );
   }
 

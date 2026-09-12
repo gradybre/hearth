@@ -189,10 +189,15 @@ void main() {
       // not a preference anybody means to express. The list is derived from
       // `builtSections`, and since spec §11 that is every room — so it has to
       // ask the further question the launcher asks.
+      //
+      // House is on the list because the thermostat is a real screen now;
+      // Fitness and Health are not, because their tabs still draw the
+      // placeholder. That is the question answering itself.
       expect(LaunchTarget.options.map((LaunchTarget t) => t.stored), <String>[
         'home',
         'today',
         'section:nutrition',
+        'section:home',
       ]);
     });
 

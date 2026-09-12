@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../features/foods/food_library_screen.dart';
+import '../../features/house/thermostat_screen.dart';
 import '../../features/plan/plan_screen.dart';
 import '../../features/recipes/recipe_library_screen.dart';
 import '../../features/shopping/shopping_screen.dart';
@@ -165,7 +166,4 @@ Widget _healthAppointments() => const UnbuiltScreen(
   coming: 'What is booked, what is due, and what came of it.',
 );
 
-Widget _houseThermostat() => const UnbuiltScreen(
-  title: 'Thermostat',
-  coming: 'What the house is set to, and what it is actually doing.',
-);
+Widget _houseThermostat() => const ThermostatScreen();
