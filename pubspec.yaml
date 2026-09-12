@@ -72,6 +72,10 @@ dev_dependencies:
   drift_dev: ^2.34.5
   riverpod_generator: ^4.0.8
   mocktail: ^1.0.5
+  # Hashing the migration files, so editing one that has already been pushed
+  # fails a test rather than silently disagreeing with the hosted database
+  # (see test/architecture/migrations_are_history_test.dart).
+  crypto: ^3.0.7
   test: ^1.31.1
 
 # For information on the generic Dart part of this file, see the

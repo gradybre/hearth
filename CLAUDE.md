@@ -68,7 +68,18 @@ task seems to require breaking one.
    dart run drift_dev schema generate drift_schemas/ test/data/local/generated_migrations/
    ```
  `supabase db reset` proves the SQL is right;
-   it says nothing about the database the app actually talks to. Three migrations once sat
+   it says nothing about the database the app actually talks to.
+
+   **And an applied migration is history: never edit one again.** `db push`
+   skips a version it has applied, so the change never reaches the hosted
+   database — while `supabase migration list` compares versions rather than
+   contents and goes on reporting agreement, and `supabase db query` *without*
+   `--linked` answers from the local database and agrees too. Three green
+   checks, all answering a question nobody asked; the symptom was a thermostat
+   that could not be linked, with nothing in the message pointing near a
+   migration. Put the change in a new file, and run
+   `dart run tool/record_migrations.dart` so
+   `test/architecture/migrations_are_history_test.dart` keeps holding the line. Three migrations once sat
    local-only: the phone kept writing `is_default`, the hosted `upsert_food` had never heard of
    the column, and every pull quietly reverted it — three features silently broken while every
    local check passed and every commit said "migration applied". Finish a schema change with
