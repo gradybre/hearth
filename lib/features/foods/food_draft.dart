@@ -7,9 +7,15 @@ import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/parsing/amount_parser.dart';
+import '../../domain/parsing/pack_size.dart';
 import '../../domain/shopping/walmart_product.dart';
 import '../../domain/units/quantity.dart';
 import '../../domain/units/unit.dart';
+
+/// Re-exported: this is where the food editor's callers have always found
+/// it, and it now lives in the domain so the nutrition adapters can read the
+/// same shape out of Open Food Facts.
+export '../../domain/parsing/pack_size.dart';
 
 /// One serving row being edited.
 @immutable
@@ -731,24 +737,4 @@ class FoodDraft {
 
   @override
   int get hashCode => const DeepCollectionEquality().hash(_props);
-}
-
-/// A typed pack size — "1 lb", "7.2 oz" — as a quantity, or null.
-///
-/// Reuses the pieces already here rather than a new parser: [parseAmount] for
-/// the number, [Units.parse] for the unit, which is the pair the ingredient
-/// parser uses. Null when either half is missing, because half a pack size
-/// silently orders the wrong amount.
-Quantity? parsePackSize(String raw) {
-  final String text = raw.trim();
-  if (text.isEmpty) return null;
-
-  final Match? split = RegExp(r'^([^a-zA-Z]+)\s*(.*)$').firstMatch(text);
-  if (split == null) return null;
-  final double? amount = parseAmount(split.group(1)!);
-  if (amount == null || amount <= 0) return null;
-
-  final String unitWord = split.group(2)!.trim();
-  final Unit? unit = unitWord.isEmpty ? Units.item : Units.parse(unitWord);
-  return unit == null ? null : Quantity.of(amount, unit);
 }
