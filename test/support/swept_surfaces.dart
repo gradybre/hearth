@@ -199,9 +199,11 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
       await tools.reach(find.text('Manage list'));
     },
     arrived: find.text('Include seasonings'),
-    // The clear, which is last and is the one this sheet grew: a destructive
-    // button below the fold is a destructive button nobody has looked at.
-    farEnd: find.text('Clear the list'),
+    // The build's explanation, which is last now that clearing has moved out
+    // to the list itself. Still the thing furthest down: a sheet whose bottom
+    // nobody has looked at is a sheet that overflows at three times the text
+    // without anybody finding out.
+    farEnd: find.textContaining('Replaces what the plan put here'),
   ),
   SweptSurface(
     name: 'putting something on the shopping list',

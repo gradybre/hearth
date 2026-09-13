@@ -188,6 +188,23 @@ class _Body extends ConsumerWidget {
                   const SizedBox(height: HearthSpacing.lg),
                 ],
               ],
+              // At the end of the list, not in the header and not on the
+              // action bar. The header is already one line too tight at twice
+              // the text, and the bar is what a thumb lands on while shopping
+              // — neither is a place for something that empties the list. Down
+              // here it is where you arrive when you are finished with it,
+              // which is when it is wanted.
+              if (lines.isNotEmpty) ...<Widget>[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => _clear(context, ref),
+                    icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+                    label: const Text('Clear the list'),
+                  ),
+                ),
+                const SizedBox(height: HearthSpacing.lg),
+              ],
               // Last, so a growing conversation never pushes the list about.
               if (ref.watch(shoppingAssistantProvider) != null) ...<Widget>[
                 _ChatCard(
@@ -294,9 +311,9 @@ class _Body extends ConsumerWidget {
   /// Everything you do to the list as a whole, on a sheet you open when you
   /// are preparing rather than shopping (review §6.2.5).
   ///
-  /// What is on it, where it came from, the build from the plan with the days
-  /// it covers, and clearing it. None of that belongs on the screen you stand
-  /// in a shop holding.
+  /// What is on it, where it came from, and the build from the plan with the
+  /// days it covers. None of that belongs on the screen you stand in a shop
+  /// holding.
   Future<void> _manage(BuildContext context, WidgetRef ref) async {
     await showModalBottomSheet<void>(
       context: context,
@@ -311,14 +328,6 @@ class _Body extends ConsumerWidget {
         onRebuild: () {
           Navigator.of(sheet).pop();
           _rebuild(context, ref);
-        },
-        // Both of these put something over the list — a question, then a
-        // snackbar — so the sheet gets out of the way first and they run
-        // against the screen's own context rather than one about to be
-        // deactivated.
-        onClear: () {
-          Navigator.of(sheet).pop();
-          _clear(context, ref);
         },
         onRemoveSource: (String key) => _removeSource(ref, key),
       ),
@@ -470,17 +479,15 @@ class _Body extends ConsumerWidget {
   }
 }
 
-/// The list as a whole: what put it there, how to build it from the plan, and
-/// how to be rid of it.
+/// The list as a whole: what put it there, and how to build it from the plan.
+///
+/// Clearing it is not here. It was, and having it in two places meant two
+/// answers to one act; it lives at the end of the list instead, where you
+/// arrive when you are finished with it.
 class _ManageSheet extends ConsumerWidget {
-  const _ManageSheet({
-    required this.onRebuild,
-    required this.onClear,
-    required this.onRemoveSource,
-  });
+  const _ManageSheet({required this.onRebuild, required this.onRemoveSource});
 
   final VoidCallback onRebuild;
-  final VoidCallback onClear;
   final ValueChanged<String> onRemoveSource;
 
   @override
@@ -576,19 +583,6 @@ class _ManageSheet extends ConsumerWidget {
               'by hand stays.',
               style: context.text.metadata.copyWith(color: colors.textMuted),
             ),
-            if (lines.isNotEmpty) ...<Widget>[
-              const SizedBox(height: HearthSpacing.xl),
-              // Named for what it does rather than coloured for it, and it asks
-              // before it happens (§6.3: never colour alone).
-              OutlinedButton.icon(
-                onPressed: onClear,
-                icon: Icon(Icons.delete_outline, size: 18, color: colors.error),
-                label: Text(
-                  'Clear the list',
-                  style: TextStyle(color: colors.error),
-                ),
-              ),
-            ],
           ],
         ),
       ),

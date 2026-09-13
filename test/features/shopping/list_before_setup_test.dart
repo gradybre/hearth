@@ -154,16 +154,26 @@ void main() {
       );
     });
 
-    testWidgets('and the list as a whole can be cleared from there', (
-      WidgetTester tester,
-    ) async {
-      // Destructive, so it is at the far end of the sheet rather than on the
-      // screen you are holding in a shop — and it asks before it happens.
+    testWidgets('and clearing it is not in here', (WidgetTester tester) async {
+      // It was, and two places for one act is two answers to it. Clearing
+      // lives at the end of the list itself — reachable without opening a
+      // sheet, and still not under the thumb of somebody in a shop, because
+      // you have to get past the list to reach it.
       await openShopping(tester);
       await tester.tap(find.text('Manage list'));
       await pumpFrames(tester, frames: 12);
 
+      // One, and it is the page's, behind the sheet — a modal does not take
+      // the screen out of the tree. Two would mean the sheet had grown its
+      // own.
       expect(find.text('Clear the list'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.text('Clear the list'),
+        ),
+        findsNothing,
+      );
     });
 
     testWidgets('an empty list leads with the two ways to fill it', (

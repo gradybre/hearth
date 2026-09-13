@@ -320,6 +320,17 @@ void main() {
   });
 
   group('clearing the list (spec §5.7)', () {
+    /// Clear lives at the end of the list, past however many lines there are.
+    Future<void> reachClear(WidgetTester tester) async {
+      await tester.scrollUntilVisible(
+        find.text('Clear the list'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Clear the list'));
+      await pumpFrames(tester, frames: 20);
+    }
+
     Future<void> fill(WidgetTester tester) async {
       await openShopping(tester);
       await openAdd(tester);
@@ -328,10 +339,27 @@ void main() {
       await confirm(tester);
     }
 
+    testWidgets('is reachable without opening Manage', (
+      WidgetTester tester,
+    ) async {
+      // Behind Manage it is two taps from a screen you are holding in a shop
+      // with a finished list in front of you. On the page itself, but at the
+      // *end* of it: the header is already tight at twice the text, and the
+      // action bar is what a thumb lands on while shopping — a destructive
+      // control does not belong in either.
+      await fill(tester);
+      await reachClear(tester);
+
+      expect(find.text('Clear the list?'), findsOneWidget);
+      await tester.tap(find.text('Clear it'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(find.text('ground beef'), findsNothing);
+    });
+
     testWidgets('it asks before it happens', (WidgetTester tester) async {
       await fill(tester);
-      await manage(tester);
-      await tester.tap(find.text('Clear the list'));
+      await reachClear(tester);
       await pumpFrames(tester, frames: 20);
 
       expect(find.text('Clear the list?'), findsOneWidget);
@@ -343,8 +371,7 @@ void main() {
 
     testWidgets('and clears it when told to', (WidgetTester tester) async {
       await fill(tester);
-      await manage(tester);
-      await tester.tap(find.text('Clear the list'));
+      await reachClear(tester);
       await pumpFrames(tester, frames: 20);
       await tester.tap(find.text('Clear it'));
       await pumpFrames(tester, frames: 20);
@@ -357,8 +384,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await fill(tester);
-      await manage(tester);
-      await tester.tap(find.text('Clear the list'));
+      await reachClear(tester);
       await pumpFrames(tester, frames: 20);
       await tester.tap(find.text('Clear it'));
       await pumpFrames(tester, frames: 20);
@@ -378,8 +404,7 @@ void main() {
       // list when Undo is tapped is somebody's newer decision, and a restore
       // of the snapshot would quietly delete it.
       await fill(tester);
-      await manage(tester);
-      await tester.tap(find.text('Clear the list'));
+      await reachClear(tester);
       await pumpFrames(tester, frames: 20);
       await tester.tap(find.text('Clear it'));
       await pumpFrames(tester, frames: 20);
