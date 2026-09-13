@@ -18,6 +18,7 @@ import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/planning/day_format.dart';
 import '../../domain/planning/meal_plan.dart';
+import '../../domain/shopping/pack_display.dart';
 import '../../domain/shopping/shopping_contribution.dart';
 import '../../domain/shopping/shopping_line.dart';
 import '../../domain/shopping/shopping_list_builder.dart';
@@ -137,6 +138,15 @@ class _Body extends ConsumerWidget {
 
     final int inBasket = lines.where((ShoppingLine l) => l.checked).length;
 
+    // Read once for the whole list rather than per line. Only the foods that
+    // have a pack size are here, so the lookup below answers null for
+    // everything sold by weight without asking a second question.
+    final Map<String, Quantity> packs = <String, Quantity>{
+      for (final Food food
+          in ref.watch(foodLibraryProvider).value ?? const <Food>[])
+        if (food.packSize case final Quantity pack) food.id: pack,
+    };
+
     return Column(
       children: <Widget>[
         Expanded(
@@ -177,6 +187,7 @@ class _Body extends ConsumerWidget {
                   ),
                   _StoreGroup(
                     lines: groups[store]!,
+                    packs: packs,
                     onReorder: (int from, int to) =>
                         _save(ref, _reordered(store, groups, from, to)),
                     onTick: (ShoppingLine line, bool value) =>
@@ -901,6 +912,7 @@ class _StartCard extends StatelessWidget {
 class _StoreGroup extends StatelessWidget {
   const _StoreGroup({
     required this.lines,
+    required this.packs,
     required this.onReorder,
     required this.onTick,
     required this.onEdit,
@@ -909,6 +921,9 @@ class _StoreGroup extends StatelessWidget {
   });
 
   final List<ShoppingLine> lines;
+
+  /// Pack sizes by food id, for the lines whose food has one.
+  final Map<String, Quantity> packs;
 
   /// Wired to `onReorderItem`, which hands over the index the item should end
   /// up at — the older `onReorder` reported it as it would be before the item
@@ -957,6 +972,7 @@ class _StoreGroup extends StatelessWidget {
           onRestore: () => onRestore(line),
           child: _LineTile(
             line: line,
+            pack: packs[line.foodId],
             onTick: (bool value) => onTick(line, value),
             onEdit: () => onEdit(line),
           ),
@@ -969,16 +985,29 @@ class _StoreGroup extends StatelessWidget {
 class _LineTile extends StatelessWidget {
   const _LineTile({
     required this.line,
+    required this.pack,
     required this.onTick,
     required this.onEdit,
   });
 
   final ShoppingLine line;
+
+  /// How much comes in one of whatever this is sold as, when that is known.
+  ///
+  /// Null for everything sold by weight, and for every food Hearth has not
+  /// been told about — in both cases the line goes on saying what it always
+  /// said (spec §5.7).
+  final Quantity? pack;
   final ValueChanged<bool> onTick;
   final VoidCallback onEdit;
 
   /// What the line says to buy, in words.
   String get _amount {
+    // Packs first, where the thing comes in them. "4 lb" of a sauce sold in
+    // 24-ounce jars is arithmetically perfect and useless at the shelf.
+    final String? packed = PackDisplay.forLine(line: line, pack: pack);
+    if (packed != null) return packed;
+
     final Quantity? buy = line.toBuy;
     if (buy != null) return QuantityFormat.format(buy);
     if (line.planned.isEmpty) return '';
@@ -996,6 +1025,11 @@ class _LineTile extends StatelessWidget {
       if (line.isManual) 'added by hand',
       if (line.isEdited && line.planned.isNotEmpty)
         'recipes call for ${line.planned.map(QuantityFormat.format).join(' + ')}',
+      // Three jars is seventy-two ounces and the ragu wants sixty-four. The
+      // eight over are the whole reason to show both: a line that only says
+      // "3 × 24 oz" has rounded up, and a rounding nobody can see is a
+      // rounding nobody can judge.
+      ?PackDisplay.shortfall(line: line, pack: pack),
       if (line.onHand != null) 'have ${QuantityFormat.format(line.onHand!)}',
       if (line.hasUnquantified) 'plus some to taste',
     ];
