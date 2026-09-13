@@ -194,12 +194,29 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     open: (WidgetTester tester, SweepTools tools) async {
       await tools.tab('Shopping');
       // The harness seeds a line, because the list screen has two shapes: an
-      // empty one still leads with its setup, and `Manage list` is what
-      // replaces that once there is something to shop for (review §6.2.5).
+      // empty one leads with the two ways to fill it, and `Manage list` is
+      // what replaces that once there is something to shop for (§6.2.5).
       await tools.reach(find.text('Manage list'));
     },
     arrived: find.text('Include seasonings'),
-    farEnd: find.text('Rebuild from the plan'),
+    // The clear, which is last and is the one this sheet grew: a destructive
+    // button below the fold is a destructive button nobody has looked at.
+    farEnd: find.text('Clear the list'),
+  ),
+  SweptSurface(
+    name: 'putting something on the shopping list',
+    opensFrom: 'lib/features/shopping/add_to_list_sheet.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Shopping');
+      await tools.reach(find.text('Add to list'));
+    },
+    arrived: find.text('What do you need?'),
+    // The recipe the sweep fixture carries, which with nothing typed is the
+    // last row the sheet offers. Reaching it is the whole question at three
+    // times the text: the heading, the explanation and the search field are
+    // together taller than the sheet is allowed to be, so the results are
+    // off the bottom unless the sheet scrolls as one thing.
+    farEnd: find.text('Slow chilli with all the trimmings'),
   ),
   SweptSurface(
     name: 'choosing something to log',

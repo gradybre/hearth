@@ -75,8 +75,14 @@ void main() {
     );
     await tester.tap(find.text('Shopping').last);
     await pumpFrames(tester);
+    // Two taps: the empty card's `Build from the plan` opens the sheet that
+    // carries the days it covers, and the sheet's own button commits it
+    // (spec §5.7, as amended). `.last` is the sheet's — the card underneath
+    // the modal wears the same words.
     await tester.tap(find.text('Build from the plan'));
-    await pumpFrames(tester, frames: 20);
+    await pumpFrames(tester, frames: 12);
+    await tester.tap(find.text('Build from the plan').last);
+    await pumpFrames(tester, frames: 24);
   }
 
   Future<void> ask(WidgetTester tester, String what) async {
@@ -228,7 +234,7 @@ void main() {
     // longer a button you scroll up the shopping list to reach.
     await tester.tap(find.text('Manage list'));
     await pumpFrames(tester, frames: 12);
-    await tester.tap(find.text('Rebuild from the plan'));
+    await tester.tap(find.text('Build from the plan'));
     await pumpFrames(tester, frames: 20);
 
     expect(find.text('Coffee'), findsOneWidget);

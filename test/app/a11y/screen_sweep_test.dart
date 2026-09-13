@@ -545,8 +545,12 @@ void main() {
       await at3x(tester);
       await tester.tap(find.text('Shopping').last);
       await pumpFrames(tester);
+      // Two taps since §5.7 was amended: the empty card opens the sheet that
+      // carries the days the build covers, and the sheet commits it.
       await tester.tap(find.text('Build from the plan'));
-      await pumpFrames(tester, frames: 20);
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Build from the plan').last);
+      await pumpFrames(tester, frames: 24);
 
       await tester.scrollUntilVisible(
         find.text('Share or export'),

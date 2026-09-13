@@ -367,6 +367,30 @@ belongs to the Nutrition section.
 - **Backdating:** any day is editable (forgot to log yesterday, etc.); frozen snapshots keep past integrity intact.
 
 ### 5.7 Shopping List + Walmart Adapter
+- **The list is filled by adding to it. Building it from the plan is one way
+  in, not what the list is.** *Amended v1.2 — the original built a list from a
+  date range and treated everything else as a correction of what came out.*
+  You open the Shopping tab, add a recipe (at a number of servings) or a food,
+  and Hearth expands it into ingredient lines, aggregating and tagging stores
+  exactly as a build from the plan does. What put each amount there is
+  recorded per line, so the two ways in coexist: a rebuild replaces the plan's
+  share and leaves everything added by hand alone. **A recipe added by hand
+  and the same recipe in the plan both count** — two occasions is two lots of
+  ingredients, and a total that quietly absorbed one of them would send
+  somebody home short.
+- **The list is not pinned to dates.** A recipe added on Saturday belongs to
+  no week, so the list header states what is left rather than a range. The
+  date range is a parameter of the build from the plan and lives with it,
+  behind Manage list.
+- **A source can be taken back off.** Removing a recipe removes its ask from
+  every line it contributed to, and lines left asking for nothing go —
+  unless they have been ticked or edited, which are decisions about the shop
+  that outlive the recipe that prompted them.
+- **The whole list can be cleared, after being asked, with an undo.** The
+  undo puts back the lines that are still missing, onto the list as it stands:
+  anything added since is somebody's newer decision and wins by key. It is one
+  write rather than one per line — the same rule as a single-line undo, not a
+  restore of a snapshot.
 - **An answer is applied to the list as it stands, not as it was asked
   about.** Editing the list by asking sends the list and gets back a set of
   changes, and those changes land on whatever the list is when they arrive —
@@ -379,20 +403,23 @@ belongs to the Nutrition section.
   count is reported — the newer edit is the one somebody meant, and quietly
   reverting it would be the same fault in the other direction. It is never a
   restore of the whole list as it stood before.
-- **The range on screen is the range the list covers.** Opening the app shows
-  the dates the current list was built for, not "today plus six" regardless —
-  build on a Friday for the weekend and the week after, open it on Sunday, and
-  the label used to describe a different stretch from the one the lines came
-  from, so rebuilding moved the list to match the label rather than the other
-  way round. A range the user has adjusted is theirs and survives anything the
-  list does; until they adjust it, the list speaks for itself.
+- **The range offered is the range the last build covered.** Opening Manage
+  list shows the dates the current list was last built for, not "today plus
+  six" regardless — build on a Friday for the weekend and the week after, open
+  it on Sunday, and the range offered used to describe a different stretch
+  from the one the lines came from, so rebuilding moved the list to match the
+  label rather than the other way round. A range the user has adjusted is
+  theirs and survives anything the list does; until they adjust it, the list
+  speaks for itself. *(v1.2: the range is no longer shown over the list, since
+  the list is no longer a week's worth of anything. It is shown where it is
+  still true — beside the build it is a parameter of.)*
 - **Dates are stepped on the calendar, never by adding hours.** A local day is
   23 or 25 hours long on the two nights a year daylight saving changes, so
   `Duration(days: n)` lands an hour either side of midnight and belongs to the
   wrong date. Every date in the app is a midnight key, so that is the
   difference between Sunday's plan and Monday's. `addDays` does it correctly
   and a test reads the source to make sure nothing goes back to the other way.
-- Build a shopping list from the planned recipes/foods over **an adjustable date range**, defaulting to today through the next seven days. Not a calendar week: shopping on a Friday covers the weekend and the week after, and never lines up with one. Already-logged entries are excluded — something eaten was already bought.
+- Build from the plan, still: the planned recipes/foods over **an adjustable date range**, defaulting to today through the next seven days. Not a calendar week: shopping on a Friday covers the weekend and the week after, and never lines up with one. Already-logged entries are excluded — something eaten was already bought. Demoted in v1.2 to one of the two ways in, behind Manage list.
 - **Aggregation:** two-stage. First, each recipe's sections are flattened to a single per-recipe ingredient total (duplicates across sections summed). Then duplicate ingredients across all the week's recipes combine into one line item. Optional/to-taste ingredients are excluded.
 - **Mixed-unit aggregation:** when the same ingredient appears in different units across recipes (2 tbsp + 50 g butter), convert to one sensible unit **when density is known**; otherwise list both quantities under a single line item.
 - **Units — recipe vs. purchase:** v1 aggregates and displays in **recipe units** (e.g., "3 tbsp olive oil"); the store hand-off communicates *what the week needs*, not a mapping to purchase sizes (e.g., "one 500 ml bottle"). Purchase-size mapping is a later refinement.
@@ -463,7 +490,7 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
 - **Nutrition section tabs:**
   1. **Recipes** — library (favorites-only filter, collections, search/filter), create/edit, AI import, AI generation (chat), cook-along mode.
   2. **Plan** — weekly summary (macro totals per day) → day detail (slots) → planned/logged toggle; remaining-for-day at-a-glance.
-  3. **Shopping** — generated list, edit, export.
+  3. **Shopping** — add a recipe or a food and it expands into lines; build from the plan; edit; export.
   4. **Foods** — personal/household food library, barcode add, manual entry.
 - Responsive layouts: phone = capture & log; desktop = plan & manage.
 - **Recipe reader principle:** in cook/read mode, show ingredients and directions and little else — minimal chrome (research: the reader should be ruthlessly focused).
@@ -770,7 +797,7 @@ A layered strategy. **Automated tests** (authored by Claude Code alongside each 
 1. **Foundation** — accounts (solo-first + share-code household) + household linking, **RLS default-deny on every table + Supabase Auth (email verification, leaked-password protection) + secure token storage**, **theme system + dark mode + accessibility baseline**, recipes (all fields + sections + scaling + cook-along w/ multi-timer + favorites + collections + search/filter chips + live nutrition), manual food entry, planner + logging (summary, macros, progress bars, remaining-for-day, copy day, meal-prep multi-day assignment, fast entry, frozen log snapshots), offline cache for recipes/logs.
 2. **Barcode scan** — individual food + in-recipe capture; OFF → USDA → manual lookup chain; personal library; duplicate soft-warn.
 3. **AI import & generation** — multi-screenshot import (MacrosFirst migration) + URL/photo import, agentic chat generation reading the food profile → review screen (confidence flags, source badges, remembered matches) → save; ingredient→nutrition matching.
-4. **Shopping list** — build from plan, aggregate, store grouping, pantry check-off, manual items, editable list, Walmart deep-link/copy export behind adapter.
+4. **Shopping list** — add recipes and foods to the list directly (primary), build from plan (secondary), aggregate, store grouping, pantry check-off, manual items, editable list, Walmart deep-link/copy export behind adapter.
 5. **Household sharing polish + data** — invites, near-realtime sync hardening, data export, week templates.
 
 ---

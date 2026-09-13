@@ -76,9 +76,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
 
       expect(find.text('Your library is empty'), findsNothing);
-      // The real shopping list, since phase 4 — it used to be the honest
-      // placeholder, and its copy is what this asserted.
-      expect(find.text('Shopping for'), findsOneWidget);
+      // The real shopping list, since phase 4. Its empty state is the copy
+      // asserted here — it no longer opens on a date range (spec §5.7).
+      expect(find.text('Nothing on the list yet.'), findsOneWidget);
     });
 
     testWidgets('sections keep their state across tab switches', (
