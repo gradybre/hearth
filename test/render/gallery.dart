@@ -20,6 +20,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/app/shell/launch_target.dart';
+import 'package:hearth/data/adapters/thermostat.dart';
+import 'package:hearth/domain/house/thermostat.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
@@ -216,6 +218,73 @@ Future<void> pressLabel(WidgetTester tester, String label) async {
   await tester.tap(target);
 }
 
+/// A house with two thermostats on it.
+///
+/// Two, because one is the case that cannot go wrong: the screen stacks them,
+/// and a picture of a single one says nothing about what the second does to
+/// the layout. Downstairs is cooling and holds a range; Upstairs is heating
+/// and has a fan, so between them every control this screen has appears.
+///
+/// **Invented.** No number here came off anybody's wall.
+ThermostatGateway galleryThermostat() => _GalleryThermostat();
+
+class _GalleryThermostat implements ThermostatGateway {
+  @override
+  String get displayName => 'Google Nest';
+
+  @override
+  Future<Uri> consentUrl() async => Uri.parse('https://example.test');
+
+  @override
+  Future<ThermostatLink> status() async => ThermostatLink.linked(
+    linkedByYou: true,
+    linkedAt: DateTime(2026, 9, 13),
+    devices: <ThermostatState>[
+      ThermostatState(
+        id: 'enterprises/gallery/devices/down',
+        label: 'Downstairs',
+        ambientC: Temp.fToC(73),
+        humidityPercent: 55,
+        mode: ThermostatMode.heatCool,
+        availableModes: const <ThermostatMode>{
+          ThermostatMode.off,
+          ThermostatMode.heat,
+          ThermostatMode.cool,
+          ThermostatMode.heatCool,
+        },
+        hvac: HvacStatus.cooling,
+        heatC: Temp.fToC(70),
+        coolC: Temp.fToC(73),
+        eco: EcoMode.off,
+      ),
+      ThermostatState(
+        id: 'enterprises/gallery/devices/up',
+        label: 'Upstairs',
+        ambientC: Temp.fToC(68),
+        humidityPercent: 51,
+        mode: ThermostatMode.heat,
+        availableModes: const <ThermostatMode>{
+          ThermostatMode.off,
+          ThermostatMode.heat,
+        },
+        hvac: HvacStatus.heating,
+        heatC: Temp.fToC(69),
+        eco: EcoMode.off,
+        fan: const FanState(isOn: false),
+      ),
+    ],
+  );
+
+  @override
+  Future<void> send(
+    ThermostatCommand command, {
+    required String deviceId,
+  }) async {}
+
+  @override
+  Future<void> unlink() async {}
+}
+
 /// Weekly targets, so the day screen shows progress rather than a setup
 /// prompt. A gallery of the un-set-up state judges the wrong screen.
 const MacroTargets galleryTargets = MacroTargets(
@@ -241,6 +310,7 @@ class Scene {
     this.taps = const <String>[],
     this.longMenu = false,
     this.shoppingList = false,
+    this.thermostats = false,
   });
 
   /// The file name, without extension. Also the caption in the index.
@@ -265,6 +335,13 @@ class Scene {
   /// the right failure for a picture that would otherwise be silently of the
   /// wrong screen.
   final List<String> taps;
+
+  /// Whether the house has thermostats on it.
+  ///
+  /// Off by default, so every other scene keeps the null gateway that stands
+  /// for a build with no backend — which is what the rest of the gallery is
+  /// drawn against.
+  final bool thermostats;
 
   /// How far from today the planner opens, in days. Negative is the past.
   ///
@@ -1277,13 +1354,23 @@ const List<Scene> scenes = <Scene>[
     target: LaunchTarget.home,
     taps: <String>['Health'],
   ),
-  Scene(name: 'the-house', target: LaunchTarget.home, taps: <String>['House']),
-  // And at three times the text on a small phone, which is where two centred
-  // sentences in the middle of an empty screen stop being centred.
+  // The thermostat, with a house behind it. Drawn against a fixture rather
+  // than against nothing: the tab used to hold a placeholder and now holds a
+  // real screen, which without a linked account is two lines saying so — a
+  // true picture of an unconfigured build and a useless one of the feature.
+  Scene(
+    name: 'the-house',
+    target: LaunchTarget.home,
+    taps: <String>['House'],
+    thermostats: true,
+  ),
+  // And at three times the text on a small phone, where two thermostats'
+  // worth of controls is the most this screen ever has to give way on.
   Scene(
     name: 'the-house-large-text',
     target: LaunchTarget.home,
     taps: <String>['House'],
+    thermostats: true,
     size: Size(320, 568),
     textScale: 3.0,
   ),
