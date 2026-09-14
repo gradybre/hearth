@@ -27,7 +27,9 @@ void main() {
       MethodCall call,
     ) async {
       if (call.method.startsWith('Clipboard.')) sent.add(call);
-      return call.method == 'Clipboard.getData' ? null : null;
+      // Every platform call this sheet can make answers the same way: it
+      // does not read the clipboard, and nothing here needs a return value.
+      return null;
     });
     messenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/url_launcher'),
