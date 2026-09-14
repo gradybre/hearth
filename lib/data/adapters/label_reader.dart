@@ -1,5 +1,6 @@
 import 'package:meta/meta.dart';
 
+import '../../domain/units/quantity.dart';
 import 'recipe_ai.dart';
 
 /// One serving as a Nutrition Facts panel states it (spec §5.5).
@@ -66,6 +67,41 @@ class LabelReading {
   bool get isEmpty => servings.isEmpty;
 }
 
+/// What a package says it holds — "NET WT 24 OZ" (spec §5.7).
+///
+/// A different question from [LabelReading], off the same box. The Nutrition
+/// Facts panel states a *serving*; the net contents state the *packet*, and
+/// the shopping list needs the second to count jars rather than weigh them.
+/// Reading both from one answer was tempting and wrong: a label photographed
+/// panel-first usually does not have the net weight in frame at all, and a
+/// mode that had to answer both would be a mode that guessed at one.
+@immutable
+class PackReading {
+  const PackReading({
+    this.size,
+    this.name,
+    this.brand,
+    this.uncertain = const <AiUncertainty>[],
+  });
+
+  /// How much is in the packet, or null when nothing legible said.
+  ///
+  /// Null is a first-class answer rather than a failure. A wrong pack size
+  /// does not fail loudly — it silently buys the wrong amount — so a photo
+  /// that did not show the net contents has to come back saying so, not
+  /// carrying a number worked out from something else on the box.
+  final Quantity? size;
+
+  /// What the packet calls itself, when the front was in frame.
+  final String? name;
+  final String? brand;
+
+  /// Anything blurred, cut off, or ambiguous (spec §5.3's flag-never-guess).
+  final List<AiUncertainty> uncertain;
+
+  bool get isEmpty => size == null;
+}
+
 /// Reading a nutrition label out of a photo, behind an interface
 /// (CLAUDE.md rule 7).
 ///
@@ -80,4 +116,13 @@ class LabelReading {
 /// confident as a correct one, and the review screen is what catches it.
 abstract interface class LabelReader {
   Future<LabelReading> read(List<AiImage> images);
+
+  /// What the packet says it holds, off a photo of the packet.
+  ///
+  /// On this interface rather than one of its own because it is the same key,
+  /// the same model, the same image plumbing and the same size caps — the
+  /// reasoning that put label reading into `recipe-ai` in the first place. A
+  /// second interface would mean a second provider, a second fake and a
+  /// second set of size guards, all to keep a name accurate.
+  Future<PackReading> readPack(List<AiImage> images);
 }

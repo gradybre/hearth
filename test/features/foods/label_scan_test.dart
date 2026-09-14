@@ -20,12 +20,19 @@ import '../../support/fixtures.dart';
 /// fallback with the typing removed — and it answers what the databases above
 /// it cannot, because it is reading the actual box.
 class FakeLabelReader implements LabelReader {
-  FakeLabelReader({LabelReading? answer, this.error})
+  FakeLabelReader({LabelReading? answer, this.pack, this.error})
     : answer = answer ?? cheddar();
 
   final LabelReading? answer;
+
+  /// What a photographed *package* says it holds (spec §5.7). Null is the
+  /// honest default: most photos of a nutrition panel do not have the net
+  /// contents in frame at all.
+  final PackReading? pack;
+
   final RecipeAiException? error;
   int calls = 0;
+  int packCalls = 0;
   List<AiImage> lastImages = const <AiImage>[];
 
   @override
@@ -34,6 +41,14 @@ class FakeLabelReader implements LabelReader {
     lastImages = images;
     if (error != null) throw error!;
     return answer!;
+  }
+
+  @override
+  Future<PackReading> readPack(List<AiImage> images) async {
+    packCalls++;
+    lastImages = images;
+    if (error != null) throw error!;
+    return pack ?? const PackReading();
   }
 }
 

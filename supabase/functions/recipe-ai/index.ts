@@ -17,6 +17,11 @@
 // of each. The name is now a slight misnomer — renaming a deployed function is
 // a migration for a cosmetic gain, so it keeps it.
 //
+// Reading a pack size off a package is a sixth mode on the same reasoning, and
+// is deliberately *not* folded into the label mode: the net contents and the
+// Nutrition Facts panel are usually on different faces of the box, so one mode
+// answering both would be a mode guessing at one of them (spec §5.7).
+//
 // The key is the reason this exists at all. ANTHROPIC_API_KEY in the client is
 // a key anyone can pull out of the app bundle and spend (CLAUDE.md §8.1).
 //
@@ -396,6 +401,96 @@ const LABEL_TOOL = {
   },
 } as const;
 
+/// The units a pack size may be stated in.
+///
+/// Narrower than [LABEL_UNITS] and deliberately so. Net contents are printed
+/// as a weight, a volume or a count — never as a scoop or a patty — and a
+/// pack size the shopping list cannot compare against what a recipe asked for
+/// is one the list quietly ignores. Anything outside this list is dropped
+/// rather than reinterpreted.
+const PACK_UNITS = [
+  'g',
+  'kg',
+  'oz',
+  'lb',
+  'ml',
+  'l',
+  'fl_oz',
+  'cup',
+  'pint',
+  'quart',
+  'gallon',
+  'item',
+] as const;
+
+/// What one packet holds (spec §5.7).
+///
+/// Nothing is required. Every other tool here has at least one required field,
+/// and this one must not: a model told it has to answer will answer, and a
+/// pack size that was invented rather than read does not fail loudly — it
+/// silently buys the wrong amount at the shop. An empty answer with a note in
+/// `uncertain` is the useful one.
+const PACK_TOOL = {
+  name: 'pack_size',
+  description: 'Return the net contents printed on the package.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      amount: {
+        type: 'number',
+        description:
+          'The number printed as the net contents. 24 for "NET WT 24 OZ ' +
+          '(680g)". Omit if the package does not state one.',
+      },
+      unit: {
+        type: 'string',
+        enum: PACK_UNITS,
+        description: 'The unit that number is printed in.',
+      },
+      name: {
+        type: 'string',
+        description: 'What the packet calls itself. Omit if not visible.',
+      },
+      brand: { type: 'string', description: 'Omit if not visible.' },
+      uncertain: {
+        type: 'array',
+        description:
+          'Anything blurred, cut off, or ambiguous — including the case ' +
+          'where no net contents are printed anywhere in the photo.',
+        items: {
+          type: 'object',
+          properties: {
+            field: { type: 'string' },
+            note: { type: 'string' },
+          },
+          required: ['field', 'note'],
+        },
+      },
+    },
+  },
+} as const;
+
+const PACK_PROMPT = `You read the net contents off food packaging.
+
+This is the figure that says how much is in the whole packet — "NET WT 24 OZ",
+"1.5 L", "12 ct" — not a serving size, not a nutrition panel figure, and not
+"servings per container". A jar of sauce holds 24 ounces however many servings
+the panel divides it into.
+
+Where both an imperial and a metric figure are printed for the same contents,
+return the one printed first and larger: that is the one the shop's shelf and
+the shopper's eye use, and a pack size that reads back in the packet's own
+words is the whole point of this.
+
+A multipack — "6 x 250 ml" — has no single pack size this app can use. Omit
+the amount and say so in uncertain rather than returning the 250 or the 1500.
+
+If the photo does not show the net contents at all, or the figure is blurred
+or cut off, omit amount and unit and say so in uncertain. That is a useful
+answer. A number you worked out from a serving size and a servings-per-
+container count is not: it does not fail loudly, it quietly buys the wrong
+amount, and it will read as confidently as a correct one on the review screen.`;
+
 /// Editing a shopping list by asking (spec §5.7).
 ///
 /// Operations rather than a rewritten list, deliberately. A model handed the
@@ -625,11 +720,13 @@ Deno.serve(async (request: Request): Promise<Response> => {
   const mode = (body.mode ?? '').trim();
   if (
     mode !== 'extract' && mode !== 'generate' && mode !== 'label' &&
-    mode !== 'shopping' && mode !== 'menu' && mode !== 'icon'
+    mode !== 'pack' && mode !== 'shopping' && mode !== 'menu' &&
+    mode !== 'icon'
   ) {
     return json(
       {
-        error: 'mode must be extract, generate, label, shopping, menu or icon',
+        error:
+          'mode must be extract, generate, label, pack, shopping, menu or icon',
       },
       400,
     );
@@ -658,6 +755,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
       ? menuContent(body.images ?? [])
       : mode === 'label'
       ? labelContent(body.images ?? [])
+      : mode === 'pack'
+      ? packContent(body.images ?? [])
       : mode === 'extract'
       ? await extractContent(
         body.images ?? [],
@@ -679,6 +778,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
       ? MENU_PROMPT
       : mode === 'label'
       ? LABEL_PROMPT
+      : mode === 'pack'
+      ? PACK_PROMPT
       : mode === 'extract'
       ? EXTRACT_PROMPT
       : GENERATE_PROMPT;
@@ -690,6 +791,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
       ? MENU_TOOL
       : mode === 'label'
       ? LABEL_TOOL
+      : mode === 'pack'
+      ? PACK_TOOL
       : RECIPE_TOOL;
 
     // The output cap lives in budget.ts, beside the reservation computed from
@@ -714,6 +817,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
       ? shapeMenu(answer.input, answer.truncated)
       : mode === 'label'
       ? shapeLabel(answer.input)
+      : mode === 'pack'
+      ? shapePack(answer.input)
       : shape(answer.input);
     return json({ ...shaped, usage });
   } catch (error) {
@@ -824,6 +929,27 @@ function labelContent(images: string[]): unknown[] {
       text: images.length > 1
         ? 'These are photos of one packet. Read its label.'
         : 'Read this label.',
+    },
+  ];
+}
+
+/// A package, as Claude content blocks.
+///
+/// Several images are the same packet from more than one angle, the same as a
+/// label — and here it earns its keep more often, because the net contents and
+/// the front of the box are frequently on different faces.
+function packContent(images: string[]): unknown[] {
+  if (images.length === 0) {
+    throw new Error('bad request: give a photo of the package');
+  }
+
+  return [
+    ...imageBlocks(images),
+    {
+      type: 'text',
+      text: images.length > 1
+        ? 'These are photos of one packet. What are its net contents?'
+        : 'What are this packet\'s net contents?',
     },
   ];
 }
@@ -1312,6 +1438,38 @@ function shapeLabel(input: Record<string, unknown>): Record<string, unknown> {
         sodium_mg: number(s.sodium_mg),
         cholesterol_mg: number(s.cholesterol_mg),
       })),
+    uncertain: Array.isArray(input.uncertain)
+      ? (input.uncertain as Uncertain[])
+        .filter((u) => u?.field || u?.note)
+        .map((u) => ({ field: text(u.field), note: text(u.note) }))
+      : [],
+  };
+}
+
+/// Narrows a pack reading, and drops a figure the app could not use.
+///
+/// An unusable half is dropped to null rather than carried through with the
+/// other half attached to it, because the client reads "amount without unit"
+/// as no answer anyway and a value that survives halfway is a value somebody
+/// will eventually read as whole. `uncertain` is kept whatever happens: the
+/// note explaining *why* there is no number is the useful part of an empty
+/// answer.
+///
+/// Must stay in step with PACK_TOOL's own enum. The label shaper drifted from
+/// LABEL_UNITS exactly once and the drift was invisible — every scoop silently
+/// dropped by the filter whose job was to be safer than defaulting — so this
+/// one reads the same constant the schema does.
+function shapePack(input: Record<string, unknown>): Record<string, unknown> {
+  const units: readonly string[] = PACK_UNITS;
+  const amount = number(input.amount);
+  const unit = text(input.unit);
+  const usable = amount !== null && amount > 0 && units.includes(unit);
+
+  return {
+    amount: usable ? amount : null,
+    unit: usable ? unit : null,
+    name: text(input.name) || null,
+    brand: text(input.brand) || null,
     uncertain: Array.isArray(input.uncertain)
       ? (input.uncertain as Uncertain[])
         .filter((u) => u?.field || u?.note)

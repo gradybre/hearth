@@ -343,6 +343,7 @@ Deno.test('every mode reserves something, and no more than it could spend', asyn
     'extract',
     'generate',
     'label',
+    'pack',
     'shopping',
     'menu',
     'icon',
