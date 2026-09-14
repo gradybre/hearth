@@ -1,6 +1,7 @@
 import 'package:hearth/data/adapters/shopping_export.dart';
 import 'package:hearth/data/adapters/walmart_export.dart';
 import 'package:hearth/domain/models/food.dart';
+import 'package:hearth/domain/shopping/cart_quantity.dart';
 import 'package:hearth/domain/shopping/shopping_line.dart';
 import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
@@ -121,6 +122,91 @@ Anywhere
     });
   });
 
+  group('the copy counts packs, the same as the list did', () {
+    // The text is what somebody actually reads in a shop, and until now it
+    // said "4 lb" of a sauce sold in 24-ounce jars — arithmetically perfect,
+    // useless at the shelf, and the exact complaint `PackDisplay` exists for.
+    // The screen has said it properly since b3ec3c3; this is the copy
+    // catching up, through the same code rather than a second opinion.
+    Food sauce({Quantity? pack, String? itemId}) => Food(
+      id: 'f-sauce',
+      householdId: 'household-1',
+      name: 'Marinara sauce',
+      source: FoodSource.manual,
+      servingOptions: const <ServingOption>[],
+      walmartItemId: itemId,
+      packSize: pack,
+    );
+
+    ShoppingLine sauceLine(Quantity planned, {Quantity? onHand}) =>
+        ShoppingLine(
+          key: 'f-sauce',
+          name: 'marinara sauce',
+          planned: <Quantity>[planned],
+          onHand: onHand,
+          foodId: 'f-sauce',
+        );
+
+    Future<String?> copyOf(
+      ShoppingLine l, {
+      Quantity? pack,
+      String? id,
+    }) async => (await const WalmartExport().export(
+      exportableLines(
+        <ShoppingLine>[l],
+        foods: <String, Food>{'f-sauce': sauce(pack: pack, itemId: id)},
+      ),
+    )).clipboardText;
+
+    final Quantity jar = Quantity.of(24, Units.ounce);
+
+    test('how many jars, and what the recipes asked for beside it', () async {
+      expect(
+        await copyOf(sauceLine(Quantity.of(64, Units.ounce)), pack: jar),
+        '- 3 × 24 oz marinara sauce (needs 64 oz)',
+      );
+    });
+
+    test('and no rounding to report when the jars come out even', () async {
+      expect(
+        await copyOf(sauceLine(Quantity.of(48, Units.ounce)), pack: jar),
+        '- 2 × 24 oz marinara sauce',
+      );
+    });
+
+    test('one jar is not a multiplication', () async {
+      expect(
+        await copyOf(sauceLine(Quantity.of(20, Units.ounce)), pack: jar),
+        '- 24 oz marinara sauce (needs 20 oz)',
+      );
+    });
+
+    test(
+      'what is in the cupboard comes off before the jars are counted',
+      () async {
+        expect(
+          await copyOf(
+            sauceLine(
+              Quantity.of(48, Units.ounce),
+              onHand: Quantity.of(24, Units.ounce),
+            ),
+            pack: jar,
+          ),
+          '- 24 oz marinara sauce',
+        );
+      },
+    );
+
+    test('and a food with no pack size still reads by weight', () async {
+      // Two pounds of mince stays two pounds: that is what the scale at the
+      // counter is going to say.
+      expect(
+        await copyOf(sauceLine(Quantity.of(2, Units.pound))),
+        '- 2 lb marinara sauce',
+      );
+    });
+  });
+
   group('the links', () {
     test('search for the item by name, without the amount', () async {
       // "2 lb ground beef" is not a product; the quantity is for the person
@@ -208,6 +294,89 @@ Anywhere
         WalmartExport.cartLinkFor(items)!.queryParameters['items'],
         '111111111_3,222222222',
       );
+    });
+
+    test(
+      'and the quantity is packs now that foods carry a pack size',
+      () async {
+        // What changed this week: `packSize` used to be null on all 469 foods,
+        // so every weight line rode in as a bare id meaning one. Walmart's
+        // quantity means *how many of this product*, so with the pack known
+        // the honest number is the pack count — one jar per jar, not one
+        // order for four pounds of a thing sold in jars.
+        final List<ShoppingExportItem> items = exportableLines(
+          <ShoppingLine>[lineFor('food-a', Quantity.of(64, Units.ounce))],
+          foods: <String, Food>{
+            'food-a': product('111111111', pack: Quantity.of(24, Units.ounce)),
+          },
+        );
+
+        expect(items.single.quantity, 3);
+        expect(
+          WalmartExport.cartLinkFor(items)!.queryParameters['items'],
+          '111111111_3',
+        );
+      },
+    );
+
+    test('a pack Hearth cannot divide by leaves the quantity at one', () async {
+      // A pack size in a different kind from the need — millilitres against
+      // pounds. Asking for the conversion would throw; the cart asks for one
+      // instead, which is what it did before any pack size existed.
+      final List<ShoppingExportItem> items = exportableLines(
+        <ShoppingLine>[lineFor('food-a', Quantity.of(3, Units.pound))],
+        foods: <String, Food>{
+          'food-a': product(
+            '111111111',
+            pack: Quantity.of(500, Units.millilitre),
+          ),
+        },
+      );
+
+      expect(
+        WalmartExport.cartLinkFor(items)!.queryParameters['items'],
+        '111111111',
+      );
+    });
+
+    test('and a pack size read wrong cannot order a pallet', () async {
+      // The cap is the last thing between a misparsed label and a delivery,
+      // and a pack size now arrives from Open Food Facts and USDA rather
+      // than from a typing hand — so it is reachable without anybody making
+      // a mistake in the app at all.
+      final List<ShoppingExportItem> items = exportableLines(
+        <ShoppingLine>[lineFor('food-a', Quantity.of(64, Units.ounce))],
+        foods: <String, Food>{
+          'food-a': product('111111111', pack: Quantity.of(0.68, Units.gram)),
+        },
+      );
+
+      expect(
+        WalmartExport.cartLinkFor(items)!.queryParameters['items'],
+        '111111111_${CartQuantity.cap}',
+      );
+    });
+
+    test('and a line the cupboard covers never rides in as zero', () async {
+      // `itemId_0` is a nonsense Walmart would reject, and a covered line is
+      // dropped before it can become one.
+      final List<ShoppingExportItem> items = exportableLines(
+        <ShoppingLine>[
+          ShoppingLine(
+            key: 'food-a',
+            name: 'ground beef',
+            planned: <Quantity>[Quantity.of(24, Units.ounce)],
+            onHand: Quantity.of(24, Units.ounce),
+            foodId: 'food-a',
+          ),
+        ],
+        foods: <String, Food>{
+          'food-a': product('111111111', pack: Quantity.of(24, Units.ounce)),
+        },
+      );
+
+      expect(items, isEmpty);
+      expect(WalmartExport.cartLinkFor(items), isNull);
     });
 
     test('a line with no saved product is left out of the basket', () async {
