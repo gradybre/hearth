@@ -111,4 +111,51 @@ void main() {
           '  dart run tool/record_migrations.dart',
     );
   });
+
+  test('no two migrations claim the same timestamp', () {
+    // A migration is named YYYYMMDDHHMMSS_name.sql, and two lanes adding one
+    // on the same day both reach for the same plausible minute — a shared
+    // counter with no allocator collides by construction, which is the same
+    // insight as ownership (docs/ORCHESTRATION.md §3).
+    //
+    // Two files sharing a stamp is not a merge conflict. Both apply, in an
+    // order Postgres picks and nothing records, and a schema that depends on
+    // which went first is a schema that differs between a fresh reset and
+    // every database that already ran them.
+    final Map<String, List<String>> byStamp = <String, List<String>>{};
+    for (final FileSystemEntity entity in dir.listSync()) {
+      if (entity is! File || !entity.path.endsWith('.sql')) continue;
+      final String name = entity.uri.pathSegments.last;
+      final String stamp = name.split('_').first;
+      byStamp.putIfAbsent(stamp, () => <String>[]).add(name);
+    }
+
+    final List<String> collisions = <String>[
+      for (final MapEntry<String, List<String>> entry in byStamp.entries)
+        if (entry.value.length > 1) '${entry.key}: ${entry.value.join(', ')}',
+    ];
+
+    expect(
+      collisions,
+      isEmpty,
+      reason:
+          'Two migrations share a timestamp:\n  ${collisions.join('\n  ')}\n\n'
+          'Rename the later one. The orchestrator assigns these before a lane '
+          'starts, for exactly this reason.',
+    );
+  });
+
+  test('and every name is one this repository can read', () {
+    // A stamp that is not fourteen digits sorts wherever the filesystem feels
+    // like, and the manifest keys on the filename — so a malformed name is a
+    // migration the guards above cannot reason about at all.
+    final List<String> malformed = <String>[
+      for (final FileSystemEntity entity in dir.listSync())
+        if (entity is File && entity.path.endsWith('.sql'))
+          if (!RegExp(r'^\d{14}_[a-z0-9_]+\.sql$')
+              .hasMatch(entity.uri.pathSegments.last))
+            entity.uri.pathSegments.last,
+    ];
+    expect(malformed, isEmpty, reason: 'unreadable migration names');
+  });
 }

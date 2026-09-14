@@ -273,16 +273,25 @@ void main() {
     // remembered across a change of week, and the *selected* day is not.
     //
     // Open Wednesday. Step to next week — nothing matches, so nothing is
-    // expanded. Step back with the today button, which selects today rather
-    // than Wednesday: Wednesday's row re-opens, showing Wednesday's rings,
-    // above a button that would have opened Thursday.
+    // expanded. Step back: the selected day is Thursday, and Wednesday's row
+    // re-opens anyway, showing Wednesday's rings above a button that would
+    // have opened Thursday.
+    //
+    // Stepped back rather than taken back by the today button, which is what
+    // this did. `Go to this week` reads the wall clock, and the fixture's week
+    // is a fixed one — so the test only passed while the real today happened
+    // to fall inside 7–13 September 2026, and began failing on the fourteenth.
+    // A test whose result depends on the day it is run is not a test
+    // (docs/ORCHESTRATION.md §6). What it is about — that the open row is
+    // remembered by its own identity while the selection is not — needs only
+    // that the selected day is *not* Wednesday, which Thursday already is.
     await openWeek(tester);
 
     await tester.tap(find.bySemanticsLabel(RegExp('Wednesday 9/9[.,]')));
     await pumpFrames(tester, frames: 12);
     await tester.tap(find.byTooltip('Next week'));
     await pumpFrames(tester, frames: 12);
-    await tester.tap(find.byTooltip('Go to this week'));
+    await tester.tap(find.byTooltip('Previous week'));
     await pumpFrames(tester, frames: 12);
 
     expect(
