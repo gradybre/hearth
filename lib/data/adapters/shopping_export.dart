@@ -6,6 +6,7 @@ class ShoppingExportItem {
   const ShoppingExportItem({
     required this.name,
     this.quantityLabel,
+    this.shortfall,
     this.storeTag,
     this.productId,
     this.quantity = 1,
@@ -13,9 +14,18 @@ class ShoppingExportItem {
 
   final String name;
 
-  /// Already rendered for humans — v1 exports recipe units ("3 tbsp olive
-  /// oil"), not a mapping to purchase sizes (spec §5.7).
+  /// Already rendered for humans, and in the words the shelf uses where
+  /// Hearth knows them: "3 tbsp olive oil" for a thing sold loose, "3 × 24 oz"
+  /// for a thing sold in jars (spec §5.7).
   final String? quantityLabel;
+
+  /// What the recipes asked for, when the packs do not come to it.
+  ///
+  /// Null unless [quantityLabel] is a pack count that rounded up. Three jars
+  /// is seventy-two ounces and the ragu wants sixty-four, and a rounding the
+  /// shopper cannot see is a rounding they cannot judge — the same pair the
+  /// list itself shows, so the copy in their hand says what the screen said.
+  final String? shortfall;
 
   final String? storeTag;
 

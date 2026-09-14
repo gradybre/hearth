@@ -98,6 +98,140 @@ void main() {
     });
   });
 
+  group('against the pack sizes that actually arrive', () {
+    // Until this week no food in the library had a pack size at all, so none
+    // of this arithmetic had ever run on real data. Open Food Facts and USDA
+    // both supply one now (b3ec3c3, 8763ab3), and these are the shapes their
+    // data takes.
+    final Quantity jar = Quantity.of(24, Units.ounce);
+
+    test('a ragu wanting 64 oz of a 24 oz jar buys three', () {
+      // The complaint the whole pack thread exists for. Two jars is 48 and
+      // short; three is 72 and the eight over are shown beside it.
+      expect(
+        quantity(line(<Quantity>[Quantity.of(64, Units.ounce)]), pack: jar),
+        3,
+      );
+    });
+
+    test('and one that divides exactly buys exactly that, across units', () {
+      // A pack is published in the shop's units and a recipe is written in
+      // the cook's. 1.5 lb is 24 oz to the gram, and a jar and a half is not
+      // a thing you can buy — so this has to come out at one, not two.
+      expect(
+        quantity(line(<Quantity>[Quantity.of(1.5, Units.pound)]), pack: jar),
+        1,
+      );
+      expect(
+        quantity(line(<Quantity>[Quantity.of(48, Units.ounce)]), pack: jar),
+        2,
+      );
+    });
+
+    test('a need that was added up does not buy a spare pack', () {
+      // Regression. A line's amount is a *sum* — `IngredientConsolidator`
+      // adds every recipe's ask together — and 0.1 lb plus 0.2 lb is
+      // 0.30000000000000004 lb. Divided by a 0.3 lb pack that is
+      // 1.0000000000000002 packs, and a bare ceil() buys two of them.
+      //
+      // The list showed the same nonsense: "2 × 0.3 lb · needs 0.3 lb".
+      final Quantity summed =
+          Quantity.of(0.1, Units.pound) + Quantity.of(0.2, Units.pound);
+      expect(
+        quantity(line(<Quantity>[summed]), pack: Quantity.of(0.3, Units.pound)),
+        1,
+      );
+    });
+
+    test('nor does one the cupboard was taken off', () {
+      // Regression, the same rounding from the other direction:
+      // 2.2 lb less 0.2 lb is 2.0000000000000004 lb, which is three 1 lb
+      // packs to a bare ceil().
+      expect(
+        quantity(
+          line(<Quantity>[
+            Quantity.of(2.2, Units.pound),
+          ], onHand: Quantity.of(0.2, Units.pound)),
+          pack: Quantity.of(1, Units.pound),
+        ),
+        2,
+      );
+    });
+
+    test('but a hair over a whole pack still rounds up', () {
+      // The slack is a double's last bits, not a shelf's worth. A gram over
+      // two jars is still three jars.
+      expect(
+        quantity(
+          line(<Quantity>[Quantity.of(48 * 28.349523125 + 1, Units.gram)]),
+          pack: jar,
+        ),
+        3,
+      );
+    });
+
+    test('a countable thing sold by the dozen is one box', () {
+      // Six eggs against a twelve-count pack. The kinds match, so the pack
+      // branch answers and the count branch never sees it.
+      expect(
+        quantity(
+          line(<Quantity>[Quantity.of(6, Units.item)]),
+          pack: Quantity.of(12, Units.item),
+        ),
+        1,
+      );
+      expect(
+        quantity(
+          line(<Quantity>[Quantity.of(18, Units.item)]),
+          pack: Quantity.of(12, Units.item),
+        ),
+        2,
+      );
+    });
+
+    test('and a weight on a counted line cannot divide it', () {
+      // A food whose pack size arrived as a weight, on a line the recipes
+      // counted. The kinds disagree, so this falls through to the count —
+      // the same answer it gave before any pack size existed.
+      expect(
+        quantity(
+          line(<Quantity>[Quantity.of(6, Units.item)]),
+          pack: Quantity.of(680, Units.gram),
+        ),
+        6,
+      );
+    });
+
+    test('a line the cupboard already covers asks for one, never zero', () {
+      // It should not reach an export at all — `exportableLines` drops it —
+      // but a cart entry of zero is a nonsense Walmart would reject, and the
+      // pack branch must not be what introduces one.
+      expect(
+        quantity(
+          line(<Quantity>[
+            Quantity.of(24, Units.ounce),
+          ], onHand: Quantity.of(24, Units.ounce)),
+          pack: jar,
+        ),
+        1,
+      );
+    });
+
+    test('and a pack size read wrong cannot fill a van', () {
+      // A parser that reads "24 oz/680 g" as a fraction of an ounce is a
+      // redeploy away, and the cap is what stands between that and a
+      // delivery. It holds with the pack arriving from a source rather than
+      // from a typing hand.
+      expect(
+        quantity(
+          line(<Quantity>[Quantity.of(64, Units.ounce)]),
+          pack: Quantity.of(0.68, Units.gram),
+        ),
+        CartQuantity.cap,
+      );
+    });
+  });
+
   group('without one', () {
     test('a countable line asks for its count', () {
       expect(quantity(line(<Quantity>[Quantity.of(3, Units.item)])), 3);

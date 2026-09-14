@@ -201,8 +201,25 @@ class ShoppingLine {
     final double left = onHand == null || onHand!.kind != need.kind
         ? need.canonicalAmount
         : need.canonicalAmount - onHand!.canonicalAmount;
+    // And the floor has width, because the subtraction above is between two
+    // numbers that are only *supposed* to be equal. A need is a sum —
+    // `IngredientConsolidator` adds every recipe's ask — and 0.1 lb plus
+    // 0.2 lb comes to 136.07771100000002 g where a typed 0.3 lb is
+    // 136.077711 g. The 2.84e-14 g between them is not `<= 0`, so the line
+    // stayed on the list with a hundred-trillionth of a gram left to buy.
+    //
+    // Harmless until something acted on it. `CartQuantity` clamps to at
+    // least one, so once foods had pack sizes the shop hand-off ordered a
+    // whole jar of a thing the household already had in full.
+    //
+    // Relative to the need rather than a fixed weight, because canonical
+    // amounts are grams in one kind and millilitres or whole items in
+    // another, and a tolerance that means "a rounding error" in grams means
+    // "a tin" in items. A trillionth of the need is far below anything a
+    // shop sells and far above anything a double loses.
+    final double floor = need.canonicalAmount.abs() * 1e-12;
     return Quantity.canonical(
-      canonicalAmount: left <= 0 ? 0 : left,
+      canonicalAmount: left <= floor ? 0 : left,
       kind: need.kind,
       preferredUnit: need.preferredUnit,
     );
