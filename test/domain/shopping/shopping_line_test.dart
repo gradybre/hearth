@@ -59,6 +59,73 @@ void main() {
     });
   });
 
+  group('and a cupboard that covers it exactly, covers it', () {
+    // Regression. A need is a *sum* — `IngredientConsolidator` adds every
+    // recipe's ask together — and floating-point addition does not land on
+    // the same bits as the number a person typed. 0.1 lb plus 0.2 lb is
+    // 136.07771100000002 g; 0.3 lb is 136.077711 g; the difference is
+    // 2.84e-14 g, which is not `<= 0`.
+    //
+    // So the line stayed on the list, unticked, with a residue of a
+    // hundred-trillionth of a gram left to buy. Harmless while nothing acted
+    // on it; not harmless once pack sizes arrived, because `CartQuantity`
+    // clamps to at least one and the shop hand-off ordered a whole jar of a
+    // thing the household already had in full.
+    ShoppingLine summed({required double a, required double b, double? have}) {
+      final Quantity total = Quantity.canonical(
+        canonicalAmount:
+            Quantity.of(a, Units.pound).canonicalAmount +
+            Quantity.of(b, Units.pound).canonicalAmount,
+        kind: UnitKind.mass,
+        preferredUnit: Units.pound,
+      );
+      return ShoppingLine(
+        key: 'sauce',
+        name: 'marinara sauce',
+        planned: <Quantity>[total],
+        wanted: total,
+        onHand: have == null ? null : Quantity.of(have, Units.pound),
+      );
+    }
+
+    test('there is nothing left to buy', () {
+      expect(summed(a: 0.1, b: 0.2, have: 0.3).toBuy!.isZero, isTrue);
+    });
+
+    test('and the line reads as dealt with', () {
+      expect(summed(a: 0.1, b: 0.2, have: 0.3).isChecked, isTrue);
+    });
+
+    test('but a real remainder is still a real remainder', () {
+      // The guard is relative to the need, so it can only ever swallow a
+      // rounding tail. A twentieth of a pound is a shortfall a person could
+      // act on, and it survives.
+      final ShoppingLine short = summed(a: 0.1, b: 0.2, have: 0.25);
+      expect(short.toBuy!.isZero, isFalse);
+      expect(short.toBuy!.amountIn(Units.pound), closeTo(0.05, 1e-9));
+    });
+
+    test('and having more than enough is still nothing to buy', () {
+      expect(summed(a: 0.1, b: 0.2, have: 0.5).toBuy!.isZero, isTrue);
+    });
+
+    test('and un-ticking one of them clears the cupboard, as it does for any '
+        'other covered line', () {
+      // `isChecked` and `ticked(false)` are two readers of the same
+      // `toBuy.isZero`, and they have to agree or the tap looks broken: the
+      // line reads as done, you untick it, and the on-hand amount that was
+      // covering it ticks it straight back on.
+      //
+      // Before the floor had width they disagreed *in the safe direction* —
+      // both said "not covered" — so this passed for the wrong reason. It is
+      // here to fail if the two ever stop being the same predicate.
+      final ShoppingLine covered = summed(a: 0.1, b: 0.2, have: 0.3);
+      expect(covered.isChecked, isTrue);
+      expect(covered.ticked(false).onHand, isNull);
+      expect(covered.ticked(false).isChecked, isFalse);
+    });
+  });
+
   group('the tick is the whole-line case of having some', () {
     test('ticking marks it done', () {
       expect(beef().ticked(true).isChecked, isTrue);
