@@ -29,7 +29,7 @@ abstract final class CartQuantity {
       // needs no conversion — and asking for one across kinds would throw
       // rather than answer (see Quantity.amountIn).
       final double packs = need.canonicalAmount / pack.canonicalAmount;
-      return _bounded(packs.ceil());
+      return _bounded(_ceil(packs));
     }
 
     // No pack size. A countable line is the one case where the list's number
@@ -46,4 +46,28 @@ abstract final class CartQuantity {
   }
 
   static int _bounded(int quantity) => math.max(1, math.min(cap, quantity));
+
+  /// Rounds up, but not off the back of a rounding error.
+  ///
+  /// A need is a *sum*: `IngredientConsolidator.combine` adds every recipe's
+  /// ask together, and an on-hand amount is subtracted from the total. Both
+  /// leave a tail. Two recipes wanting 0.1 lb and 0.2 lb come to
+  /// 0.30000000000000004 lb, which against a 0.3 lb pack is 1.0000000000000002
+  /// packs — and a bare `ceil()` buys two of them.
+  ///
+  /// The list said as much out loud once the packs reached it: "2 × 0.3 lb ·
+  /// needs 0.3 lb", a rounding shown beside the thing it did not round.
+  /// `PackDisplay` already treats a gram either way as agreement; this is the
+  /// same judgement one step earlier, where the decision is actually made.
+  ///
+  /// The slack is a double's last bits and nothing more — a gram over two
+  /// jars is still three jars.
+  static int _ceil(double packs) {
+    final double whole = packs.roundToDouble();
+    return (packs - whole).abs() <= _slack ? whole.toInt() : packs.ceil();
+  }
+
+  /// Measured on the pack *count*, not on the weight — which [cap] keeps
+  /// small, so a fixed slack stays far below anything a shopper could act on.
+  static const double _slack = 1e-9;
 }

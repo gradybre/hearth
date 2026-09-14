@@ -1,6 +1,7 @@
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/shopping/cart_quantity.dart';
+import '../../domain/shopping/pack_display.dart';
 import '../../domain/shopping/shopping_line.dart';
 import '../../domain/units/quantity.dart';
 import 'shopping_export.dart';
@@ -105,8 +106,17 @@ class WalmartExport implements ShoppingExportAdapter {
       }
       for (final ShoppingExportItem item in byStore[store]!) {
         final String amount = item.quantityLabel ?? '';
+        // The rounding travels with the pack count, the way it does on the
+        // list: "3 × 24 oz marinara (needs 64 oz)". After the name rather
+        // than inside the amount, because the amount is what the line leads
+        // with and a parenthesis in front of it reads as part of the number.
+        final String needs = item.shortfall == null
+            ? ''
+            : ' (${item.shortfall})';
         out.writeln(
-          amount.isEmpty ? '- ${item.name}' : '- $amount ${item.name}',
+          amount.isEmpty
+              ? '- ${item.name}$needs'
+              : '- $amount ${item.name}$needs',
         );
       }
     }
@@ -128,23 +138,50 @@ List<ShoppingExportItem> exportableLines(
   for (final ShoppingLine line in lines)
     if (!line.isChecked)
       if (_food(line, foods) case final Food? food)
-        ShoppingExportItem(
-          name: line.name,
-          quantityLabel: _label(line),
-          storeTag: line.storeTag,
-          productId: food?.walmartItemId,
-          quantity: CartQuantity.forLine(line: line, pack: food?.packSize),
-        ),
+        if (_amount(line, food?.packSize) case final _Amount amount)
+          ShoppingExportItem(
+            name: line.name,
+            quantityLabel: amount.label,
+            shortfall: amount.shortfall,
+            storeTag: line.storeTag,
+            productId: food?.walmartItemId,
+            quantity: CartQuantity.forLine(line: line, pack: food?.packSize),
+          ),
 ];
 
 Food? _food(ShoppingLine line, Map<String, Food> foods) =>
     line.foodId == null ? null : foods[line.foodId];
 
-String? _label(ShoppingLine line) {
+typedef _Amount = ({String? label, String? shortfall});
+
+/// What the exported line says to buy, in words.
+///
+/// The same order the list on screen reads in, and through the same
+/// [PackDisplay] — a second opinion about how a pack reads is how the copy in
+/// somebody's hand comes to disagree with the screen they copied it from.
+_Amount _amount(ShoppingLine line, Quantity? pack) {
+  // Packs first, where the thing comes in them. "4 lb" of a sauce sold in
+  // 24-ounce jars is arithmetically perfect and useless at the shelf.
+  final String? packed = PackDisplay.forLine(line: line, pack: pack);
+  if (packed != null) {
+    return (
+      label: packed,
+      shortfall: PackDisplay.shortfall(line: line, pack: pack),
+    );
+  }
+
   final Quantity? buy = line.toBuy;
-  if (buy != null) return buy.isZero ? null : QuantityFormat.format(buy);
-  if (line.planned.isEmpty) return null;
+  if (buy != null) {
+    return (
+      label: buy.isZero ? null : QuantityFormat.format(buy),
+      shortfall: null,
+    );
+  }
+  if (line.planned.isEmpty) return (label: null, shortfall: null);
   // Written two ways at once and never settled — both go, because dropping
   // one would be choosing an amount the app declined to choose.
-  return line.planned.map(QuantityFormat.format).join(' + ');
+  return (
+    label: line.planned.map(QuantityFormat.format).join(' + '),
+    shortfall: null,
+  );
 }
