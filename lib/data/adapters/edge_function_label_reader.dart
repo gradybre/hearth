@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../domain/units/quantity.dart';
+import '../../domain/units/unit.dart';
 import 'label_reader.dart';
 import 'recipe_ai.dart';
 
@@ -25,12 +27,27 @@ class EdgeFunctionLabelReader implements LabelReader {
   final SupabaseClient _client;
 
   @override
-  Future<LabelReading> read(List<AiImage> images) async {
+  Future<LabelReading> read(List<AiImage> images) async => readingFrom(
+    await _ask('label', images, 'Take a photo of the label first.'),
+  );
+
+  @override
+  Future<PackReading> readPack(List<AiImage> images) async => packFrom(
+    await _ask('pack', images, 'Take a photo of the package first.'),
+  );
+
+  /// One call to the function, in whichever mode, as a decoded envelope.
+  ///
+  /// Shared by both readers rather than written twice: the two differ only in
+  /// the mode they send and the shape they parse back, and the error handling
+  /// between those two points is the part that took several goes to get right.
+  Future<Map<Object?, Object?>> _ask(
+    String mode,
+    List<AiImage> images,
+    String noPhoto,
+  ) async {
     if (images.isEmpty) {
-      throw const RecipeAiException(
-        'Take a photo of the label first.',
-        isRetryable: false,
-      );
+      throw RecipeAiException(noPhoto, isRetryable: false);
     }
 
     final Object? data;
@@ -38,7 +55,7 @@ class EdgeFunctionLabelReader implements LabelReader {
       final FunctionResponse response = await _client.functions.invoke(
         functionName,
         body: <String, Object?>{
-          'mode': 'label',
+          'mode': mode,
           'images': <String>[
             for (final AiImage image in images)
               'data:${image.mediaType};base64,${base64Encode(image.bytes)}',
@@ -66,7 +83,7 @@ class EdgeFunctionLabelReader implements LabelReader {
     final Object? error = data['error'];
     if (error != null) throw RecipeAiException('$error');
 
-    return readingFrom(data);
+    return data;
   }
 
   /// Reads the function's response into a [LabelReading].
@@ -108,6 +125,42 @@ class EdgeFunctionLabelReader implements LabelReader {
       );
     }
     return reading;
+  }
+
+  /// Reads the function's response into a [PackReading].
+  ///
+  /// Public for the same reason as [readingFrom]: the parse is the seam worth
+  /// testing, including against the shapes the function should never send.
+  ///
+  /// A reading with no size is **not** an error. The packet's net contents are
+  /// often not in the same frame as anything else, and "the photo did not say"
+  /// is the answer that keeps a wrong pack size off a food — one that would
+  /// not fail loudly, it would silently buy the wrong amount.
+  static PackReading packFrom(Map<Object?, Object?> envelope) => PackReading(
+    size: _pack(_number(envelope['amount']), _text(envelope['unit'])),
+    name: _textOrNull(envelope['name']),
+    brand: _textOrNull(envelope['brand']),
+    uncertain: <AiUncertainty>[
+      if (envelope['uncertain'] case final List<Object?> flagged)
+        for (final Object? item in flagged)
+          if (item is Map)
+            AiUncertainty(
+              field: _text(item['field']),
+              note: _text(item['note']),
+            ),
+    ],
+  );
+
+  /// An amount and a unit as a quantity, or null when either half is missing.
+  ///
+  /// Half a pack size is not most of one. A unit this app cannot convert is
+  /// dropped rather than defaulted to grams, the same rule the serving parse
+  /// above follows and for the same reason: a packet silently reinterpreted
+  /// as a weight it is not reads exactly as correct on the review screen.
+  static Quantity? _pack(double? amount, String unitId) {
+    if (amount == null || amount <= 0 || unitId.isEmpty) return null;
+    final Unit? unit = Units.parse(unitId);
+    return unit == null ? null : Quantity.of(amount, unit);
   }
 
   /// One serving row, or null when it is not one.

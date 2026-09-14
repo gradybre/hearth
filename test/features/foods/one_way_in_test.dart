@@ -79,6 +79,12 @@ class _FakeLabelReader implements LabelReader {
       ),
     ],
   );
+
+  /// This walk is about the ways a food gets in, not about pack sizes: an
+  /// empty reading is what a photo of a nutrition panel honestly gives.
+  @override
+  Future<PackReading> readPack(List<AiImage> images) async =>
+      const PackReading();
 }
 
 class _FakeCamera implements PhotoPicker {

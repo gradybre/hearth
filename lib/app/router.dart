@@ -11,6 +11,7 @@ import '../features/foods/food_draft.dart';
 import '../features/foods/food_editor_screen.dart';
 import '../features/foods/menu_import_screen.dart';
 import '../features/foods/merge_screen.dart';
+import '../features/foods/pack_size_screen.dart';
 import '../features/foods/seasonings_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/plan/logging_intent.dart';
@@ -219,6 +220,13 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
       path: '/food/merge',
       builder: (BuildContext context, GoRouterState state) =>
           const MergeScreen(),
+    ),
+    GoRoute(
+      // Library maintenance, like the two above it: a list you visit when
+      // something is missing rather than every day (spec §5.7).
+      path: '/food/pack-sizes',
+      builder: (BuildContext context, GoRouterState state) =>
+          const PackSizeScreen(),
     ),
     GoRoute(
       path: '/food/seasonings',

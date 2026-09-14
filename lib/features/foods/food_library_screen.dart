@@ -371,6 +371,10 @@ class _MaintenanceMenu extends StatelessWidget {
         value: '/food/seasonings',
         child: Text('Seasonings that need no match', style: context.text.body),
       ),
+      PopupMenuItem<String>(
+        value: '/food/pack-sizes',
+        child: Text('Foods with no pack size', style: context.text.body),
+      ),
     ],
   );
 }

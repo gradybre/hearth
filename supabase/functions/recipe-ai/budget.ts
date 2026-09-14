@@ -75,6 +75,7 @@ export type Mode =
   | 'extract'
   | 'generate'
   | 'label'
+  | 'pack'
   | 'shopping'
   | 'menu'
   | 'icon';
@@ -86,13 +87,21 @@ export type Mode =
 /// 60 — a short list that looks complete. The others answer with one recipe,
 /// one label, one basket. An icon is a few hundred bytes of markup, so a small
 /// ceiling is the cheapest guard against a model that decides to trace a
-/// photograph.
+/// photograph. A pack size is smaller still — one number, one unit and a note
+/// about what was hard to read — and it is the mode that runs over a library
+/// of hundreds, so it is the one where a wasteful ceiling would add up.
 ///
 /// Here rather than at the call site because the reservation is computed from
 /// it: two copies of this number would drift, and the copy that drifted would
 /// be the one holding the ceiling up.
 export function maxOutputTokens(mode: Mode): number {
-  return mode === 'menu' ? 16_000 : mode === 'icon' ? 1500 : 4096;
+  return mode === 'menu'
+    ? 16_000
+    : mode === 'icon'
+    ? 1500
+    : mode === 'pack'
+    ? 1000
+    : 4096;
 }
 
 /// The model's context window, and so the most any one call can be billed for
@@ -139,6 +148,7 @@ function maxInputTokens(mode: Mode): number {
       );
     case 'menu':
     case 'label':
+    case 'pack':
       return maxImages * perImage;
     case 'generate':
     case 'shopping':
