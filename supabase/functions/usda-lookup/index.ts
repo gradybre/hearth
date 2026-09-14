@@ -7,58 +7,15 @@
 //
 // A second benefit worth having: USDA's response shape is awkward and changes.
 // Parsing it here means a fix is a redeploy rather than an App Store release.
+// That parsing lives in `narrow.ts`, because this file calls `Deno.serve` and
+// importing it to test the narrowing would start a server.
 //
 // verify_jwt is on (the default), so only a signed-in Hearth user can spend
 // this project's USDA quota.
 
+import { type Match, toMatch } from './narrow.ts';
+
 const FDC = 'https://api.nal.usda.gov/fdc/v1';
-
-/// FDC nutrient numbers. The ids are stable; the names in the payload are not.
-const PROTEIN = '203';
-const CARB = '205';
-const FAT = '204';
-
-/// The three minor nutrients (spec §5.6). USDA reports sodium and cholesterol
-/// in milligrams and fibre in grams, which is exactly how Hearth stores them,
-/// so nothing is converted here.
-const FIBER = '291';
-const SODIUM = '307';
-const CHOLESTEROL = '601';
-
-/// Energy, in the order FDC prefers to state it.
-///
-/// 208 is the classic reported value and covers the branded catalogue. The
-/// curated Foundation foods do not carry it at all — they state energy as
-/// "Energy (Atwater General Factors)" and "(Specific Factors)" instead — so
-/// insisting on 208 silently discarded them, which is why a search for "red
-/// bell pepper" showed veggie chips and hummus while USDA's own four entries
-/// for raw bell peppers never appeared. General factors first: it is the
-/// familiar 4-4-9 arithmetic, and the one every other source here is quoting.
-const KCAL = ['208', '957', '958'];
-
-interface Macros {
-  kcal: number;
-  protein_g: number;
-  carb_g: number;
-  fat_g: number;
-  /// Null when USDA did not report it. Deliberately not defaulted to 0 — a
-  /// food nobody measured for fibre is not a food with no fibre (spec §5.6).
-  fiber_g: number | null;
-  sodium_mg: number | null;
-  cholesterol_mg: number | null;
-}
-
-interface Match {
-  fdc_id: number;
-  name: string;
-  brand: string | null;
-  barcode: string | null;
-  data_type: string | null;
-  per_100g: Macros;
-  serving_grams: number | null;
-  serving_label: string | null;
-  confidence: number;
-}
 
 Deno.serve(async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') {
@@ -132,101 +89,6 @@ async function search(
   return foods
     .map(toMatch)
     .filter((m): m is Match => m !== null);
-}
-
-// deno-lint-ignore no-explicit-any
-function toMatch(food: any): Match | null {
-  const name = `${food?.description ?? ''}`.trim();
-  if (!name) return null;
-
-  const per100g = macrosOf(food);
-  // No energy means nothing worth offering: every other number is context for
-  // a calorie count that is not there.
-  if (per100g === null) return null;
-
-  const gramsPerServing =
-    `${food?.servingSizeUnit ?? ''}`.toLowerCase() === 'g' &&
-      typeof food?.servingSize === 'number' && food.servingSize > 0
-      ? food.servingSize
-      : null;
-
-  const barcode = `${food?.gtinUpc ?? ''}`.trim() || null;
-  const brand = `${food?.brandOwner ?? food?.brandName ?? ''}`.trim() || null;
-
-  return {
-    fdc_id: Number(food?.fdcId ?? 0),
-    name,
-    brand,
-    barcode,
-    data_type: `${food?.dataType ?? ''}`.trim() || null,
-    per_100g: per100g,
-    serving_grams: gramsPerServing,
-    serving_label: `${food?.householdServingFullText ?? ''}`.trim() || null,
-    confidence: confidenceOf(per100g, brand, barcode),
-  };
-}
-
-// deno-lint-ignore no-explicit-any
-function macrosOf(food: any): Macros | null {
-  const nutrients: unknown[] = Array.isArray(food?.foodNutrients)
-    ? food.foodNutrients
-    : [];
-
-  const by = (number: string): number | null => {
-    for (const raw of nutrients) {
-      // deno-lint-ignore no-explicit-any
-      const n = raw as any;
-      const id = `${n?.nutrientNumber ?? n?.nutrient?.number ?? ''}`;
-      if (id === number) {
-        const value = n?.value ?? n?.amount;
-        if (typeof value === 'number') return value;
-      }
-    }
-    return null;
-  };
-
-  const firstOf = (numbers: string[]): number | null => {
-    for (const number of numbers) {
-      const value = by(number);
-      if (value !== null) return value;
-    }
-    return null;
-  };
-
-  const kcal = firstOf(KCAL);
-  if (kcal === null) return null;
-
-  return {
-    kcal,
-    protein_g: by(PROTEIN) ?? 0,
-    carb_g: by(CARB) ?? 0,
-    fat_g: by(FAT) ?? 0,
-    // `by` already answers null for a nutrient USDA did not report, and that
-    // null is carried the whole way rather than flattened here.
-    fiber_g: by(FIBER),
-    sodium_mg: by(SODIUM),
-    cholesterol_mg: by(CHOLESTEROL),
-  };
-}
-
-/// The same judgement the Open Food Facts adapter makes, for the same reason:
-/// a wrong macro corrupts a day's numbers invisibly, so anything doubtful is
-/// flagged for a human rather than quietly believed.
-function confidenceOf(
-  per100g: Macros,
-  brand: string | null,
-  barcode: string | null,
-): number {
-  // Nothing edible is over 900 kcal per 100 g — pure fat is about 900.
-  if (per100g.kcal <= 0 || per100g.kcal > 900) return 0.3;
-
-  let score = 0.8;
-  if (brand) score += 0.05;
-  if (barcode) score += 0.05;
-  if (per100g.protein_g === 0 && per100g.carb_g === 0 && per100g.fat_g === 0) {
-    score -= 0.25;
-  }
-  return Math.min(Math.max(score, 0), 1);
 }
 
 function json(body: unknown, status = 200): Response {

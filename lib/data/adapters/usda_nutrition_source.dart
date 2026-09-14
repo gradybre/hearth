@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
+import '../../domain/parsing/pack_size.dart';
 import '../../domain/parsing/serving_label.dart';
 import '../../domain/units/quantity.dart';
 import '../../domain/units/unit.dart';
@@ -108,6 +109,15 @@ class UsdaNutritionSource implements NutritionSource {
         brand: _text(json['brand']),
         barcode: barcode,
         source: FoodSource.usda,
+        // What the package holds, which is a different question from what a
+        // serving is — and the one a shopping list needs, because a jar is
+        // bought whole. The same parser Open Food Facts feeds, reading the
+        // same prose: without it the list said "4 lb" of a sauce sold in
+        // 24-ounce jars, which is arithmetically perfect and useless at a
+        // shelf (spec §5.7). Anything it cannot read is null rather than a
+        // guess — a wrong pack size does not fail loudly, it quietly buys the
+        // wrong amount.
+        packSize: parsePackSize('${json['pack_size'] ?? ''}'),
         // The pack's own serving leads, for the same reason it does in Open
         // Food Facts: `Food.defaultServing` is whatever comes first, and what
         // a log defaults to should be the number written on the box.
