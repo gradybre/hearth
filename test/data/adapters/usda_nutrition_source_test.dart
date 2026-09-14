@@ -2,6 +2,7 @@ import 'package:hearth/data/adapters/nutrition_source.dart';
 import 'package:hearth/data/adapters/usda_nutrition_source.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
+import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -33,6 +34,7 @@ Map<String, Object?> aHit({
   Object? fiber,
   Object? sodium,
   Object? cholesterol,
+  Object? packSize,
 }) => <String, Object?>{
   'matches': <Object?>[
     <String, Object?>{
@@ -50,6 +52,7 @@ Map<String, Object?> aHit({
       },
       'serving_grams': servingGrams,
       'serving_label': ?servingLabel,
+      'pack_size': ?packSize,
     },
   ],
 };
@@ -158,6 +161,42 @@ void main() {
       expect(per100g.sodiumMg, isNull);
       expect(per100g.cholesterolMg, isNull);
       expect(per100g.kcal, 400);
+    });
+  });
+
+  group('what the whole package holds (spec §5.7)', () {
+    // A weight tells you nothing at a shelf stacked with jars, so the shopping
+    // list counts packs — "3 × 24 oz" — and it can only do that for a food
+    // that knows its own pack size. Open Food Facts has supplied one for a
+    // while; USDA's branded labels carry `packageWeight` and the function now
+    // passes it on.
+    test('a stated pack size becomes a real quantity', () async {
+      final List<NutritionMatch> matches = await sourceReturning(
+        aHit(packSize: '24 oz'),
+      ).search('marinara');
+
+      expect(matches.single.food.packSize, Quantity.of(24, Units.ounce));
+    });
+
+    test('a function that has not said leaves it unknown', () async {
+      // An older deployment sends no `pack_size` at all, and the shopping list
+      // falls back to the weight it already had rather than inventing a pack.
+      final List<NutritionMatch> matches = await sourceReturning(aHit())
+          .search('cheddar');
+
+      expect(matches.single.food.packSize, isNull);
+    });
+
+    test('an unreadable pack size is null, not a guess', () async {
+      // A wrong pack size does not fail loudly — it silently buys the wrong
+      // amount — so anything the shared parser cannot read stays absent.
+      for (final Object raw in <Object>['', '   ', 'family size', 'oz']) {
+        final List<NutritionMatch> matches = await sourceReturning(
+          aHit(packSize: raw),
+        ).search('cheddar');
+
+        expect(matches.single.food.packSize, isNull, reason: '"$raw"');
+      }
     });
   });
 }
