@@ -454,9 +454,29 @@ Future<void> expectTextContrast(
 
   final RenderBox box = element.renderObject! as RenderBox;
   final RenderView view = tester.binding.renderViews.first;
-  final Rect bounds = MatrixUtils.transformRect(
+  // Two coordinate spaces, and they are only the same one by a single line in
+  // the harness. `getTransformTo(null)` answers in **logical** pixels, while
+  // `RenderView.paintBounds` is `size * devicePixelRatio` and the image below
+  // comes out that big — **physical** pixels. `app_harness.dart` pins the
+  // ratio at 1.0, so today they coincide; at 3.0 the same rectangle covers a
+  // ninth of the glyphs and sits at a third of their offset, which is a
+  // region of whatever the label happens to be above.
+  //
+  // That would not go red. The foreground below is read from the widget tree
+  // rather than from the frame, so a washed-out label still reports its own
+  // colour against *some* background and the negative test still passes —
+  // the check would go on answering, about the wrong pixels. So the rect is
+  // converted rather than assumed.
+  final double scale = view.configuration.devicePixelRatio;
+  final Rect logical = MatrixUtils.transformRect(
     box.getTransformTo(null),
     box.paintBounds,
+  );
+  final Rect bounds = Rect.fromLTRB(
+    logical.left * scale,
+    logical.top * scale,
+    logical.right * scale,
+    logical.bottom * scale,
   );
 
   late int width;
