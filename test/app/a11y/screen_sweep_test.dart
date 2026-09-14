@@ -9,6 +9,7 @@ import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/week.dart';
 import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
@@ -106,12 +107,15 @@ void main() {
     required Brightness brightness,
     Size size = phone,
     LaunchTarget? launchTarget,
+    Map<DateTime, List<MealPlanEntry>> week =
+        const <DateTime, List<MealPlanEntry>>{},
   }) => pumpHearthApp(
     tester,
     size: size,
     recipes: <Recipe>[chilli()],
     foods: <Food>[yoghurt()],
     entries: <MealPlanEntry>[tonight()],
+    weekEntries: week,
     targets: const MacroTargets(
       kcal: 2200,
       proteinG: 170,
@@ -242,6 +246,14 @@ void main() {
             brightness: Brightness.light,
             size: size,
             launchTarget: LaunchTarget.today,
+            // A week with something in it. An empty one draws a header and
+            // seven rows of nothing, which is not the screen anybody has to
+            // read at three times the text (§9.1 says the same about the
+            // gallery: a picture of an empty state judges the wrong screen).
+            week: <DateTime, List<MealPlanEntry>>{
+              for (final DateTime day in weekOf(dayKey(DateTime.now())))
+                day: <MealPlanEntry>[tonight()],
+            },
           );
           await pumpFrames(tester);
           await tester.tap(find.text('Week').last);
@@ -254,7 +266,38 @@ void main() {
 
           // And with a row opened, which is where the rings and the three
           // minor-nutrient bars come back.
-          await tester.tap(find.bySemanticsLabel(RegExp(', today[.]')));
+          //
+          // Whichever row is in front of us, not today's. Today's is only
+          // there when the real date lands where the fixture expects and the
+          // row happens to be built at this text size — and this is a test
+          // about a day laying out at three times the text, which any day
+          // proves. It began failing when the date rolled over.
+          // Whichever row is there, reached by dragging rather than by
+          // `scrollUntilVisible`, which evaluates its target eagerly and so
+          // throws before it can scroll anything into being.
+          //
+          // Two things were wrong with tapping the row labelled "today". It
+          // assumed the real date lands where the fixture expects, so it
+          // started failing when the date rolled over. And at three times the
+          // text on a 320-point phone the header fills the viewport, so no
+          // row is built until the list moves — which it happened to have
+          // done on any day when today's row was far enough down to scroll
+          // to. This is a test about a day laying out at large text, and any
+          // day proves that.
+          final Finder anyDay = find.bySemanticsLabel(RegExp(r'day \d+/\d+'));
+          final Finder list = find.byType(Scrollable).last;
+          for (int i = 0; i < 8 && anyDay.evaluate().isEmpty; i++) {
+            await tester.drag(list, const Offset(0, -200));
+            await pumpFrames(tester);
+          }
+          expect(
+            anyDay,
+            findsWidgets,
+            reason:
+                'the week showed no day at all at ${scale}x on '
+                '${size.width} — there is nothing to open',
+          );
+          await tester.tap(anyDay.first);
           await pumpFrames(tester, frames: 10);
           expect(
             tester.takeException(),
