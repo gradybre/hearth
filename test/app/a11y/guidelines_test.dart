@@ -476,7 +476,20 @@ Future<void> expectTextContrast(WidgetTester tester, String where) async {
       text.box.paintBounds,
     );
     if (!_isUncovered(tester, text.box, logical)) continue;
-    if (inactive.any((Rect rect) => rect.overlaps(logical))) continue;
+    // Contained by a disabled control, not merely touching one. The rule is
+    // "a disabled control's own text", and a box that overlaps a disabled
+    // rect at one corner is a *neighbouring* label — which `overlaps` would
+    // drop from the sweep with nothing to say it had. Today both spellings
+    // skip the same ten runs (cook-along's dead Back and Next, with their
+    // icons, in both themes); this one goes on meaning that when a screen
+    // grows a disabled region with something else inside it.
+    if (inactive.any(
+      (Rect rect) =>
+          rect.inflate(1).contains(logical.topLeft) &&
+          rect.inflate(1).contains(logical.bottomRight),
+    )) {
+      continue;
+    }
     final Rect bounds = Rect.fromLTRB(
       logical.left * scale,
       logical.top * scale,
@@ -545,7 +558,11 @@ Future<void> expectTextContrast(WidgetTester tester, String where) async {
       final double a = ink0.computeLuminance() + 0.05;
       final double b = ground.computeLuminance() + 0.05;
       final double ratio = a > b ? a / b : b / a;
-      if (ratio + 0.01 >= ink.target) continue;
+      // A tie counts as passing, but only a tie: both colours here are exact
+      // — the ink comes from the render tree and the ground is a flat theme
+      // token — so the ratio is the same number on every platform, and the
+      // only slack it needs is the last bits of a double. 4.5 means 4.5.
+      if (ratio >= ink.target - 1e-9) continue;
       failures.add(
         '${text.describe()} is ${_hex(ink.colour!)} on ${_hex(ground)} — '
         '${ratio.toStringAsFixed(2)}:1, under ${ink.target}:1 '
