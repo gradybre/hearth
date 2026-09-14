@@ -60,6 +60,7 @@ void main() {
         entries: galleryEntries(day),
         weekEntries: galleryWeek(day),
         shoppingLines: galleryShoppingLinesFor(scene),
+        thermostat: scene.thermostats ? galleryThermostat() : null,
         targets: galleryTargets,
       );
       await pumpFrames(tester, frames: 20);
