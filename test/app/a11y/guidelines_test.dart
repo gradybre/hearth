@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,12 +25,19 @@ import '../../support/fake_auth.dart';
 import '../../support/fixtures.dart';
 import '../../support/swept_surfaces.dart';
 
-/// The §6.3 baseline, checked by Flutter's own auditors rather than by eye.
+/// The §6.3 baseline, checked by machine rather than by eye.
 ///
-/// These are the guidelines the framework ships: every tappable thing is big
-/// enough to hit and carries a label a screen reader can read, and text meets
-/// WCAG AA contrast against what is behind it. Written as a sweep because the
-/// baseline is not optional and a per-screen habit is how it rots.
+/// Three questions, on every screen the app has: is every tappable thing big
+/// enough to hit, does it carry a label a screen reader can read, and does the
+/// text clear WCAG contrast against what is behind it. Written as a sweep
+/// because the baseline is not optional and a per-screen habit is how it rots.
+///
+/// The first two are the guidelines the framework ships. The third was too,
+/// and is now [expectTextContrast] instead — `textContrastGuideline` guesses
+/// the text's colour out of the pixels and guesses differently on a Mac and on
+/// Linux, which made this suite green here and red on CI. That function says
+/// what it does instead, and why the change widens the check rather than
+/// loosening it.
 ///
 /// **It used to reach four screens.** It tapped each of the four Nutrition
 /// tabs and a handful of hand-written journeys past them, which is most of
@@ -185,19 +193,12 @@ void main() {
     ],
   );
 
-  /// The three auditors, against whatever is on screen.
+  /// The three questions, against whatever is on screen.
   ///
   /// [where] is carried into the failure, because a sweep that says only
   /// "tap target too small" leaves you to find which of thirty screens it
   /// meant.
-  Future<void> check(
-    WidgetTester tester,
-    String where, {
-
-    /// False only where the framework's contrast auditor cannot measure the
-    /// screen — one surface, named and replaced below rather than skipped.
-    bool contrast = true,
-  }) async {
+  Future<void> check(WidgetTester tester, String where) async {
     // Big enough to hit — a 44pt target is the difference between logging a
     // meal one-handed in a kitchen and not.
     //
@@ -216,13 +217,9 @@ void main() {
       meetsGuideline(labeledTapTargetGuideline),
       reason: 'something tappable on $where has no label',
     );
-    if (contrast) {
-      await expectLater(
-        tester,
-        meetsGuideline(textContrastGuideline),
-        reason: 'text on $where is under WCAG AA contrast',
-      );
-    }
+    // And readable against what is behind it. Measured here rather than by
+    // `textContrastGuideline`, for the reason [expectTextContrast] gives.
+    await expectTextContrast(tester, where);
   }
 
   for (final Brightness brightness in Brightness.values) {
@@ -263,11 +260,7 @@ void main() {
       for (final String tab in tabs) {
         await tester.tap(find.text(tab).last);
         await pumpFrames(tester, frames: 10);
-        await expectLater(
-          tester,
-          meetsGuideline(textContrastGuideline),
-          reason: 'text on the $tab tab is under WCAG AA contrast',
-        );
+        await expectTextContrast(tester, 'the $tab tab');
       }
       handle.dispose();
     });
@@ -329,24 +322,7 @@ void main() {
             findsWidgets,
             reason: '${surface.name} never opened in $theme',
           );
-          // One surface the framework's contrast auditor cannot measure. It
-          // is not skipped: its two labels are measured directly, by the
-          // colours actually on the glass. See [_unmeasurableByTheAuditor].
-          final bool measurable = surface.name != _unmeasurableByTheAuditor;
-          await check(
-            tester,
-            '${surface.name} in $theme',
-            contrast: measurable,
-          );
-          if (!measurable) {
-            for (final String label in _logSheetGroupLabels) {
-              await expectTextContrast(
-                tester,
-                find.text(label),
-                '"$label" on ${surface.name} in $theme',
-              );
-            }
-          }
+          await check(tester, '${surface.name} in $theme');
           handle.dispose();
         });
       }
@@ -388,96 +364,88 @@ void main() {
   });
 }
 
-/// The one surface [textContrastGuideline] reports a false failure on.
+/// Every piece of text painted on [tester]'s screen, against what is behind it.
 ///
-/// **What it reports.** The log sheet's two group headings — "Your recipes"
-/// and "Your foods" — come back at a contrast ratio of 1.04 in light and 1.08
-/// in dark, which would mean text painted in its own background colour.
+/// **Why this is not [textContrastGuideline].** The framework's auditor samples
+/// each label's paint bounds *inflated by four points*, histograms those
+/// pixels, splits them at the mean lightness and takes the most frequent colour
+/// from each half. Neither half is guaranteed to be the text: four points
+/// outside a small label reaches a card border or a field fill, and inside it
+/// the glyph edges are a spread of anti-aliased blends that can out-number the
+/// glyph *cores*. When both halves come back as something other than the ink,
+/// the ratio it reports is between two colours the designer never paired.
 ///
-/// **What is actually on the glass**, sampled out of the rendered frame inside
-/// each heading's own line box:
+/// That is not hypothetical. This sweep was green on macOS and red on Linux CI
+/// with seven failures, and all seven reported a pair like this:
 ///
 /// ```
-/// #ece2d0 x8852   the sheet behind it
-/// #e9decb x338    one anti-aliased scanline, all of it at y=373
-/// #6b5849 x40     the heading itself, at full strength
+/// the thermostat in light   "House"   1.28:1   #F6EFE1 / #DDD4C6
+/// seasonings … in light     "basil"   1.96:1   #ECE2D0 / #ACA294
+/// the day's targets, light  "170"     3.04:1   #E1D4BA / #817666
 /// ```
 ///
-/// `MinimumTextContrastGuideline` samples the label's paint bounds *inflated
-/// by four points*, histograms the pixels, and takes the most frequent colour
-/// above and below the mean lightness. Four points below a 12-point heading is
-/// the top border of the `_PickRow` card underneath it
-/// (`lib/features/plan/log_sheet.dart:1242`, `Border.all(color: colors.outline)`),
-/// and one anti-aliased hairline across 338 pixels outvotes the 40 pixels of
-/// glyph that are at the text's full colour. So the ratio it computes is
-/// between two creams, and the heading is not in the answer at all.
+/// In every one of the seven the lighter colour is an exact Hearth surface
+/// token and the darker one is **not a Hearth colour at all** — `#DDD4C6`,
+/// `#ACA294` and `#817666` are partial blends of cocoa over cream, which is to
+/// say anti-aliasing. Measured properly those three are 5.89:1, 12.29:1 and
+/// 10.77:1. Nothing was wrong with the screens; what differed was how many
+/// pixels the rasteriser leaves at the glyph's full strength, and that is a
+/// property of the font engine — CoreText on a Mac, FreeType on the CI box.
+/// A check whose verdict moves with the host's text rendering is not measuring
+/// the palette.
 ///
-/// The heading really is `#6b5849` on `#ece2d0`, which is **5.25:1** and
-/// clears AA. Nothing here needs fixing for accessibility. Widening
-/// `_GroupLabel`'s four-point bottom padding by a point would move the hairline
-/// out of the sampled band and let the auditor see the text — but that is
-/// `log_sheet.dart`, which this change does not own, and changing the design
-/// to suit the measuring instrument is the wrong way round anyway.
+/// **What this asks instead.** For each run of text actually painted: the
+/// colour it is drawn in, taken from the render tree, against the commonest
+/// colour inside its own **tight** line box, taken from the rendered frame.
+/// No inflation, so nothing outside the text votes; and the foreground is
+/// known rather than guessed at, so anti-aliasing cannot stand in for it.
+/// Both halves are then platform-independent — a text colour comes from the
+/// theme, and the ground is a flat fill whose commonest pixel does not depend
+/// on glyph shape.
 ///
-/// So the surface keeps both tap-target guidelines and swaps the contrast one
-/// for [expectTextContrast], which asks the same question of the same two
-/// headings and answers it exactly. Wash either heading out and it goes red.
-const String _unmeasurableByTheAuditor = 'choosing something to log';
-
-/// The two headings on that sheet, measured by hand in its place.
+/// **It is a wider net than the one it replaces, not a narrower one.** The
+/// auditor only reaches text that is in the semantics tree *and* is matched by
+/// `find.text` *and* hit-tests to its own glyphs; this walks the render tree,
+/// so a chip's label, a field's value and the text inside a merged row are all
+/// measured now. The thermostat's three mode chips are the plainest example —
+/// cream on terracotta, and never once looked at before this. Across the 78
+/// cases it measures about 1,300 runs of text, seventeen to a screen.
 ///
-/// Its third — "Recent" — needs a logged meal behind it, which this fixture
-/// has no reason to carry; the two here share a widget with it, so what is
-/// unmeasured is a position on screen rather than a colour.
-const List<String> _logSheetGroupLabels = <String>[
-  'Your recipes',
-  'Your foods',
-];
-
-/// The contrast of one label against what is painted behind it.
+/// The surface that had to be exempted from the old auditor, and the two
+/// headings measured by hand in its place, are gone with it. **There is no
+/// exemption list.** If one ever starts, that is the signal to look at the
+/// screens rather than lengthen the list — a check that grows exceptions
+/// faster than it grows coverage has stopped being a check.
 ///
-/// A narrower question than the guideline asks, answered off the same frame:
-/// the colour the label is drawn in, against the commonest colour inside its
-/// own line box — no inflation, so nothing outside the text can vote.
-Future<void> expectTextContrast(
-  WidgetTester tester,
-  Finder finder,
-  String where,
-) async {
-  final Element element = tester.element(finder);
-  final Text label = tester.widget<Text>(finder);
-  final TextStyle? own = label.style;
-  final TextStyle style = own == null || own.inherit
-      ? DefaultTextStyle.of(element).style.merge(own)
-      : own;
-  final Color foreground = style.color!;
-
-  final RenderBox box = element.renderObject! as RenderBox;
+/// **What it does not look at**, said plainly:
+///
+///  * text the frame does not hold at this instant — scrolled out of its list,
+///    or behind the sheet in front of it. One frame per screen sees one frame
+///    per screen, and the sheet gets its own case.
+///  * text that something else is drawn over ([_isUncovered]). A floating
+///    button passing over a list is doing its job, and the row beneath it is
+///    not a question about the palette.
+///  * a control that is switched off ([_inactiveAreas]). WCAG exempts an
+///    inactive component and the framework's auditor skips one too.
+///  * text over a photograph or a gradient. The commonest pixel in the box is
+///    a fair ground for a flat fill and a poor one for a picture. No screen
+///    this sweep visits has one; the day one does, this needs a worst-pixel
+///    rule rather than to quietly go on answering.
+Future<void> expectTextContrast(WidgetTester tester, String where) async {
   final RenderView view = tester.binding.renderViews.first;
+
   // Two coordinate spaces, and they are only the same one by a single line in
   // the harness. `getTransformTo(null)` answers in **logical** pixels, while
   // `RenderView.paintBounds` is `size * devicePixelRatio` and the image below
   // comes out that big — **physical** pixels. `app_harness.dart` pins the
   // ratio at 1.0, so today they coincide; at 3.0 the same rectangle covers a
-  // ninth of the glyphs and sits at a third of their offset, which is a
-  // region of whatever the label happens to be above.
-  //
-  // That would not go red. The foreground below is read from the widget tree
-  // rather than from the frame, so a washed-out label still reports its own
-  // colour against *some* background and the negative test still passes —
-  // the check would go on answering, about the wrong pixels. So the rect is
+  // ninth of the glyphs and sits at a third of their offset, which is a region
+  // of whatever the text happens to be above. That would not go red — the
+  // foreground is read from the widget tree, so a washed-out label still
+  // reports its own colour against *some* background and a negative test still
+  // passes, while the check answers about the wrong pixels. So it is
   // converted rather than assumed.
   final double scale = view.configuration.devicePixelRatio;
-  final Rect logical = MatrixUtils.transformRect(
-    box.getTransformTo(null),
-    box.paintBounds,
-  );
-  final Rect bounds = Rect.fromLTRB(
-    logical.left * scale,
-    logical.top * scale,
-    logical.right * scale,
-    logical.bottom * scale,
-  );
 
   late int width;
   late int height;
@@ -492,39 +460,338 @@ Future<void> expectTextContrast(
     return data;
   });
 
-  final Map<int, int> histogram = <int, int>{};
-  for (int y = bounds.top.floor(); y < bounds.bottom.ceil(); y++) {
-    for (int x = bounds.left.floor(); x < bounds.right.ceil(); x++) {
-      if (x < 0 || y < 0 || x >= width || y >= height) continue;
-      final int argb = pixels!.getUint32((y * width + x) * 4);
-      histogram[argb] = (histogram[argb] ?? 0) + 1;
+  // WCAG exempts an inactive control, and so does the framework's auditor
+  // ("skip disabled nodes, as they are not required to pass contrast check").
+  // Cook-along's Back and Next are the app's example: at either end of a
+  // recipe one of them is dead, drawn at Material's 38% and reading 2.20:1,
+  // and that is the whole point of the state.
+  final List<Rect> inactive = _inactiveAreas(tester, scale);
+
+  final List<String> failures = <String>[];
+  int measured = 0;
+
+  for (final _PaintedText text in _textOnScreen(view)) {
+    final Rect logical = MatrixUtils.transformRect(
+      text.box.getTransformTo(null),
+      text.box.paintBounds,
+    );
+    if (!_isUncovered(tester, text.box, logical)) continue;
+    if (inactive.any((Rect rect) => rect.overlaps(logical))) continue;
+    final Rect bounds = Rect.fromLTRB(
+      logical.left * scale,
+      logical.top * scale,
+      logical.right * scale,
+      logical.bottom * scale,
+    );
+
+    final Map<int, int> histogram = <int, int>{};
+    for (int y = bounds.top.floor(); y < bounds.bottom.ceil(); y++) {
+      for (int x = bounds.left.floor(); x < bounds.right.ceil(); x++) {
+        if (x < 0 || y < 0 || x >= width || y >= height) continue;
+        final int rgba = pixels!.getUint32((y * width + x) * 4);
+        histogram[rgba] = (histogram[rgba] ?? 0) + 1;
+      }
+    }
+    // Nothing of it is inside the frame — scrolled out, or clipped away.
+    if (histogram.isEmpty) continue;
+
+    // Every colour this paragraph paints *with* is disqualified as the colour
+    // it is painted *on*. Without that, a heading heavy enough to cover more
+    // of its own line box than the ground does reports itself as its own
+    // background and comes back at 1.00:1 — which is what the framework's
+    // auditor does to a 24pt title, and is a statement about type weight
+    // rather than about contrast.
+    final Set<int> inks = <int>{
+      for (final _Ink ink in text.inks)
+        if (ink.colour case final Color colour) _rgba(colour),
+    };
+    for (final int ink in inks) {
+      histogram.remove(ink);
+    }
+    if (histogram.isEmpty) {
+      // Every pixel in the line box is one of the colours the text itself is
+      // drawn in: there is nothing behind it to read it against, which is what
+      // invisible text looks like from here.
+      failures.add(
+        '${text.describe()} has nothing behind it but its own ink '
+        '(${inks.map((int c) => _hex(_colour(c))).join(', ')})',
+      );
+      continue;
+    }
+
+    final Color ground = _colour(
+      histogram.entries
+          .reduce(
+            (MapEntry<int, int> a, MapEntry<int, int> b) =>
+                a.value >= b.value ? a : b,
+          )
+          .key,
+    );
+
+    for (final _Ink ink in text.inks) {
+      measured++;
+      if (ink.colour == null) {
+        failures.add(
+          '${text.describe()} is painted with no colour in its style, so '
+          'there is nothing to measure it by',
+        );
+        continue;
+      }
+      // A partly transparent ink is the blend of it over the ground, not the
+      // opaque colour: `computeLuminance` ignores alpha and would report a
+      // faded label as if it were at full strength.
+      final Color ink0 = Color.alphaBlend(ink.colour!, ground);
+      // WCAG's own formula: (L1 + 0.05) / (L2 + 0.05), lighter over darker.
+      final double a = ink0.computeLuminance() + 0.05;
+      final double b = ground.computeLuminance() + 0.05;
+      final double ratio = a > b ? a / b : b / a;
+      if (ratio + 0.01 >= ink.target) continue;
+      failures.add(
+        '${text.describe()} is ${_hex(ink.colour!)} on ${_hex(ground)} — '
+        '${ratio.toStringAsFixed(2)}:1, under ${ink.target}:1 '
+        '(${ink.why})',
+      );
     }
   }
-  expect(histogram, isNotEmpty, reason: '$where was not on screen');
 
-  final int commonest = histogram.entries
-      .reduce(
-        (MapEntry<int, int> a, MapEntry<int, int> b) =>
-            a.value >= b.value ? a : b,
-      )
-      .key;
-  // The frame is RGBA; `Color` wants ARGB.
-  final Color background = Color(
-    (commonest >>> 8) | ((commonest & 0xFF) << 24),
-  );
-
-  // WCAG's own formula: (L1 + 0.05) / (L2 + 0.05), lighter over darker.
-  final double ink = foreground.computeLuminance() + 0.05;
-  final double paper = background.computeLuminance() + 0.05;
-  final double ratio = ink > paper ? ink / paper : paper / ink;
-
+  // A sweep that measured nothing passes, and a screen that drew nothing is
+  // not what any of these journeys is for.
   expect(
-    ratio,
-    greaterThanOrEqualTo(4.5),
-    reason:
-        '$where is $foreground on $background — '
-        '${ratio.toStringAsFixed(2)}:1, under WCAG AA',
+    measured,
+    greaterThan(0),
+    reason: 'no text was measured on $where — did the journey arrive?',
   );
+  expect(
+    failures,
+    isEmpty,
+    reason:
+        'text on $where is under WCAG contrast:\n  ${failures.join('\n  ')}',
+  );
+}
+
+/// One run of text, and the threshold it has to clear.
+@immutable
+class _Ink {
+  const _Ink({required this.colour, required this.target, required this.why});
+
+  /// Null where the painted style carries no colour at all, which is a failure
+  /// rather than a skip: nothing in `hearth_typography.dart` leaves one unset,
+  /// so a null here means text is being painted in whatever the engine's
+  /// default happens to be.
+  final Color? colour;
+
+  /// 4.5 for body text, 3.0 for large or bold text and for icon glyphs.
+  final double target;
+
+  /// Which of WCAG's rules that threshold came from, for the failure to say.
+  final String why;
+}
+
+/// A paragraph or a field's value, with every colour it is drawn in.
+@immutable
+class _PaintedText {
+  const _PaintedText({
+    required this.box,
+    required this.text,
+    required this.inks,
+  });
+
+  final RenderBox box;
+  final String text;
+  final List<_Ink> inks;
+
+  String describe() => '"${text.replaceAll('\n', ' / ')}"';
+}
+
+/// Whether nothing is drawn over [box] — not over any part of it.
+///
+/// The topmost thing hit at a point has to be [box] itself or something it
+/// sits inside. A label under a pushed screen, or behind a sheet's barrier,
+/// hits that screen or that barrier instead — neither is in its lineage — and
+/// is not on the glass to be read.
+///
+/// **Five points, not one.** A floating button is *supposed* to pass over the
+/// content, and at the largest text the recipe list's delete button ends up
+/// three-quarters under the "Add recipe" button. Its centre is clear, so a
+/// one-point test measures it and takes the button's terracotta as its
+/// background: cocoa on terracotta, 1.01:1, a failure about occlusion wearing
+/// the clothes of a failure about palette. Something partly hidden is not a
+/// contrast question at all, so it is left alone.
+///
+/// Deliberately not `Finder.hitTestable`, which the framework's auditor uses
+/// and which asks the stricter question of whether the *text* is in the hit
+/// path. A `Chip` never hit-tests its own label (`_RenderChip.hitTestChildren`
+/// offers only the delete icon), so every chip in the app — the thermostat's
+/// mode row among them, cream on terracotta — is invisible to that question
+/// while being perfectly visible on screen.
+bool _isUncovered(WidgetTester tester, RenderBox box, Rect logical) {
+  if (!box.attached || !box.hasSize || box.size.isEmpty) return false;
+  if (logical.isEmpty || logical.hasNaN) return false;
+  final Set<RenderObject> lineage = <RenderObject>{};
+  for (RenderObject? node = box; node != null; node = node.parent) {
+    lineage.add(node);
+  }
+  // The middle of each edge rather than the corners, inset by a point. A
+  // rounded button's label reaches the full width of its inside, so its
+  // corners sit outside the curve and hit whatever is behind the button —
+  // which would drop every floating action button's own label as covered.
+  final Rect inner = logical.deflate(1);
+  final Size view = tester.view.physicalSize / tester.view.devicePixelRatio;
+  final Rect screen = Offset.zero & view;
+  bool clear(Offset at, {required bool edge}) {
+    // Off the edge of the window. A *corner* may be: a label flush to the edge
+    // would otherwise be dropped for being at it. Its middle may not — text
+    // whose middle is not on the glass is not being read, and sampling the
+    // sliver of it that is on screen is how a row scrolled almost out of a
+    // list came to be measured against the scrim of the dialog in front of it.
+    if (!screen.contains(at)) return edge;
+    final HitTestResult result = tester.hitTestOnBinding(at);
+    // The first *render object* in the path, not the first entry: a
+    // `RenderParagraph` hands its `TextSpan` to the hit test as well, so the
+    // topmost entry is routinely an annotation rather than a box — and a check
+    // that read `path.first` alone found no paragraph anywhere and passed
+    // every screen by measuring nothing at all.
+    for (final HitTestEntry<HitTestTarget> entry in result.path) {
+      if (entry.target is! RenderObject) continue;
+      return lineage.contains(entry.target);
+    }
+    return false;
+  }
+
+  return clear(inner.center, edge: false) &&
+      clear(inner.centerLeft, edge: true) &&
+      clear(inner.centerRight, edge: true) &&
+      clear(inner.topCenter, edge: true) &&
+      clear(inner.bottomCenter, edge: true);
+}
+
+/// Where the screen has a control that is switched off.
+///
+/// Read off the compiled semantics tree, which is where "disabled" is actually
+/// recorded — the render tree only knows it as a colour. Returned in logical
+/// pixels, the space [_isUncovered] and the sampling below both work in.
+List<Rect> _inactiveAreas(WidgetTester tester, double scale) {
+  final List<Rect> found = <Rect>[];
+  for (final RenderView view in tester.binding.renderViews) {
+    final SemanticsNode? root = view.owner?.semanticsOwner?.rootSemanticsNode;
+    if (root == null) continue;
+    void walk(SemanticsNode node) {
+      if (node.flagsCollection.isEnabled == ui.Tristate.isFalse) {
+        Rect rect = node.rect;
+        for (SemanticsNode? up = node; up != null; up = up.parent) {
+          if (up.transform case final Matrix4 transform) {
+            rect = MatrixUtils.transformRect(transform, rect);
+          }
+        }
+        // The semantics tree is in physical pixels, because the root transform
+        // carries the device pixel ratio.
+        found.add(
+          Rect.fromLTRB(
+            rect.left / scale,
+            rect.top / scale,
+            rect.right / scale,
+            rect.bottom / scale,
+          ),
+        );
+      }
+      node.visitChildren((SemanticsNode child) {
+        walk(child);
+        return true;
+      });
+    }
+
+    walk(root);
+  }
+  return found;
+}
+
+/// Every paragraph and editable in the render tree, with its resolved colours.
+Iterable<_PaintedText> _textOnScreen(RenderView view) {
+  final List<_PaintedText> found = <_PaintedText>[];
+  void walk(RenderObject node) {
+    final InlineSpan? span = switch (node) {
+      RenderParagraph(:final InlineSpan text) => text,
+      RenderEditable(:final InlineSpan? text) => text,
+      _ => null,
+    };
+    if (span != null && node is RenderBox) {
+      final List<_Ink> inks = <_Ink>[];
+      final StringBuffer plain = StringBuffer();
+      _readSpan(span, const TextStyle(), inks, plain);
+      if (inks.isNotEmpty) {
+        found.add(_PaintedText(box: node, text: plain.toString(), inks: inks));
+      }
+    }
+    node.visitChildren(walk);
+  }
+
+  walk(view);
+  return found;
+}
+
+/// Walks a span tree, accumulating the style the way a `TextPainter` does.
+void _readSpan(
+  InlineSpan span,
+  TextStyle inherited,
+  List<_Ink> inks,
+  StringBuffer plain,
+) {
+  if (span is! TextSpan) return;
+  final TextStyle style = span.style == null
+      ? inherited
+      : inherited.merge(span.style);
+  final String? text = span.text;
+  if (text != null && text.trim().isNotEmpty) {
+    plain.write(text);
+    // A null colour is carried forward rather than dropped: it cannot happen
+    // through Hearth's themes, so it is reported as a failure above rather
+    // than quietly skipped here.
+    final Color? colour = style.color;
+    final String rule = _rule(style, text);
+    inks.add(
+      _Ink(colour: colour, target: rule == _normalText ? 4.5 : 3.0, why: rule),
+    );
+  }
+  for (final InlineSpan child in span.children ?? const <InlineSpan>[]) {
+    _readSpan(child, style, inks, plain);
+  }
+}
+
+const String _normalText = 'WCAG 1.4.3, normal text';
+
+/// Which of WCAG's contrast rules a run of text drawn in [style] falls under.
+String _rule(TextStyle style, String text) {
+  // An icon is a glyph from an icon font, and holding a picture to the rule
+  // for prose would be this check inventing a policy. WCAG has its own rule
+  // for one, and it is the 3:1 that large text gets.
+  if (text.runes.every(_isPrivateUse)) return 'WCAG 1.4.11, a graphic';
+  final double size = style.fontSize ?? 12.0;
+  final bool bold =
+      (style.fontWeight?.value ?? FontWeight.normal.value) >=
+      FontWeight.bold.value;
+  if (size >= 18 || (bold && size >= 14)) return 'WCAG 1.4.3, large text';
+  return _normalText;
+}
+
+/// The private-use planes, which is where every icon font puts its glyphs.
+bool _isPrivateUse(int rune) =>
+    (rune >= 0xE000 && rune <= 0xF8FF) ||
+    (rune >= 0xF0000 && rune <= 0xFFFFD) ||
+    (rune >= 0x100000 && rune <= 0x10FFFD);
+
+/// The frame is RGBA; [Color] is ARGB.
+Color _colour(int rgba) => Color((rgba >>> 8) | ((rgba & 0xFF) << 24));
+
+int _rgba(Color colour) {
+  final int argb = colour.toARGB32();
+  return ((argb & 0x00FFFFFF) << 8) | ((argb >>> 24) & 0xFF);
+}
+
+String _hex(Color colour) {
+  final int argb = colour.toARGB32();
+  final String rgb = (argb & 0xFFFFFF).toRadixString(16).padLeft(6, '0');
+  final int alpha = (argb >>> 24) & 0xFF;
+  return alpha == 0xFF ? '#$rgb' : '#$rgb at ${(alpha / 255 * 100).round()}%';
 }
 
 typedef _Journey = Future<void> Function(WidgetTester tester, SweepTools tools);
