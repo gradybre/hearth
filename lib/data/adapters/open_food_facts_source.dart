@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
+import '../../domain/parsing/pack_size.dart';
 import '../../domain/parsing/serving_label.dart';
 import '../../domain/units/quantity.dart';
 import '../../domain/units/unit.dart';
@@ -232,6 +233,13 @@ class OpenFoodFactsSource implements NutritionSource {
         brand: brand,
         barcode: code.isEmpty ? null : code,
         source: FoodSource.openFoodFacts,
+        // What the package holds, which is a different question from what a
+        // serving is — and the one a shopping list needs, because a jar is
+        // bought whole. Already requested in `fields` and never read until
+        // now; without it the list said "4 lb" of a sauce sold in 24-ounce
+        // jars, which is arithmetically perfect and useless at a shelf
+        // (spec §5.7).
+        packSize: parsePackSize('${product['quantity'] ?? ''}'),
         // The pack's own serving leads. `Food.defaultServing` is whatever comes
         // first, and it is what every screen shows and what a log defaults to
         // — so it has to be the number written on the tin, not a laboratory

@@ -4,6 +4,7 @@ import 'package:hearth/app/widgets/swipe_to_delete.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/shopping/shopping_line.dart';
 import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
@@ -523,6 +524,61 @@ void main() {
       await undo(tester);
 
       expect(find.text('Coffee'), findsOneWidget);
+    });
+  });
+
+  group('a thing sold in packs (spec §5.7)', () {
+    testWidgets('says how many to pick up, not what they weigh', (
+      WidgetTester tester,
+    ) async {
+      // The complaint: a ragu wanting 64 oz of Rao's read "4 lb", which is
+      // arithmetically perfect and useless at a shelf stacked with jars.
+      await pumpHearthApp(
+        tester,
+        foods: <Food>[
+          aFood(
+            'Marinara Sauce',
+            id: 'f-sauce',
+          ).withPack(Quantity.of(24, Units.ounce)),
+        ],
+        shoppingLines: <ShoppingLine>[
+          ShoppingLine(
+            key: 'f-sauce',
+            name: 'Marinara Sauce',
+            planned: <Quantity>[Quantity.of(64, Units.ounce)],
+            foodId: 'f-sauce',
+          ),
+        ],
+      );
+      await tester.tap(find.text('Shopping').last);
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('3 × 24 oz'), findsOneWidget);
+      expect(find.text('4 lb'), findsNothing);
+      // And the rounding is visible, because three jars is 72 and the ragu
+      // wants 64.
+      expect(find.textContaining('needs 64 oz'), findsOneWidget);
+    });
+
+    testWidgets('while anything sold by weight is left alone', (
+      WidgetTester tester,
+    ) async {
+      await pumpHearthApp(
+        tester,
+        foods: <Food>[aFood('Ground beef', id: 'f-beef')],
+        shoppingLines: <ShoppingLine>[
+          ShoppingLine(
+            key: 'f-beef',
+            name: 'Ground beef',
+            planned: <Quantity>[Quantity.of(2, Units.pound)],
+            foodId: 'f-beef',
+          ),
+        ],
+      );
+      await tester.tap(find.text('Shopping').last);
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('2 lb'), findsOneWidget);
     });
   });
 }

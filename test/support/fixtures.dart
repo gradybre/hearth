@@ -212,6 +212,9 @@ extension FoodTestCopies on Food {
   Food withBrand(String brand) => _copy(brand: brand);
   Food withBarcode(String barcode) => _copy(barcode: barcode);
   Food withStoreTag(String tag) => _copy(storeTag: tag);
+
+  /// How much comes in one of whatever it is sold as — a 24-ounce jar.
+  Food withPack(Quantity pack) => _copy(packSize: pack);
   Food withDeleted() => _copy(isDeleted: true);
   Food asDefault() => _copy(isDefault: true);
   Food asZeroCalorie() => _copy(isZeroCalorie: true);
@@ -224,6 +227,7 @@ extension FoodTestCopies on Food {
     String? brand,
     String? barcode,
     String? storeTag,
+    Quantity? packSize,
     bool? isDeleted,
     bool? isDefault,
     bool? isZeroCalorie,
@@ -238,6 +242,7 @@ extension FoodTestCopies on Food {
         : householdId as String?,
     brand: brand ?? this.brand,
     storeTag: storeTag ?? this.storeTag,
+    packSize: packSize ?? this.packSize,
     barcode: barcode ?? this.barcode,
     gramsPerMillilitre: gramsPerMillilitre,
     macrosOverridden: macrosOverridden,

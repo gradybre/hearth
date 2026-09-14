@@ -18,6 +18,7 @@ Map<String, Object?> product({
   Object? carbs = 12.9,
   Object? fat = 0.2,
   String? servingSize,
+  String? quantity,
   Object? fiber,
   Object? sodium,
   Object? cholesterol,
@@ -26,6 +27,7 @@ Map<String, Object?> product({
   'product_name': name,
   'brands': ?brands,
   'serving_size': ?servingSize,
+  'quantity': ?quantity,
   'nutriments': <String, Object?>{
     'energy-kcal_100g': kcal,
     'proteins_100g': protein,
@@ -653,6 +655,40 @@ void hydrationTests() {
       final ServingOption per100g = food.servingOptions.last;
       expect(per100g.macros.fiberG, 0);
       expect(per100g.macros.sodiumMg, 0);
+    });
+  });
+
+  group('what the package holds', () {
+    Future<NutritionMatch?> scanned({String? quantity}) => sourceReturning(
+      <String, Object?>{'product': product(quantity: quantity), 'status': 1},
+    ).byBarcode('5000157024671');
+
+    test('the pack size comes across, so a jar can be counted', () async {
+      // A shopping list has to say what to pick up, and for anything in a jar
+      // or a can a weight does not. The field has been requested from Open
+      // Food Facts since the adapter was written and never read.
+      expect(
+        (await scanned(quantity: '24 oz'))?.food.packSize
+            ?.amountIn(Units.ounce),
+        24,
+      );
+    });
+
+    test('and grams work as well as ounces', () async {
+      expect(
+        (await scanned(quantity: '680 g'))?.food.packSize?.amountIn(Units.gram),
+        680,
+      );
+    });
+
+    test('a product that does not say is left without one', () async {
+      // Better absent than guessed: a wrong pack size does not fail loudly,
+      // it silently buys the wrong amount.
+      expect((await scanned())?.food.packSize, isNull);
+    });
+
+    test('and neither does one that says something unreadable', () async {
+      expect((await scanned(quantity: 'family size'))?.food.packSize, isNull);
     });
   });
 }
