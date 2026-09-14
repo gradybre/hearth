@@ -108,6 +108,22 @@ void main() {
     test('and having more than enough is still nothing to buy', () {
       expect(summed(a: 0.1, b: 0.2, have: 0.5).toBuy!.isZero, isTrue);
     });
+
+    test('and un-ticking one of them clears the cupboard, as it does for any '
+        'other covered line', () {
+      // `isChecked` and `ticked(false)` are two readers of the same
+      // `toBuy.isZero`, and they have to agree or the tap looks broken: the
+      // line reads as done, you untick it, and the on-hand amount that was
+      // covering it ticks it straight back on.
+      //
+      // Before the floor had width they disagreed *in the safe direction* —
+      // both said "not covered" — so this passed for the wrong reason. It is
+      // here to fail if the two ever stop being the same predicate.
+      final ShoppingLine covered = summed(a: 0.1, b: 0.2, have: 0.3);
+      expect(covered.isChecked, isTrue);
+      expect(covered.ticked(false).onHand, isNull);
+      expect(covered.ticked(false).isChecked, isFalse);
+    });
   });
 
   group('the tick is the whole-line case of having some', () {
