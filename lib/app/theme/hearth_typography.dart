@@ -42,27 +42,36 @@ abstract final class HearthTypography {
   /// confident on cream reads as heavy and slightly smeared inverted.
   static double serifHeaderWeight({required bool isDark}) => isDark ? 500 : 600;
 
-  static TextStyle recipeTitle({required bool isDark}) {
-    final double weight = serifHeaderWeight(isDark: isDark);
-    return TextStyle(
-      fontFamily: serif,
-      fontSize: 32,
-      height: 1.1,
-      fontWeight: isDark ? FontWeight.w500 : FontWeight.w600,
-      fontVariations: _serifAxes(weight, 32),
-    );
-  }
+  /// One serif header at a given size, with `opsz` tracked to that size.
+  ///
+  /// Every serif style goes through here so the optical-size axis can never
+  /// drift from the rendered size — the thing the class doc promises.
+  static TextStyle _serifHeader({
+    required bool isDark,
+    required double size,
+    required double height,
+  }) => TextStyle(
+    fontFamily: serif,
+    fontSize: size,
+    height: height,
+    fontWeight: isDark ? FontWeight.w500 : FontWeight.w600,
+    fontVariations: _serifAxes(serifHeaderWeight(isDark: isDark), size),
+  );
 
-  static TextStyle sectionHeader({required bool isDark}) {
-    final double weight = serifHeaderWeight(isDark: isDark);
-    return TextStyle(
-      fontFamily: serif,
-      fontSize: 20,
-      height: 1.2,
-      fontWeight: isDark ? FontWeight.w500 : FontWeight.w600,
-      fontVariations: _serifAxes(weight, 20),
-    );
-  }
+  static TextStyle recipeTitle({required bool isDark}) =>
+      _serifHeader(isDark: isDark, size: 32, height: 1.1);
+
+  static TextStyle sectionHeader({required bool isDark}) =>
+      _serifHeader(isDark: isDark, size: 20, height: 1.2);
+
+  /// The title of a confirmation dialog — "Sign out?", "Discard this recipe?".
+  ///
+  /// A step above [sectionHeader] and below [recipeTitle]: a dialog title is
+  /// the loudest thing on screen while it is up, but it is not a recipe name.
+  /// 24 is also what Material sizes `headlineSmall`, so adopting it changes
+  /// the face without moving any dialog's layout.
+  static TextStyle dialogTitle({required bool isDark}) =>
+      _serifHeader(isDark: isDark, size: 24, height: 1.15);
 
   /// Directions, notes, and general prose.
   static TextStyle body() => TextStyle(
@@ -114,13 +123,34 @@ abstract final class HearthTypography {
   );
 
   /// A Material [TextTheme] so stock widgets inherit the same type.
+  ///
+  /// **Every slot is filled, deliberately.** A slot left null here does not
+  /// reach a widget as null: [ThemeData] merges the platform's default
+  /// typography underneath this theme, so an unset slot silently becomes
+  /// Material's — in Material's font. That is how every confirmation title in
+  /// the app came to be drawn in Roboto: Material 3 resolves an `AlertDialog`
+  /// title from `headlineSmall`, which nothing here had ever set. It passed
+  /// every colour and layout check, because only the typeface was wrong.
+  ///
+  /// `test/app/theme/material_type_slots_test.dart` holds the line.
   static TextTheme materialTextTheme({required bool isDark}) {
     final TextStyle bodyStyle = body();
+    final TextStyle title = recipeTitle(isDark: isDark);
     return TextTheme(
-      displayLarge: recipeTitle(isDark: isDark),
-      headlineMedium: recipeTitle(isDark: isDark),
+      // Nothing in Hearth is set larger than a recipe title, so the display
+      // ramp tops out there rather than inventing sizes above it.
+      displayLarge: title,
+      displayMedium: title,
+      displaySmall: title,
+      // `headlineLarge` is the Material 3 date picker's header.
+      headlineLarge: title,
+      headlineMedium: title,
+      // `headlineSmall` is the AlertDialog title.
+      headlineSmall: dialogTitle(isDark: isDark),
       titleLarge: sectionHeader(isDark: isDark),
       titleMedium: sectionHeader(isDark: isDark).copyWith(fontSize: 17),
+      // `titleSmall` is the date picker's weekday row and mode toggle.
+      titleSmall: _serifHeader(isDark: isDark, size: 14, height: 1.3),
       bodyLarge: bodyStyle,
       bodyMedium: bodyStyle,
       bodySmall: metadata().copyWith(fontSize: 13),
