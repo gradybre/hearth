@@ -47,6 +47,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         await showDialog<bool>(
           context: context,
           builder: (BuildContext context) => AlertDialog(
+            // Scrolls, so the buttons stay reachable when the type is turned up (§6.3).
+            scrollable: true,
             title: const Text('Sign out?'),
             content: const Text(
               'Your recipes stay in the household. You will need your '
@@ -555,6 +557,8 @@ class _PasswordResetState extends ConsumerState<_PasswordReset> {
         await showDialog<bool>(
           context: context,
           builder: (BuildContext context) => AlertDialog(
+            // Scrolls, so the buttons stay reachable when the type is turned up (§6.3).
+            scrollable: true,
             title: const Text('Send a reset link?'),
             content: Text(
               'We will email ${widget.email} a link for setting a new '
