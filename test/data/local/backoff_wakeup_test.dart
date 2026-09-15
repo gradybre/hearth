@@ -21,7 +21,19 @@ import 'package:hearth/data/local/pending_write_store.dart';
 void main() {
   late HearthDatabase db;
   late PendingWriteStore queue;
-  final DateTime at = DateTime.utc(2026, 9, 15, 12);
+  // Deliberately in the **past**, and that is the whole point of it.
+  //
+  // This fixture used to read `2026, 9, 15` — a date chosen while it was
+  // still ahead. Every `nextAttemptDue()` below was called without a clock,
+  // so it compared the fixture against the wall one, and a backoff due at a
+  // future instant was correctly "still waiting". The suite passed for
+  // months and went red on the morning of the fifteenth, on `main`, with
+  // nothing changed and nothing near the queue touched.
+  //
+  // A past date cannot rot that way: a call that forgets to pass `now` finds
+  // the wait already over and fails on the spot, in the change that dropped
+  // it, rather than on some future morning belonging to whoever is unlucky.
+  final DateTime at = DateTime.utc(2026, 1, 15, 12);
 
   setUp(() {
     db = HearthDatabase.forTesting(NativeDatabase.memory());
@@ -39,13 +51,13 @@ void main() {
   );
 
   test('nothing waiting means no alarm to set', () async {
-    expect(await queue.nextAttemptDue(), isNull);
+    expect(await queue.nextAttemptDue(now: at), isNull);
   });
 
   test('and a write that can be sent now does not need one either', () async {
     // It is already due. An alarm for the present is a wasted wake-up.
     await enqueue('a');
-    expect(await queue.nextAttemptDue(), isNull);
+    expect(await queue.nextAttemptDue(now: at), isNull);
   });
 
   test('a refused write says when it is worth asking again', () async {
@@ -54,7 +66,7 @@ void main() {
     await queue.markFailed(write.sequence, 'the server said no', now: at);
 
     expect(
-      await queue.nextAttemptDue(),
+      await queue.nextAttemptDue(now: at),
       at.add(PendingWriteStore.backoff.first),
       reason: 'the wait is known and nothing was going to act on it',
     );
@@ -76,7 +88,7 @@ void main() {
       );
 
       expect(
-        await queue.nextAttemptDue(),
+        await queue.nextAttemptDue(now: at),
         at.add(PendingWriteStore.backoff.first),
       );
     },
@@ -97,6 +109,6 @@ void main() {
       await queue.markFailed(due.single.sequence, 'no', now: later);
     }
 
-    expect(await queue.nextAttemptDue(), isNull);
+    expect(await queue.nextAttemptDue(now: at), isNull);
   });
 }
