@@ -135,6 +135,8 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
         await showDialog<bool>(
           context: context,
           builder: (BuildContext context) => AlertDialog(
+            // Scrolls, so the buttons stay reachable when the type is turned up (§6.3).
+            scrollable: true,
             title: const Text('Start this recipe over?'),
             content: const Text(
               'Clears every tick and stops all running timers.',
