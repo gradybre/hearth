@@ -859,6 +859,60 @@ pillar. What has changed is that one tab of one room now does something.
 - **Setup is recorded in `docs/NEST_SETUP.md`**, because it is a one-time sequence through two
   Google consoles that will need repeating in a year when something breaks.
 
+**House's devices come from Home Assistant.** Brendan asked for this on 16 September 2026,
+and §11's sentence about building one of these rooms being a separate decision is, again,
+what this paragraph is. `docs/HOME_ASSISTANT_SPEC.md` carries the detail; what follows is
+the scope this spec adopts.
+
+- **Home Assistant keeps owning the house.** It already does the pairing, the manufacturer
+  accounts, the device protocols and the automations, and it goes on doing all of it —
+  including while Hearth is closed. Hearth is a native household interface onto it, not a
+  replacement for it, and there is no automation editor or scheduler here.
+- **Hearth talks to Home Assistant directly**, over its authenticated REST and WebSocket
+  APIs. No Supabase proxy and no add-on on the Pi: Supabase keeps serving Hearth's own data
+  and is not the transport for a command, a token, a snapshot or a frame of video. A
+  consequence worth having on purpose — a light whose integration is local still works when
+  the internet does not.
+- **Each person connects their own Home Assistant account**, with a long-lived access token
+  they create in their own HA profile and type into Hearth. Joining a Hearth household does
+  not grant access to Home Assistant, and the screens say so. Which devices somebody has
+  chosen, and their favourites, are **device-local** in this release and do not sync — but
+  both people see the same real house, because the house is Home Assistant's.
+- **Generic categories, never a brand adapter.** Door and window contacts, motion, occupancy
+  and leak sensors, numeric sensors with their reported units, plugs and switches, lights,
+  camera and doorbell events, and cameras. What a thing can do is read from the attributes
+  Home Assistant reports — `supported_color_modes` and the rest — and never from its name. A
+  switch somebody called `front_door_light` is a switch.
+- **Unknown is not a value, and a dead connection is not a closed door.** An opened door says
+  Open; a lost connection says Unavailable, or *Last known: closed*, and never an unqualified
+  Closed. Unknown, unavailable, unselected, removed, unauthorized and unsupported stay six
+  distinct answers, because collapsing any two of them is how an app comes to report a house
+  as secure at the moment it stopped being able to tell.
+- **The token is a user-supplied runtime credential**, which is a different thing from the
+  bundled keys rule 1 governs. It lives in its own secure store, keyed separately from the
+  Supabase session and bound to the Hearth user, the household and the connection — never in
+  a Dart define, `config/local.json`, SQLite, Supabase, an export, a log or a fixture. Hearth
+  deleting it locally does **not** revoke it in Home Assistant, and the screen that deletes it
+  says where to do that rather than implying it is done.
+- **Device selection is a presentation filter, not a security boundary.** Home Assistant
+  enforces what the token's owner may actually do, and Hearth does not promise per-entity
+  scopes that Home Assistant does not offer.
+- **A command names one entity.** No empty target, no area-wide fallback, and never writing
+  `/api/states` to move hardware. Acceptance by Home Assistant is not proof the thing moved,
+  so an unconfirmed command says *Could not confirm* rather than claiming success — and
+  nothing is ever replayed after a reconnect, a restart or an ambiguous timeout, because a
+  delayed replay could undo what the other person just did.
+- **Cameras are a named milestone**, and a link that opens Home Assistant in a browser does
+  not satisfy it. One stream at a time, started deliberately, released on leaving or
+  backgrounding; a still is never badged Live.
+- **Nest stays exactly as it is.** The thermostat keeps its own direct Google integration,
+  its routes and its behaviour, and is not migrated through Home Assistant.
+- **Deferred here, deliberately:** HA thermostat controls, locks, garage doors, covers,
+  alarms, sirens, buttons, configuration switches, scenes and scripts, automation editing,
+  background push alerts, event history, recording playback, two-way camera audio, multiple
+  HA servers, shared dashboard sync, and OAuth sign-in. Nothing else is lifted from §12.
+
+
 Three consequences worth naming, because they are easy to trip over later:
 
 - `isBuilt` is derived from having destinations, so all four sections now report as built. That
