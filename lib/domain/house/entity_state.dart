@@ -18,6 +18,7 @@
 /// boolean without the caller saying what to do about it.
 library;
 
+import 'package:collection/collection.dart';
 import 'package:meta/meta.dart';
 
 /// Whether Home Assistant currently knows the answer.
@@ -148,6 +149,27 @@ class EntityState {
           lastUpdated: lastUpdated,
         );
 
+  /// Deep, and including [attributes].
+  ///
+  /// Leaving the attributes out looks harmless — they are "detail", and the
+  /// state string is "the value". It is not harmless. A caller deciding
+  /// whether anything moved writes the obvious line,
+  ///
+  ///     if (next == current) return;
+  ///
+  /// and an attribute-only change vanishes into it — including the event that
+  /// confirms a brightness command, which changes `brightness` and nothing
+  /// else. Home Assistant's `last_updated` does move when an attribute does,
+  /// so the two usually differ by that field anyway; a payload without a
+  /// timestamp, and a reading never taken, are where they do not. Leaning on a
+  /// neighbouring field to carry a comparison this type claims to make is a
+  /// coincidence rather than a contract.
+  ///
+  /// Deep rather than by identity because `hs_color` arrives as a list, and
+  /// comparing the maps by reference would reproduce exactly the same bug one
+  /// level further down.
+  static const DeepCollectionEquality _attributes = DeepCollectionEquality();
+
   @override
   bool operator ==(Object other) =>
       other is EntityState &&
@@ -155,9 +177,16 @@ class EntityState {
       other.freshness == freshness &&
       other.raw == raw &&
       other.lastChanged == lastChanged &&
-      other.lastUpdated == lastUpdated;
+      other.lastUpdated == lastUpdated &&
+      _attributes.equals(other.attributes, attributes);
 
   @override
-  int get hashCode =>
-      Object.hash(availability, freshness, raw, lastChanged, lastUpdated);
+  int get hashCode => Object.hash(
+    availability,
+    freshness,
+    raw,
+    lastChanged,
+    lastUpdated,
+    _attributes.hash(attributes),
+  );
 }
