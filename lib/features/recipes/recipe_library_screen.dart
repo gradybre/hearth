@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/a11y/accessibility.dart';
 import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
@@ -21,6 +22,14 @@ import 'macro_stats_row.dart';
 import 'recipe_filter_bar.dart';
 import 'recipe_icon.dart';
 import 'recipe_photo.dart';
+
+/// What the floating pill needs left free at the end of the list: its own 56
+/// points plus the 16 the Scaffold floats it above the edge.
+///
+/// Room for the *last* row to scroll clear. It is not a fix for the rows above
+/// it — a floating button covers a different one at every scroll offset, which
+/// is why large text stops floating it at all.
+const double _pillClearance = 72;
 
 /// The household's recipe library (spec §5.2).
 ///
@@ -44,20 +53,45 @@ class RecipeLibraryScreen extends ConsumerWidget {
     // the controls on screen to be undone.
     final bool hasLibrary = (library.value ?? const <Recipe>[]).isNotEmpty;
 
+    // Past the scale where layouts give way, the way in stops floating over
+    // the list and becomes a bar the Scaffold lays out — which insets the body
+    // instead of drawing on top of it.
+    //
+    // The pill is 274 points wide and 72 tall with its margin at 3x, parked
+    // over the right-hand end of every row — which is exactly where the delete
+    // a swipe uncovers sits. It did not merely hide that button: the hit test
+    // stopped at the pill, so pressing a visible, enabled Delete opened the
+    // Add recipe sheet. Dynamic type is honoured, not survived (§6.3), and a
+    // control you can see and cannot press is not honoured.
+    //
+    // Bottom padding on the list — the usual answer — only frees the *last*
+    // row, so it is kept for the floating case and is not the fix here. Nor is
+    // waiting for the label to outgrow its pill, which does not happen until
+    // about 2.5x: by 2x a Delete is already under the pill and losing the tap.
+    //
+    // [A11y.reflowThreshold] rather than a number of this screen's own: it is
+    // already the app's line for "the layout gives way around the words", and
+    // one line is worth more than two four points apart.
+    final bool docked = A11y.scaleOf(context) > A11y.reflowThreshold;
+
     return Scaffold(
       backgroundColor: colors.background,
       // One labelled control rather than four buttons stacked up the corner.
       // Three of those four were icon-only, so what they did lived in a
       // tooltip — a hover, on a device with no pointer — and the stack grew
-      // by one every time another way in was built (U05).
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'recipe-add',
-        onPressed: () => showAddRecipeSheet(context),
-        backgroundColor: colors.accent,
-        foregroundColor: colors.onAccent,
-        icon: const Icon(Icons.add),
-        label: Text('Add recipe', style: context.text.label),
-      ),
+      // by one every time another way in was built (U05). Both shapes below
+      // keep the words, for that reason.
+      floatingActionButton: docked
+          ? null
+          : FloatingActionButton.extended(
+              heroTag: 'recipe-add',
+              onPressed: () => showAddRecipeSheet(context),
+              backgroundColor: colors.accent,
+              foregroundColor: colors.onAccent,
+              icon: const Icon(Icons.add),
+              label: Text('Add recipe', style: context.text.label),
+            ),
+      bottomNavigationBar: docked ? _AddRecipeBar(gutter: gutter) : null,
       body: SafeArea(
         child: ReadingColumn(
           child: library.when(
@@ -139,10 +173,63 @@ class RecipeLibraryScreen extends ConsumerWidget {
                     _RecipeSliver(
                       recipes: shown.value ?? const <Recipe>[],
                       gutter: gutter,
+                      // Nothing floats over the end of the list once the
+                      // button is docked, so the list stops reserving room
+                      // for it rather than trailing a band of empty paper.
+                      clearance: docked ? 0 : _pillClearance,
                     ),
                 ],
               );
             },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Add recipe", at accessibility text sizes: a bar the Scaffold lays out
+/// rather than a pill floating over the list.
+///
+/// The words and the action are the pill's, unchanged — what changes is that
+/// the Scaffold insets the list above this instead of drawing it on top, so
+/// no row's controls end up underneath. It grows with the text rather than
+/// clipping it: the pill is a fixed 56 points tall, which the label's own line
+/// box outgrows by 3x.
+class _AddRecipeBar extends StatelessWidget {
+  const _AddRecipeBar({required this.gutter});
+
+  final double gutter;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    return Material(
+      // The page's own paper, so the bar reads as the foot of the screen
+      // rather than a second surface laid over it.
+      color: colors.background,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.all(gutter),
+          child: SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => showAddRecipeSheet(context),
+              style: FilledButton.styleFrom(
+                backgroundColor: colors.accent,
+                foregroundColor: colors.onAccent,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: HearthSpacing.lg,
+                  vertical: HearthSpacing.md,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(HearthRadius.lg),
+                ),
+              ),
+              icon: const Icon(Icons.add),
+              label: Text('Add recipe', style: context.text.label),
+            ),
           ),
         ),
       ),
@@ -257,14 +344,21 @@ class _NoMatches extends StatelessWidget {
 /// The list, as a sliver so it shares one scroll view with the chrome above
 /// it (see the comment on that scroll view).
 class _RecipeSliver extends StatelessWidget {
-  const _RecipeSliver({required this.recipes, required this.gutter});
+  const _RecipeSliver({
+    required this.recipes,
+    required this.gutter,
+    required this.clearance,
+  });
 
   final List<Recipe> recipes;
   final double gutter;
 
+  /// Room left at the end of the list for anything floating over it.
+  final double clearance;
+
   @override
   Widget build(BuildContext context) => SliverPadding(
-    padding: EdgeInsets.fromLTRB(gutter, 0, gutter, gutter + 72),
+    padding: EdgeInsets.fromLTRB(gutter, 0, gutter, gutter + clearance),
     sliver: SliverList.separated(
       itemCount: recipes.length,
       separatorBuilder: (BuildContext context, int index) =>
