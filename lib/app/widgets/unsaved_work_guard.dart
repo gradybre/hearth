@@ -44,6 +44,8 @@ class UnsavedWorkGuard extends StatelessWidget {
     final bool? discard = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
+        // Scrolls, so the buttons stay reachable when the type is turned up (§6.3).
+        scrollable: true,
         backgroundColor: context.colors.surface,
         title: Text('Discard this $what?', style: context.text.sectionHeader),
         content: Text(
@@ -87,6 +89,8 @@ class UnsavedWorkGuard extends StatelessWidget {
       await showDialog<bool>(
         context: context,
         builder: (BuildContext context) => AlertDialog(
+          // Scrolls, so the buttons stay reachable when the type is turned up (§6.3).
+          scrollable: true,
           backgroundColor: context.colors.surface,
           title: Text('Unfinished changes', style: context.text.sectionHeader),
           content: Text(
