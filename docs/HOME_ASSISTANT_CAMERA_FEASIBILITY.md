@@ -304,7 +304,7 @@ and go2rtc would need an RTSP source that Ring does not expose.
 **This is the load-bearing fact of the whole document.** Any plan built on
 "get the HLS URL and hand it to a video widget" does not work for Brendan's cameras.
 
-### 3.3 Ring still images appear to need a subscription — flag for Brendan
+### 3.3 Ring still images need a subscription — Brendan has one
 
 `RingCam.async_camera_image` (line 155) works off `self._video_url`:
 
@@ -327,7 +327,28 @@ a real, honest placeholder state for "live view available, no still image", not 
 spinner that never resolves — and note the snapshot would be a frame from the *last
 recording*, which spec §4.3 explicitly forbids presenting as captured now.
 
-**Unverified:** whether Brendan has Ring Protect. See §6.
+**Answered, 16 September 2026.** Brendan is on **Ring Multi**, which lists *180 days
+of video event history for all cameras*, *Snapshot Capture*, and *Extended Live View*.
+History is what populates `_video_url`, so `has_subscription` should read true and the
+snapshot path should return an image rather than raising.
+
+**What that settles, and what it does not.** It settles *availability*: the snapshot half
+of §4.3 is not empty here, and the card does not need a "live view works, no still image"
+state as its normal case — though it still needs one for the moment history is empty or
+the plan lapses, because an entitlement is not a guarantee about any given camera at any
+given moment.
+
+It does **not** settle *freshness*, and that is the half that shapes the UI. The image is
+produced by running ffmpeg over the **last recording's** URL — it is a frame of whatever
+was last recorded, not a capture taken when the card was drawn. §4.3's rule stands
+unchanged: show it with the event's own time, never with "now". A camera that has not
+recorded since Tuesday shows Tuesday, and says so.
+
+**Still unverified from here:** that Home Assistant's `has_subscription` flag reads true
+for this particular plan tier on his instance. Ring's plan naming has changed over time,
+and the flag comes from Ring's API rather than from the plan's marketing name. One
+snapshot fetch against his own camera settles it; until then this is *expected to work*,
+not *verified working*. See §6.
 
 ### 3.4 Other Ring facts, confirmed
 
