@@ -51,6 +51,10 @@ dependencies:
   image_picker: ^1.2.3
   path_provider: ^2.1.6
   http: ^1.6.0
+  # Home Assistant's live state arrives over a WebSocket (spec §11). Already
+  # present transitively via supabase_flutter; named directly because relying on
+  # somebody else's transitive dependency means a bump elsewhere can remove it.
+  web_socket_channel: ^3.0.3
   mobile_scanner: ^7.4.0
   # Opening a store's search page from the shopping export (spec §5.7).
   url_launcher: ^6.3.1
