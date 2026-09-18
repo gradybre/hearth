@@ -159,7 +159,7 @@ class HaSession {
             );
         }
       },
-      onError: (Object error) {
+      onError: (Object _) {
         if (!done.isCompleted) {
           done.completeError(
             const HaSessionException(
@@ -168,18 +168,9 @@ class HaSession {
             ),
           );
         }
+        _ended();
       },
-      onDone: () {
-        if (!done.isCompleted) {
-          done.completeError(
-            const HaSessionException(
-              HaSessionFailure.connectionLost,
-              'Home Assistant closed the connection.',
-            ),
-          );
-        }
-        _failEveryWaiter();
-      },
+      onDone: _ended,
     );
 
     return done.future;
@@ -310,6 +301,18 @@ class HaSession {
 
   static DateTime? _time(Object? value) =>
       value is String ? DateTime.tryParse(value)?.toUtc() : null;
+
+  /// The socket went away on its own.
+  ///
+  /// Everything outstanding fails, and — the part a first version of this
+  /// missed — the change stream is closed. Without that a listener is never
+  /// told the connection ended: `changes` simply goes quiet, which is
+  /// indistinguishable from a house where nothing is happening. The controller
+  /// above would sit reporting Live while the Pi was off.
+  void _ended() {
+    _failEveryWaiter();
+    if (!_changes.isClosed) _changes.close();
+  }
 
   void _failEveryWaiter() {
     // A socket that closed with requests outstanding must not leave their
