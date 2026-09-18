@@ -98,6 +98,23 @@ void main() {
       );
     });
 
+    test('and a socket that dies mid-handshake fails at once', () async {
+      // Not eventually. Before this was held, a close during the handshake
+      // left the attempt waiting for the fifteen-second timeout — which on a
+      // phone is fifteen seconds of spinner for a Pi that is switched off.
+      // The suite still passed, because it asserted the throw and not the
+      // speed, so the regression was invisible until a repository test took
+      // exactly fifteen seconds.
+      final Future<HaSession> opening = connect();
+      await pumpEventQueue();
+      socket.serverCloses();
+
+      await expectLater(
+        opening.timeout(const Duration(seconds: 1)),
+        throwsA(isA<HaSessionException>()),
+      );
+    });
+
     test('and a lost connection is', () async {
       final Future<HaSession> opening = connect();
       await pumpEventQueue();

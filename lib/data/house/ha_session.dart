@@ -124,8 +124,16 @@ class HaSession {
 
   bool _closed = false;
 
+  /// The handshake in progress, so [_ended] can fail it.
+  ///
+  /// A socket that dies mid-handshake has to reject the connect attempt, not
+  /// leave it waiting: without this the attempt sits until the timeout, which
+  /// is fifteen seconds of spinner for a Pi that is simply switched off.
+  Completer<void>? _handshake;
+
   Future<void> _authenticate(String token) async {
     final Completer<void> done = Completer<void>();
+    _handshake = done;
 
     _listening = _socket.incoming.listen(
       (Map<String, Object?> frame) {
@@ -310,6 +318,16 @@ class HaSession {
   /// indistinguishable from a house where nothing is happening. The controller
   /// above would sit reporting Live while the Pi was off.
   void _ended() {
+    final Completer<void>? handshake = _handshake;
+    _handshake = null;
+    if (handshake != null && !handshake.isCompleted) {
+      handshake.completeError(
+        const HaSessionException(
+          HaSessionFailure.connectionLost,
+          'Home Assistant closed the connection.',
+        ),
+      );
+    }
     _failEveryWaiter();
     if (!_changes.isClosed) _changes.close();
   }
