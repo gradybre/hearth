@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../features/foods/food_library_screen.dart';
+import '../../features/house/ha_connect_route.dart';
 import '../../features/house/thermostat_screen.dart';
 import '../../features/plan/plan_screen.dart';
 import '../../features/recipes/recipe_library_screen.dart';
@@ -138,6 +139,14 @@ const List<AppDestination> houseDestinations = <AppDestination>[
     semanticLabel: 'Thermostat. What the house is set to.',
     builder: _houseThermostat,
   ),
+  AppDestination(
+    path: '/devices',
+    label: 'Devices',
+    icon: Icons.sensors_outlined,
+    selectedIcon: Icons.sensors,
+    semanticLabel: 'Devices. Doors, plugs and lights from Home Assistant.',
+    builder: _houseDevices,
+  ),
 ];
 
 // Top-level functions rather than closures: an `AppDestination` is `const`,
@@ -168,3 +177,5 @@ Widget _healthAppointments() => const UnbuiltScreen(
 );
 
 Widget _houseThermostat() => const ThermostatScreen();
+
+Widget _houseDevices() => const HaDevicesScreen();

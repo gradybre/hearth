@@ -95,27 +95,59 @@ void main() {
   });
 
   group('a room with a single tab', () {
-    // House has one destination (spec §11), and `NavigationBar` asserts
-    // it has at least two. So the shell drew nothing at all rather than a
-    // thermostat: an assertion in the bottom bar takes the body down with it,
-    // and `/thermostat` rendered zero widgets of text.
+    // `NavigationBar` asserts it has at least two destinations. House used to
+    // have one, so the shell drew nothing at all rather than a thermostat: an
+    // assertion in the bottom bar takes the body down with it, and
+    // `/thermostat` rendered zero widgets of text.
     //
-    // Driven through the router because the harness opens on Recipes and the
-    // way to another room is the route, not a tab.
-    Future<void> goToTheHouse(WidgetTester tester, Size size) async {
-      await _pumpAt(tester, size);
+    // **House has two tabs now**, so it no longer exercises this. The room
+    // below is built for the purpose instead, which is the point: the guard
+    // has to keep being tested when no real section happens to have one tab,
+    // or the bug simply waits for somebody to add a one-tab room and comes
+    // back. A check that stops running is not a gate.
+    const BuiltSection oneTab = BuiltSection(
+      id: 'test-one-tab',
+      label: 'One room',
+      blurb: 'A room with a single thing in it.',
+      icon: Icons.chair_outlined,
+      destinations: <AppDestination>[
+        AppDestination(
+          path: '/only',
+          label: 'Only',
+          icon: Icons.circle_outlined,
+          selectedIcon: Icons.circle,
+          semanticLabel: 'Only. The one tab this room has.',
+          builder: _onlyTab,
+        ),
+      ],
+    );
+
+    Future<void> pumpOneTabRoom(WidgetTester tester, Size size) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            theme: HearthTheme.light(),
+            home: AppShell(
+              section: oneTab,
+              currentIndex: 0,
+              onDestinationSelected: (int _) {},
+              onLeaveSection: () {},
+              child: _onlyTab(),
+            ),
+          ),
+        ),
+      );
       await pumpFrames(tester);
-      GoRouter.of(tester.element(find.byType(Scaffold).first))
-          .go('/thermostat');
-      await pumpFrames(tester, frames: 10);
     }
 
     testWidgets('opens its screen on a phone rather than a blank page', (
       WidgetTester tester,
     ) async {
-      await goToTheHouse(tester, phone);
-
-      expect(find.text('Thermostat'), findsWidgets);
+      await pumpOneTabRoom(tester, phone);
+      expect(find.text('The only tab'), findsWidgets);
     });
 
     testWidgets('and shows no tab bar, which could only say where you are', (
@@ -123,9 +155,9 @@ void main() {
     ) async {
       // One tab is a row with nothing to choose. The section bar above the
       // content already names the room and carries the way out of it, so
-      // there is nothing lost by leaving the bar off.
-      await goToTheHouse(tester, phone);
-
+      // there is nothing lost by leaving the bar off — and drawing one would
+      // trip the assertion that took the whole screen down.
+      await pumpOneTabRoom(tester, phone);
       expect(find.byType(NavigationBar), findsNothing);
     });
 
@@ -135,14 +167,29 @@ void main() {
       // The sidebar builds a row per destination and asserts nothing, so one
       // tab is a rail with one row — and it still carries the way home and
       // the way into Settings, which is most of what it is for.
-      await goToTheHouse(tester, desktop);
+      await pumpOneTabRoom(tester, desktop);
 
-      expect(find.text('Thermostat'), findsWidgets);
+      expect(find.text('The only tab'), findsWidgets);
       expect(
-        find.bySemanticsLabel(houseDestinations.single.semanticLabel),
+        find.bySemanticsLabel(oneTab.destinations.single.semanticLabel),
         findsOneWidget,
       );
       expect(find.text('Settings'), findsWidgets);
+    });
+  });
+
+  group('and a room with more than one', () {
+    // The other side of the same guard: House gained a Devices tab, so the
+    // bar it could not draw before is drawn now.
+    testWidgets('does show the bar', (WidgetTester tester) async {
+      await _pumpAt(tester, phone);
+      await pumpFrames(tester);
+      GoRouter.of(tester.element(find.byType(Scaffold).first))
+          .go('/thermostat');
+      await pumpFrames(tester, frames: 10);
+
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.text('Devices'), findsWidgets);
     });
   });
 
@@ -294,3 +341,6 @@ void main() {
     });
   });
 }
+
+/// The one tab the synthetic room has.
+Widget _onlyTab() => const Scaffold(body: Center(child: Text('The only tab')));

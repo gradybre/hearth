@@ -38,6 +38,8 @@ import '../data/auth/auth_gateway.dart';
 import '../data/auth/local_auth_gateway.dart';
 import '../data/auth/password_recovery.dart';
 import '../data/auth/supabase_auth_gateway.dart';
+import '../data/house/ha_credentials.dart';
+import '../data/house/ha_repository.dart';
 import '../data/local/collection_store.dart';
 import '../data/local/cook_session_store.dart';
 import '../data/local/cook_timer_store.dart';
@@ -807,6 +809,47 @@ final Provider<PreferenceStore> preferenceStoreProvider =
     Provider<PreferenceStore>(
       (Ref ref) => PreferenceStore(ref.watch(databaseProvider)),
     );
+
+/// This installation's Home Assistant connection (spec §11).
+///
+/// One per Hearth user, household and connection id. The scope is what makes
+/// signing in as somebody else, or changing household, reach a different
+/// credential rather than inheriting one — §5.2 of the Home Assistant handoff
+/// requires exactly that, and a provider that ignored the identity would
+/// quietly hand one person's house to another.
+///
+/// The connection id is fixed for now because §2 allows one connection per
+/// active user and household on an installation. It is a field rather than a
+/// constant inside the key so that replacing a token can write the new one
+/// under a new id and keep the old until the new one proves itself.
+final Provider<HaCredentialScope> haScopeProvider = Provider<HaCredentialScope>(
+  (Ref ref) => HaCredentialScope(
+    userId: ref.watch(currentUserIdProvider),
+    householdId: ref.watch(currentHouseholdIdProvider),
+    connectionId: 'primary',
+  ),
+);
+
+/// Reading and writing that connection.
+///
+/// Nothing above this ever holds the token: the repository proves an address
+/// and a token, stores them, and opens connections from what it stored. There
+/// is deliberately no way to read the credential back out.
+final Provider<HaRepository> haRepositoryProvider = Provider<HaRepository>(
+  (Ref ref) => HaRepository(
+    preferences: ref.watch(preferenceStoreProvider),
+    credentials: HaCredentialStore(),
+    scope: ref.watch(haScopeProvider),
+  ),
+);
+
+/// Whether this installation has a Home Assistant to talk to.
+///
+/// Watched by the House section so the Devices tab can say "connect" rather
+/// than drawing an empty dashboard somebody cannot explain.
+final FutureProvider<bool> haConfiguredProvider = FutureProvider<bool>(
+  (Ref ref) => ref.watch(haRepositoryProvider).isConfigured,
+);
 
 /// Whether cook-along shows every step at once.
 ///
