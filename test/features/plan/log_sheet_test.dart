@@ -247,7 +247,7 @@ void main() {
     );
     await searchFor(tester, 'apple');
 
-    expect(find.textContaining('5.3 oz'), findsOneWidget);
+    expect(find.textContaining('5.29 oz'), findsOneWidget);
   });
 
   testWidgets('a per-100 g reference is not dressed up as a serving', (

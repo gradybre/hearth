@@ -328,7 +328,7 @@ void fromLookupTests() {
       // server types a uuid: the row saves locally, then is rejected on its
       // first sync, long after the user believed it was safe.
       expect(draft.existingId, isNull);
-      expect(draft.servings.single.id, isNull);
+      expect(Uuid.isValidUUID(fromString: draft.servings.single.id!), isTrue);
 
       final Food saved = draft.toFood();
       expect(saved.id, isNot(startsWith('off:')));

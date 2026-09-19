@@ -148,6 +148,15 @@ jobs:
             psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
             < supabase/tests/schema_guards.sql
 
+      - name: Package nutrition and planned-serving guards
+        run: |
+          docker exec -i supabase_db_hearth \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/tests/package_nutrition.sql
+          docker exec -i supabase_db_hearth \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/tests/planned_serving_reference.sql
+
       # And the half a single session cannot tell you either. `schema_guards`
       # is one connection, so a lock-order bug is invisible from inside it:
       # every statement it runs succeeds. This drives the AI ledger's reserve

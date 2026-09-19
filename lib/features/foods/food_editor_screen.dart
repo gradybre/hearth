@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
@@ -16,6 +17,7 @@ import '../../domain/format/serving_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/parsing/amount_parser.dart';
 import '../../domain/shopping/walmart_product.dart';
+import '../../domain/units/mass_display_mode.dart';
 import '../../domain/units/unit.dart';
 import 'food_draft.dart';
 import 'read_label_sheet.dart';
@@ -167,7 +169,14 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
   }
 
   Future<void> _save() async {
-    if (!_draft.isValid || _restaurantError != null) {
+    // A complete package/nutrition change waits on its own inline confirm
+    // (spec R10). Save commits what was confirmed and nothing else, so a
+    // changed servings-per-package count can never take effect without
+    // somebody having looked at the sentence it produces -- and an
+    // incomplete optional entry never blocks saving the food at all.
+    if (!_draft.isValid ||
+        _restaurantError != null ||
+        _draft.packageNutritionNeedsConfirmation) {
       setState(() => _showErrors = true);
       return;
     }
@@ -370,10 +379,16 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
               'Check and save',
             _ => 'New food',
           }, style: context.text.sectionHeader),
-          leading: TextButton(
-            onPressed: _saving ? null : _cancel,
-            child: const Text('Cancel'),
-          ),
+          leading: MediaQuery.textScalerOf(context).scale(14) > 20
+              ? IconButton(
+                  onPressed: _saving ? null : _cancel,
+                  tooltip: 'Cancel',
+                  icon: const Icon(Icons.close),
+                )
+              : TextButton(
+                  onPressed: _saving ? null : _cancel,
+                  child: const Text('Cancel'),
+                ),
           leadingWidth: 88,
           actions: <Widget>[
             Padding(
@@ -574,7 +589,12 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
                       () => _draft = _draft.copyWith(
                         servings: <ServingDraft>[
                           ..._draft.servings,
-                          const ServingDraft(),
+                          // A stable id from the moment the row exists, not
+                          // invented later by `toFood` -- a package/nutrition
+                          // relationship (spec R9-R11) the user links to this
+                          // row has to keep pointing at it through every
+                          // rebuild between now and Save.
+                          ServingDraft(id: const Uuid().v4()),
                         ],
                       ),
                     ),
@@ -634,7 +654,8 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
               const SizedBox(height: HearthSpacing.xs),
               Text(
                 'Paste a product link and Hearth remembers which product this '
-                'is. Add the pack size and it works out how many to order.',
+                'is, so "Take it shopping" can fill a basket rather than open '
+                'a search.',
                 style: context.text.metadata.copyWith(
                   color: context.colors.textMuted,
                 ),
@@ -674,15 +695,304 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
                   ],
                 ),
               ],
-              const SizedBox(height: HearthSpacing.md),
+              const SizedBox(height: HearthSpacing.xl),
+              // Shared with shopping and nutrition (spec R10): one field for
+              // how much comes in a package, not a copy each screen edits
+              // independently.
+              Text('Package & nutrition', style: context.text.sectionHeader),
+              const SizedBox(height: HearthSpacing.xs),
+              Text(
+                'How much a package holds and how that '
+                'relates to a nutrition serving above. Package and serving '
+                'labels keep their own printed units either way.',
+                style: context.text.metadata.copyWith(
+                  color: context.colors.textMuted,
+                ),
+              ),
+              const SizedBox(height: HearthSpacing.sm),
               _TextField(
-                label: 'Sold in',
+                label: 'Package amount',
                 value: _draft.packSize,
-                hint: '1 lb',
+                hint: '10 oz',
                 onChanged: (String v) =>
                     setState(() => _draft = _draft.copyWith(packSize: v)),
               ),
+              const SizedBox(height: HearthSpacing.md),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  _TextField(
+                    label: 'Servings per package',
+                    value: _draft.servingsPerPackage,
+                    hint: '2',
+                    keyboardType: TextInputType.text,
+                    onChanged: (String v) => setState(
+                      () => _draft = _draft.withPackageField(
+                        servingsPerPackage: v,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: HearthSpacing.md),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'Nutrition serving',
+                        style: context.text.metadata.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: HearthSpacing.xs),
+                      DropdownButtonFormField<String>(
+                        key: ValueKey(
+                          'package-serving-${_draft.packageServingId}',
+                        ),
+                        initialValue:
+                            _draft.servings.any(
+                              (ServingDraft s) =>
+                                  s.id == _draft.packageServingId &&
+                                  s.unit.kind == UnitKind.volume,
+                            )
+                            ? _draft.packageServingId
+                            : null,
+                        isExpanded: true,
+                        style: context.text.body.copyWith(
+                          color: colors.textPrimary,
+                        ),
+                        dropdownColor: colors.surfaceElevated,
+                        hint: const Text('Choose a serving'),
+                        items: <DropdownMenuItem<String>>[
+                          for (final ServingDraft serving in _draft.servings)
+                            if (serving.id != null &&
+                                Units.byId(serving.unitId)?.kind ==
+                                    UnitKind.volume)
+                              DropdownMenuItem<String>(
+                                value: serving.id,
+                                child: Text(
+                                  serving.label.isEmpty
+                                      ? 'serving'
+                                      : serving.label,
+                                ),
+                              ),
+                        ],
+                        onChanged: (String? value) => setState(
+                          () => _draft = _draft.withPackageField(
+                            packageServingId: value,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: HearthSpacing.sm),
+              CheckboxListTile.adaptive(
+                value: _draft.packageServingsApproximate,
+                onChanged: (bool? on) => setState(
+                  () => _draft = _draft.withPackageField(
+                    packageServingsApproximate: on ?? false,
+                  ),
+                ),
+                title: Text(
+                  'About (an approximate printed count)',
+                  style: context.text.body,
+                ),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+              if (_draft.packageNutritionPreview
+                  case final String preview) ...<Widget>[
+                const SizedBox(height: HearthSpacing.xs),
+                Text(
+                  _draft.packageServingsApproximate
+                      ? '$preview  ·  approximate conversion from package '
+                            'label'
+                      : preview,
+                  style: context.text.body.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                ),
+              ],
+              if (_draft.packageNutritionUnitPreview
+                  case final String equivalence)
+                Text(
+                  equivalence,
+                  style: context.text.body.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                ),
+              // Not held back until Save: a field nobody can act on is
+              // worth saying so about while it is still on screen.
+              if (_draft.packageNutritionError case final String message)
+                Padding(
+                  padding: const EdgeInsets.only(top: HearthSpacing.xs),
+                  child: Text(
+                    message,
+                    style: context.text.metadata.copyWith(color: colors.error),
+                  ),
+                ),
+              // The review step, said plainly and done here rather than as a
+              // side effect of Save (spec R10). Until it is pressed, what is
+              // typed is not what the food uses.
+              if (_draft.packageNutritionNeedsConfirmation ||
+                  (_draft.hasStalePackageNutrition &&
+                      _draft.packageNutritionError == null)) ...<Widget>[
+                const SizedBox(height: HearthSpacing.xs),
+                Text(
+                  _showErrors
+                      ? 'Not used yet - confirm these package servings, or '
+                            'remove the link, before saving.'
+                      : 'Not used yet - confirm these package servings to '
+                            'use them.',
+                  style: context.text.metadata.copyWith(color: colors.error),
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton.tonal(
+                    onPressed: () {
+                      final FoodDraft confirmed = _draft
+                          .confirmPackageNutrition();
+                      if (identical(confirmed, _draft)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'These package details cannot form a conversion. Correct the amounts or remove the link.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      setState(() {
+                        _draft = confirmed;
+                        _showErrors = false;
+                      });
+                    },
+                    child: Text(
+                      _draft.originalPackageNutrition == null
+                          ? 'Use package servings'
+                          : 'Confirm package servings',
+                    ),
+                  ),
+                ),
+              ] else if (_draft.originalPackageNutrition?.isValid == true &&
+                  !_draft.hasStalePackageNutrition)
+                Padding(
+                  padding: const EdgeInsets.only(top: HearthSpacing.xs),
+                  child: Text(
+                    _isDirty
+                        ? 'Package servings confirmed. Save to apply.'
+                        : 'Package servings in use.',
+                    style: context.text.metadata.copyWith(
+                      color: colors.textMuted,
+                    ),
+                  ),
+                ),
+              if (_draft.packageNutritionNeedsConfirmation)
+                Text(
+                  'Confirm here, then Save the food to apply changes.',
+                  style: context.text.metadata.copyWith(
+                    color: colors.textMuted,
+                  ),
+                ),
+              // Both facts are kept as entered; this only says they differ.
+              if (_draft.packageDensityConflictNote case final String note)
+                Padding(
+                  padding: const EdgeInsets.only(top: HearthSpacing.xs),
+                  child: Text(
+                    note,
+                    style: context.text.metadata.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ),
+              if (_draft.hasStalePackageNutrition) ...<Widget>[
+                const SizedBox(height: HearthSpacing.xs),
+                Text(
+                  'Check package servings -- the package or serving has '
+                  'changed since this was confirmed.',
+                  style: context.text.metadata.copyWith(color: colors.error),
+                ),
+              ],
+              for (final String note in _draft.packageReviewNotes)
+                Padding(
+                  padding: const EdgeInsets.only(top: HearthSpacing.xs),
+                  child: Text(
+                    note,
+                    style: context.text.metadata.copyWith(
+                      color: colors.textMuted,
+                    ),
+                  ),
+                ),
+              if (_draft.packageReviewNotes.any(
+                (String n) => n.contains('needs manual confirmation'),
+              ))
+                CheckboxListTile.adaptive(
+                  value: _draft.packageBasisAcknowledged,
+                  onChanged: (bool? on) => setState(
+                    () => _draft = _draft.copyWith(
+                      packageBasisAcknowledged: on ?? false,
+                    ),
+                  ),
+                  title: Text(
+                    'The package and this serving describe the same '
+                    'preparation',
+                    style: context.text.body,
+                  ),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+              if (_draft.originalPackageNutrition != null ||
+                  _draft.hasEnteredPackageFields)
+                Padding(
+                  padding: const EdgeInsets.only(top: HearthSpacing.xs),
+                  child: TextButton(
+                    onPressed: () =>
+                        setState(() => _draft = _draft.clearPackageNutrition()),
+                    child: const Text('Remove package/nutrition link'),
+                  ),
+                ),
               const SizedBox(height: HearthSpacing.xxl),
+              const SizedBox(height: HearthSpacing.lg),
+              Text(
+                'Weight display',
+                style: context.text.metadata.copyWith(
+                  color: colors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: HearthSpacing.xs),
+              DropdownButtonFormField<MassDisplayMode>(
+                initialValue: _draft.massDisplayMode,
+                isExpanded: true,
+                style: context.text.body.copyWith(color: colors.textPrimary),
+                dropdownColor: colors.surfaceElevated,
+                items: const <DropdownMenuItem<MassDisplayMode>>[
+                  DropdownMenuItem<MassDisplayMode>(
+                    value: MassDisplayMode.automatic,
+                    child: Text('Automatic'),
+                  ),
+                  DropdownMenuItem<MassDisplayMode>(
+                    value: MassDisplayMode.ounces,
+                    child: Text('Ounces'),
+                  ),
+                  DropdownMenuItem<MassDisplayMode>(
+                    value: MassDisplayMode.weight,
+                    child: Text('Weight (oz/lb)'),
+                  ),
+                ],
+                onChanged: (MassDisplayMode? value) {
+                  if (value == null) return;
+                  setState(
+                    () => _draft = _draft.copyWith(massDisplayMode: value),
+                  );
+                },
+              ),
+              const SizedBox(height: HearthSpacing.xs),
+              Text(
+                'Used for recipe and shopping totals. Package labels keep '
+                'their own units.',
+                style: context.text.metadata.copyWith(color: colors.textMuted),
+              ),
+              const SizedBox(height: HearthSpacing.lg),
             ],
           ),
         ),

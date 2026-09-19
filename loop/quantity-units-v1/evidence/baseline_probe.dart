@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+// Reproducible baseline probe, not application code.
 import 'package:hearth/domain/format/quantity_format.dart';
 import 'package:hearth/domain/parsing/ingredient_parser.dart';
 import 'package:hearth/domain/recipes/ingredient_consolidator.dart';

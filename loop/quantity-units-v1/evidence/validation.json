@@ -1,0 +1,46 @@
+[
+  {
+    "command": [
+      "flutter",
+      "analyze"
+    ],
+    "exit": 0,
+    "seconds": 2.81
+  },
+  {
+    "command": [
+      "flutter",
+      "test",
+      "test/features/plan/package_repeat_ui_test.dart"
+    ],
+    "exit": 0,
+    "seconds": 3.53
+  },
+  {
+    "command": [
+      "flutter",
+      "test"
+    ],
+    "exit": 0,
+    "seconds": 89.58
+  },
+  {
+    "command": "HEARTH_RENDER=1 flutter test test/render --tags render",
+    "exit": 0,
+    "passed": 59
+  },
+  {
+    "command": "deno check all function entrypoints; deno lint; deno test --allow-import supabase/functions/",
+    "exit": 0,
+    "passed": 78,
+    "steps": 76
+  },
+  {
+    "command": "45 SQL migrations, seed, schema_guards.sql, package_nutrition.sql, planned_serving_reference.sql in owned disposable database",
+    "exit": 0
+  },
+  {
+    "command": "flutter build macos --debug -t private synthetic memory-database fixture",
+    "exit": 0
+  }
+]

@@ -3579,6 +3579,29 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _massDisplayModeMeta = const VerificationMeta(
+    'massDisplayMode',
+  );
+  @override
+  late final GeneratedColumn<String> massDisplayMode = GeneratedColumn<String>(
+    'mass_display_mode',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('automatic'),
+  );
+  static const VerificationMeta _packageNutritionMeta = const VerificationMeta(
+    'packageNutrition',
+  );
+  @override
+  late final GeneratedColumn<String> packageNutrition = GeneratedColumn<String>(
+    'package_nutrition',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -3611,6 +3634,8 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
     isZeroCalorie,
     isModifier,
     isDeleted,
+    massDisplayMode,
+    packageNutrition,
     updatedAt,
   ];
   @override
@@ -3758,6 +3783,24 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
         isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
       );
     }
+    if (data.containsKey('mass_display_mode')) {
+      context.handle(
+        _massDisplayModeMeta,
+        massDisplayMode.isAcceptableOrUnknown(
+          data['mass_display_mode']!,
+          _massDisplayModeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('package_nutrition')) {
+      context.handle(
+        _packageNutritionMeta,
+        packageNutrition.isAcceptableOrUnknown(
+          data['package_nutrition']!,
+          _packageNutritionMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -3851,6 +3894,14 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, FoodRow> {
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
       )!,
+      massDisplayMode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mass_display_mode'],
+      )!,
+      packageNutrition: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}package_nutrition'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -3899,6 +3950,28 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
   /// (spec §5.2). Its servings may hold negative macros; nothing else may.
   final bool isModifier;
   final bool isDeleted;
+
+  /// How this food's imperial masses are totalled for display (spec R3-R4).
+  ///
+  /// A presentation choice only: `automatic`, `ounces` or `weight`. Non-null
+  /// with a default, because every food already in this cache has one --
+  /// automatic -- and a nullable column would make `nothing chosen yet` and
+  /// `decide for me` two ways of saying the same thing.
+  final String massDisplayMode;
+
+  /// One reviewed package-to-serving relationship, as version-stamped JSON
+  /// text (spec R9-R13).
+  ///
+  /// Stored whole rather than as three columns, for the same reason the
+  /// server stores one jsonb: the count, the serving it counts, and the two
+  /// amounts it was reviewed against are a single claim. Split up, a write
+  /// carrying only some of them would leave a count pointing at a serving it
+  /// never saw, and the result is a wrong cup weight rather than a missing
+  /// one. Nullable, because having none is the ordinary state.
+  ///
+  /// Only ever read through `FoodMapper`, which keeps an unrecognised version
+  /// verbatim so an older build round-trips it untouched.
+  final String? packageNutrition;
   final DateTime updatedAt;
   const FoodRow({
     required this.id,
@@ -3920,6 +3993,8 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     required this.isZeroCalorie,
     required this.isModifier,
     required this.isDeleted,
+    required this.massDisplayMode,
+    this.packageNutrition,
     required this.updatedAt,
   });
   @override
@@ -3966,6 +4041,10 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     map['is_zero_calorie'] = Variable<bool>(isZeroCalorie);
     map['is_modifier'] = Variable<bool>(isModifier);
     map['is_deleted'] = Variable<bool>(isDeleted);
+    map['mass_display_mode'] = Variable<String>(massDisplayMode);
+    if (!nullToAbsent || packageNutrition != null) {
+      map['package_nutrition'] = Variable<String>(packageNutrition);
+    }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -4013,6 +4092,10 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       isZeroCalorie: Value(isZeroCalorie),
       isModifier: Value(isModifier),
       isDeleted: Value(isDeleted),
+      massDisplayMode: Value(massDisplayMode),
+      packageNutrition: packageNutrition == null && nullToAbsent
+          ? const Value.absent()
+          : Value(packageNutrition),
       updatedAt: Value(updatedAt),
     );
   }
@@ -4044,6 +4127,8 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       isZeroCalorie: serializer.fromJson<bool>(json['isZeroCalorie']),
       isModifier: serializer.fromJson<bool>(json['isModifier']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      massDisplayMode: serializer.fromJson<String>(json['massDisplayMode']),
+      packageNutrition: serializer.fromJson<String?>(json['packageNutrition']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -4070,6 +4155,8 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
       'isZeroCalorie': serializer.toJson<bool>(isZeroCalorie),
       'isModifier': serializer.toJson<bool>(isModifier),
       'isDeleted': serializer.toJson<bool>(isDeleted),
+      'massDisplayMode': serializer.toJson<String>(massDisplayMode),
+      'packageNutrition': serializer.toJson<String?>(packageNutrition),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -4094,6 +4181,8 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     bool? isZeroCalorie,
     bool? isModifier,
     bool? isDeleted,
+    String? massDisplayMode,
+    Value<String?> packageNutrition = const Value.absent(),
     DateTime? updatedAt,
   }) => FoodRow(
     id: id ?? this.id,
@@ -4121,6 +4210,10 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     isZeroCalorie: isZeroCalorie ?? this.isZeroCalorie,
     isModifier: isModifier ?? this.isModifier,
     isDeleted: isDeleted ?? this.isDeleted,
+    massDisplayMode: massDisplayMode ?? this.massDisplayMode,
+    packageNutrition: packageNutrition.present
+        ? packageNutrition.value
+        : this.packageNutrition,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   FoodRow copyWithCompanion(FoodsCompanion data) {
@@ -4158,6 +4251,12 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
           ? data.isModifier.value
           : this.isModifier,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      massDisplayMode: data.massDisplayMode.present
+          ? data.massDisplayMode.value
+          : this.massDisplayMode,
+      packageNutrition: data.packageNutrition.present
+          ? data.packageNutrition.value
+          : this.packageNutrition,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -4184,13 +4283,15 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
           ..write('isZeroCalorie: $isZeroCalorie, ')
           ..write('isModifier: $isModifier, ')
           ..write('isDeleted: $isDeleted, ')
+          ..write('massDisplayMode: $massDisplayMode, ')
+          ..write('packageNutrition: $packageNutrition, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     householdId,
     name,
@@ -4210,8 +4311,10 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
     isZeroCalorie,
     isModifier,
     isDeleted,
+    massDisplayMode,
+    packageNutrition,
     updatedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4235,6 +4338,8 @@ class FoodRow extends DataClass implements Insertable<FoodRow> {
           other.isZeroCalorie == this.isZeroCalorie &&
           other.isModifier == this.isModifier &&
           other.isDeleted == this.isDeleted &&
+          other.massDisplayMode == this.massDisplayMode &&
+          other.packageNutrition == this.packageNutrition &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -4258,6 +4363,8 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
   final Value<bool> isZeroCalorie;
   final Value<bool> isModifier;
   final Value<bool> isDeleted;
+  final Value<String> massDisplayMode;
+  final Value<String?> packageNutrition;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const FoodsCompanion({
@@ -4280,6 +4387,8 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     this.isZeroCalorie = const Value.absent(),
     this.isModifier = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.massDisplayMode = const Value.absent(),
+    this.packageNutrition = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -4303,6 +4412,8 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     this.isZeroCalorie = const Value.absent(),
     this.isModifier = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.massDisplayMode = const Value.absent(),
+    this.packageNutrition = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -4328,6 +4439,8 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     Expression<bool>? isZeroCalorie,
     Expression<bool>? isModifier,
     Expression<bool>? isDeleted,
+    Expression<String>? massDisplayMode,
+    Expression<String>? packageNutrition,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -4352,6 +4465,8 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
       if (isZeroCalorie != null) 'is_zero_calorie': isZeroCalorie,
       if (isModifier != null) 'is_modifier': isModifier,
       if (isDeleted != null) 'is_deleted': isDeleted,
+      if (massDisplayMode != null) 'mass_display_mode': massDisplayMode,
+      if (packageNutrition != null) 'package_nutrition': packageNutrition,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -4377,6 +4492,8 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     Value<bool>? isZeroCalorie,
     Value<bool>? isModifier,
     Value<bool>? isDeleted,
+    Value<String>? massDisplayMode,
+    Value<String?>? packageNutrition,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -4400,6 +4517,8 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
       isZeroCalorie: isZeroCalorie ?? this.isZeroCalorie,
       isModifier: isModifier ?? this.isModifier,
       isDeleted: isDeleted ?? this.isDeleted,
+      massDisplayMode: massDisplayMode ?? this.massDisplayMode,
+      packageNutrition: packageNutrition ?? this.packageNutrition,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -4465,6 +4584,12 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
+    if (massDisplayMode.present) {
+      map['mass_display_mode'] = Variable<String>(massDisplayMode.value);
+    }
+    if (packageNutrition.present) {
+      map['package_nutrition'] = Variable<String>(packageNutrition.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -4496,6 +4621,8 @@ class FoodsCompanion extends UpdateCompanion<FoodRow> {
           ..write('isZeroCalorie: $isZeroCalorie, ')
           ..write('isModifier: $isModifier, ')
           ..write('isDeleted: $isDeleted, ')
+          ..write('massDisplayMode: $massDisplayMode, ')
+          ..write('packageNutrition: $packageNutrition, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -5794,6 +5921,17 @@ class $MealPlanEntriesTable extends MealPlanEntries
     type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _servingOptionIdMeta = const VerificationMeta(
+    'servingOptionId',
+  );
+  @override
+  late final GeneratedColumn<String> servingOptionId = GeneratedColumn<String>(
+    'serving_option_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _isPlannedMeta = const VerificationMeta(
     'isPlanned',
   );
@@ -5865,6 +6003,7 @@ class $MealPlanEntriesTable extends MealPlanEntries
     refType,
     refId,
     servings,
+    servingOptionId,
     isPlanned,
     isLogged,
     loggedAt,
@@ -5927,6 +6066,15 @@ class $MealPlanEntriesTable extends MealPlanEntries
       );
     } else if (isInserting) {
       context.missing(_servingsMeta);
+    }
+    if (data.containsKey('serving_option_id')) {
+      context.handle(
+        _servingOptionIdMeta,
+        servingOptionId.isAcceptableOrUnknown(
+          data['serving_option_id']!,
+          _servingOptionIdMeta,
+        ),
+      );
     }
     if (data.containsKey('is_planned')) {
       context.handle(
@@ -5996,6 +6144,10 @@ class $MealPlanEntriesTable extends MealPlanEntries
         DriftSqlType.double,
         data['${effectivePrefix}servings'],
       )!,
+      servingOptionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}serving_option_id'],
+      ),
       isPlanned: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_planned'],
@@ -6033,6 +6185,15 @@ class MealPlanEntryRow extends DataClass
   final String refType;
   final String refId;
   final double servings;
+
+  /// Which of the food's servings [servings] counts (spec R12).
+  ///
+  /// Null — the ordinary state, and every row written before this existed —
+  /// means a count of the food's first serving, which is what `servings` has
+  /// always meant. A value names one serving row by id, so a package-derived
+  /// amount is read back against the row its label was reviewed against
+  /// rather than against whichever row is listed first.
+  final String? servingOptionId;
   final bool isPlanned;
   final bool isLogged;
   final DateTime? loggedAt;
@@ -6048,6 +6209,7 @@ class MealPlanEntryRow extends DataClass
     required this.refType,
     required this.refId,
     required this.servings,
+    this.servingOptionId,
     required this.isPlanned,
     required this.isLogged,
     this.loggedAt,
@@ -6063,6 +6225,9 @@ class MealPlanEntryRow extends DataClass
     map['ref_type'] = Variable<String>(refType);
     map['ref_id'] = Variable<String>(refId);
     map['servings'] = Variable<double>(servings);
+    if (!nullToAbsent || servingOptionId != null) {
+      map['serving_option_id'] = Variable<String>(servingOptionId);
+    }
     map['is_planned'] = Variable<bool>(isPlanned);
     map['is_logged'] = Variable<bool>(isLogged);
     if (!nullToAbsent || loggedAt != null) {
@@ -6083,6 +6248,9 @@ class MealPlanEntryRow extends DataClass
       refType: Value(refType),
       refId: Value(refId),
       servings: Value(servings),
+      servingOptionId: servingOptionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(servingOptionId),
       isPlanned: Value(isPlanned),
       isLogged: Value(isLogged),
       loggedAt: loggedAt == null && nullToAbsent
@@ -6107,6 +6275,7 @@ class MealPlanEntryRow extends DataClass
       refType: serializer.fromJson<String>(json['refType']),
       refId: serializer.fromJson<String>(json['refId']),
       servings: serializer.fromJson<double>(json['servings']),
+      servingOptionId: serializer.fromJson<String?>(json['servingOptionId']),
       isPlanned: serializer.fromJson<bool>(json['isPlanned']),
       isLogged: serializer.fromJson<bool>(json['isLogged']),
       loggedAt: serializer.fromJson<DateTime?>(json['loggedAt']),
@@ -6124,6 +6293,7 @@ class MealPlanEntryRow extends DataClass
       'refType': serializer.toJson<String>(refType),
       'refId': serializer.toJson<String>(refId),
       'servings': serializer.toJson<double>(servings),
+      'servingOptionId': serializer.toJson<String?>(servingOptionId),
       'isPlanned': serializer.toJson<bool>(isPlanned),
       'isLogged': serializer.toJson<bool>(isLogged),
       'loggedAt': serializer.toJson<DateTime?>(loggedAt),
@@ -6139,6 +6309,7 @@ class MealPlanEntryRow extends DataClass
     String? refType,
     String? refId,
     double? servings,
+    Value<String?> servingOptionId = const Value.absent(),
     bool? isPlanned,
     bool? isLogged,
     Value<DateTime?> loggedAt = const Value.absent(),
@@ -6151,6 +6322,9 @@ class MealPlanEntryRow extends DataClass
     refType: refType ?? this.refType,
     refId: refId ?? this.refId,
     servings: servings ?? this.servings,
+    servingOptionId: servingOptionId.present
+        ? servingOptionId.value
+        : this.servingOptionId,
     isPlanned: isPlanned ?? this.isPlanned,
     isLogged: isLogged ?? this.isLogged,
     loggedAt: loggedAt.present ? loggedAt.value : this.loggedAt,
@@ -6167,6 +6341,9 @@ class MealPlanEntryRow extends DataClass
       refType: data.refType.present ? data.refType.value : this.refType,
       refId: data.refId.present ? data.refId.value : this.refId,
       servings: data.servings.present ? data.servings.value : this.servings,
+      servingOptionId: data.servingOptionId.present
+          ? data.servingOptionId.value
+          : this.servingOptionId,
       isPlanned: data.isPlanned.present ? data.isPlanned.value : this.isPlanned,
       isLogged: data.isLogged.present ? data.isLogged.value : this.isLogged,
       loggedAt: data.loggedAt.present ? data.loggedAt.value : this.loggedAt,
@@ -6186,6 +6363,7 @@ class MealPlanEntryRow extends DataClass
           ..write('refType: $refType, ')
           ..write('refId: $refId, ')
           ..write('servings: $servings, ')
+          ..write('servingOptionId: $servingOptionId, ')
           ..write('isPlanned: $isPlanned, ')
           ..write('isLogged: $isLogged, ')
           ..write('loggedAt: $loggedAt, ')
@@ -6203,6 +6381,7 @@ class MealPlanEntryRow extends DataClass
     refType,
     refId,
     servings,
+    servingOptionId,
     isPlanned,
     isLogged,
     loggedAt,
@@ -6219,6 +6398,7 @@ class MealPlanEntryRow extends DataClass
           other.refType == this.refType &&
           other.refId == this.refId &&
           other.servings == this.servings &&
+          other.servingOptionId == this.servingOptionId &&
           other.isPlanned == this.isPlanned &&
           other.isLogged == this.isLogged &&
           other.loggedAt == this.loggedAt &&
@@ -6233,6 +6413,7 @@ class MealPlanEntriesCompanion extends UpdateCompanion<MealPlanEntryRow> {
   final Value<String> refType;
   final Value<String> refId;
   final Value<double> servings;
+  final Value<String?> servingOptionId;
   final Value<bool> isPlanned;
   final Value<bool> isLogged;
   final Value<DateTime?> loggedAt;
@@ -6246,6 +6427,7 @@ class MealPlanEntriesCompanion extends UpdateCompanion<MealPlanEntryRow> {
     this.refType = const Value.absent(),
     this.refId = const Value.absent(),
     this.servings = const Value.absent(),
+    this.servingOptionId = const Value.absent(),
     this.isPlanned = const Value.absent(),
     this.isLogged = const Value.absent(),
     this.loggedAt = const Value.absent(),
@@ -6260,6 +6442,7 @@ class MealPlanEntriesCompanion extends UpdateCompanion<MealPlanEntryRow> {
     required String refType,
     required String refId,
     required double servings,
+    this.servingOptionId = const Value.absent(),
     this.isPlanned = const Value.absent(),
     this.isLogged = const Value.absent(),
     this.loggedAt = const Value.absent(),
@@ -6280,6 +6463,7 @@ class MealPlanEntriesCompanion extends UpdateCompanion<MealPlanEntryRow> {
     Expression<String>? refType,
     Expression<String>? refId,
     Expression<double>? servings,
+    Expression<String>? servingOptionId,
     Expression<bool>? isPlanned,
     Expression<bool>? isLogged,
     Expression<DateTime>? loggedAt,
@@ -6294,6 +6478,7 @@ class MealPlanEntriesCompanion extends UpdateCompanion<MealPlanEntryRow> {
       if (refType != null) 'ref_type': refType,
       if (refId != null) 'ref_id': refId,
       if (servings != null) 'servings': servings,
+      if (servingOptionId != null) 'serving_option_id': servingOptionId,
       if (isPlanned != null) 'is_planned': isPlanned,
       if (isLogged != null) 'is_logged': isLogged,
       if (loggedAt != null) 'logged_at': loggedAt,
@@ -6310,6 +6495,7 @@ class MealPlanEntriesCompanion extends UpdateCompanion<MealPlanEntryRow> {
     Value<String>? refType,
     Value<String>? refId,
     Value<double>? servings,
+    Value<String?>? servingOptionId,
     Value<bool>? isPlanned,
     Value<bool>? isLogged,
     Value<DateTime?>? loggedAt,
@@ -6324,6 +6510,7 @@ class MealPlanEntriesCompanion extends UpdateCompanion<MealPlanEntryRow> {
       refType: refType ?? this.refType,
       refId: refId ?? this.refId,
       servings: servings ?? this.servings,
+      servingOptionId: servingOptionId ?? this.servingOptionId,
       isPlanned: isPlanned ?? this.isPlanned,
       isLogged: isLogged ?? this.isLogged,
       loggedAt: loggedAt ?? this.loggedAt,
@@ -6353,6 +6540,9 @@ class MealPlanEntriesCompanion extends UpdateCompanion<MealPlanEntryRow> {
     }
     if (servings.present) {
       map['servings'] = Variable<double>(servings.value);
+    }
+    if (servingOptionId.present) {
+      map['serving_option_id'] = Variable<String>(servingOptionId.value);
     }
     if (isPlanned.present) {
       map['is_planned'] = Variable<bool>(isPlanned.value);
@@ -6384,6 +6574,7 @@ class MealPlanEntriesCompanion extends UpdateCompanion<MealPlanEntryRow> {
           ..write('refType: $refType, ')
           ..write('refId: $refId, ')
           ..write('servings: $servings, ')
+          ..write('servingOptionId: $servingOptionId, ')
           ..write('isPlanned: $isPlanned, ')
           ..write('isLogged: $isLogged, ')
           ..write('loggedAt: $loggedAt, ')
@@ -16674,6 +16865,8 @@ typedef $$FoodsTableCreateCompanionBuilder = FoodsCompanion Function({
   Value<bool> isZeroCalorie,
   Value<bool> isModifier,
   Value<bool> isDeleted,
+  Value<String> massDisplayMode,
+  Value<String?> packageNutrition,
   required DateTime updatedAt,
   Value<int> rowid,
 });
@@ -16697,6 +16890,8 @@ typedef $$FoodsTableUpdateCompanionBuilder = FoodsCompanion Function({
   Value<bool> isZeroCalorie,
   Value<bool> isModifier,
   Value<bool> isDeleted,
+  Value<String> massDisplayMode,
+  Value<String?> packageNutrition,
   Value<DateTime> updatedAt,
   Value<int> rowid,
 });
@@ -16852,6 +17047,16 @@ class $$FoodsTableFilterComposer
 
   ColumnFilters<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get massDisplayMode => $composableBuilder(
+    column: $table.massDisplayMode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get packageNutrition => $composableBuilder(
+    column: $table.packageNutrition,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -17015,6 +17220,16 @@ class $$FoodsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get massDisplayMode => $composableBuilder(
+    column: $table.massDisplayMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get packageNutrition => $composableBuilder(
+    column: $table.packageNutrition,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -17100,6 +17315,16 @@ class $$FoodsTableAnnotationComposer
 
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<String> get massDisplayMode => $composableBuilder(
+    column: $table.massDisplayMode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get packageNutrition => $composableBuilder(
+    column: $table.packageNutrition,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
@@ -17207,6 +17432,8 @@ class $$FoodsTableTableManager
                 Value<bool> isZeroCalorie = const Value.absent(),
                 Value<bool> isModifier = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
+                Value<String> massDisplayMode = const Value.absent(),
+                Value<String?> packageNutrition = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FoodsCompanion(
@@ -17229,6 +17456,8 @@ class $$FoodsTableTableManager
                 isZeroCalorie: isZeroCalorie,
                 isModifier: isModifier,
                 isDeleted: isDeleted,
+                massDisplayMode: massDisplayMode,
+                packageNutrition: packageNutrition,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -17253,6 +17482,8 @@ class $$FoodsTableTableManager
                 Value<bool> isZeroCalorie = const Value.absent(),
                 Value<bool> isModifier = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
+                Value<String> massDisplayMode = const Value.absent(),
+                Value<String?> packageNutrition = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => FoodsCompanion.insert(
@@ -17275,6 +17506,8 @@ class $$FoodsTableTableManager
                 isZeroCalorie: isZeroCalorie,
                 isModifier: isModifier,
                 isDeleted: isDeleted,
+                massDisplayMode: massDisplayMode,
+                packageNutrition: packageNutrition,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -18209,6 +18442,7 @@ typedef $$MealPlanEntriesTableCreateCompanionBuilder =
       required String refType,
       required String refId,
       required double servings,
+      Value<String?> servingOptionId,
       Value<bool> isPlanned,
       Value<bool> isLogged,
       Value<DateTime?> loggedAt,
@@ -18224,6 +18458,7 @@ typedef $$MealPlanEntriesTableUpdateCompanionBuilder =
       Value<String> refType,
       Value<String> refId,
       Value<double> servings,
+      Value<String?> servingOptionId,
       Value<bool> isPlanned,
       Value<bool> isLogged,
       Value<DateTime?> loggedAt,
@@ -18294,6 +18529,11 @@ class $$MealPlanEntriesTableFilterComposer
 
   ColumnFilters<double> get servings => $composableBuilder(
     column: $table.servings,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get servingOptionId => $composableBuilder(
+    column: $table.servingOptionId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -18380,6 +18620,11 @@ class $$MealPlanEntriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get servingOptionId => $composableBuilder(
+    column: $table.servingOptionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isPlanned => $composableBuilder(
     column: $table.isPlanned,
     builder: (column) => ColumnOrderings(column),
@@ -18452,6 +18697,11 @@ class $$MealPlanEntriesTableAnnotationComposer
 
   GeneratedColumn<double> get servings =>
       $composableBuilder(column: $table.servings, builder: (column) => column);
+
+  GeneratedColumn<String> get servingOptionId => $composableBuilder(
+    column: $table.servingOptionId,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<bool> get isPlanned =>
       $composableBuilder(column: $table.isPlanned, builder: (column) => column);
@@ -18530,6 +18780,7 @@ class $$MealPlanEntriesTableTableManager
                 Value<String> refType = const Value.absent(),
                 Value<String> refId = const Value.absent(),
                 Value<double> servings = const Value.absent(),
+                Value<String?> servingOptionId = const Value.absent(),
                 Value<bool> isPlanned = const Value.absent(),
                 Value<bool> isLogged = const Value.absent(),
                 Value<DateTime?> loggedAt = const Value.absent(),
@@ -18543,6 +18794,7 @@ class $$MealPlanEntriesTableTableManager
                 refType: refType,
                 refId: refId,
                 servings: servings,
+                servingOptionId: servingOptionId,
                 isPlanned: isPlanned,
                 isLogged: isLogged,
                 loggedAt: loggedAt,
@@ -18558,6 +18810,7 @@ class $$MealPlanEntriesTableTableManager
                 required String refType,
                 required String refId,
                 required double servings,
+                Value<String?> servingOptionId = const Value.absent(),
                 Value<bool> isPlanned = const Value.absent(),
                 Value<bool> isLogged = const Value.absent(),
                 Value<DateTime?> loggedAt = const Value.absent(),
@@ -18571,6 +18824,7 @@ class $$MealPlanEntriesTableTableManager
                 refType: refType,
                 refId: refId,
                 servings: servings,
+                servingOptionId: servingOptionId,
                 isPlanned: isPlanned,
                 isLogged: isLogged,
                 loggedAt: loggedAt,

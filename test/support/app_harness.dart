@@ -101,6 +101,7 @@ Future<HearthDatabase> pumpHearthApp(
   Stream<List<Recipe>>? recipeStream,
   List<Food> foods = const <Food>[],
   List<MealPlanEntry> entries = const <MealPlanEntry>[],
+  List<RecentLog> recentLogs = const <RecentLog>[],
 
   /// A whole week, for the screen that compares seven days.
   ///
@@ -371,7 +372,7 @@ Future<HearthDatabase> pumpHearthApp(
         shoppingChangesProvider.overrideWith(
           (Ref ref) => const Stream<void>.empty(),
         ),
-        recentLogsProvider.overrideWith((Ref ref) async => const <RecentLog>[]),
+        recentLogsProvider.overrideWith((Ref ref) async => recentLogs),
         weekEntriesProvider.overrideWith((Ref ref) async => weekEntries),
         // Favourites and collections are sqlite-backed streams too, so they
         // need the same treatment — without these the library screen sits on

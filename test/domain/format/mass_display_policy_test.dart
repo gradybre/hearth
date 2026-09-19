@@ -56,7 +56,7 @@ void main() {
       'with no hints at all, the ordinary promote/demote ladder decides',
       () {
         // 1.5 lb worth of grams, authored in neither oz nor lb.
-        final Quantity q = Quantity.canonical(
+        final Quantity q = const Quantity.canonical(
           canonicalAmount: 680.388555,
           kind: UnitKind.mass,
         );

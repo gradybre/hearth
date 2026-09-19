@@ -80,9 +80,18 @@ abstract final class UnitConverter {
       return ConversionResult(quantity: quantity, densityMissing: true);
     }
 
-    final double? density =
+    final double? stated =
         gramsPerMillilitre ??
         (ingredient == null ? null : DensityTable.lookup(ingredient));
+    // A density has to be a number something can be multiplied and divided
+    // by. A stored NaN, zero or negative is not one: the arithmetic below
+    // yields NaN or Infinity, `isExact` then reports that as a converted
+    // amount, and it travels into an ingredient, a recipe total, a serving
+    // and a logged day (review B1). Refusing here keeps it to the flagged
+    // gap every caller already handles.
+    final double? density = stated != null && stated.isFinite && stated > 0
+        ? stated
+        : null;
     if (density == null) {
       return ConversionResult(quantity: quantity, densityMissing: true);
     }

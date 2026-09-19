@@ -1,0 +1,212 @@
+[
+  {
+    "attempt": "d1-core-a1",
+    "state": "invalid_output",
+    "model": "claude-sonnet-5",
+    "sessionId": "a7f19fed-39a8-48f1-b1a2-b0ff4c6f904b",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d1-nutrition-a1",
+    "state": "invalid_output",
+    "model": "claude-sonnet-5",
+    "sessionId": "b3afb487-b502-4483-a679-2a68da97edfd",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d1-tests-a1",
+    "state": "complete",
+    "model": "claude-sonnet-5",
+    "sessionId": "818203cf-fe8b-4a3c-b09d-b7ad9be70c98",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d2-data-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "aec9c082-dc6c-42ca-a578-5caa524cf91f",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d2-sql-a1",
+    "state": "invalid_output",
+    "model": "claude-opus-5",
+    "sessionId": "8e74d485-d85e-49c2-95d9-e1fb101060ee",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d2-sql-repair-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "8e74d485-d85e-49c2-95d9-e1fb101060ee",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d3-draft-a1",
+    "state": "invalid_output",
+    "model": "claude-sonnet-5",
+    "sessionId": "c3d0504a-ba7f-4b2f-b1ac-619ef611f562",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d3-editor-a1",
+    "state": "complete",
+    "model": "claude-sonnet-5",
+    "sessionId": "4ed01fff-7d74-4da2-abaf-1ceb166e0d0f",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d3-editor-repair-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "841d0a91-fc23-4b8a-a69c-1e0fc0502d42",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d3-label-client-a1",
+    "state": "invalid_output",
+    "model": "claude-sonnet-5",
+    "sessionId": "ccab81b5-35e9-47e4-8f59-fdd03aa95329",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d3-logging-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "068c4789-0224-4333-b630-307b47c28ab3",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d3-recipes-a1",
+    "state": "invalid_output",
+    "model": "claude-sonnet-5",
+    "sessionId": "444009b5-feff-46e7-beb7-1e314133730a",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d3-shopping-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "7671218f-8b13-472e-a097-150892828b00",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d3-shopping-repair-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "be5bfd3e-5014-4208-a8a0-230d35d3ea52",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d3n-server-a1",
+    "state": "complete",
+    "model": "claude-sonnet-5",
+    "sessionId": "54db2372-d65e-41f3-8ab8-189718f5348d",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d4-core-review-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "691ab835-5b8d-4e2e-9f46-cec27ebb400c",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d4-domain-repair-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "cf136df4-45d3-4730-9196-21c4b7dfb35b",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d4-draft-final-repair-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "cdbd46b4-31b1-4ac0-85c0-9ae00cfddde3",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d4-final-review-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "fa278be5-b045-4cb0-b2be-8fa574c7e0f8",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d4-logscan-repair-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "71994c86-08e8-4bd6-b5fa-c3cde6bd6b26",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d4-planned-serving-repair-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "92ce75dd-4ed4-4d90-b787-9e282b5b5c5d",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d4-planned-serving-review-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "4e7a210c-8814-4f21-888f-7b68d6c6aa7f",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d4-repair-review-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "68d71078-0f4d-461d-a140-eec6c7387274",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d4-repeat-repair-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "b4b269a7-080c-4bec-8cc0-d288232d4ce0",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d4-shopping-editor-repair-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "2a253232-4fe8-4107-8f76-da40933417f1",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d4-sql-review-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "eb1c9b97-9d5e-4978-8b8c-c7a8291a5a82",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d4-surfaces-review-a1",
+    "state": "complete",
+    "model": "claude-opus-5",
+    "sessionId": "726e2c5b-b328-4106-8778-892eca09e162",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d4-vision-review-a1",
+    "state": "complete",
+    "model": "claude-sonnet-5",
+    "sessionId": "da360e9b-af70-42b0-8a6a-7c197e4b74cf",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d4-vision-review-a2",
+    "state": "complete",
+    "model": "claude-sonnet-5",
+    "sessionId": "0db2b06b-74be-4334-a406-cec55c5284df",
+    "ownerStopped": true
+  },
+  {
+    "attempt": "d4-vision-review-a3",
+    "state": "invalid_output",
+    "model": "claude-sonnet-5",
+    "sessionId": "17c3a530-6e66-4edd-86f6-610d1d346db3",
+    "ownerStopped": true
+  }
+]

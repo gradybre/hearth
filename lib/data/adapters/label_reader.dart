@@ -53,9 +53,17 @@ class LabelReading {
     this.name,
     this.brand,
     this.uncertain = const <AiUncertainty>[],
+    this.packageSize,
+    this.servingsPerContainer,
+    this.servingsApproximate = false,
+    this.packageBasis = 'unknown',
+    this.fieldSources = const <String, String>{},
   });
 
   final List<LabelServing> servings;
+
+  /// Photo provenance for the transcribed package and serving facts.
+  final Map<String, String> fieldSources;
 
   /// Null when the photo is of the panel alone, which is the common case.
   final String? name;
@@ -64,7 +72,24 @@ class LabelReading {
   /// Anything blurred, cut off, or ambiguous (spec §5.3's flag-never-guess).
   final List<AiUncertainty> uncertain;
 
-  bool get isEmpty => servings.isEmpty;
+  /// What the front of the package says it holds — 'NET WT 24 OZ' — when a
+  /// front-of-package photo was part of this read (spec §5.7/R11). Null when
+  /// no package photo was supplied or none was legible.
+  final Quantity? packageSize;
+
+  /// How many of the selected nutrition serving the package states it
+  /// holds, straight off the label. Null when not stated or not read.
+  final double? servingsPerContainer;
+
+  /// True when the panel itself hedges the count — 'about 6 servings'.
+  final bool servingsApproximate;
+
+  /// 'as_packaged', 'prepared', 'drained', or 'unknown' when the panel did
+  /// not say or the photo did not make it clear.
+  final String packageBasis;
+
+  bool get isEmpty =>
+      servings.isEmpty && packageSize == null && servingsPerContainer == null;
 }
 
 /// What a package says it holds — "NET WT 24 OZ" (spec §5.7).

@@ -63,8 +63,11 @@ class LibrarySync {
       pass,
       'foods',
       localUpdatedAt: _foods.updatedAtFor,
-      apply: (RemoteRecord record) => _foods.upsert(
-        SyncPayload.food(record.payload),
+      apply: (RemoteRecord record) async => _foods.upsert(
+        SyncPayload.food(
+          record.payload,
+          existing: await _foods.byId(record.id),
+        ),
         updatedAt: record.updatedAt,
       ),
     );

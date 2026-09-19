@@ -286,7 +286,11 @@ void main() {
       await openAddFood(tester);
       await tester.tap(find.text('Read a label'));
       await pumpFrames(tester);
-      await tester.tap(find.text('Take a photo'));
+      await tester.tap(
+        find.byKey(const ValueKey<String>('LabelSlot.nutrition-camera')),
+      );
+      await pumpFrames(tester);
+      await tester.tap(find.text('Read photos'));
       await pumpFrames(tester, frames: 10);
 
       // Straight to the editor, filled in and unsaved (CLAUDE.md rule 4).

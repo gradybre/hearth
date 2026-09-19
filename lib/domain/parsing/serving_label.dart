@@ -1,6 +1,5 @@
 import '../units/quantity.dart';
 import '../units/unit.dart';
-import '../units/unit_converter.dart';
 import 'amount_parser.dart';
 
 /// The household measure a serving label leads with, when it names one.
@@ -53,8 +52,5 @@ Quantity servingAmountFor(String label, {required double grams}) {
   final Quantity? stated = statedHouseholdMeasure(label);
   if (stated == null) return Quantity.of(grams, Units.gram);
   if (stated.kind == UnitKind.volume) return stated;
-  return UnitConverter.normalise(
-    Quantity.of(grams, Units.gram),
-    system: UnitSystem.imperial,
-  );
+  return Quantity.of(grams, Units.gram).withPreferredUnit(stated.preferredUnit);
 }

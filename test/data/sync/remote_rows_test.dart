@@ -58,6 +58,27 @@ void main() {
       });
     });
 
+    test(
+      'selected serving survives old payload and supports explicit clear',
+      () async {
+        await rows.applyEntry({...entry(), 'serving_option_id': 'label-cup'});
+        expect(
+          (await db.select(db.mealPlanEntries).get()).single.servingOptionId,
+          'label-cup',
+        );
+        await rows.applyEntry(entry());
+        expect(
+          (await db.select(db.mealPlanEntries).get()).single.servingOptionId,
+          'label-cup',
+        );
+        await rows.applyEntry({...entry(), 'serving_option_id': ''});
+        expect(
+          (await db.select(db.mealPlanEntries).get()).single.servingOptionId,
+          isNull,
+        );
+      },
+    );
+
     test('its frozen snapshot is copied, not recomputed', () async {
       // The snapshot is what the meal was when it was logged, and editing the
       // recipe later must never change it (spec §4). Rebuilding it from the

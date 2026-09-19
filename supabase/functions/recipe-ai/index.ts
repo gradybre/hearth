@@ -1,3 +1,4 @@
+import { labelPhotoRoles } from './label_photo_roles.ts';
 // Recipe import, generation, and label reading, behind the server
 // (spec §5.3, §5.4, §5.5).
 //
@@ -36,6 +37,7 @@ import {
   type Ticket,
 } from './budget.ts';
 import { fetchGuarded, UrlRefused } from './url_guard.ts';
+import { shapePackageFields } from './label_package_fields.ts';
 
 const ANTHROPIC = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -384,6 +386,66 @@ const LABEL_TOOL = {
           required: ['amount', 'unit', 'kcal'],
         },
       },
+      package_amount: {
+        type: 'number',
+        description:
+          'The net contents printed on the package, in this photo set, if ' +
+          'visible. Omit if not shown, or if the photos give no single ' +
+          'package amount to read.',
+      },
+      package_unit: {
+        type: 'string',
+        enum: [
+          'g',
+          'kg',
+          'oz',
+          'lb',
+          'ml',
+          'l',
+          'fl_oz',
+          'cup',
+          'pint',
+          'quart',
+          'gallon',
+          'item',
+        ],
+        description:
+          'The unit package_amount is printed in. Omit together with ' +
+          'package_amount when neither is shown.',
+      },
+      servings_per_container: {
+        type: 'number',
+        description:
+          'The number of the servings above that make up the whole ' +
+          'package, as printed near the words servings per container. ' +
+          'Omit if not printed.',
+      },
+      servings_approximate: {
+        type: 'boolean',
+        description:
+          'True when the label itself calls the servings-per-container ' +
+          'figure approximate, such as about 2 servings per container. ' +
+          'False otherwise, including when servings_per_container is ' +
+          'omitted.',
+      },
+      package_basis: {
+        type: 'string',
+        enum: ['as_packaged', 'prepared', 'drained', 'unknown'],
+        description:
+          'What the Nutrition Facts panel describes: as_packaged for an ' +
+          'ordinary panel describing the food as sold, prepared when the ' +
+          'panel visibly says the food is as prepared, drained when it ' +
+          'visibly says drained, and unknown when the panel is missing, unreadable, or its preparation is ambiguous.',
+      },
+      field_sources: {
+        type: 'object',
+        description: 'Which photograph supplied each transcribed fact. Use unknown when unclear; roles are hints, not proof.',
+        properties: {
+          package_amount: { type: 'string', enum: ['nutrition', 'package', 'both', 'unknown'] },
+          servings_per_container: { type: 'string', enum: ['nutrition', 'package', 'both', 'unknown'] },
+          servings: { type: 'string', enum: ['nutrition', 'package', 'both', 'unknown'] },
+        },
+      },
       uncertain: {
         type: 'array',
         description: 'Anything blurred, cut off, or ambiguous.',
@@ -624,8 +686,29 @@ what lets the app use this food in a recipe that measures in cups. Prefer the
 ounce figure over the gram figure when both are given for the same portion; if
 only grams are printed, return the grams.
 
-Ignore "servings per container" — that is how many are in the packet, not a
-portion anybody eats.
+Also read the package as a whole, when it is shown: the net contents printed
+on the front or the panel, and the servings-per-container figure — how many
+of the servings above make up the whole package. These belong in
+package_amount, package_unit and servings_per_container, never folded into a
+serving's own macros.
+
+If the label itself calls the servings-per-container figure approximate, such
+as about 2 servings per container, set servings_approximate and keep the
+number as printed; do not round it to a whole count.
+
+Say what the panel's numbers describe: package_basis is as_packaged for an
+ordinary Nutrition Facts panel describing the food as sold, prepared when the
+panel visibly says the food is as prepared, drained when it visibly says
+drained, and unknown when the panel is missing, unreadable, or its preparation is ambiguous.
+
+The photos may show only the front of the package, with no Nutrition Facts
+panel visible at all. That is a valid photo set: return an empty servings
+array along with whatever of name, brand, package_amount, package_unit and
+servings_per_container the front actually shows. Never compute macros or a
+serving count from a package amount, and never invent a package amount to go
+with a panel that does not show one — omit it and say so in uncertain
+instead. If the photos plainly show different products, or different sizes of
+the same product, say so in uncertain rather than treating them as one packet.
 
 Return at most the servings the label states. Do not invent a 100 g row.
 
@@ -702,6 +785,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
   let body: {
     mode?: string;
     images?: string[];
+    image_roles?: unknown;
     url?: string;
     text?: string;
     notes?: string;
@@ -754,7 +838,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
       : mode === 'menu'
       ? menuContent(body.images ?? [])
       : mode === 'label'
-      ? labelContent(body.images ?? [])
+      ? labelContent(body.images ?? [], body.image_roles)
       : mode === 'pack'
       ? packContent(body.images ?? [])
       : mode === 'extract'
@@ -917,7 +1001,7 @@ function menuContent(images: string[]): unknown[] {
 /// Several images are the same packet from more than one angle — a panel is
 /// often easier to read in two shots than one — so they are stitched into a
 /// single reading rather than treated as several foods.
-function labelContent(images: string[]): unknown[] {
+function labelContent(images: string[], roles?: unknown): unknown[] {
   if (images.length === 0) {
     throw new Error('bad request: give a photo of the label');
   }
@@ -926,9 +1010,9 @@ function labelContent(images: string[]): unknown[] {
     ...imageBlocks(images),
     {
       type: 'text',
-      text: images.length > 1
+      text: (images.length > 1
         ? 'These are photos of one packet. Read its label.'
-        : 'Read this label.',
+        : 'Read this label.') + labelPhotoRoles(roles, images.length),
     },
   ];
 }
@@ -1438,6 +1522,7 @@ function shapeLabel(input: Record<string, unknown>): Record<string, unknown> {
         sodium_mg: number(s.sodium_mg),
         cholesterol_mg: number(s.cholesterol_mg),
       })),
+    ...shapePackageFields(input),
     uncertain: Array.isArray(input.uncertain)
       ? (input.uncertain as Uncertain[])
         .filter((u) => u?.field || u?.note)

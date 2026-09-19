@@ -17,6 +17,7 @@ class RecentLog {
     required this.servings,
     required this.lastLoggedAt,
     required this.timesLogged,
+    this.servingOptionId,
   });
 
   final PlanRefType refType;
@@ -28,6 +29,19 @@ class RecentLog {
 
   /// The portion used last time — what a one-tap repeat should reuse.
   final double servings;
+
+  /// Which of the food's servings [servings] counts, when it is not the
+  /// food's first one (spec R12).
+  ///
+  /// The count and the row it counts only mean anything together. A
+  /// package-derived amount is six of the row its label was reviewed
+  /// against, and repeating that six against whichever row the food lists
+  /// first records double the meal it claims to repeat — frozen history that
+  /// spec §4 then forbids correcting.
+  ///
+  /// Null is the ordinary state and means exactly what it always meant: a
+  /// count of the food's default serving.
+  final String? servingOptionId;
 
   final DateTime lastLoggedAt;
 
@@ -69,6 +83,9 @@ abstract final class RecentLogs {
           refId: entry.refId,
           label: snapshot.label,
           servings: snapshot.servings,
+          // From the entry rather than the snapshot: the reference is a live
+          // pointer at a serving row, not part of what was frozen.
+          servingOptionId: entry.servingOptionId,
           lastLoggedAt: snapshot.capturedAt,
           timesLogged: 1,
         );
@@ -83,6 +100,12 @@ abstract final class RecentLogs {
         // guess at what you would repeat.
         label: isNewer ? snapshot.label : existing.label,
         servings: isNewer ? snapshot.servings : existing.servings,
+        // Moves with the portion, null included: the newest logging naming
+        // no row means the default one, and keeping the older id would
+        // repeat a portion in a serving that meal was never counted in.
+        servingOptionId: isNewer
+            ? entry.servingOptionId
+            : existing.servingOptionId,
         lastLoggedAt: isNewer ? snapshot.capturedAt : existing.lastLoggedAt,
         timesLogged: existing.timesLogged + 1,
       );

@@ -1,6 +1,8 @@
 import 'package:meta/meta.dart';
 
+import '../models/food.dart';
 import '../models/recipe.dart';
+import '../parsing/ingredient_parser.dart';
 import '../text/text_normaliser.dart';
 import '../units/density.dart';
 import '../units/mass_display_mode.dart';
@@ -68,11 +70,20 @@ abstract final class IngredientConsolidator {
   ///
   /// Optional/to-taste ingredients are excluded by default — they belong on
   /// neither the shopping list nor the macro total (spec §5.2).
+  /// [foods] is the library the lines are matched against, read for one
+  /// thing: a group's density comes from *its own* food rather than from a
+  /// table entry that happens to share its name (spec R12).
+  ///
+  /// [preferPackKind] is the shopping question, and is off here: a recipe
+  /// measured in cups reads in cups, whatever the shop sells it in (spec R5).
   static List<ConsolidatedIngredient> flatten(
     Recipe recipe, {
     bool includeOptional = false,
     DensityLookup densityLookup = DensityTable.lookup,
     UnitSystem system = UnitSystem.imperial,
+    Map<String, Food> foods = const <String, Food>{},
+    bool preferPackKind = false,
+    bool sourceMode = false,
   }) => _group(
     <_Entry>[
       for (final RecipeIngredient ingredient in recipe.allIngredients)
@@ -81,6 +92,9 @@ abstract final class IngredientConsolidator {
     ],
     densityLookup,
     system,
+    foods,
+    preferPackKind,
+    sourceMode,
   );
 
   /// Stage two: merge the week's recipes into one list, combining ingredients
@@ -95,6 +109,9 @@ abstract final class IngredientConsolidator {
     bool includeOptional = false,
     DensityLookup densityLookup = DensityTable.lookup,
     UnitSystem system = UnitSystem.imperial,
+    Map<String, Food> foods = const <String, Food>{},
+    bool preferPackKind = false,
+    bool sourceMode = false,
   }) {
     final List<_Entry> entries = <_Entry>[];
     for (final Recipe recipe in recipes) {
@@ -116,13 +133,23 @@ abstract final class IngredientConsolidator {
         );
       }
     }
-    return _group(entries, densityLookup, system);
+    return _group(
+      entries,
+      densityLookup,
+      system,
+      foods,
+      preferPackKind,
+      sourceMode,
+    );
   }
 
   static List<ConsolidatedIngredient> _group(
     List<_Entry> entries,
     DensityLookup densityLookup,
     UnitSystem system,
+    Map<String, Food> foods,
+    bool preferPackKind,
+    bool sourceMode,
   ) {
     final Map<String, List<_Entry>> grouped = <String, List<_Entry>>{};
     for (final _Entry entry in entries) {
@@ -136,7 +163,15 @@ abstract final class IngredientConsolidator {
 
     return <ConsolidatedIngredient>[
       for (final MapEntry<String, List<_Entry>> group in grouped.entries)
-        _consolidate(group.key, group.value, densityLookup, system),
+        _consolidate(
+          group.key,
+          group.value,
+          densityLookup,
+          system,
+          foods,
+          preferPackKind,
+          sourceMode,
+        ),
     ];
   }
 
@@ -145,8 +180,20 @@ abstract final class IngredientConsolidator {
     List<_Entry> entries,
     DensityLookup densityLookup,
     UnitSystem system,
+    Map<String, Food> foods,
+    bool preferPackKind,
+    bool sourceMode,
   ) {
     final String displayName = entries.first.ingredient.name;
+
+    // What the lines themselves said they came in: the "28 oz" of
+    // "2 (28 oz) cans" (spec R3.3). Display evidence only — it is applied as
+    // a preferred-unit hint on the per-source copy of the quantity and never
+    // touches a canonical amount, because a recipe's mentioned package is not
+    // proof of the product the shopper buys. Carried on the ask rather than
+    // computed at render time, so it survives being persisted, rebuilt and
+    // having another source taken back off.
+    final Unit? rawPackageUnit = _rawPackageUnit(entries);
 
     bool hasUnquantified = false;
     final List<Quantity> amounts = <Quantity>[];
@@ -156,22 +203,36 @@ abstract final class IngredientConsolidator {
         hasUnquantified = true;
         continue;
       }
-      amounts.add(quantity);
+      amounts.add(
+        rawPackageUnit != null && quantity.kind == UnitKind.mass
+            ? quantity.withPreferredUnit(rawPackageUnit)
+            : quantity,
+      );
     }
+
+    // The food this group is matched to, by id — never by name. Two products
+    // that read alike are still two products, and borrowing one's density for
+    // the other is how a jar of one thing gets measured as another (spec R12).
+    final String? foodId = entries
+        .map((_Entry e) => e.ingredient.foodId)
+        .firstWhere((String? id) => id != null, orElse: () => null);
+    final Food? food = foodId == null ? null : foods[foodId];
 
     final List<Quantity> quantities = combine(
       amounts,
       displayName: displayName,
       densityLookup: densityLookup,
       system: system,
+      food: food,
+      preferPackKind: preferPackKind,
+      packageUnit: rawPackageUnit,
+      crossKind: !sourceMode,
     );
 
     return ConsolidatedIngredient(
       key: key,
       displayName: displayName,
-      foodId: entries
-          .map((_Entry e) => e.ingredient.foodId)
-          .firstWhere((String? id) => id != null, orElse: () => null),
+      foodId: foodId,
       quantities: quantities,
       hasUnquantified: hasUnquantified,
       sourceRecipeIds: entries
@@ -211,7 +272,30 @@ abstract final class IngredientConsolidator {
     MassDisplayMode massDisplayMode = MassDisplayMode.automatic,
     Quantity? packSize,
     Unit? packageUnit,
+    Food? food,
+    bool preferPackKind = false,
+    bool crossKind = true,
   }) {
+    // The matched food answers first, and about itself: its own stated or
+    // implied density, then a reviewed package relationship, then — only
+    // then — the generic table (spec R12).
+    //
+    // None of which applies in source mode ([crossKind] false), which is how
+    // a contribution is summed. An ask is a record of what somebody asked
+    // for, in the measure they asked for it, and a mutable food link may not
+    // rewrite it: converting there would store a recipe written in cups as
+    // ounces, and then changing the servings per package — or removing the
+    // relationship altogether — could never recompute it (spec R5, R12).
+    final Quantity? pack = crossKind ? (packSize ?? food?.packSize) : null;
+    final MassDisplayMode mode = crossKind
+        ? (food?.massDisplayMode ?? massDisplayMode)
+        : massDisplayMode;
+    final double? matched = crossKind
+        ? food?.effectiveGramsPerMillilitre
+        : null;
+    double? densityFor(String name) =>
+        crossKind ? (matched ?? densityLookup(name)) : null;
+
     // Sum within each bucket first — that part is always exact.
     final Map<String, Quantity> byBucket = <String, Quantity>{};
     for (final Quantity quantity in quantities) {
@@ -222,11 +306,12 @@ abstract final class IngredientConsolidator {
     return _unify(
       byBucket,
       displayName,
-      densityLookup,
+      densityFor,
       system,
-      massDisplayMode,
-      packSize,
+      mode,
+      pack,
       packageUnit,
+      crossKind && preferPackKind,
     );
   }
 
@@ -285,50 +370,116 @@ abstract final class IngredientConsolidator {
   static List<Quantity> _unify(
     Map<String, Quantity> byBucket,
     String displayName,
-    DensityLookup densityLookup,
+    double? Function(String name) densityFor,
     UnitSystem system,
     MassDisplayMode massDisplayMode,
     Quantity? packSize,
     Unit? packageUnit,
+    bool preferPackKind,
   ) {
     if (byBucket.isEmpty) return const <Quantity>[];
 
-    Quantity normalised(Quantity q) => UnitConverter.normalise(
-      q,
-      system: system,
-      massDisplayMode: massDisplayMode,
-      packSize: packSize,
-      packageUnit: packageUnit,
-    );
+    Quantity normalised(Quantity q) {
+      // A derived total carries the package's own unit as its display hint,
+      // never its canonical value: 2 cups of a food sold in a 10 oz bag reads
+      // in ounces, and the source quantities are left exactly as authored so
+      // a later change recomputes rather than compounds (spec R2, R3).
+      final Quantity hinted =
+          q.kind == UnitKind.mass &&
+              (packageUnit != null || q.preferredUnit == null)
+          ? _massHinted(q, packSize, packageUnit)
+          : q;
+      return UnitConverter.normalise(
+        hinted,
+        system: system,
+        massDisplayMode: massDisplayMode,
+        packSize: packSize,
+        packageUnit: packageUnit,
+      );
+    }
+
+    final bool hasVolume = byBucket.containsKey(_volume);
+    final bool hasMass = byBucket.containsKey(_mass);
+    final bool packIsMass =
+        packSize != null &&
+        packSize.kind == UnitKind.mass &&
+        packSize.canonicalAmount.isFinite &&
+        packSize.canonicalAmount > 0;
+
+    // Weight is the more useful unit at the shop, so collapse into grams —
+    // both when the two kinds are already side by side, and when a shopping
+    // total has to be counted against a mass pack that nothing else in the
+    // group is measured in (spec R7, R12).
+    if (hasVolume && (hasMass || (preferPackKind && packIsMass))) {
+      final double? density = densityFor(displayName);
+      if (density != null) {
+        final ConversionResult converted = UnitConverter.crossKind(
+          byBucket[_volume]!,
+          UnitKind.mass,
+          gramsPerMillilitre: density,
+        );
+        if (converted.isExact) {
+          final Quantity merged = hasMass
+              ? _sum(byBucket[_mass]!, converted.quantity)
+              : converted.quantity;
+          final Map<String, Quantity> rest = <String, Quantity>{
+            ...byBucket,
+            _mass: merged,
+          }..remove(_volume);
+          return <Quantity>[
+            for (final Quantity q in rest.values) normalised(q),
+          ];
+        }
+      }
+    }
 
     if (byBucket.length == 1) {
       return <Quantity>[normalised(byBucket.values.first)];
     }
 
-    final double? density = densityLookup(displayName);
-    final bool hasVolume = byBucket.containsKey(_volume);
-    final bool hasMass = byBucket.containsKey(_mass);
-
-    if (density != null && hasVolume && hasMass) {
-      // Weight is the more useful unit at the shop, so collapse into grams.
-      final ConversionResult converted = UnitConverter.crossKind(
-        byBucket[_volume]!,
-        UnitKind.mass,
-        gramsPerMillilitre: density,
-      );
-      if (converted.isExact) {
-        final Quantity merged = _sum(byBucket[_mass]!, converted.quantity);
-        final Map<String, Quantity> rest = <String, Quantity>{
-          ...byBucket,
-          _mass: merged,
-        }..remove(_volume);
-        return <Quantity>[for (final Quantity q in rest.values) normalised(q)];
-      }
-    }
-
     // Counts never convert, and without a density neither does volume<->mass.
     // List them together rather than inventing a total (spec §5.7).
     return <Quantity>[for (final Quantity q in byBucket.values) normalised(q)];
+  }
+
+  /// [q] wearing the package's unit as a display hint, where there is one.
+  static Quantity _massHinted(
+    Quantity q,
+    Quantity? packSize,
+    Unit? packageUnit,
+  ) {
+    final Unit? hint =
+        _massUnit(packageUnit) ?? _massUnit(packSize?.preferredUnit);
+    return hint == null ? q : q.withPreferredUnit(hint);
+  }
+
+  static Unit? _massUnit(Unit? unit) =>
+      unit != null && unit.kind == UnitKind.mass ? unit : null;
+
+  /// The mass unit named by explicit pack-size syntax on any of this group's
+  /// raw lines (spec R3.3).
+  ///
+  /// Ranked the same way a mass sum's display hint is ranked, so the two
+  /// cannot disagree about which unit a mixed group reads in. Applied to
+  /// every mass quantity in the group, which is what keeps a group carrying
+  /// ounce-package evidence in ounces even when another line was written in
+  /// pounds.
+  static Unit? _rawPackageUnit(List<_Entry> entries) {
+    Unit? best;
+    for (final _Entry entry in entries) {
+      final String raw = _rawOf(entry.ingredient);
+      if (raw.isEmpty) continue;
+      final Unit? found = IngredientParser.packageUnitFor(raw);
+      if (found == null || found.kind != UnitKind.mass) continue;
+      if (best == null || _massRank(found) > _massRank(best)) best = found;
+    }
+    return best;
+  }
+
+  /// The line as it was typed or imported, or nothing at all.
+  static String _rawOf(RecipeIngredient ingredient) {
+    final Object? raw = ingredient.rawText;
+    return raw is String ? raw : '';
   }
 }
 
