@@ -1,8 +1,9 @@
-import '../../domain/format/quantity_format.dart';
+import '../../domain/format/food_quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/shopping/cart_quantity.dart';
 import '../../domain/shopping/pack_display.dart';
 import '../../domain/shopping/shopping_line.dart';
+import '../../domain/shopping/shopping_list_builder.dart';
 import '../../domain/units/quantity.dart';
 import 'shopping_export.dart';
 
@@ -138,15 +139,24 @@ List<ShoppingExportItem> exportableLines(
   for (final ShoppingLine line in lines)
     if (!line.isChecked)
       if (_food(line, foods) case final Food? food)
-        if (_amount(line, food?.packSize) case final _Amount amount)
-          ShoppingExportItem(
-            name: line.name,
-            quantityLabel: amount.label,
-            shortfall: amount.shortfall,
-            storeTag: line.storeTag,
-            productId: food?.walmartItemId,
-            quantity: CartQuantity.forLine(line: line, pack: food?.packSize),
-          ),
+        // Resolved through the same helper the list reads from, so a
+        // cupboard amount measured the other way comes off here too
+        // (spec R5, R7).
+        if (ShoppingLineResolver.resolve(line: line, food: food)
+            case final ResolvedShoppingLine resolved)
+          if (!resolved.isChecked)
+            if (_amount(resolved, food) case final _Amount amount)
+              ShoppingExportItem(
+                name: line.name,
+                quantityLabel: amount.label,
+                shortfall: amount.shortfall,
+                storeTag: line.storeTag,
+                productId: food?.walmartItemId,
+                quantity: CartQuantity.forLine(
+                  line: resolved.line,
+                  pack: resolved.pack,
+                ),
+              ),
 ];
 
 Food? _food(ShoppingLine line, Map<String, Food> foods) =>
@@ -159,7 +169,9 @@ typedef _Amount = ({String? label, String? shortfall});
 /// The same order the list on screen reads in, and through the same
 /// [PackDisplay] — a second opinion about how a pack reads is how the copy in
 /// somebody's hand comes to disagree with the screen they copied it from.
-_Amount _amount(ShoppingLine line, Quantity? pack) {
+_Amount _amount(ResolvedShoppingLine resolved, Food? food) {
+  final ShoppingLine line = resolved.line;
+  final Quantity? pack = resolved.pack;
   // Packs first, where the thing comes in them. "4 lb" of a sauce sold in
   // 24-ounce jars is arithmetically perfect and useless at the shelf.
   final String? packed = PackDisplay.forLine(line: line, pack: pack);
@@ -173,7 +185,7 @@ _Amount _amount(ShoppingLine line, Quantity? pack) {
   final Quantity? buy = line.toBuy;
   if (buy != null) {
     return (
-      label: buy.isZero ? null : QuantityFormat.format(buy),
+      label: buy.isZero ? null : FoodQuantityFormat.format(buy, food: food),
       shortfall: null,
     );
   }
@@ -181,7 +193,9 @@ _Amount _amount(ShoppingLine line, Quantity? pack) {
   // Written two ways at once and never settled — both go, because dropping
   // one would be choosing an amount the app declined to choose.
   return (
-    label: line.planned.map(QuantityFormat.format).join(' + '),
+    label: line.planned
+        .map((Quantity q) => FoodQuantityFormat.format(q, food: food))
+        .join(' + '),
     shortfall: null,
   );
 }

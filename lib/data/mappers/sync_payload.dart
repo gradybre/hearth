@@ -2,6 +2,7 @@ import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/recipes/sketch_icon.dart';
+import '../../domain/units/mass_display_mode.dart';
 import '../../domain/units/quantity.dart';
 import '../../domain/units/unit.dart';
 import 'food_mapper.dart';
@@ -95,13 +96,21 @@ abstract final class SyncPayload {
     );
   }
 
-  static Food food(Map<String, Object?> json) => Food(
+  static Food food(Map<String, Object?> json, {Food? existing}) => Food(
     id: '${json['id']}',
     householdId: json['household_id'] as String?,
     name: '${json['name'] ?? ''}',
     brand: json['brand'] as String?,
     storeTag: json['store_tag'] as String?,
     walmartItemId: json['walmart_item_id'] as String?,
+    massDisplayMode: FoodMapper.massDisplayModeFrom(
+      json,
+      fallback: existing?.massDisplayMode ?? MassDisplayMode.automatic,
+    ),
+    packageNutrition: FoodMapper.packageNutritionFrom(
+      json,
+      fallback: existing?.packageNutrition,
+    ),
     packSize: packSizeFrom(
       switch (json['pack_canonical']) {
         final num n => n.toDouble(),
@@ -149,6 +158,23 @@ abstract final class SyncPayload {
         ),
     ],
   );
+
+  /// Which serving a plan entry's portion counts, or null for none.
+  ///
+  /// '' is the sentinel a current client sends to mean *explicitly none*, so
+  /// it reads back as null. An **absent** key is a different answer: a server
+  /// or a client that has nothing to say about the reference, which the pull
+  /// path must treat as 'leave what is stored' rather than as a clear — see
+  /// [hasServingOptionId].
+  static String? servingOptionId(Object? value) {
+    if (value is! String) return null;
+    final String id = value.trim();
+    return id.isEmpty ? null : id;
+  }
+
+  /// Whether the payload said anything at all about the serving reference.
+  static bool hasServingOptionId(Map<String, Object?> json) =>
+      json.containsKey('serving_option_id');
 
   /// When the server last changed this record, for last-write-wins.
   static DateTime? updatedAt(Map<String, Object?> json) =>

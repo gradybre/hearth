@@ -342,7 +342,11 @@ void main() {
 
       await tester.tap(find.text("Read the packet's label"));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Take a photo'));
+      await tester.tap(
+        find.byKey(const ValueKey<String>('LabelSlot.nutrition-camera')),
+      );
+      await pumpFrames(tester);
+      await tester.tap(find.text('Read photos'));
       await pumpFrames(tester, frames: 12);
 
       // That food's own editor, with the grams it had and the units the label

@@ -1,0 +1,9 @@
+12.0 oz: display=12 oz; authored=12 oz; normalizedHint=oz
+14.5 oz: display=14 oz; authored=14 oz; normalizedHint=oz
+16.0 oz: display=1 lb; authored=16 oz; normalizedHint=lb
+24.0 oz: display=1.5 lb; authored=24 oz; normalizedHint=lb
+28.0 oz: display=1.8 lb; authored=28 oz; normalizedHint=lb
+56.0 oz: display=3.5 lb; authored=56 oz; normalizedHint=lb
+12 oz + 12 oz corn: 1.5 lb
+1 lb + 8 oz beef: 1.5 lb
+package parse: name=tomatoes; authored=56 oz; display=3.5 lb

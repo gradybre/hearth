@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:meta/meta.dart';
 
+import '../models/food.dart';
 import '../recipes/ingredient_consolidator.dart';
 import '../units/density.dart';
 import '../units/quantity.dart';
@@ -135,11 +136,17 @@ abstract final class ShoppingContributions {
   /// The summing is [IngredientConsolidator.combine] — the same arithmetic
   /// that adds an ingredient across a week of recipes, rather than a second
   /// implementation free to drift from it.
+  /// [food] is the food the line is matched to, when it is matched to one:
+  /// its density decides whether two asks in different kinds can be added at
+  /// all, and its pack size decides which kind the total is counted in
+  /// (spec R5, R12). Null keeps the generic behaviour exactly as it was.
   static ShoppingLine settle(
     ShoppingLine line, {
     required List<ShoppingContribution> contributions,
     DensityLookup densityLookup = DensityTable.lookup,
     UnitSystem system = UnitSystem.imperial,
+    Food? food,
+    bool preferPackKind = true,
   }) {
     final List<ShoppingContribution> kept = <ShoppingContribution>[
       for (final ShoppingContribution c in contributions)
@@ -154,6 +161,8 @@ abstract final class ShoppingContributions {
         displayName: line.name,
         densityLookup: densityLookup,
         system: system,
+        food: food,
+        preferPackKind: preferPackKind,
       ),
       hasUnquantified: kept.any((ShoppingContribution c) => c.hasUnquantified),
     );
@@ -170,6 +179,8 @@ abstract final class ShoppingContributions {
     DensityLookup densityLookup = DensityTable.lookup,
     UnitSystem system = UnitSystem.imperial,
     String displayName = '',
+    Food? food,
+    bool preferPackKind = true,
   }) {
     final List<ShoppingContribution> out = <ShoppingContribution>[...existing];
     for (final ShoppingContribution add in incoming) {
@@ -182,11 +193,21 @@ abstract final class ShoppingContributions {
       }
       final ShoppingContribution was = out[at];
       out[at] = was.copyWith(
+        // Source mode. Two asks from the same source are still that source's
+        // ask, in the measure it was written in — adding the same cup recipe
+        // twice is four cups, never an amount of ounces derived from a food
+        // link that can change or be removed afterwards (spec R5, R12). The
+        // pack-counted total is [settle]'s job, and it is recomputed from
+        // these asks every time rather than stored in their place.
+        //
+        // [food] and [preferPackKind] stay in the signature so callers do not
+        // have to change, and are deliberately not consulted here.
         quantities: IngredientConsolidator.combine(
           <Quantity>[...was.quantities, ...add.quantities],
           displayName: displayName,
           densityLookup: densityLookup,
           system: system,
+          crossKind: false,
         ),
         servings: was.servings == null && add.servings == null
             ? null

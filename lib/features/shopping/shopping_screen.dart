@@ -13,7 +13,7 @@ import '../../app/widgets/undo_snackbar.dart';
 import '../../data/local/shopping_store.dart';
 import '../../data/repositories/shopping_repository.dart';
 import '../../domain/foods/no_match_rule.dart';
-import '../../domain/format/quantity_format.dart';
+import '../../domain/format/food_quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/planning/day_format.dart';
@@ -136,16 +136,24 @@ class _Body extends ConsumerWidget {
         return a.compareTo(b);
       });
 
-    final int inBasket = lines.where((ShoppingLine l) => l.checked).length;
-
-    // Read once for the whole list rather than per line. Only the foods that
-    // have a pack size are here, so the lookup below answers null for
-    // everything sold by weight without asking a second question.
-    final Map<String, Quantity> packs = <String, Quantity>{
+    // Read once for the whole list rather than per line. The whole food is
+    // kept rather than just its pack size: how a total reads, whether a cup
+    // of it can be counted in jars, and what a cupboard amount comes off,
+    // are all answered by the matched food (spec R5).
+    final Map<String, Food> foods = <String, Food>{
       for (final Food food
           in ref.watch(foodLibraryProvider).value ?? const <Food>[])
-        if (food.packSize case final Quantity pack) food.id: pack,
+        food.id: food,
     };
+
+    final int inBasket = lines
+        .where(
+          (ShoppingLine l) => ShoppingLineResolver.resolve(
+            line: l,
+            food: foods[l.foodId],
+          ).isChecked,
+        )
+        .length;
 
     return Column(
       children: <Widget>[
@@ -187,12 +195,13 @@ class _Body extends ConsumerWidget {
                   ),
                   _StoreGroup(
                     lines: groups[store]!,
-                    packs: packs,
+                    foods: foods,
                     onReorder: (int from, int to) =>
                         _save(ref, _reordered(store, groups, from, to)),
                     onTick: (ShoppingLine line, bool value) =>
                         _save(ref, _replacing(line.ticked(value))),
-                    onEdit: (ShoppingLine line) => _edit(context, ref, line),
+                    onEdit: (ShoppingLine line) =>
+                        _edit(context, ref, line, foods[line.foodId]),
                     onRemove: (ShoppingLine line) => _remove(ref, line),
                     onRestore: (ShoppingLine line) => _restore(ref, line),
                   ),
@@ -238,12 +247,10 @@ class _Body extends ConsumerWidget {
               context,
               lines,
               // Passed in, so the sheet and the adapter stay free of
-              // Riverpod and of anything that could reach a network.
-              foods: <String, Food>{
-                for (final Food f
-                    in ref.read(foodLibraryProvider).value ?? const <Food>[])
-                  f.id: f,
-              },
+              // Riverpod and of anything that could reach a network. The
+              // same map the lines were drawn from, so the copy in
+              // somebody's hand cannot disagree with the screen it came from.
+              foods: foods,
             ),
           ),
       ],
@@ -302,11 +309,13 @@ class _Body extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     ShoppingLine line,
+    Food? food,
   ) async {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     final ShoppingLine? changed = await showShoppingAmountSheet(
       context,
       line,
+      food: food,
       onRemove: () async {
         await _remove(ref, line);
         showUndoSnackBar(
@@ -912,7 +921,7 @@ class _StartCard extends StatelessWidget {
 class _StoreGroup extends StatelessWidget {
   const _StoreGroup({
     required this.lines,
-    required this.packs,
+    required this.foods,
     required this.onReorder,
     required this.onTick,
     required this.onEdit,
@@ -922,8 +931,8 @@ class _StoreGroup extends StatelessWidget {
 
   final List<ShoppingLine> lines;
 
-  /// Pack sizes by food id, for the lines whose food has one.
-  final Map<String, Quantity> packs;
+  /// The library by food id, for the lines that are matched to one.
+  final Map<String, Food> foods;
 
   /// Wired to `onReorderItem`, which hands over the index the item should end
   /// up at — the older `onReorder` reported it as it would be before the item
@@ -972,7 +981,7 @@ class _StoreGroup extends StatelessWidget {
           onRestore: () => onRestore(line),
           child: _LineTile(
             line: line,
-            pack: packs[line.foodId],
+            food: foods[line.foodId],
             onTick: (bool value) => onTick(line, value),
             onEdit: () => onEdit(line),
           ),
@@ -985,52 +994,66 @@ class _StoreGroup extends StatelessWidget {
 class _LineTile extends StatelessWidget {
   const _LineTile({
     required this.line,
-    required this.pack,
+    required this.food,
     required this.onTick,
     required this.onEdit,
   });
 
   final ShoppingLine line;
 
-  /// How much comes in one of whatever this is sold as, when that is known.
+  /// The food this line is matched to, when it is matched to one.
   ///
-  /// Null for everything sold by weight, and for every food Hearth has not
-  /// been told about — in both cases the line goes on saying what it always
-  /// said (spec §5.7).
-  final Quantity? pack;
+  /// Null for every food Hearth has not been told about — in which case the
+  /// line goes on saying what it always said (spec §5.7, R5).
+  final Food? food;
   final ValueChanged<bool> onTick;
   final VoidCallback onEdit;
 
+  /// The line as it should be read, rather than as it is stored: a cupboard
+  /// amount in another kind already taken off, and the pack to count against
+  /// (spec R5, R7).
+  ResolvedShoppingLine get _resolved =>
+      ShoppingLineResolver.resolve(line: line, food: food);
+
   /// What the line says to buy, in words.
   String get _amount {
+    final ResolvedShoppingLine resolved = _resolved;
     // Packs first, where the thing comes in them. "4 lb" of a sauce sold in
     // 24-ounce jars is arithmetically perfect and useless at the shelf.
-    final String? packed = PackDisplay.forLine(line: line, pack: pack);
+    final String? packed = PackDisplay.forLine(
+      line: resolved.line,
+      pack: resolved.pack,
+    );
     if (packed != null) return packed;
 
-    final Quantity? buy = line.toBuy;
-    if (buy != null) return QuantityFormat.format(buy);
+    final Quantity? buy = resolved.toBuy;
+    if (buy != null) return FoodQuantityFormat.format(buy, food: food);
     if (line.planned.isEmpty) return '';
     // The recipes could only say it two ways at once, so both are shown
     // rather than one being guessed at (spec §5.7).
-    return line.planned.map(QuantityFormat.format).join(' + ');
+    return line.planned
+        .map((Quantity q) => FoodQuantityFormat.format(q, food: food))
+        .join(' + ');
   }
 
   /// The arithmetic underneath, when there is any worth showing.
   String? get _detail {
+    final ResolvedShoppingLine resolved = _resolved;
     final List<String> parts = <String>[
       // Said, because a rebuild keeps it and drops the rest — and until now
       // a line somebody typed looked exactly like one the plan produced, so
       // there was no way to tell beforehand what a rebuild would take.
       if (line.isManual) 'added by hand',
       if (line.isEdited && line.planned.isNotEmpty)
-        'recipes call for ${line.planned.map(QuantityFormat.format).join(' + ')}',
+        'recipes call for '
+            '${line.planned.map((Quantity q) => FoodQuantityFormat.format(q, food: food)).join(' + ')}',
       // Three jars is seventy-two ounces and the ragu wants sixty-four. The
       // eight over are the whole reason to show both: a line that only says
       // "3 × 24 oz" has rounded up, and a rounding nobody can see is a
       // rounding nobody can judge.
-      ?PackDisplay.shortfall(line: line, pack: pack),
-      if (line.onHand != null) 'have ${QuantityFormat.format(line.onHand!)}',
+      ?PackDisplay.shortfall(line: resolved.line, pack: resolved.pack),
+      if (line.onHand != null)
+        'have ${FoodQuantityFormat.format(line.onHand!, food: food)}',
       if (line.hasUnquantified) 'plus some to taste',
     ];
     return parts.isEmpty ? null : parts.join(' · ');
@@ -1040,7 +1063,9 @@ class _LineTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     final HearthTextStyles text = context.text;
-    final bool done = line.isChecked;
+    // Resolved, so a cupboard amount measured the other way still ticks the
+    // line off once it covers the need.
+    final bool done = _resolved.isChecked;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: HearthSpacing.sm),

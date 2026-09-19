@@ -1,8 +1,10 @@
 import 'package:meta/meta.dart';
 
+import '../units/mass_display_mode.dart';
 import '../units/quantity.dart';
 import '../units/unit.dart';
 import 'macros.dart';
+import 'package_nutrition.dart';
 
 /// Where a food's nutrition data came from (spec §5.5).
 ///
@@ -105,6 +107,8 @@ class Food {
     this.isModifier = false,
     this.isDeleted = false,
     this.updatedAt,
+    this.massDisplayMode = MassDisplayMode.automatic,
+    this.packageNutrition,
   });
 
   final String id;
@@ -208,10 +212,114 @@ class Food {
   /// are new.
   final DateTime? updatedAt;
 
+  /// How an imperial mass quantity for this food should be displayed —
+  /// pinned to ounces, run through the ordinary oz/lb ladder, or decided
+  /// automatically from pack size and source hints (spec R3–R4).
+  ///
+  /// A display preference only. Never changes what is stored, summed, or
+  /// computed — only which unit a total is finally shown in.
+  final MassDisplayMode massDisplayMode;
+
+  /// A reviewed package amount, nutrition serving, and servings-per-package
+  /// relationship (spec R9–R13), when the household has set one.
+  ///
+  /// Bridges mass and volume for a food that would otherwise have no way to
+  /// answer a recipe measured in the other kind of unit — a jar of shredded
+  /// cheddar whose label states 10 oz and "about 2 servings" of 1/4 cup,
+  /// asked for by weight in a recipe. Only ever a *fallback*: this food's own
+  /// stated or inferred density always answers first (spec R12), and this
+  /// relationship is used only through [activePackageServing], which returns
+  /// null the moment it no longer matches the food's current pack size or
+  /// serving list.
+  final PackageNutrition? packageNutrition;
+
   bool get isGlobal => householdId == null;
 
-  /// This food's density, from the source if it gave one, otherwise worked
-  /// out from its own serving sizes.
+  /// Density stated explicitly by the source, or implied by this food's own
+  /// serving sizes when it states more than one kind of measurement.
+  ///
+  /// Split out from [effectiveGramsPerMillilitre] so a package relationship
+  /// (spec R9–R13) is only tried once this comes back empty, and so a caller
+  /// wanting to flag a conflict (spec R12) can compare the two directly
+  /// rather than one silently winning inside a single number.
+  double? get ownGramsPerMillilitre =>
+      _usableDensity(gramsPerMillilitre) ?? _densityFromServings();
+
+  /// [value] when it is a figure something can actually be divided by, and
+  /// null otherwise (review B1).
+  ///
+  /// A stored density arrives from sync as whatever the payload said, and
+  /// `double.tryParse` accepts NaN and Infinity as readily as 1.03. A zero, a
+  /// negative or a NaN is not a density: multiplying by it poisons every
+  /// macro downstream, and -- worse -- its mere presence used to count as
+  /// this food having answered, so a reviewed package relationship that could
+  /// have answered properly was skipped in favour of it. One accessor, so
+  /// there is a single meaning of usable rather than one per caller.
+  static double? _usableDensity(double? value) =>
+      value != null && value.isFinite && value > 0 ? value : null;
+
+  /// The serving option a reviewed package/nutrition relationship (spec
+  /// R9–R13) is anchored to, when that relationship exists, is well-formed,
+  /// and still describes this food's *current* package size and serving.
+  ///
+  /// Null the instant any of those three drift apart — a changed pack size,
+  /// a changed serving amount, or a deleted serving — because at that point
+  /// the saved count no longer describes anything real (spec R10, R13).
+  /// Looked up by id rather than list position, so reordering the serving
+  /// list is harmless.
+  ServingOption? get activePackageServing {
+    final PackageNutrition? relation = packageNutrition;
+    if (relation == null || !relation.isValid) return null;
+    final ServingOption? serving = _servingById(relation.servingOptionId!);
+    if (serving == null) return null;
+    final bool stillMatches = relation.matches(
+      pack: packSize,
+      servingId: serving.id,
+      servingAmount: serving.amount,
+    );
+    return stillMatches ? serving : null;
+  }
+
+  /// True when a package/nutrition relationship is saved but no longer
+  /// matches this food's current package size or its selected serving.
+  ///
+  /// The editor's cue to show "Check package servings" (spec R10) rather than
+  /// silently keep computing from stale facts, or silently drop them with no
+  /// explanation.
+  bool get hasStalePackageNutrition =>
+      packageNutrition != null &&
+      packageNutrition!.isValid &&
+      activePackageServing == null;
+
+  ServingOption? _servingById(String id) {
+    for (final ServingOption option in servingOptions) {
+      if (option.id == id) return option;
+    }
+    return null;
+  }
+
+  /// Grams per millilitre implied by the active package relationship — null
+  /// when there is none, it is invalid, or it has gone stale.
+  double? get packageGramsPerMillilitre => activePackageServing == null
+      ? null
+      : packageNutrition?.gramsPerMillilitre;
+
+  /// Whether the package relationship's implied density disagrees with this
+  /// food's own by more than 5% (spec R12).
+  ///
+  /// A signal for a review screen to surface, never a reason to prefer one
+  /// figure over the other — [effectiveGramsPerMillilitre] keeps its own
+  /// precedence order regardless of this.
+  bool get packageDensityConflictsWithOwn {
+    final double? own = ownGramsPerMillilitre;
+    final double? fromPackage = packageGramsPerMillilitre;
+    if (own == null || fromPackage == null || own == 0) return false;
+    return (fromPackage - own).abs() / own.abs() > 0.05;
+  }
+
+  /// This food's density: its own stated or inferred figure first, falling
+  /// back to a reviewed package relationship only when the food has no
+  /// density of its own to give (spec R12).
   ///
   /// A food that states both a volume serving and a weight serving has
   /// already told us how much a millilitre of it weighs, even when nobody
@@ -224,8 +332,13 @@ class Food {
   /// grams. Without it a perfectly well-described food still could not
   /// answer "how much is 2.5 cups of it", and the ingredient came back
   /// flagged with nothing obviously wrong.
+  ///
+  /// The package fallback never overrides a direct answer the food's own
+  /// data already gives, and is never cached back into [gramsPerMillilitre]:
+  /// a cached number would outlive the package review it came from and lose
+  /// the provenance that makes it correctable (spec R12).
   double? get effectiveGramsPerMillilitre =>
-      gramsPerMillilitre ?? _densityFromServings();
+      ownGramsPerMillilitre ?? packageGramsPerMillilitre;
 
   double? _densityFromServings() {
     final ({double amount, double scale})? volume = _bridge(UnitKind.volume);

@@ -46,7 +46,7 @@ void main() {
       await pumpFrames(tester);
     }
     if (pack != null) {
-      await tester.enterText(await field(tester, '1 lb'), pack);
+      await tester.enterText(await field(tester, '10 oz'), pack);
     }
     await pumpFrames(tester);
   }

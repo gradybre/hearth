@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import '../../domain/text/text_normaliser.dart';
 import '../local/hearth_database.dart';
 import '../mappers/shopping_mapper.dart';
+import '../mappers/sync_payload.dart';
 import '../remote/supabase_remote_gateway.dart';
 
 /// Writes records that arrived from the server straight into the local cache.
@@ -65,6 +66,11 @@ class RemoteRows {
       )..where(($MealPlanEntriesTable e) => e.id.equals('${json['id']}'))).go();
       return;
     }
+    final existing = SyncPayload.hasServingOptionId(json)
+        ? null
+        : await (_db.select(
+            _db.mealPlanEntries,
+          )..where((e) => e.id.equals('${json['id']}'))).getSingleOrNull();
     await _db
         .into(_db.mealPlanEntries)
         .insertOnConflictUpdate(
@@ -75,6 +81,9 @@ class RemoteRows {
             refType: '${json['ref_type']}',
             refId: '${json['ref_id']}',
             servings: _double(json['servings']) ?? 0,
+            servingOptionId: SyncPayload.hasServingOptionId(json)
+                ? SyncPayload.servingOptionId(json['serving_option_id'])
+                : existing?.servingOptionId,
             isPlanned: json['is_planned'] == true,
             isLogged: json['is_logged'] == true,
             loggedAt: json['logged_at'] == null
@@ -86,7 +95,7 @@ class RemoteRows {
                 ? null
                 : jsonEncode(json['macro_snapshot']),
             updatedAt: _time(json['updated_at']),
-          ),
+          ).toCompanion(false),
         );
   }
 

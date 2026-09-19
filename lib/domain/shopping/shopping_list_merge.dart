@@ -1,3 +1,4 @@
+import '../models/food.dart';
 import 'shopping_contribution.dart';
 import 'shopping_line.dart';
 
@@ -23,10 +24,13 @@ import 'shopping_line.dart';
 /// the difference be seen rather than silently resolved.
 abstract final class ShoppingListMerge {
   /// [existing] as it is now, brought up to date with [rebuilt].
+  /// [foods] is the library, so every line's total is settled against the
+  /// food it is matched to rather than against a generic guess (spec R5).
   static List<ShoppingLine> into(
     List<ShoppingLine> existing,
-    List<ShoppingLine> rebuilt,
-  ) {
+    List<ShoppingLine> rebuilt, {
+    Map<String, Food> foods = const <String, Food>{},
+  }) {
     final Map<String, ShoppingLine> byKey = <String, ShoppingLine>{
       for (final ShoppingLine line in rebuilt) line.key: line,
     };
@@ -36,6 +40,7 @@ abstract final class ShoppingListMerge {
     for (final ShoppingLine line in existing) {
       seen.add(line.key);
       final ShoppingLine? now = byKey[line.key];
+      final Food? food = foods[now?.foodId ?? line.foodId];
 
       final List<ShoppingContribution> was = line.contributions.isEmpty
           ? ShoppingContributions.legacy(line)
@@ -50,7 +55,9 @@ abstract final class ShoppingListMerge {
         // still does, so the line stays with the plan's share taken out of
         // it — which is the whole reason the asks are kept apart.
         if (mine.isNotEmpty) {
-          merged.add(ShoppingContributions.settle(line, contributions: mine));
+          merged.add(
+            ShoppingContributions.settle(line, contributions: mine, food: food),
+          );
           continue;
         }
         // Nothing of anybody's left. Dropped — unless somebody has touched
@@ -58,7 +65,9 @@ abstract final class ShoppingListMerge {
         // is a note that you have the thing, and an edited one is a decision
         // that outlived the recipe that prompted it.
         if (line.isManual || line.isChecked || line.isEdited) {
-          merged.add(ShoppingContributions.settle(line, contributions: mine));
+          merged.add(
+            ShoppingContributions.settle(line, contributions: mine, food: food),
+          );
         }
         continue;
       }
@@ -75,6 +84,7 @@ abstract final class ShoppingListMerge {
           // was. A rebuild is authoritative about the plan and about nothing
           // else on the line.
           contributions: ShoppingContributions.replacePlan(was, _planOf(now)),
+          food: food,
         ),
       );
     }

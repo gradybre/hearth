@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../models/food.dart';
+import '../models/package_nutrition.dart';
 import '../units/quantity.dart';
 import '../units/unit.dart';
 import '../units/unit_converter.dart';
@@ -161,8 +162,73 @@ class MergePlan {
     isDefault: survivor.isDefault,
     isZeroCalorie: survivor.isZeroCalorie,
     isModifier: survivor.isModifier,
+    // Spelled out like every other field here, and for the same reason: a
+    // soft-deleted survivor used to come back to life on merge, reappearing
+    // in the library with nobody having asked for it (review L10).
+    isDeleted: survivor.isDeleted,
     updatedAt: survivor.updatedAt,
+    // The survivor's own preference, always: a merge is not an occasion for
+    // the reader's units to change under them (spec R4).
+    massDisplayMode: survivor.massDisplayMode,
+    packageNutrition: adoptedPackageNutrition(
+      survivor: survivor,
+      retiring: retiring,
+      mergedServings: mergedServings,
+    ),
   );
+
+  /// The package relationship the merged food keeps (spec R13).
+  ///
+  /// The survivor's own comes first and is never replaced -- a human
+  /// confirmed it against this food's package, and the retiring food's is
+  /// evidence about a different row.
+  ///
+  /// The retiring food's is adopted only when it still describes exactly what
+  /// the merged food will be: the same package amount the survivor already
+  /// records, and a serving carried across unchanged. The serving id is
+  /// remapped because `unionServings` gives an adopted serving a fresh one,
+  /// and that is the only edit allowed here -- everything else is the basis
+  /// the user reviewed. Anything short of an exact match is left unlinked for
+  /// review rather than activated, because a relationship pinned to the wrong
+  /// package is a wrong cup weight on every recipe that uses it, reported as
+  /// a fact.
+  static PackageNutrition? adoptedPackageNutrition({
+    required Food survivor,
+    required Food retiring,
+    required List<ServingOption> mergedServings,
+  }) {
+    if (survivor.packageNutrition != null) return survivor.packageNutrition;
+
+    final PackageNutrition? relation = retiring.packageNutrition;
+    if (relation == null || !relation.isValid) return null;
+
+    final String remapped = '${survivor.id}:${relation.servingOptionId}';
+    for (final ServingOption option in mergedServings) {
+      if (option.id != relation.servingOptionId && option.id != remapped) {
+        continue;
+      }
+      // Asked of the merged food's facts, not the retiring food's: the
+      // survivor's package is the one that will be stored, so it is the one
+      // the snapshot has to agree with.
+      final bool sameBasis = relation.matches(
+        pack: survivor.packSize,
+        servingId: relation.servingOptionId,
+        servingAmount: option.amount,
+      );
+      if (!sameBasis) continue;
+
+      return PackageNutrition.manual(
+        servingsPerPackage: relation.servingsPerPackage!,
+        servingOptionId: option.id,
+        servingAmount: relation.servingAmount!,
+        packageAmount: relation.packageAmount!,
+        isApproximate: relation.isApproximate,
+        source: relation.source ?? PackageNutritionSource.manual,
+        basis: relation.basis ?? PackageNutritionBasis.asPackaged,
+      );
+    }
+    return null;
+  }
 
   /// Works out what a merge would do, without doing any of it.
   ///

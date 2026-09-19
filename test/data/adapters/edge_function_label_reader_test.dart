@@ -40,6 +40,25 @@ Map<Object?, Object?> panel({
 };
 
 void main() {
+  test(
+    'photo field provenance keeps known facts and drops arbitrary values',
+    () {
+      final reading = EdgeFunctionLabelReader.readingFrom(
+        panel()
+          ..['field_sources'] = {
+            'package_amount': 'package',
+            'servings': 'nutrition',
+            'servings_per_container': 'invented',
+            'extra': 'both',
+          },
+      );
+      expect(reading.fieldSources, {
+        'package_amount': 'package',
+        'servings': 'nutrition',
+      });
+    },
+  );
+
   group('a label that read cleanly', () {
     test('carries both ways the panel states one portion', () {
       // Brendan's Kirkland cheddar: "Serving size 1oz (28g/about 1/4 cup)".
@@ -143,7 +162,7 @@ void main() {
           isA<RecipeAiException>().having(
             (RecipeAiException e) => e.message,
             'message',
-            contains('No serving sizes'),
+            contains('Nothing legible'),
           ),
         ),
       );
@@ -264,6 +283,72 @@ void main() {
       expect(reading.servings.single.sodiumMg, isNull);
       expect(reading.servings.single.cholesterolMg, isNull);
       expect(reading.servings.single.kcal, 110);
+    });
+  });
+
+  group('the front-of-package facts (spec R9/R11)', () {
+    test('a package amount and count read cleanly', () {
+      final LabelReading reading = EdgeFunctionLabelReader.readingFrom(
+        panel(servings: const <Object?>[])..addAll(<String, Object?>{
+          'package_amount': 24,
+          'package_unit': 'oz',
+          'servings_per_container': 6,
+          'servings_approximate': false,
+          'package_basis': 'as_packaged',
+        }),
+      );
+
+      expect(reading.packageSize, isNotNull);
+      expect(reading.servingsPerContainer, 6);
+      expect(reading.servingsApproximate, isFalse);
+      expect(reading.packageBasis, 'as_packaged');
+    });
+
+    test('a front-only read is not treated as empty', () {
+      final LabelReading reading = EdgeFunctionLabelReader.readingFrom(
+        panel(servings: const <Object?>[])..addAll(<String, Object?>{
+          'package_amount': 24,
+          'package_unit': 'oz',
+        }),
+      );
+
+      expect(reading.servings, isEmpty);
+      expect(reading.packageSize, isNotNull);
+    });
+
+    test('a zero or negative count is dropped, not treated as read', () {
+      final LabelReading reading = EdgeFunctionLabelReader.readingFrom(
+        panel()..addAll(<String, Object?>{'servings_per_container': 0}),
+      );
+      expect(reading.servingsPerContainer, isNull);
+    });
+
+    test('an unrecognised basis reads as unknown', () {
+      final LabelReading reading = EdgeFunctionLabelReader.readingFrom(
+        panel()..addAll(<String, Object?>{'package_basis': 'cooked'}),
+      );
+      expect(reading.packageBasis, 'unknown');
+    });
+
+    test('a missing basis reads as unknown', () {
+      final LabelReading reading = EdgeFunctionLabelReader.readingFrom(panel());
+      expect(reading.packageBasis, 'unknown');
+    });
+
+    test('a package amount with no unit is dropped', () {
+      final LabelReading reading = EdgeFunctionLabelReader.readingFrom(
+        panel()..addAll(<String, Object?>{'package_amount': 24}),
+      );
+      expect(reading.packageSize, isNull);
+    });
+
+    test('nothing at all still throws', () {
+      expect(
+        () => EdgeFunctionLabelReader.readingFrom(
+          panel(servings: const <Object?>[]),
+        ),
+        throwsA(isA<RecipeAiException>()),
+      );
     });
   });
 }

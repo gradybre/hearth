@@ -147,14 +147,15 @@ class AiUsage {
 /// An image on its way to extraction.
 @immutable
 class AiImage {
-  const AiImage({required this.bytes, required this.mediaType});
+  const AiImage({required this.bytes, required this.mediaType, this.role});
 
   /// A chosen photo, told apart by its extension.
   ///
   /// One place rather than three: the API rejects a declared type that does
   /// not match the bytes, so a `.webp` screenshot sent as jpeg comes back a
   /// 400 that reads like a server fault and can only fail the same way again.
-  factory AiImage.ofPhoto(PickedPhoto photo) => AiImage(
+  factory AiImage.ofPhoto(PickedPhoto photo, {String? role}) => AiImage(
+    role: role,
     bytes: photo.bytes,
     mediaType: switch (photo.extension) {
       'png' => 'image/png',
@@ -168,6 +169,9 @@ class AiImage {
 
   /// 'image/jpeg', 'image/png' — what the API is told this is.
   final String mediaType;
+
+  /// Optional caller-stated role for a label photo; never inferred by order.
+  final String? role;
 }
 
 /// Raised when import or generation could not complete.

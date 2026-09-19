@@ -7,12 +7,13 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
-import '../../domain/format/quantity_format.dart';
+import '../../domain/format/food_quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/recipes/ingredient_consolidator.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/recipes/recipe_scaler.dart';
+import '../../domain/units/quantity.dart';
 import 'collections_sheet.dart';
 import 'cook_along_screen.dart';
 import 'macro_stats_row.dart';
@@ -259,6 +260,13 @@ class _RecipeBodyState extends State<_RecipeBody> {
                 partialFor: macros.partialNoteFor,
               ),
             ],
+            if (macros.usesApproximatePackageNutrition) ...<Widget>[
+              const SizedBox(height: HearthSpacing.xs),
+              Text(
+                'Uses approximate package servings',
+                style: text.metadata.copyWith(color: colors.textMuted),
+              ),
+            ],
             // Missing data flags, never blocks (spec §5.3): shown alongside
             // the numbers rather than hiding them, so what is known is never
             // held back for want of what isn't — and naming the actual gap,
@@ -308,8 +316,9 @@ class _RecipeBodyState extends State<_RecipeBody> {
                 in IngredientConsolidator.flatten(
                   recipe,
                   includeOptional: true,
+                  foods: widget.foods,
                 ))
-              _CombinedRow(line: line),
+              _CombinedRow(line: line, foods: widget.foods),
             const SizedBox(height: HearthSpacing.xl),
             // Method stays grouped either way. The sections are how the
             // cooking reads — and cook-along depends on a step knowing which
@@ -319,7 +328,12 @@ class _RecipeBodyState extends State<_RecipeBody> {
                 Text(section.name, style: text.sectionHeader),
                 const SizedBox(height: HearthSpacing.md),
                 for (final RecipeStep step in section.orderedSteps)
-                  _StepRow(step: step, section: section, recipe: recipe),
+                  _StepRow(
+                    step: step,
+                    section: section,
+                    recipe: recipe,
+                    foods: widget.foods,
+                  ),
                 const SizedBox(height: HearthSpacing.xl),
               ],
           ] else if (recipe.isGrouped)
@@ -328,17 +342,22 @@ class _RecipeBodyState extends State<_RecipeBody> {
               Text(section.name, style: text.sectionHeader),
               const SizedBox(height: HearthSpacing.md),
               for (final RecipeIngredient ingredient in section.ingredients)
-                _IngredientRow(ingredient: ingredient),
+                _IngredientRow(ingredient: ingredient, foods: widget.foods),
               if (section.steps.isNotEmpty) ...<Widget>[
                 const SizedBox(height: HearthSpacing.md),
                 for (final RecipeStep step in section.orderedSteps)
-                  _StepRow(step: step, section: section, recipe: recipe),
+                  _StepRow(
+                    step: step,
+                    section: section,
+                    recipe: recipe,
+                    foods: widget.foods,
+                  ),
               ],
               const SizedBox(height: HearthSpacing.xl),
             ]
           else ...<Widget>[
             for (final RecipeIngredient ingredient in recipe.allIngredients)
-              _IngredientRow(ingredient: ingredient),
+              _IngredientRow(ingredient: ingredient, foods: widget.foods),
             if (recipe.allSteps.isNotEmpty) ...<Widget>[
               const SizedBox(height: HearthSpacing.xl),
               Text('Directions', style: text.sectionHeader),
@@ -348,7 +367,12 @@ class _RecipeBodyState extends State<_RecipeBody> {
               // it can say how much of anything it uses.
               for (final RecipeSection section in recipe.orderedSections)
                 for (final RecipeStep step in section.orderedSteps)
-                  _StepRow(step: step, section: section, recipe: recipe),
+                  _StepRow(
+                    step: step,
+                    section: section,
+                    recipe: recipe,
+                    foods: widget.foods,
+                  ),
             ],
           ],
           if (scaled != null && scaled.hasWarnings) ...<Widget>[
@@ -399,14 +423,20 @@ class _IngredientView extends StatelessWidget {
 /// dough with no density known — and §5.7 is explicit that both are then shown
 /// rather than guessed at.
 class _CombinedRow extends StatelessWidget {
-  const _CombinedRow({required this.line});
+  const _CombinedRow({required this.line, this.foods});
 
   final ConsolidatedIngredient line;
+
+  /// The household's food library, keyed by id — one snapshot from the
+  /// screen, so each row's matched-food display preference (spec R1–R8) is
+  /// resolved without a per-row lookup.
+  final Map<String, Food>? foods;
 
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     final HearthTextStyles text = context.text;
+    final Food? food = line.foodId == null ? null : foods?[line.foodId];
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: HearthSpacing.xs),
@@ -416,7 +446,9 @@ class _CombinedRow extends StatelessWidget {
           SizedBox(
             width: 92,
             child: Text(
-              line.quantities.map(QuantityFormat.format).join(' + '),
+              line.quantities
+                  .map((Quantity q) => FoodQuantityFormat.format(q, food: food))
+                  .join(' + '),
               style: text.ingredient,
             ),
           ),
@@ -443,14 +475,20 @@ class _CombinedRow extends StatelessWidget {
 }
 
 class _IngredientRow extends StatelessWidget {
-  const _IngredientRow({required this.ingredient});
+  const _IngredientRow({required this.ingredient, this.foods});
 
   final RecipeIngredient ingredient;
+
+  /// The household's food library, keyed by id — see [_CombinedRow.foods].
+  final Map<String, Food>? foods;
 
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     final HearthTextStyles text = context.text;
+    final Food? food = ingredient.foodId == null
+        ? null
+        : foods?[ingredient.foodId];
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: HearthSpacing.xs),
@@ -464,7 +502,11 @@ class _IngredientRow extends StatelessWidget {
             child: Text(
               ingredient.quantity == null
                   ? ''
-                  : QuantityFormat.format(ingredient.quantity!),
+                  : FoodQuantityFormat.format(
+                      ingredient.quantity!,
+                      food: food,
+                      rawSources: [ingredient.rawText ?? ''],
+                    ),
               style: text.ingredient,
             ),
           ),
@@ -498,6 +540,7 @@ class _StepRow extends StatelessWidget {
     required this.step,
     required this.section,
     required this.recipe,
+    this.foods,
   });
 
   final RecipeStep step;
@@ -506,6 +549,9 @@ class _StepRow extends StatelessWidget {
   /// Carried so a step can still find an ingredient an import filed under a
   /// different heading — see [StepAmounts.recipe].
   final Recipe recipe;
+
+  /// The household's food library, keyed by id — see [_CombinedRow.foods].
+  final Map<String, Food>? foods;
 
   @override
   Widget build(BuildContext context) {
@@ -532,7 +578,12 @@ class _StepRow extends StatelessWidget {
                   step.text,
                   style: text.body.copyWith(color: colors.textSecondary),
                 ),
-                StepAmounts(step: step, section: section, recipe: recipe),
+                StepAmounts(
+                  step: step,
+                  section: section,
+                  recipe: recipe,
+                  foods: foods,
+                ),
               ],
             ),
           ),

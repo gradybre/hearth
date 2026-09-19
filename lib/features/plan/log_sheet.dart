@@ -66,6 +66,15 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   Food? _food;
   late double _servings = widget.existing?.entry.servings ?? 1;
 
+  /// Which of the food's servings [_servings] counts (spec R12).
+  ///
+  /// Null is the ordinary state: a count of the food's first serving, which
+  /// is what the stored column has always meant. It is only ever set from a
+  /// package-derived amount, where the count and the row it counts are one
+  /// answer — storing the count alone is what made a planned 30 oz reopen
+  /// at twice its calories.
+  late String? _servingOptionId = widget.existing?.entry.servingOptionId;
+
   /// Which unit the portion is being *entered* in (spec §5.6): one of the
   /// food's own servings, or a raw gram/ounce amount.
   ///
@@ -88,6 +97,16 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   /// Null until something is chosen, which is what [_unitFrom] resolves.
   PortionUnit? _entryUnit;
 
+  /// The unit the amount was last actually *entered* in.
+  ///
+  /// Not the same question as [_entryUnit], which is only what the field is
+  /// being displayed in. Switching chips asks to read one portion another
+  /// way; it does not restate the amount, so it must move neither the stored
+  /// portion nor the macros underneath it. Only typing or stepping does.
+  ///
+  /// Null until something is entered, which is what [_basisFor] resolves.
+  PortionUnit? _amountBasis;
+
   /// The unit this was last typed in, read back off the device.
   ///
   /// For a *new* portion that is the one this food was last logged in;
@@ -108,11 +127,74 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     return foods[entry.refId];
   }
 
+  /// The serving [_servings] counts.
+  ///
+  /// The named row where there is one, the food's first where there is not,
+  /// and nothing at all when a named row has since been removed — falling
+  /// back to the default there would re-cost the portion against a different
+  /// row, which is the whole of the defect this reference exists to prevent.
+  ServingOption? _standardFor(Map<String, Food> foods) {
+    final Food? food = _foodFor(foods);
+    if (food == null) return null;
+    final String? id = _servingOptionId;
+    if (id == null) return food.defaultServing;
+    for (final ServingOption option in food.servingOptions) {
+      if (option.id == id) return option;
+    }
+    return null;
+  }
+
+  /// What actually gets written: the per-serving macros, the portion, and
+  /// which serving that portion counts.
+  ///
+  /// The three travel together because they only mean anything together. A
+  /// package-derived amount is six of the row the label was reviewed against
+  /// — not six of whichever row the food lists first — so the count is
+  /// converted into that row's own count and the id goes with it.
+  ({Macros perServing, double portion, String? servingOptionId}) _basis({
+    required Map<String, Food> foods,
+    required Map<String, Recipe> recipes,
+  }) {
+    // A meal already logged is corrected against what it was logged as, and
+    // its reference is part of that record (spec §4).
+    if (_frozenPerServing case final Macros frozen) {
+      return (
+        perServing: frozen,
+        portion: _servings,
+        servingOptionId: widget.existing?.entry.servingOptionId,
+      );
+    }
+    final PackagePortion? package = _packagePortion(foods);
+    if (package != null && package.servingCount > 0) {
+      return (
+        perServing: package.macros.scaledBy(1 / package.servingCount),
+        portion: package.servingCount,
+        servingOptionId: package.serving.id,
+      );
+    }
+    return (
+      perServing: _perServing(foods: foods, recipes: recipes),
+      portion: _servings,
+      servingOptionId: _servingOptionId,
+    );
+  }
+
   /// Which of [units] the portion is entered in: what was tapped, else what
-  /// was remembered, else the food's default serving.
-  PortionUnit? _unitFrom(List<PortionUnit> units) =>
+  /// was remembered, else the serving the portion is actually counted in.
+  ///
+  /// [standard] before `units.first`, and the distinction is the whole of
+  /// it: `portionUnitsFor` lists every same-kind row in the food's own
+  /// order, so a reopened entry counted in the second of two rows reading
+  /// '1 cup' showed the *first* chip beside the second row's calories. The
+  /// arithmetic was right either way; the two lines named different rows,
+  /// which is exactly the hazard a package relationship creates.
+  PortionUnit? _unitFrom(List<PortionUnit> units, {ServingOption? standard}) =>
       _entryUnit ??
       PortionUnit.withId(units, _rememberedUnitId) ??
+      PortionUnit.withId(
+        units,
+        standard == null ? null : PortionUnit.serving(standard).id,
+      ) ??
       (units.isEmpty ? null : units.first);
 
   /// Reads back the unit stored under [key], if any is.
@@ -137,7 +219,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     if (unit == null) return;
     final PreferenceStore preferences = ref.read(preferenceStoreProvider);
     final String key = '${PreferenceStore.logUnitForEntry}$entryId';
-    final ServingOption? standard = _foodFor(foods)?.defaultServing;
+    final ServingOption? standard = _standardFor(foods);
     // Never throws. By the time this runs the meal is already saved, and
     // failing here would leave the sheet open over a committed entry — one
     // more tap of "Log it" and the day has the meal twice. Which unit a
@@ -216,6 +298,56 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     return snapshot.macros.scaledBy(1 / portion);
   }
 
+  /// The package-derived macros for the current portion, when this food can
+  /// only answer the unit the amount was *entered* in through a reviewed
+  /// package relationship (spec R9–R12). Null in every ordinary case.
+  ///
+  /// Keyed on [_amountBasis] rather than on whichever unit the field happens
+  /// to be displayed in, and that distinction is the entire reason the field
+  /// exists. Reopening a planned meal in the unit it was last typed in, or
+  /// tapping a chip to read one portion another way, is not a new amount: it
+  /// may move neither the stored portion nor the macros. Only typing or
+  /// stepping sets a basis, so only typing or stepping can reach this.
+  PackagePortion? _packagePortion(Map<String, Food> foods) {
+    if (_recipe != null) return null;
+    final PortionUnit? basis = _amountBasis;
+    if (basis == null) return null;
+    final Food? food = _foodFor(foods);
+    if (food == null) return null;
+    return packagePortionFor(
+      food: food,
+      basis: basis,
+      servings: _servings,
+      // Counted against the row this entry names, not the food's first.
+      standard: _standardFor(foods),
+    );
+  }
+
+  bool _usesApproximatePackage(
+    Map<String, Food> foods,
+    Map<String, Recipe> recipes,
+  ) {
+    final MealPlanEntry? entry = widget.existing?.entry;
+    if (entry?.isLogged ?? false) {
+      return entry?.macroSnapshot?.usesApproximatePackageNutrition ?? false;
+    }
+    final Recipe? recipe =
+        _recipe ??
+        (entry?.refType == PlanRefType.recipe ? recipes[entry?.refId] : null);
+    if (recipe != null) {
+      return MacroCalculator.forRecipe(
+        recipe,
+        foods: foods,
+      ).usesApproximatePackageNutrition;
+    }
+    final PackagePortion? package = _packagePortion(foods);
+    if (package != null) return package.isApproximate;
+    final Food? food = _foodFor(foods);
+    return _servingOptionId != null &&
+        food?.activePackageServing?.id == _servingOptionId &&
+        (food?.packageNutrition?.isApproximate ?? false);
+  }
+
   Macros _perServing({
     required Map<String, Food> foods,
     required Map<String, Recipe> recipes,
@@ -229,6 +361,20 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     // snapshot over an old meal, so it is the one place an edit made months
     // later can reach back and change what was eaten.
     if (_frozenPerServing case final Macros frozen) return frozen;
+    // A raw amount typed in a unit this food can only answer through a
+    // reviewed package relationship (spec R9–R12). The macros come from the
+    // *selected* nutrition row — 30 oz of a 10 oz package holding two 1 cup
+    // servings is six of the row the relationship was reviewed against, not
+    // six of whichever row happens to be first.
+    //
+    // Divided back out to a per-default-serving figure because that is what
+    // the `servings` column has always counted, and everything downstream
+    // rebuilds from it. The product of the two is what gets frozen, so the
+    // total is the selected row's answer either way.
+    final PackagePortion? package = _packagePortion(foods);
+    if (package != null && _servings > 0) {
+      return package.macros.scaledBy(1 / _servings);
+    }
     if (widget.existing != null) return widget.existing!.perServing;
     if (_recipe != null) {
       return MacroCalculator.forRecipe(_recipe!, foods: foods).perServing;
@@ -252,6 +398,12 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
         when widget.existing!.entry.isLogged) {
       return snap.coverage;
     }
+    // Read off the same row as the macros, never off `defaultServing`. Two
+    // rows can both read '1 cup' and know different nutrients, and a
+    // coverage claim frozen against the wrong one is permanent (spec §4,
+    // §5.6) — which is the exact defect NutrientCoverage exists to prevent.
+    final PackagePortion? package = _packagePortion(foods);
+    if (package != null) return package.coverage;
     if (widget.existing != null) return widget.existing!.liveCoverage;
     if (_recipe != null) {
       return MacroCalculator.forRecipe(_recipe!, foods: foods).coverage;
@@ -281,21 +433,30 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   }) async {
     setState(() => _busy = true);
     try {
-      final Macros perServing = _perServing(foods: foods, recipes: recipes);
+      final ({Macros perServing, double portion, String? servingOptionId})
+      basis = _basis(foods: foods, recipes: recipes);
       final NutrientCoverage coverage = _coverage(
         foods: foods,
         recipes: recipes,
       );
+      // Null for a meal already logged: its numbers came from its own frozen
+      // snapshot, so the qualifier frozen beside them is the one that still
+      // describes them — whatever the food's package relationship says today.
+      final bool? approximate = (widget.existing?.entry.isLogged ?? false)
+          ? null
+          : _usesApproximatePackage(foods, recipes);
 
       if (_isExisting) {
         await ref
             .read(planRepositoryProvider)
             .logEntry(
               widget.existing!.entry.id,
-              liveMacros: perServing,
+              liveMacros: basis.perServing,
               liveCoverage: coverage,
+              usesApproximatePackage: approximate,
+              servingOptionId: basis.servingOptionId,
               label: _label,
-              portion: _servings,
+              portion: basis.portion,
             );
         await _recordEntryUnit(widget.existing!.entry.id, typedIn, foods);
       } else {
@@ -306,9 +467,11 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
               slot: widget.slot,
               refType: _recipe != null ? PlanRefType.recipe : PlanRefType.food,
               refId: _recipe?.id ?? _food!.id,
-              servings: _servings,
-              loggedMacros: perServing,
+              servings: basis.portion,
+              servingOptionId: basis.servingOptionId,
+              loggedMacros: basis.perServing,
               loggedCoverage: coverage,
+              usesApproximatePackage: approximate ?? false,
               label: _label,
             );
         await _recordEntryUnit(added.id, typedIn, foods);
@@ -327,6 +490,11 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   }) async {
     setState(() => _busy = true);
     try {
+      // The same basis a log writes, minus the macros. A planned entry has
+      // no snapshot to answer from later, so the row it counts is the only
+      // thing standing between 30 oz and a reopened day that doubles it.
+      final ({Macros perServing, double portion, String? servingOptionId})
+      basis = _basis(foods: foods, recipes: recipes);
       final MealPlanEntry added = await ref
           .read(planRepositoryProvider)
           .add(
@@ -334,7 +502,8 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
             slot: widget.slot,
             refType: _recipe != null ? PlanRefType.recipe : PlanRefType.food,
             refId: _recipe?.id ?? _food!.id,
-            servings: _servings,
+            servings: basis.portion,
+            servingOptionId: basis.servingOptionId,
           );
       await _recordEntryUnit(added.id, typedIn, foods);
       ref.invalidate(dayEntriesProvider);
@@ -349,39 +518,77 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   ///
   /// Macros are recomputed from the current library rather than copied from
   /// the old snapshot: repeating a meal should record what that food is now.
+  ///
+  /// Costed against the serving that portion actually counted, never against
+  /// whichever row the food happens to list first. A package-derived amount
+  /// is six of the row its label was reviewed against, and reading that six
+  /// against another row freezes double the meal it claims to repeat —
+  /// history that §4 then forbids correcting.
   Future<void> _logAgain(
     RecentLog recent, {
     required Map<String, Food> foods,
     required Map<String, Recipe> recipes,
   }) async {
+    final Food? food = recent.refType == PlanRefType.food
+        ? foods[recent.refId]
+        : null;
+    final ServingOption? serving = food == null
+        ? null
+        : EntryResolver.servingForEntry(food, recent.servingOptionId);
+
+    if (recent.refType == PlanRefType.food && serving == null) {
+      // Nothing honest to repeat. The default row is a different serving
+      // with different macros, and zero is not what was eaten either — so
+      // the one-tap path asks rather than guessing, the same answer the
+      // plan surface already gives an uncostable entry.
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(
+            food == null
+                ? '${recent.label} is no longer in your foods.'
+                : 'The serving ${recent.label} was logged in has been '
+                      'removed. Choose a portion again.',
+          ),
+        ),
+      );
+      if (food != null) _choose(food);
+      return;
+    }
+
     setState(() => _busy = true);
     try {
+      final Recipe? recipe = recent.refType == PlanRefType.recipe
+          ? recipes[recent.refId]
+          : null;
+      final RecipeMacros? recipeMacros = recipe == null
+          ? null
+          : MacroCalculator.forRecipe(recipe, foods: foods);
+
       final Macros perServing = switch (recent.refType) {
-        PlanRefType.recipe =>
-          recipes[recent.refId] == null
-              ? Macros.zero
-              : MacroCalculator.forRecipe(
-                  recipes[recent.refId]!,
-                  foods: foods,
-                ).perServing,
-        PlanRefType.food =>
-          foods[recent.refId]?.defaultServing?.macros ?? Macros.zero,
+        PlanRefType.recipe => recipeMacros?.perServing ?? Macros.zero,
+        PlanRefType.food => serving!.macros,
       };
       // Beside the numbers, from the same source, for the same reason: a
       // recipe's coverage lives in its ingredients and cannot be read back
-      // off its total (spec §5.6).
+      // off its total (spec §5.6). For a food it is read off the very row
+      // the macros came from — two rows can both read '1 cup' and know
+      // different nutrients.
       final NutrientCoverage coverage = switch (recent.refType) {
         PlanRefType.recipe =>
-          recipes[recent.refId] == null
-              ? const NutrientCoverage.notRecorded()
-              : MacroCalculator.forRecipe(
-                  recipes[recent.refId]!,
-                  foods: foods,
-                ).coverage,
-        PlanRefType.food => switch (foods[recent.refId]?.defaultServing) {
-          final ServingOption serving => NutrientCoverage.ofOne(serving.macros),
-          null => const NutrientCoverage.notRecorded(),
-        },
+          recipeMacros?.coverage ?? const NutrientCoverage.notRecorded(),
+        PlanRefType.food => NutrientCoverage.ofOne(serving!.macros),
+      };
+      // Read off the food as it stands now rather than off the old
+      // snapshot: the qualifier has to describe the relationship *this*
+      // repeat is being costed through (spec R10, R12), and only when the
+      // row being counted is the one that relationship is anchored to.
+      final bool approximate = switch (recent.refType) {
+        PlanRefType.recipe =>
+          recipeMacros?.usesApproximatePackageNutrition ?? false,
+        PlanRefType.food =>
+          recent.servingOptionId != null &&
+              food?.activePackageServing?.id == recent.servingOptionId &&
+              (food?.packageNutrition?.isApproximate ?? false),
       };
 
       await ref
@@ -392,6 +599,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
             slot: widget.slot,
             liveMacros: perServing,
             liveCoverage: coverage,
+            usesApproximatePackage: approximate,
           );
       ref.invalidate(dayEntriesProvider);
       ref.invalidate(recentLogsProvider);
@@ -449,7 +657,10 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     setState(() {
       _food = food;
       _entryUnit = null;
+      _amountBasis = null;
       _rememberedUnitId = null;
+      // A different food's servings are not this one's.
+      _servingOptionId = null;
     });
     unawaited(_recallUnit('${PreferenceStore.logUnitForFood}${food.id}'));
   }
@@ -541,6 +752,11 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     final HearthColors colors = context.colors;
     final Macros total = perServing.scaledBy(_servings);
     final bool alreadyLogged = widget.existing?.entry.isLogged ?? false;
+    // Frozen for a meal already logged, live for one about to be (spec R12).
+    final MacroSnapshot? frozenSnapshot = widget.existing?.entry.macroSnapshot;
+    final bool approximatePackage = alreadyLogged
+        ? frozenSnapshot?.usesApproximatePackageNutrition ?? false
+        : _usesApproximatePackage(foods, recipes);
 
     // Which units this portion can be typed in, and which of them it is being
     // typed in. A raw gram or ounce amount is always available for a food
@@ -550,16 +766,18 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     final int daysFromToday = _daysFromToday;
 
     final Food? food = _foodFor(foods);
-    final ServingOption? standard = food?.defaultServing;
-    final List<PortionUnit> units = portionUnitsFor(food);
-    final PortionUnit? unit = _unitFrom(units);
+    final ServingOption? standard = _standardFor(foods);
+    final List<PortionUnit> units = portionUnitsFor(food, standard: standard);
+    final PortionUnit? unit = _unitFrom(units, standard: standard);
     // Rounded for the field only. The stored portion moves when somebody
     // types or steps, never because a chip was tapped: one pot is
     // 5.996473604060913 oz, and a field cannot show that, but a portion that
     // rounded itself every time the unit changed would drift.
     final double count = unit == null
         ? _servings
-        : unit.forDisplay(unit.countOf(_servings, standard: standard?.amount));
+        : unit.forDisplay(
+            unit.countOf(_servings, standard: standard?.amount, food: food),
+          );
 
     // Scrollable, and through the sheet's own controller so that dragging
     // the content also grows the sheet (spec §6.3).
@@ -602,6 +820,16 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
                       'F ${total.fatG.round()}',
             style: context.text.metadata.copyWith(color: colors.textMuted),
           ),
+          // Said beside the number rather than folded into it: a package
+          // printed as 'about 2 servings' gives an exact-looking total that
+          // is not an exact measurement (spec R10, R12).
+          if (approximatePackage) ...<Widget>[
+            const SizedBox(height: HearthSpacing.xs),
+            Text(
+              'Uses approximate package servings',
+              style: context.text.metadata.copyWith(color: colors.textMuted),
+            ),
+          ],
           const SizedBox(height: HearthSpacing.lg),
           // Which unit the portion is entered in, before how many of it.
           if (units.length > 1) ...<Widget>[
@@ -613,7 +841,23 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
                 // — otherwise the stepper keeps what was typed, and the next
                 // unfocus commits that stale number over the conversion.
                 FocusScope.of(context).unfocus();
-                setState(() => _entryUnit = picked);
+                setState(() {
+                  // Pin the basis before the display unit moves. Reading the
+                  // same portion in another unit is not a new amount, so it
+                  // may change neither the stored portion nor the macros.
+                  //
+                  // Pinned to the food's own default serving rather than to
+                  // whichever unit the field opened in. The stored portion
+                  // has always been a count of that serving, and a
+                  // remembered raw unit is only how it is shown — pinning
+                  // the display unit would let a chip tap on a reopened
+                  // planned meal re-cost it through the package
+                  // relationship without a keystroke (spec R12, §4).
+                  _amountBasis ??= standard == null
+                      ? null
+                      : PortionUnit.serving(standard);
+                  _entryUnit = picked;
+                });
                 if (food != null) {
                   unawaited(
                     ref
@@ -645,9 +889,16 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
             basisId: unit?.id,
             format: unit == null ? writeAmount : unit.format,
             onChanged: (double value) => setState(() {
+              // Typing or stepping *is* the basis — the one place the unit
+              // behind the macros is allowed to change.
+              _amountBasis = unit;
               _servings = unit == null
                   ? value
-                  : unit.toDefaultServings(value, standard: standard?.amount);
+                  : unit.toDefaultServings(
+                      value,
+                      standard: standard?.amount,
+                      food: food,
+                    );
             }),
           ),
           // What an amount in grams actually comes to, before it is

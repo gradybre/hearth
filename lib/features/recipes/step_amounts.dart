@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
-import '../../domain/format/quantity_format.dart';
+import '../../domain/format/food_quantity_format.dart';
+import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/recipes/step_ingredients.dart';
 
@@ -37,6 +38,7 @@ class StepAmounts extends StatelessWidget {
     required this.section,
     this.recipe,
     this.forCooking = false,
+    this.foods,
     super.key,
   });
 
@@ -55,6 +57,12 @@ class StepAmounts extends StatelessWidget {
   /// compact metadata line. Defaults to `false`, which is the presentation
   /// recipe details and the All-steps view keep using.
   final bool forCooking;
+
+  /// The household's food library, keyed by id, for the matched-food mass
+  /// display preference and pack size (spec R1–R8) — one snapshot passed
+  /// down from the screen rather than fetched per row. Null is read the same
+  /// as "no match", which formats with the conservative default.
+  final Map<String, Food>? foods;
 
   /// The focused-card ingredient row size.
   ///
@@ -97,7 +105,8 @@ class StepAmounts extends StatelessWidget {
     final String line = used
         .map(
           (RecipeIngredient i) =>
-              '${QuantityFormat.format(i.quantity!)} ${i.name}',
+              '${FoodQuantityFormat.format(i.quantity!, food: foods?[i.foodId], rawSources: [i.rawText ?? ''])} '
+              '${i.name}',
         )
         .join('  ·  ');
 
@@ -163,7 +172,8 @@ class StepAmounts extends StatelessWidget {
                 // Quantity first, amount and name kept together on one line
                 // rather than a rigid amount column — a fixed-width column
                 // is the thing that breaks on a small phone.
-                '${QuantityFormat.format(used[i].quantity!)} ${used[i].name}',
+                '${FoodQuantityFormat.format(used[i].quantity!, food: foods?[used[i].foodId], rawSources: [used[i].rawText ?? ''])} '
+                '${used[i].name}',
                 style: context.text.ingredient.copyWith(
                   fontSize: _cookingIngredientFontSize,
                   height: 1.4,

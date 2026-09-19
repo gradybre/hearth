@@ -38,6 +38,7 @@ abstract final class PlanMapper {
     'sodium_mg',
     'cholesterol_mg',
     'coverage',
+    'uses_approximate_package_nutrition',
     'servings',
     'captured_at',
     'label',
@@ -65,6 +66,12 @@ abstract final class PlanMapper {
         // because once a meal is eaten its ingredients are gone and a partial
         // total can never be re-qualified.
         'coverage': snapshot.coverage.toJson(),
+        // Whether these numbers were reached through an 'about N servings'
+        // package count (spec R10, R12). Written beside them rather than
+        // looked up later, because the relationship behind it can be
+        // corrected or removed and this meal still happened the way it did.
+        'uses_approximate_package_nutrition':
+            snapshot.usesApproximatePackageNutrition,
         'servings': snapshot.servings,
         'captured_at': snapshot.capturedAt.toIso8601String(),
         'label': snapshot.label,
@@ -97,6 +104,11 @@ abstract final class PlanMapper {
       // understands all read as "not recorded" — never as complete. A
       // snapshot frozen before coverage existed cannot earn it retroactively.
       coverage: NutrientCoverage.fromJson(decoded['coverage']),
+      // Absent reads false. A snapshot frozen before this existed made no
+      // approximate claim, and inventing one for it would be a claim about
+      // history nobody made.
+      usesApproximatePackageNutrition:
+          decoded['uses_approximate_package_nutrition'] == true,
       unreadFields: <String, Object?>{
         for (final MapEntry<String, Object?> field in decoded.entries)
           if (!_snapshotKeys.contains(field.key)) field.key: field.value,
@@ -116,6 +128,7 @@ abstract final class PlanMapper {
     refType: refTypeFromSql(row.refType),
     refId: row.refId,
     servings: row.servings,
+    servingOptionId: servingOptionIdFromSql(row.servingOptionId),
     isPlanned: row.isPlanned,
     isLogged: row.isLogged,
     loggedAt: row.loggedAt,
@@ -132,6 +145,7 @@ abstract final class PlanMapper {
     refType: refTypeToSql(entry.refType),
     refId: entry.refId,
     servings: entry.servings,
+    servingOptionId: Value<String?>(entry.servingOptionId),
     isPlanned: Value<bool>(entry.isPlanned),
     isLogged: Value<bool>(entry.isLogged),
     loggedAt: Value<DateTime?>(entry.loggedAt),
@@ -153,6 +167,12 @@ abstract final class PlanMapper {
     'ref_type': refTypeToSql(entry.refType),
     'ref_id': entry.refId,
     'servings': entry.servings,
+    // Always said out loud, and '' rather than null for 'none'. The server
+    // preserves what it holds when this key is absent — which is how an
+    // older client's write leaves a newer one's reference alone — so a
+    // deliberate clear has to be distinguishable from silence (spec R13's
+    // omitted-versus-explicit rule, applied to the same problem here).
+    'serving_option_id': entry.servingOptionId ?? '',
     'is_planned': entry.isPlanned,
     'is_logged': entry.isLogged,
     'logged_at': entry.loggedAt?.toIso8601String(),
@@ -208,6 +228,16 @@ abstract final class PlanMapper {
     'notes': day.notes,
     'updated_at': day.updatedAt.toUtc().toIso8601String(),
   };
+
+  /// A stored serving reference, with the empty sentinel read as none.
+  ///
+  /// '' is what a current client writes to say 'explicitly no row'; reading
+  /// it back as an id would send every lookup hunting for a serving whose id
+  /// is the empty string.
+  static String? servingOptionIdFromSql(String? value) {
+    final String id = (value ?? '').trim();
+    return id.isEmpty ? null : id;
+  }
 
   static double _double(Object? value) => value is num ? value.toDouble() : 0;
 

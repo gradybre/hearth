@@ -16,6 +16,7 @@ class ParsedIngredient {
     this.quantity,
     this.prepNote,
     this.isOptional = false,
+    this.packageUnit,
   });
 
   /// The line exactly as it came in, kept so the user can see what the parser
@@ -34,6 +35,15 @@ class ParsedIngredient {
   /// Set by phrases like "to taste" or a trailing "(optional)". Optional
   /// ingredients are excluded from macros and the shopping list (spec §5.2).
   final bool isOptional;
+
+  /// The mass unit implied by explicit pack-size syntax on this line — "2 x
+  /// 400g cans", "4 (10 oz) bags", "4 10 oz bags" — or null when the line
+  /// carries no such evidence.
+  ///
+  /// Display evidence only (spec R3.3): this never reparses [quantity] and
+  /// never replaces its canonical amount. A recipe's mentioned package is
+  /// not proof of the product a shopper buys.
+  final Unit? packageUnit;
 
   bool get isQuantified => quantity != null;
 
@@ -157,6 +167,7 @@ abstract final class IngredientParser {
     }
 
     final Quantity? quantity;
+    Unit? packageUnit;
     final RegExpMatch? amountMatch = _leadingAmount.firstMatch(working);
     if (amountMatch == null) {
       quantity = null;
@@ -231,6 +242,7 @@ abstract final class IngredientParser {
         rest = _tidy(packSource.substring(pack.end))
             .replaceFirst(_container, '');
         rest = _tidy(rest);
+        if (packUnit.kind == UnitKind.mass) packageUnit = packUnit;
       } else {
         final int space = rest.indexOf(' ');
         final String firstToken = space < 0 ? rest : rest.substring(0, space);
@@ -259,6 +271,7 @@ abstract final class IngredientParser {
       quantity: quantity,
       prepNote: prepNote,
       isOptional: isOptional,
+      packageUnit: packageUnit,
     );
   }
 
@@ -294,6 +307,15 @@ abstract final class IngredientParser {
     }
     return parseAmount(text);
   }
+
+  /// The mass unit implied by explicit pack-size syntax in [raw] — "2 x
+  /// 400g cans", "4 (10 oz) bags", "4 10 oz bags" — or null when the line
+  /// carries no such evidence.
+  ///
+  /// Display evidence only (spec R3.3): a recipe's mentioned package is not
+  /// proof of the product a shopper buys, so this is used only to choose a
+  /// display unit, never to reparse or replace a canonical quantity.
+  static Unit? packageUnitFor(String raw) => parse(raw).packageUnit;
 
   static String _tidy(String value) => value
       .replaceAll(RegExp(r'\s+'), ' ')
