@@ -1,0 +1,21 @@
+{
+  "plan_id": "P-HEARTH-COOK-002",
+  "version": 1,
+  "status": "reviewed_local_checks_passed",
+  "approval": "APPROVAL.md",
+  "baseline": "0ad6d3a5d2119771198d7632d67de15df9c8be5a",
+  "files": {
+    "PLAN.md": "31c87ec49975c737db5d0722bd1f6168cb1bf15f678a0bcd4b86c93f6257a07f",
+    "EXECUTION.md": "48d4c194ed1090931a8aa21c65ac2807d8285a63615a79ba41da97110a0020fc"
+  },
+  "baseline_test": {
+    "command": "flutter test test/features/recipes/cook_ingredients_layout_test.dart test/features/recipes/cook_along_test.dart test/features/recipes/cook_scaled_test.dart --reporter compact",
+    "exit_code": 0,
+    "log": "/private/tmp/hearth-cook-directions-baseline.log"
+  },
+  "preview": "/Users/brendan/Documents/Codex/2026-09-18/please-use-the-astra-loop-engineering/cook-directions-preview.html",
+  "candidateSources": {
+    "lib/features/recipes/cook_along_screen.dart": "880848e40226397bc590b744b604c7d8cd7461cec1288fc3a630d4186bde2078",
+    "lib/features/recipes/cook_instruction_blocks.dart": "f82ad6a3b28a53a851ebc2c74c99bd3d6291807a95d31293b40365bc978a9fd5"
+  }
+}

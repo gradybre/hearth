@@ -180,7 +180,7 @@ belongs to the Nutrition section.
   - *Data note:* volume↔weight conversion (cups → grams) needs per-ingredient density data. Start with a density table for common ingredients; fall back to literal multiply when density is unknown, and flag it.
   - Non-linear items (salt, leavening, bake time) are **flagged, not auto-adjusted** — the user sees a note that these may not scale linearly.
 - **Cook-along walkthrough (Claude-style, all features):**
-  - Step-by-step cards, one step in focus.
+  - Step-by-step cards, one step in focus. Focused directions use a top-aligned reading column (maximum 560 logical pixels), a single compact step-progress label, and left-aligned 24-point text in spaced reading blocks. Existing paragraph breaks are respected; clear sentence boundaries may become display breaks, with conservative protection for quantities and abbreviations. Wording, punctuation, order, stored steps and timer behavior remain unchanged. The progress label scrolls with the directions, and accessibility text scaling is unrestricted.
   - Checkable steps.
   - Ingredients pinned/visible on screen during steps. Focused cards show matched amounts in a “For this step” panel directly below the directions: one quantity-first row per ingredient, 22-point base type, with full text scaling and wrapping. Short screens and large text keep the content and cooking actions scrollable together.
   - Embedded timers, with **multiple concurrent timers** (sauce + pasta + oven at once) — single-timer feels broken in real cooking.
