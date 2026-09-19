@@ -182,7 +182,7 @@ belongs to the Nutrition section.
 - **Cook-along walkthrough (Claude-style, all features):**
   - Step-by-step cards, one step in focus.
   - Checkable steps.
-  - Ingredients pinned/visible on screen during steps.
+  - Ingredients pinned/visible on screen during steps. Focused cards show matched amounts in a “For this step” panel directly below the directions: one quantity-first row per ingredient, 22-point base type, with full text scaling and wrapping. Short screens and large text keep the content and cooking actions scrollable together.
   - Embedded timers, with **multiple concurrent timers** (sauce + pasta + oven at once) — single-timer feels broken in real cooking.
   - **Large tap targets / tap-anywhere-to-advance** for messy-hands use; **keep-screen-awake** while in cook mode.
   - *Voice control deferred to a later phase* (large targets + keep-awake cover v1).
