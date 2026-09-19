@@ -1,5 +1,5 @@
 {
-  "status": "local_checks_passed_reviews_and_native_walkthrough_pending",
+  "status": "accepted_for_pr_ci",
   "runId": "cook-directions-20260919",
   "root": "/private/tmp/hearth-directions-20260919",
   "author": {
@@ -15,37 +15,53 @@
     "ownerStopped": true,
     "integration": "Astra fixed loose column width, superseded centering assertion, and moved progress into scrolling content after red regression."
   },
-  "nativeMac": "build/start passed; interactive check blocked by locked Mac; fixture stopped",
-  "independentCodeReview": "pending explicit egress permission",
-  "independentVisualReview": "pending explicit egress permission",
+  "nativeMac": {
+    "candidate": "3ad344b",
+    "fixture": "Actual CookAlongScreen; synthetic in-memory recipe and timer/session adapters; user-supplied instruction text",
+    "status": "passed",
+    "checks": [
+      "Directions display as three left-aligned spaced blocks",
+      "Scroll reaches full final paragraph and both ingredient amounts",
+      "Start6min timer remains on step1",
+      "Markdone goes exactly to step2 withonecompletedstep",
+      "Step2 opens at top withtwo separate sentenceblocks",
+      "Back returns tostep1 at top with completedstatus andrunningtimer",
+      "Nativeaccessibility exposesoriginalfullinstructiononce plusseparateingredients/actions"
+    ],
+    "scope": "Mac native UI and accessibility tree; no VoiceOver audio test or live timer notification delivery claim",
+    "previewStopped": true,
+    "normalMacBuildRestored": true
+  },
+  "independentCodeReview": "accepted after two bounded numeric-boundary repairs",
+  "independentVisualReview": "accepted;24pt retained",
   "checks": [
     {
       "name": "format",
       "code": 0,
       "signal": null,
-      "elapsedMs": 1498
+      "elapsedMs": 1580
     },
     {
       "name": "analyze",
       "code": 0,
       "signal": null,
-      "elapsedMs": 3708
+      "elapsedMs": 3803
     },
     {
       "name": "full-test",
       "code": 0,
       "signal": null,
-      "elapsedMs": 89176
+      "elapsedMs": 105002
     },
     {
       "name": "gallery",
       "code": 0,
       "signal": null,
-      "elapsedMs": 10122
+      "elapsedMs": 11237
     }
   ],
   "fullTest": {
-    "passed": 3478,
+    "passed": 3481,
     "skipped": 71,
     "exitCode": 0
   },
@@ -56,6 +72,19 @@
   "negativeTests": [
     "Old centered paragraph fails three-block layout assertion",
     "No-split formatter fails three-sentence assertion",
-    "Fixed progress chrome fails full completion-label visibility at 320x568 3x with a running timer"
-  ]
+    "Fixed progress chrome fails full completion-label visibility at 320x568 3x with a running timer",
+    "Sentence-ending digits failed before restricting initial protection to letters",
+    "Inline numbered list markers failed before per-block prefix protection"
+  ],
+  "sources": {
+    "lib/features/recipes/cook_along_screen.dart": "880848e40226397bc590b744b604c7d8cd7461cec1288fc3a630d4186bde2078",
+    "lib/features/recipes/cook_instruction_blocks.dart": "f82ad6a3b28a53a851ebc2c74c99bd3d6291807a95d31293b40365bc978a9fd5"
+  },
+  "reviewSessions": {
+    "code-a1": "8294d8c8-dbec-4b2d-803b-6b51b23b7807",
+    "code-repair-a1": "60fef5f9-9b22-4e19-b482-8238a01ff274",
+    "code-repair-a2": "5ea2199c-61e8-4f3d-b561-d3e5e299ad9e",
+    "visual-font-a1": "7420689f-7a26-46c1-b8d0-c1b2135771b8",
+    "visual-responsive-a1": "550668bf-0971-4fbd-a082-51babfebd7ca"
+  }
 }

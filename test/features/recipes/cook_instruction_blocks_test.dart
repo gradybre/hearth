@@ -9,6 +9,40 @@ import 'package:hearth/features/recipes/cook_instruction_blocks.dart';
 String _stripWhitespace(String s) => s.replaceAll(RegExp(r'\s+'), '');
 
 void main() {
+  test('inline numbered items do not leave a bare number block', () {
+    expect(cookInstructionBlocks('1. Chop. 2. Fry. 3. Serve.'), <String>[
+      '1. Chop.',
+      '2. Fry.',
+      '3. Serve.',
+    ]);
+  });
+
+  test('sentence-ending numbers are not mistaken for initials', () {
+    expect(cookInstructionBlocks('Repeat step 3. Add the salt.'), <String>[
+      'Repeat step 3.',
+      'Add the salt.',
+    ]);
+    expect(cookInstructionBlocks('Serve 4. Enjoy!'), <String>[
+      'Serve 4.',
+      'Enjoy!',
+    ]);
+    expect(cookInstructionBlocks('Set the dial to 1.5. Stir well.'), <String>[
+      'Set the dial to 1.5.',
+      'Stir well.',
+    ]);
+  });
+
+  test('numbered line markers stay attached to their instruction', () {
+    expect(
+      cookInstructionBlocks('1. Heat oil. Add garlic.\n2. Stir.'),
+      <String>['1. Heat oil.', 'Add garlic.', '2. Stir.'],
+    );
+    expect(cookInstructionBlocks('• 1. Heat oil. Add garlic.'), <String>[
+      '• 1. Heat oil.',
+      'Add garlic.',
+    ]);
+  });
+
   group('the supplied chili screenshot text', () {
     const String s1 =
         'Heat 1 tbsp neutral oil in a large skillet over medium-high heat.';

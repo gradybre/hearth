@@ -1,7 +1,7 @@
 {
   "sources": {
     "lib/features/recipes/cook_along_screen.dart": "880848e40226397bc590b744b604c7d8cd7461cec1288fc3a630d4186bde2078",
-    "lib/features/recipes/cook_instruction_blocks.dart": "7e25802d7852f8641b0ffb16ab0d2290ecd2215b3cac584c3261a76b8a6877da"
+    "lib/features/recipes/cook_instruction_blocks.dart": "f82ad6a3b28a53a851ebc2c74c99bd3d6291807a95d31293b40365bc978a9fd5"
   },
   "images": {
     "before-dark.png": "30c134a0d889d9bbc702badd1ac3e0f9415e53c553b8ad8d2560c589537dc4aa",
@@ -18,5 +18,6 @@
     "small-3x-timer.png": "6bafb272a90842256a365d08a7ec8e40b37700bf9f20a80a1281b9e3c1cdb7e3"
   },
   "comparison_note": "24/26 comparison images captured before the same-height progress label moved inside the scroll region. Final candidate captures include that viewport repair; body typography is unchanged.",
-  "fixture": "Synthetic recipe using user-supplied instruction wording; no household database queried."
+  "fixture": "Synthetic recipe using user-supplied instruction wording; no household database queried.",
+  "formatterRepair": "Final numeric-boundary repairs do not change these fixture renderings; final gallery rerun confirms exact image bytes."
 }

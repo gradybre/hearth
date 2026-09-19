@@ -61,6 +61,8 @@ final RegExp _lineBreak = RegExp(r'\r\n|\r|\n');
 final RegExp _sentenceEnders = RegExp(r'[.!?]+');
 final RegExp _wordChar = RegExp(r'[A-Za-z0-9]');
 final RegExp _digit = RegExp(r'[0-9]');
+final RegExp _initial = RegExp(r'^[A-Za-z]$');
+final RegExp _numberedPrefix = RegExp(r'(?:[-*•]\s+)?[0-9]+\.');
 final RegExp _boundaryStart = RegExp(r'[A-Z0-9"\u201c\u2018\u2019]');
 final RegExp _whitespace = RegExp(r'\s');
 const String _closingMarks = '"\'\u2019\u201d';
@@ -96,6 +98,8 @@ List<String> cookInstructionBlocks(String text) {
 List<String> _splitSentences(String line) {
   final List<String> result = <String>[];
   int start = 0;
+  // A leading “1.” is a list marker; a number ending a sentence is not.
+  int? prefixEnd = _numberedPrefix.matchAsPrefix(line)?.end;
 
   for (final RegExpMatch match in _sentenceEnders.allMatches(line)) {
     if (match.start < start) continue; // inside an already-consumed block
@@ -114,6 +118,7 @@ List<String> _splitSentences(String line) {
     }
 
     if (punct == '.') {
+      if (match.end == prefixEnd) continue;
       // A decimal number: a digit immediately on either side of the dot.
       final bool digitBefore =
           match.start > 0 && _digit.hasMatch(line[match.start - 1]);
@@ -125,7 +130,8 @@ List<String> _splitSentences(String line) {
       // the dot (this also protects each dot of "U.S.", "e.g.", "i.e.").
       final String word = _wordBefore(line, match.start);
       if (word.isNotEmpty &&
-          (_abbreviations.contains(word.toLowerCase()) || word.length == 1)) {
+          (_abbreviations.contains(word.toLowerCase()) ||
+              _initial.hasMatch(word))) {
         continue;
       }
     }
@@ -147,7 +153,9 @@ List<String> _splitSentences(String line) {
     if (!_boundaryStart.hasMatch(line[j])) continue; // lowercase continuation
 
     result.add(line.substring(start, end).trim());
-    start = end;
+    start = j;
+    // Recheck at the next block too: inline “1. Chop. 2. Fry.” stays tidy.
+    prefixEnd = _numberedPrefix.matchAsPrefix(line, start)?.end;
   }
 
   final String rest = line.substring(start).trim();
