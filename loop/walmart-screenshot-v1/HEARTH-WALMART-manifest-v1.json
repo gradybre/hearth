@@ -1,0 +1,21 @@
+{
+  "plan_id": "P-HEARTH-WALMART-001",
+  "revision": 1,
+  "status": "proposed_awaiting_initial_approval",
+  "approval": null,
+  "source_repository": "/Users/brendan/Developer/hearth",
+  "main_sha": "4be6bc8292db5b4038ce4ebf5341878911e382d3",
+  "integration_sha": "75c9bb25a72210e00cdcd6b7855b544455483437",
+  "dependency_pr": "https://github.com/gradybre/hearth/pull/110",
+  "scope_assumption": "Visible Walmart URLs only; clarification unanswered; not approved by silence.",
+  "baseline": {
+    "passed": 59,
+    "exit_code": 0
+  },
+  "workers_dispatched": false,
+  "files": {
+    "HEARTH-WALMART-PLAN-v1.md": "e6e0e7e17c6e048836ceac226196a3ae4ab41cc4fb542cc9945649d40ac750b3",
+    "HEARTH-WALMART-EXECUTION-v1.md": "d765ebc9cce07e740ba84d5cb3304843105d68d4758fe05cd9ca84c75f1f19bc",
+    "HEARTH-WALMART-baseline.log": "12122ae2e072c5352bf46997d2fb36518cad53f6870020502419a997b666059d"
+  }
+}

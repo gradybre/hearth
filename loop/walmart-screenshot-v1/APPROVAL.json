@@ -1,0 +1,12 @@
+{
+  "plan_id": "P-HEARTH-WALMART-001",
+  "revision": 1,
+  "approved_at": "2026-09-19T23:32:53.533117+00:00",
+  "user_message": "Approve",
+  "scope": "All behavior and release boundaries in the versioned v1 plan, including visible-link extraction only and PR110 dependency gates.",
+  "files": {
+    "HEARTH-WALMART-PLAN-v1.md": "e6e0e7e17c6e048836ceac226196a3ae4ab41cc4fb542cc9945649d40ac750b3",
+    "HEARTH-WALMART-EXECUTION-v1.md": "d765ebc9cce07e740ba84d5cb3304843105d68d4758fe05cd9ca84c75f1f19bc",
+    "HEARTH-WALMART-baseline.log": "12122ae2e072c5352bf46997d2fb36518cad53f6870020502419a997b666059d"
+  }
+}
