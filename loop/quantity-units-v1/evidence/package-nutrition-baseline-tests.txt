@@ -1,0 +1,191 @@
+Resolving dependencies...
+Downloading packages...
+  _fe_analyzer_shared 103.0.0 (108.0.0 available)
+  analyzer 13.3.0 (14.4.0 available)
+  analyzer_buffer 0.3.3 (0.3.4 available)
+  android_file_picker 1.1.0 (2.0.0 available)
+  build 4.0.10 (4.0.11 available)
+  build_config 1.3.2 (1.3.3 available)
+  build_daemon 4.1.5 (4.1.6 available)
+  build_runner 2.16.0 (2.16.1 available)
+  built_value 8.12.7 (8.13.0 available)
+  cli_util 0.5.2 (0.6.0 available)
+  clock 1.1.2 (1.1.3 available)
+  code_assets 1.2.1 (2.1.0 available)
+  code_builder 4.11.1 (4.12.0 available)
+  cupertino_ui 1.0.1 (1.1.0 available)
+  dbus 0.7.15 (0.8.0 available)
+  drift 2.34.3 (2.35.0 available)
+  drift_dev 2.34.5 (2.35.0 available)
+  file_picker 12.2.0 (13.1.0 available)
+  file_picker_darwin 1.1.0 (2.1.0 available)
+  file_picker_linux 1.1.0 (2.0.0 available)
+  file_picker_platform_interface 3.3.0 (4.0.0 available)
+  file_picker_web 3.1.0 (4.0.0 available)
+  flutter_local_notifications 22.3.0 (22.3.1 available)
+  flutter_riverpod 3.4.2 (3.4.3 available)
+  flutter_secure_storage 11.0.0 (11.2.0 available)
+  flutter_secure_storage_darwin 0.4.0 (0.4.3 available)
+  flutter_secure_storage_linux 3.0.2 (3.0.3 available)
+  flutter_secure_storage_platform_interface 2.0.3 (2.1.1 available)
+  glob 2.1.3 (2.2.0 available)
+  go_router 18.0.0 (18.0.1 available)
+  hooks 2.0.2 (2.2.0 available)
+  image_picker_android 0.8.13+21 (0.8.13+23 available)
+  io 1.0.5 (1.1.0 available)
+  jni_flutter 1.0.2 (1.0.3 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  material_ui 1.1.0 (1.3.0 available)
+  mime 2.0.0 (2.1.0 available)
+  mobile_scanner 7.4.0 (7.4.2 available)
+  native_toolchain_c 0.19.2 (0.19.5 available)
+  objective_c 9.5.0 (9.6.0 available)
+  package_config 2.2.0 (3.0.0 available)
+  passkeys_platform_interface 2.9.0 (2.10.0 available)
+  platform 3.1.6 (3.2.0 available)
+  pool 1.5.2 (1.5.3 available)
+  pub_semver 2.2.0 (2.2.1 available)
+  pubspec_parse 1.5.0 (1.6.0 available)
+  record_use 0.6.0 (1.1.1 available)
+  riverpod 3.4.2 (3.4.3 available)
+  riverpod_analyzer_utils 1.0.0-dev.11 (1.0.0-dev.12 available)
+  riverpod_annotation 4.0.6 (4.0.7 available)
+  riverpod_generator 4.0.8 (4.0.9 available)
+  shared_preferences_android 2.4.27 (2.4.28 available)
+  shared_preferences_foundation 2.5.6 (2.5.7 available)
+  source_gen 4.2.4 (4.3.0 available)
+  sqlite3 3.5.2 (3.6.0 available)
+  stack_trace 1.12.1 (1.12.2 available)
+  stream_transform 2.1.1 (2.1.2 available)
+  synchronized 3.4.1+2 (3.4.2 available)
+  test 1.31.1 (1.32.0 available)
+  test_api 0.7.12 (0.7.14 available)
+  test_core 0.6.18 (0.6.20 available)
+  url_launcher_android 6.3.32 (6.3.33 available)
+  url_launcher_ios 6.4.1 (6.4.2 available)
+  url_launcher_linux 3.2.2 (3.2.3 available)
+  url_launcher_macos 3.2.5 (3.2.6 available)
+  url_launcher_windows 3.1.5 (3.1.6 available)
+  vector_math 2.4.0 (2.4.2 available)
+  wakelock_plus 1.7.0 (1.8.0 available)
+  wakelock_plus_platform_interface 1.6.0 (1.7.0 available)
+  windows_file_picker 1.2.0 (2.0.0 available)
+  yaml 3.1.3 (3.1.4 available)
+Got dependencies!
+71 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+00:00 +0: loading /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart
+00:00 +0: /Users/brendan/Developer/hearth/test/data/adapters/edge_function_label_reader_test.dart: a label that read cleanly carries both ways the panel states one portion
+00:00 +1: /Users/brendan/Developer/hearth/test/data/adapters/edge_function_label_reader_test.dart: a label that read cleanly carries what the packet is called
+00:00 +2: /Users/brendan/Developer/hearth/test/data/adapters/edge_function_label_reader_test.dart: a label that read cleanly a panel photographed alone has no name, and that is fine
+00:00 +3: /Users/brendan/Developer/hearth/test/data/adapters/edge_function_label_reader_test.dart: a label that read cleanly what was hard to read comes through as a flag
+00:00 +4: /Users/brendan/Developer/hearth/test/data/adapters/edge_function_label_reader_test.dart: what the app cannot use is dropped, not guessed at a serving with no positive amount
+00:00 +5: /Users/brendan/Developer/hearth/test/data/adapters/edge_function_label_reader_test.dart: what the app cannot use is dropped, not guessed at a serving whose unit means nothing here
+00:00 +6: /Users/brendan/Developer/hearth/test/data/adapters/edge_function_label_reader_test.dart: what the app cannot use is dropped, not guessed at a macro that is missing is zero, not a blocker
+00:00 +7: /Users/brendan/Developer/hearth/test/data/adapters/edge_function_label_reader_test.dart: a reading with nothing in it says so no servings at all
+00:00 +8: /Users/brendan/Developer/hearth/test/data/adapters/edge_function_label_reader_test.dart: a reading with nothing in it says so every serving dropped is the same as none
+00:00 +9: /Users/brendan/Developer/hearth/test/data/adapters/edge_function_label_reader_test.dart: a reading with nothing in it says so a response with no servings key at all
+00:00 +10: /Users/brendan/Developer/hearth/test/data/adapters/edge_function_label_reader_test.dart: a packet unit and its weight both rows arrive, with the packet word intact
+00:00 +11: /Users/brendan/Developer/hearth/test/data/adapters/edge_function_label_reader_test.dart: a packet unit and its weight with the same macros, which is what makes the pair worth having
+00:00 +12: /Users/brendan/Developer/hearth/test/data/adapters/edge_function_label_reader_test.dart: the three minor nutrients (spec §5.6) are read off the panel when the model returns them
+00:00 +13: /Users/brendan/Developer/hearth/test/data/adapters/edge_function_label_reader_test.dart: the three minor nutrients (spec §5.6) a cropped panel leaves them unknown rather than zero
+00:00 +14: /Users/brendan/Developer/hearth/test/data/adapters/pack_reading_test.dart: a printed net weight becomes a quantity in its own unit
+00:00 +15: /Users/brendan/Developer/hearth/test/data/adapters/pack_reading_test.dart: what is not an answer no amount is no pack size, not a zero
+00:00 +16: /Users/brendan/Developer/hearth/test/data/adapters/pack_reading_test.dart: what is not an answer nor an amount with no unit
+00:00 +17: /Users/brendan/Developer/hearth/test/data/adapters/pack_reading_test.dart: what is not an answer nor a unit this app cannot convert
+00:00 +18: /Users/brendan/Developer/hearth/test/data/adapters/pack_reading_test.dart: what is not an answer nor zero or a negative number
+00:00 +19: /Users/brendan/Developer/hearth/test/data/adapters/pack_reading_test.dart: what is not an answer and an empty envelope is an empty reading rather than a throw
+00:00 +20: /Users/brendan/Developer/hearth/test/data/adapters/pack_reading_test.dart: what the reader was unsure of comes with it
+00:00 +21: /Users/brendan/Developer/hearth/test/data/adapters/pack_reading_test.dart: a volume in litres survives as a volume
+00:00 +22: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: a seasoning line contributes nothing and says why
+00:00 +23: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: a seasoning line is not a gap, so the recipe reads as complete
+00:00 +24: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: a seasoning line and unmarked, the same line is a gap again
+00:00 +25: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: a seasoning line beats the no-amount check, which salt would trip too
+00:00 +26: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: a seasoning line optional still means optional, and is still its own thing
+00:00 +27: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: an ordinary component taken out of a meal (spec §5.2) subtracts, sign and all, straight through the serving ratio
+00:00 +28: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: an ordinary component taken out of a meal (spec §5.2) and taking out more than was there says so
+00:00 +29: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: a recipe that comes to less than nothing (spec §5.2) says so, rather than quietly reducing the day
+00:00 +30: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: a recipe that comes to less than nothing (spec §5.2) and it is not only the calories that can go under
+00:00 +31: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: a recipe that comes to less than nothing (spec §5.2) and an ordinary recipe still says nothing at all
+00:00 +32: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: single ingredient scales the food serving to the ingredient amount
+00:00 +33: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: single ingredient converts volume to weight when a density is known
+00:00 +34: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: single ingredient prefers the food's own density over the generic table
+00:00 +35: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: exclusions and gaps (spec §5.2, §5.3) optional ingredients are excluded and are NOT a data gap
+00:00 +36: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: exclusions and gaps (spec §5.2, §5.3) a partial fibre total says how much of it was guessed at
+00:00 +37: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: exclusions and gaps (spec §5.2, §5.3) a total every counted ingredient knew carries no caveat
+00:00 +38: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: exclusions and gaps (spec §5.2, §5.3) optional wins over the seasoning mark, and that is deliberate
+00:00 +39: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: exclusions and gaps (spec §5.2, §5.3) an unmatched ingredient is a gap, not a zero-calorie ingredient
+00:00 +40: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: exclusions and gaps (spec §5.2, §5.3) an unquantified non-optional line is a gap
+00:00 +41: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: exclusions and gaps (spec §5.2, §5.3) an unconvertible unit is a gap rather than a guess
+00:00 +42: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: a food that can bridge its own units states a density its own servings imply
+00:00 +43: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: a food that can bridge its own units an explicit density still wins over the derived one
+00:00 +44: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: a food that can bridge its own units a cup of it now resolves instead of being flagged
+00:00 +45: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: a food that can bridge its own units one serving alone still cannot bridge anything
+00:00 +46: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: a food that can bridge its own units a zero-calorie food bridges on its other macros
+00:00 +47: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: a food that can bridge its own units a food with no numbers at all bridges nothing
+00:00 +48: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: whole recipe per-serving is the whole recipe divided by yield
+00:00 +49: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: whole recipe totals are the sum of the ingredients (spec §4)
+00:00 +50: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: whole recipe a complete recipe is not flagged incomplete
+00:00 +51: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: whole recipe one unmatched ingredient flags the recipe but does not block
+00:00 +52: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: whole recipe a missing yield falls back to one serving instead of infinity
+00:00 +53: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: why a recipe is incomplete a matched-but-unconvertible ingredient is not reported as unmatched
+00:00 +54: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: why a recipe is incomplete a genuinely unmatched ingredient still says so
+00:00 +55: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: why a recipe is incomplete several kinds of gap are all named, not collapsed into one
+00:00 +56: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: why a recipe is incomplete a complete recipe has no reason to give
+00:00 +57: /Users/brendan/Developer/hearth/test/domain/recipes/macro_calculator_test.dart: forServings scales a logged portion
+00:00 +58: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: FoodDraft.fromLookup keeps what the food is
+00:00 +59: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: FoodDraft.fromLookup rounds the arithmetic the source scaled for us
+00:00 +60: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: FoodDraft.fromLookup a food already in the library is never rounded behind the user
+00:00 +61: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: FoodDraft.fromLookup drops the source's own ids so the save is a new food
+00:00 +62: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: FoodDraft.withLabel a row the source left empty gives way to the label
+00:00 +63: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: FoodDraft.withLabel unless the food really is zero, in which case it stays
+00:00 +64: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: FoodDraft.withLabel and a label with nothing to say never empties the draft
+00:00 +65: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: FoodDraft.withLabel the weight and the volume of one portion both arrive
+00:00 +66: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: FoodDraft.withLabel an untouched starter row is replaced, not left above them
+00:00 +67: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: FoodDraft.withLabel a starter row someone has typed into is theirs and is kept
+00:00 +68: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: FoodDraft.withLabel an existing food keeps every serving it already had
+00:00 +69: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: FoodDraft.withLabel a portion already on the draft is not added twice
+00:00 +70: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: FoodDraft.withLabel a typed name and brand survive the photo
+00:00 +71: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: FoodDraft.withLabel an empty name and brand are filled from the label
+00:00 +72: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: FoodDraft.withLabel the barcode and the food being edited are carried through
+00:00 +73: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: FoodDraft.withLabel the source's arithmetic is not shown as though it were measured
+00:00 +74: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: a label that states a packet unit and a weight both arrive, with the packet word intact
+00:00 +75: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: a label that states a packet unit and a weight the packet word survives the round trip to a food
+00:00 +76: /Users/brendan/Developer/hearth/test/features/foods/food_draft_test.dart: the Walmart product a food is bought as (spec §5.7) a pasted product link is stored as the item number
+00:00 +77: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +78: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +79: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +80: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +81: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +82: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +83: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +84: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +85: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +86: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +87: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +88: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +89: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +90: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +91: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +92: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +93: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +94: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +95: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +96: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +97: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +98: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +99: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +100: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +101: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:00 +102: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the editor fills its servings from a photographed label
+00:01 +103: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: nothing is saved by reading a label
+00:01 +104: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: a typed name survives the photo
+00:02 +105: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: a figure that was hard to read is pointed at
+00:02 +106: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: a failure keeps the photo so a retry is one tap
+00:02 +107: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: a build with no backend does not offer a camera
+00:02 +108: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: desktop is offered the library instead of a camera
+00:02 +109: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the Foods list offers it for a food with no barcode at all
+00:02 +110: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: the Foods list hides it when there is no backend
+00:03 +111: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: an existing food keeps the servings it already had
+00:03 +112: /Users/brendan/Developer/hearth/test/features/foods/label_scan_test.dart: reopening the sheet asks for a photo, not the last answer
+00:03 +113: All tests passed!
