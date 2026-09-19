@@ -275,6 +275,36 @@ void main() {
     }
   });
 
+  testWidgets('timer and done actions never skip the next ingredient step', (
+    WidgetTester tester,
+  ) async {
+    await pumpCookAlong(
+      tester,
+      recipe: aRecipe(
+        ingredients: <RecipeIngredient>[
+          anIngredient('olive oil', amount: 2, unit: Units.tbsp),
+          anIngredient('garlic', amount: 1, unit: Units.tsp),
+        ],
+        steps: <RecipeStep>[
+          aStep('Heat the olive oil.', stepNumber: 1, timerSeconds: 600),
+          aStep('Stir in the garlic.', stepNumber: 2, timerSeconds: 120),
+          aStep('Serve.', stepNumber: 3),
+        ],
+      ),
+    );
+    await tester.ensureVisible(find.text('Start 10 min timer'));
+    await tester.tap(find.text('Start 10 min timer'));
+    await tester.pump();
+    expect(find.text('Step 1 of 3'), findsOneWidget);
+    await tester.ensureVisible(find.text('Mark done'));
+    await tester.tap(find.text('Mark done'));
+    await tester.pump();
+    expect(find.text('Step 2 of 3  ·  1 done'), findsOneWidget);
+    expect(find.text('1 tsp garlic'), findsOneWidget);
+    expect(find.text('Start 2 min timer'), findsOneWidget);
+    expect(find.text('Serve.'), findsNothing);
+  });
+
   group('size and text-scale matrix', () {
     const List<Size> sizes = <Size>[
       Size(320, 568),

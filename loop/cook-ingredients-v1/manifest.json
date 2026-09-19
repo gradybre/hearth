@@ -1,7 +1,7 @@
 {
   "planId": "P-HEARTH-COOK-001",
   "revision": 2,
-  "status": "approved_execution_preparing",
+  "status": "implemented_reviewed_native_walkthrough_pending",
   "approvalRef": "APPROVAL.md",
   "baselineCommit": "b88fd1069da786be54f8a0ca1f371085b7e1b7bf",
   "recordedAt": "2026-09-19T02:19:51.881320+00:00",
@@ -21,5 +21,8 @@
   "baselineTests": {
     "passed": 60,
     "exitCode": 0
-  }
+  },
+  "finalFontSize": 22,
+  "pr": "https://github.com/gradybre/hearth/pull/108",
+  "results": "RESULTS.md"
 }
