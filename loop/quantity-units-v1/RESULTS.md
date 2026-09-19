@@ -24,7 +24,7 @@ Implemented package-aware ounce display, a per-food Weight display choice, lossl
 - Flutter analysis: clean. Full Flutter suite: **3,717 passed, 81 skipped**, exit 0 (89.58 seconds). Independent final Opus review reports no blocking regression in the repaired scope. Native macOS synthetic fixture rebuilt successfully against the final source; interaction remains blocked.
 - Native walkthrough: blocked by Mac lock. Unlock request is pending; no waiver inferred.
 - Hosted migrations/function and real two-photo read: **not deployed/not run**. Required release order and native gate remain in force.
-- PR/CI: pending creation.
+- Draft PR: [#110](https://github.com/gradybre/hearth/pull/110). GitHub CI was started on the pushed candidate; its current checks are authoritative. The PR stays draft while native/deployment/live-photo gates are pending.
 
 M1/M2 implementation checks are accepted locally. M3/M4 remain incomplete until the native and delivery gates are satisfied. A draft PR is a review checkpoint, not a release.
 
