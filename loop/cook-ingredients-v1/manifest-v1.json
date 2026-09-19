@@ -1,0 +1,24 @@
+{
+  "planId": "P-HEARTH-COOK-001",
+  "revision": 1,
+  "status": "proposed_awaiting_initial_human_approval",
+  "approvalRef": null,
+  "baselineCommit": "b88fd1069da786be54f8a0ca1f371085b7e1b7bf",
+  "recordedAt": "2026-09-19T02:17:14.933940+00:00",
+  "governingPolicy": [
+    "CLAUDE.md",
+    "docs/HEARTH_SPEC.md",
+    "docs/ORCHESTRATION.md",
+    "/Users/brendan/.codex/skills/loop-engineering/SKILL.md"
+  ],
+  "files": {
+    "PLAN.md": "fb240173e692edbb6ff8bd0f398cf4b1ad5647452ad047d1061bac990e3790cb",
+    "EXECUTION.md": "b69c3614756fa95ae4e68c2d7bc031a990dfe3d1f11a2cdd4e6edcf848d1a3b8",
+    "baseline.log": "70d9b637b256cc67098ad479b8712bd6d52b7ef8274eec73c32a6f83d49c0e99"
+  },
+  "executionStarted": false,
+  "baselineTests": {
+    "passed": 60,
+    "exitCode": 0
+  }
+}

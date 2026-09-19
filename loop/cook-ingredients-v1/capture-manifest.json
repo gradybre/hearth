@@ -1,0 +1,15 @@
+{
+  "candidateSha": "1aef94cbf78216944f17505bfab54b86fb33f6ba",
+  "source": "Actual Flutter widget renderer with bundled fonts and synthetic fixtures; not device screenshots",
+  "command": "HEARTH_RENDER=1 flutter test test/render/cook_ingredients_render_test.dart",
+  "images": {
+    "before.png": "92fd68e178f2877e2446f238e3b2a45deaa7173e440261c87c4815fcf83eec4d",
+    "cook-phone-light.png": "dfc0352a3ac20e3d72f3b0bd12028e35e503fa75208614a7b68c7c2928fd7cc5",
+    "cook-small-2x-ingredients.png": "76a6ae7fd889b54d6dce15191f5635154ca25ad430af5b9558ec3a41053f529f",
+    "cook-desktop.png": "7560e07bdaad0ea622a00e08792a523789119ee367d60129941ca51ca16567f6",
+    "cook-long-ingredients.png": "1c3e10611712447c1314b3dbf7b9c28746cd7de614034bf68da0e1fb1d3bbb20",
+    "cook-small-3x-ingredients.png": "e1dcb375c07cfece1082139cb82344f6a6e209333b24b6302de234ac451e7a44",
+    "cook-small-3x-scrolled.png": "08167e76365def766c641cdbed148b9b6b50fae860f334924246c425089dbe4c",
+    "cook-phone-dark.png": "35577b52752d85e9ae69a4e5dc07e0008a988283a4ef9ea5c94c3c7bceeb0011"
+  }
+}

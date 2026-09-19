@@ -658,103 +658,124 @@ class _StepCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-
-    return Semantics(
-      button: true,
-      label: 'Step ${step.stepNumber}. ${step.text}. Tap to go on.',
+    final Widget content = ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 560),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          // The step number and its instruction collapse into
+          // one semantics node carrying the tap-to-advance
+          // action: exposing the instruction `Text` a second
+          // time on top of this label would announce it
+          // twice.
+          Semantics(
+            button: true,
+            label: 'Step ${step.stepNumber}. ${step.text}. Tap to go on.',
+            onTap: onAdvance,
+            excludeSemantics: true,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                Text(
+                  '${step.stepNumber}',
+                  textAlign: TextAlign.center,
+                  style: context.text.recipeTitle.copyWith(
+                    color: colors.accent,
+                  ),
+                ),
+                const SizedBox(height: HearthSpacing.md),
+                Text(
+                  step.text,
+                  textAlign: TextAlign.center,
+                  // Kitchen-first legibility: read at arm's
+                  // length across a counter (spec §6.1).
+                  style: context.text.body.copyWith(
+                    fontSize: 26,
+                    height: 1.4,
+                    color: isChecked ? colors.textMuted : colors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Outside the excluded group above and not wrapped in
+          // any `excludeSemantics` ancestor, so a screen reader
+          // reaches every ingredient line on its own — the
+          // amounts belong on this screen above all others:
+          // hands busy, and the ingredient list a whole screen
+          // away. `forCooking: true` selects the "For this
+          // step" panel (D7); the panel itself supplies its own
+          // top gap only when there is something to show.
+          if (section case final RecipeSection s)
+            StepAmounts(
+              step: step,
+              section: s,
+              recipe: recipe,
+              forCooking: true,
+            ),
+        ],
+      ),
+    );
+    final List<Widget> actions = <Widget>[
+      if (onStartTimer != null) ...<Widget>[
+        const SizedBox(height: HearthSpacing.md),
+        if (runningTimer == null)
+          _BigButton(
+            label:
+                'Start ${_duration(Duration(seconds: step.timerSeconds!))} timer',
+            icon: Icons.timer_outlined,
+            filled: false,
+            onPressed: onStartTimer!,
+          )
+        else
+          _RunningTimerLabel(timer: runningTimer!, now: now),
+      ],
+      const SizedBox(height: HearthSpacing.md),
+      _BigButton(
+        label: isChecked ? 'Done' : 'Mark done',
+        icon: isChecked ? Icons.check_circle : Icons.check_circle_outline,
+        filled: !isChecked,
+        onPressed: onCheck,
+      ),
+    ];
+    return GestureDetector(
       onTap: onAdvance,
-      excludeSemantics: true,
-      child: GestureDetector(
-        // Tap anywhere to advance: with a hand covered in flour, aiming at a
-        // button is the tax (spec §5.2).
-        onTap: onAdvance,
-        behavior: HitTestBehavior.opaque,
-        child: Padding(
-          padding: const EdgeInsets.all(HearthSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Expanded(
-                // The step sits in the middle of the space it has rather than
-                // pinned to the top: one step in focus reads as the subject of
-                // the screen, not as a caption above a lot of nothing.
-                //
-                // Center around the scroll view, not inside it — that way a
-                // short step is centred and a long one still scrolls from the
-                // top instead of being cropped at both ends.
-                child: Center(
-                  child: SingleChildScrollView(
-                    child: ConstrainedBox(
-                      // Caps the measure on a wide window. Centred text that
-                      // runs the full width of a desktop screen is a chore to
-                      // read back to the start of.
-                      constraints: const BoxConstraints(maxWidth: 560),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: <Widget>[
-                          Text(
-                            '${step.stepNumber}',
-                            textAlign: TextAlign.center,
-                            style: context.text.recipeTitle.copyWith(
-                              color: colors.accent,
-                            ),
-                          ),
-                          const SizedBox(height: HearthSpacing.md),
-                          Text(
-                            step.text,
-                            textAlign: TextAlign.center,
-                            // Kitchen-first legibility: read at arm's length
-                            // across a counter (spec §6.1).
-                            style: context.text.body.copyWith(
-                              fontSize: 26,
-                              height: 1.4,
-                              color: isChecked
-                                  ? colors.textMuted
-                                  : colors.textPrimary,
-                            ),
-                          ),
-                          // The amounts belong on this screen above all
-                          // others: hands busy, and the ingredient list a
-                          // whole screen away.
-                          if (section case final RecipeSection s) ...<Widget>[
-                            const SizedBox(height: HearthSpacing.md),
-                            StepAmounts(step: step, section: s, recipe: recipe),
-                          ],
-                        ],
-                      ),
+      behavior: HitTestBehavior.opaque,
+      excludeFromSemantics: true,
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          // On a short screen or at large type, keep actions in the same
+          // scroll area so they cannot squeeze the ingredients out of view.
+          final bool scrollActions =
+              constraints.maxHeight < 400 ||
+              MediaQuery.textScalerOf(context).scale(18) > 27;
+          if (scrollActions) {
+            return SingleChildScrollView(
+              key: ValueKey<String>('cook-scroll-${step.id}'),
+              padding: const EdgeInsets.all(HearthSpacing.lg),
+              child: Column(children: <Widget>[content, ...actions]),
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.all(HearthSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      key: ValueKey<String>('cook-scroll-${step.id}'),
+                      child: content,
                     ),
                   ),
                 ),
-              ),
-              if (onStartTimer != null) ...<Widget>[
-                const SizedBox(height: HearthSpacing.md),
-                if (runningTimer == null)
-                  _BigButton(
-                    label:
-                        'Start ${_duration(Duration(seconds: step.timerSeconds!))} timer',
-                    icon: Icons.timer_outlined,
-                    filled: false,
-                    onPressed: onStartTimer!,
-                  )
-                else
-                  // Shows the countdown rather than offering to start again.
-                  // The control that would stack a second timer on the same
-                  // pot simply is not there.
-                  _RunningTimerLabel(timer: runningTimer!, now: now),
+                ...actions,
               ],
-              const SizedBox(height: HearthSpacing.md),
-              _BigButton(
-                label: isChecked ? 'Done' : 'Mark done',
-                icon: isChecked
-                    ? Icons.check_circle
-                    : Icons.check_circle_outline,
-                filled: !isChecked,
-                onPressed: onCheck,
-              ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -777,36 +798,52 @@ class _BigButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    return SizedBox(
-      width: double.infinity,
-      height: HearthTouch.kitchenTarget,
-      child: Material(
-        color: filled ? colors.accent : colors.surface,
-        borderRadius: BorderRadius.circular(HearthRadius.md),
-        child: InkWell(
-          onTap: onPressed,
+    return ConstrainedBox(
+      // minHeight, not a fixed height: at large text scale the label may
+      // need a second line, and a fixed height was clipping/overflowing
+      // the row (169px right overflow at textScale 3).
+      constraints: const BoxConstraints(minHeight: HearthTouch.kitchenTarget),
+      child: SizedBox(
+        width: double.infinity,
+        child: Material(
+          color: filled ? colors.accent : colors.surface,
           borderRadius: BorderRadius.circular(HearthRadius.md),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(HearthRadius.md),
-              border: Border.all(
-                color: filled ? colors.accent : colors.outline,
-              ),
-            ),
-            alignment: Alignment.center,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Icon(icon, color: filled ? colors.onAccent : colors.accent),
-                const SizedBox(width: HearthSpacing.sm),
-                Text(
-                  label,
-                  style: context.text.label.copyWith(
-                    fontSize: 18,
-                    color: filled ? colors.onAccent : colors.textPrimary,
-                  ),
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(HearthRadius.md),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(HearthRadius.md),
+                border: Border.all(
+                  color: filled ? colors.accent : colors.outline,
                 ),
-              ],
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: HearthSpacing.md,
+                vertical: HearthSpacing.sm,
+              ),
+              alignment: Alignment.center,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Icon(icon, color: filled ? colors.onAccent : colors.accent),
+                  const SizedBox(width: HearthSpacing.sm),
+                  // Flexible + wrap so the label wraps to a second line at
+                  // large text scale instead of overflowing past the
+                  // button's right edge.
+                  Flexible(
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      softWrap: true,
+                      style: context.text.label.copyWith(
+                        fontSize: 18,
+                        color: filled ? colors.onAccent : colors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -864,12 +901,32 @@ class _NavButton extends StatelessWidget {
   final VoidCallback? onPressed;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: HearthTouch.kitchenTarget,
-    child: OutlinedButton.icon(
+  Widget build(BuildContext context) => ConstrainedBox(
+    // minHeight, not a fixed height, matching _BigButton — the label may
+    // need to wrap to a second line inside the Expanded half-width slot at
+    // large text scale.
+    constraints: const BoxConstraints(minHeight: HearthTouch.kitchenTarget),
+    child: OutlinedButton(
       onPressed: onPressed,
-      icon: Icon(icon),
-      label: Text(label, style: context.text.label.copyWith(fontSize: 17)),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(
+          horizontal: HearthSpacing.md,
+          vertical: HearthSpacing.sm,
+        ),
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: HearthSpacing.sm,
+        children: <Widget>[
+          Icon(icon),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: context.text.label.copyWith(fontSize: 17),
+          ),
+        ],
+      ),
     ),
   );
 }
@@ -1125,27 +1182,45 @@ class _RunningTimerLabel extends StatelessWidget {
           ? 'Timer is up'
           : 'Timer running, ${spokenDuration(timer.remainingAt(now))} left',
       excludeSemantics: true,
-      child: Container(
-        height: HearthTouch.kitchenTarget,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: colors.surfaceSunken,
-          borderRadius: BorderRadius.circular(HearthRadius.md),
-          border: Border.all(color: colors.outline),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Icon(
-              done ? Icons.notifications_active : Icons.timer_outlined,
-              color: colors.accent,
-            ),
-            const SizedBox(width: HearthSpacing.sm),
-            Text(
-              done ? 'Time is up' : '${countdown(timer.remainingAt(now))} left',
-              style: context.text.label.copyWith(fontSize: 18),
-            ),
-          ],
+      child: ConstrainedBox(
+        // minHeight, not a fixed height: the countdown text can outgrow a
+        // fixed-height tray at large text scale and overflow past the
+        // right edge (the reported 169px overflow at textScale 3).
+        constraints: const BoxConstraints(minHeight: HearthTouch.kitchenTarget),
+        child: Container(
+          width: double.infinity,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(
+            horizontal: HearthSpacing.md,
+            vertical: HearthSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: colors.surfaceSunken,
+            borderRadius: BorderRadius.circular(HearthRadius.md),
+            border: Border.all(color: colors.outline),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(
+                done ? Icons.notifications_active : Icons.timer_outlined,
+                color: colors.accent,
+              ),
+              const SizedBox(width: HearthSpacing.sm),
+              // Flexible + wrap: lets the countdown wrap to a second line
+              // at large text scale rather than clip past the tray edge.
+              Flexible(
+                child: Text(
+                  done
+                      ? 'Time is up'
+                      : '${countdown(timer.remainingAt(now))} left',
+                  textAlign: TextAlign.center,
+                  softWrap: true,
+                  style: context.text.label.copyWith(fontSize: 18),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
