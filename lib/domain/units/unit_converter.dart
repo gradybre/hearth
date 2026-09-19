@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import 'density.dart';
+import 'mass_display_mode.dart';
 import 'quantity.dart';
 import 'unit.dart';
 
@@ -125,13 +126,37 @@ abstract final class UnitConverter {
   /// stays half a cup rather than becoming 8 tbsp, because cup is where the
   /// walk starts and tbsp is below it. Count units are always preserved as
   /// authored — "2 cloves" must not become "2 items".
+  ///
+  /// For imperial mass, [massDisplayMode] decides how the ladder is
+  /// overridden:
+  ///  * [MassDisplayMode.ounces] always pins ounces;
+  ///  * [MassDisplayMode.weight] always runs the ordinary ladder below;
+  ///  * [MassDisplayMode.automatic] (the default) prefers a compatible mass
+  ///    [packSize]'s unit, then [packageUnit], then an authored ounce
+  ///    reading kept as-is (never promoted to pounds), and only then falls
+  ///    back to the ladder.
+  /// A metric reader always gets the plain metric ladder — none of this
+  /// applies outside imperial.
   static Unit displayUnitFor(
     Quantity quantity, {
     UnitSystem system = UnitSystem.imperial,
+    MassDisplayMode massDisplayMode = MassDisplayMode.automatic,
+    Quantity? packSize,
+    Unit? packageUnit,
   }) {
     final Unit? preferred = quantity.preferredUnit;
     if (quantity.kind == UnitKind.count) {
       return preferred ?? Units.item;
+    }
+
+    if (quantity.kind == UnitKind.mass && system != UnitSystem.metric) {
+      final Unit? overridden = _massDisplayUnit(
+        quantity,
+        massDisplayMode,
+        packSize,
+        packageUnit,
+      );
+      if (overridden != null) return overridden;
     }
 
     final List<Unit> ladder = ladderFor(quantity.kind, system);
@@ -151,13 +176,67 @@ abstract final class UnitConverter {
     return ladder[index];
   }
 
+  /// Returns an imperial mass unit that should win over the ladder, or null
+  /// when the ladder should decide instead.
+  static Unit? _massDisplayUnit(
+    Quantity quantity,
+    MassDisplayMode mode,
+    Quantity? packSize,
+    Unit? packageUnit,
+  ) {
+    switch (mode) {
+      case MassDisplayMode.ounces:
+        return Units.ounce;
+      case MassDisplayMode.weight:
+        return null;
+      case MassDisplayMode.automatic:
+        if (packSize != null &&
+            packSize.kind == UnitKind.mass &&
+            packSize.canonicalAmount.isFinite &&
+            packSize.canonicalAmount > 0) {
+          final Unit? fromPack = _imperialMassUnit(packSize.preferredUnit);
+          if (fromPack != null) return fromPack;
+        }
+        final Unit? fromPackageUnit = _imperialMassUnit(packageUnit);
+        if (fromPackageUnit != null) return fromPackageUnit;
+        if (quantity.preferredUnit == Units.ounce) return Units.ounce;
+        return null;
+    }
+  }
+
+  static Unit? _imperialMassUnit(Unit? unit) =>
+      (unit == Units.ounce || unit == Units.pound) ? unit : null;
+
   /// Re-expresses [quantity] in the unit [displayUnitFor] would choose.
   ///
-  /// This is the "3 tsp -> 1 tbsp" normalisation applied after scaling. The
-  /// stored value is unchanged; only [Quantity.preferredUnit] moves, so this
-  /// can never introduce drift.
+  /// This is the "3 tsp -> 1 tbsp" normalisation applied after scaling for
+  /// volume and count. Mass is deliberately left alone: which unit a mass
+  /// quantity *displays* in is now a display-time policy decision (pack size,
+  /// package unit, authored-ounce preservation, or the ladder — see
+  /// [displayUnitFor]), and baking that choice into the stored
+  /// [Quantity.preferredUnit] here would erase the authored unit the next
+  /// time the quantity is scaled. A recipe written in pounds and scaled down
+  /// can still demote to ounces on screen without ever forgetting it was
+  /// written in pounds.
+  ///
+  /// The stored numeric value is never rounded in either case, so scaling up
+  /// and back down always returns the original.
   static Quantity normalise(
     Quantity quantity, {
     UnitSystem system = UnitSystem.imperial,
-  }) => quantity.withPreferredUnit(displayUnitFor(quantity, system: system));
+    MassDisplayMode massDisplayMode = MassDisplayMode.automatic,
+    Quantity? packSize,
+    Unit? packageUnit,
+  }) {
+    if (quantity.kind == UnitKind.mass) return quantity;
+    return quantity.withPreferredUnit(
+      displayUnitFor(
+        quantity,
+        system: system,
+        massDisplayMode: massDisplayMode,
+        packSize: packSize,
+        packageUnit: packageUnit,
+      ),
+    );
+  }
 }

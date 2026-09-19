@@ -3,6 +3,7 @@ import 'package:meta/meta.dart';
 import '../models/recipe.dart';
 import '../text/text_normaliser.dart';
 import '../units/density.dart';
+import '../units/mass_display_mode.dart';
 import '../units/quantity.dart';
 import '../units/unit.dart';
 import '../units/unit_converter.dart';
@@ -191,6 +192,15 @@ abstract final class IngredientConsolidator {
   /// head, and the two collapse into grams only where a density says they
   /// may (spec §5.7).
   ///
+  /// Within a mass bucket, the resulting quantity's display hint is chosen by
+  /// an explicit priority (pound > ounce > kilogram > gram) rather than by
+  /// which contribution happened to arrive first, so "1 lb + 8 oz" and
+  /// "8 oz + 1 lb" both read as "1.5 lb". [massDisplayMode], [packSize], and
+  /// [packageUnit] are accepted for callers that also want them applied when
+  /// the combined quantity is normalised, but they never get baked into the
+  /// stored preferred-unit hint itself — that would overwrite authorship the
+  /// way [UnitConverter.normalise] is careful not to.
+  ///
   /// [displayName] is what the density table is asked about, so pass the
   /// line's name where there is one.
   static List<Quantity> combine(
@@ -198,15 +208,61 @@ abstract final class IngredientConsolidator {
     String displayName = '',
     DensityLookup densityLookup = DensityTable.lookup,
     UnitSystem system = UnitSystem.imperial,
+    MassDisplayMode massDisplayMode = MassDisplayMode.automatic,
+    Quantity? packSize,
+    Unit? packageUnit,
   }) {
     // Sum within each bucket first — that part is always exact.
     final Map<String, Quantity> byBucket = <String, Quantity>{};
     for (final Quantity quantity in quantities) {
       final String bucket = _bucketFor(quantity);
       final Quantity? existing = byBucket[bucket];
-      byBucket[bucket] = existing == null ? quantity : existing + quantity;
+      byBucket[bucket] = existing == null ? quantity : _sum(existing, quantity);
     }
-    return _unify(byBucket, displayName, densityLookup, system);
+    return _unify(
+      byBucket,
+      displayName,
+      densityLookup,
+      system,
+      massDisplayMode,
+      packSize,
+      packageUnit,
+    );
+  }
+
+  /// Adds two same-kind quantities, picking the preferred-unit hint of the
+  /// sum explicitly rather than leaning on "whichever came first".
+  ///
+  /// For mass this is the pound > ounce > kilogram > gram priority described
+  /// on [combine]. For volume and count — which don't have that ambiguity in
+  /// practice — this keeps the original left-operand-wins behaviour.
+  static Quantity _sum(Quantity a, Quantity b) {
+    final double total = a.canonicalAmount + b.canonicalAmount;
+    if (a.kind == UnitKind.mass) {
+      return Quantity.canonical(
+        canonicalAmount: total,
+        kind: a.kind,
+        preferredUnit: _preferMassUnit(a.preferredUnit, b.preferredUnit),
+      );
+    }
+    return Quantity.canonical(
+      canonicalAmount: total,
+      kind: a.kind,
+      preferredUnit: a.preferredUnit ?? b.preferredUnit,
+    );
+  }
+
+  static int _massRank(Unit? unit) {
+    if (unit == Units.pound) return 4;
+    if (unit == Units.ounce) return 3;
+    if (unit == Units.kilogram) return 2;
+    if (unit == Units.gram) return 1;
+    return 0;
+  }
+
+  static Unit? _preferMassUnit(Unit? a, Unit? b) {
+    if (_massRank(a) == 0 && _massRank(b) == 0) return a ?? b;
+    return _massRank(a) >= _massRank(b) ? a : b;
   }
 
   /// What may be added to what.
@@ -231,12 +287,22 @@ abstract final class IngredientConsolidator {
     String displayName,
     DensityLookup densityLookup,
     UnitSystem system,
+    MassDisplayMode massDisplayMode,
+    Quantity? packSize,
+    Unit? packageUnit,
   ) {
     if (byBucket.isEmpty) return const <Quantity>[];
+
+    Quantity normalised(Quantity q) => UnitConverter.normalise(
+      q,
+      system: system,
+      massDisplayMode: massDisplayMode,
+      packSize: packSize,
+      packageUnit: packageUnit,
+    );
+
     if (byBucket.length == 1) {
-      return <Quantity>[
-        UnitConverter.normalise(byBucket.values.first, system: system),
-      ];
+      return <Quantity>[normalised(byBucket.values.first)];
     }
 
     final double? density = densityLookup(displayName);
@@ -251,24 +317,18 @@ abstract final class IngredientConsolidator {
         gramsPerMillilitre: density,
       );
       if (converted.isExact) {
-        final Quantity merged = byBucket[_mass]! + converted.quantity;
+        final Quantity merged = _sum(byBucket[_mass]!, converted.quantity);
         final Map<String, Quantity> rest = <String, Quantity>{
           ...byBucket,
           _mass: merged,
         }..remove(_volume);
-        return <Quantity>[
-          for (final Quantity q in rest.values)
-            UnitConverter.normalise(q, system: system),
-        ];
+        return <Quantity>[for (final Quantity q in rest.values) normalised(q)];
       }
     }
 
     // Counts never convert, and without a density neither does volume<->mass.
     // List them together rather than inventing a total (spec §5.7).
-    return <Quantity>[
-      for (final Quantity q in byBucket.values)
-        UnitConverter.normalise(q, system: system),
-    ];
+    return <Quantity>[for (final Quantity q in byBucket.values) normalised(q)];
   }
 }
 

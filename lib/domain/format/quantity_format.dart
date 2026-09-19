@@ -1,3 +1,4 @@
+import '../units/mass_display_mode.dart';
 import '../units/quantity.dart';
 import '../units/unit.dart';
 import '../units/unit_converter.dart';
@@ -51,11 +52,24 @@ abstract final class QuantityFormat {
   };
 
   /// Formats [quantity] for display, choosing the unit automatically.
+  ///
+  /// [massDisplayMode], [packSize], and [packageUnit] feed the imperial mass
+  /// unit policy in [UnitConverter.displayUnitFor]; they have no effect on
+  /// non-mass quantities or under a metric [system].
   static String format(
     Quantity quantity, {
     UnitSystem system = UnitSystem.imperial,
+    MassDisplayMode massDisplayMode = MassDisplayMode.automatic,
+    Quantity? packSize,
+    Unit? packageUnit,
   }) {
-    final Unit unit = UnitConverter.displayUnitFor(quantity, system: system);
+    final Unit unit = UnitConverter.displayUnitFor(
+      quantity,
+      system: system,
+      massDisplayMode: massDisplayMode,
+      packSize: packSize,
+      packageUnit: packageUnit,
+    );
     return formatIn(quantity, unit);
   }
 
@@ -74,13 +88,22 @@ abstract final class QuantityFormat {
   }) {
     final Unit? authored = quantity.preferredUnit;
     if (authored == null) return format(quantity, system: system);
-    return formatIn(quantity, authored);
+    return formatIn(quantity, authored, preservePrecision: true);
   }
 
   /// Formats [quantity] in a specific [unit].
-  static String formatIn(Quantity quantity, Unit unit) {
+  static String formatIn(
+    Quantity quantity,
+    Unit unit, {
+    bool preservePrecision = false,
+  }) {
     final double amount = quantity.amountIn(unit);
-    final String number = formatAmount(amount, unit);
+    final String number =
+        preservePrecision &&
+            unit.kind == UnitKind.mass &&
+            unit.system == UnitSystem.imperial
+        ? _authoredMassDecimal(amount)
+        : formatAmount(amount, unit);
     // Pluralisation has to agree with what [number] actually shows, not with
     // the unrounded amount. 240 ml is 1.0144 cup — greater than one, but it
     // *displays* as "1", and "1 cups" is what happens when the two disagree.
@@ -108,9 +131,14 @@ abstract final class QuantityFormat {
 
   /// Formats a bare number the way [unit] should read.
   ///
-  /// Imperial volume and counts get cooking fractions; weight and metric units
-  /// get decimals. Nobody writes "1 1/3 ml".
+  /// Imperial mass (oz/lb) gets a trimmed decimal that never silently loses
+  /// a package's real weight above ten units, nor rounds a tiny amount away
+  /// to nothing. Imperial volume and counts get cooking fractions; metric
+  /// units get plain decimals. Nobody writes "1 1/3 ml".
   static String formatAmount(double amount, Unit unit) {
+    if (unit.kind == UnitKind.mass && unit.system == UnitSystem.imperial) {
+      return _imperialMassDecimal(amount);
+    }
     final bool decimal =
         unit.kind == UnitKind.mass || unit.system == UnitSystem.metric;
     return decimal ? _decimal(amount) : _fractional(amount);
@@ -132,12 +160,49 @@ abstract final class QuantityFormat {
   /// dash, and never colour or punctuation alone for meaning (§6.3).
   static const String _minus = '−';
 
-  /// Weight: decimals, no fractions. Whole numbers above 10, one place below.
+  /// Weight (metric mass) and metric volume: decimals, no fractions. Whole
+  /// numbers above 10, one place below.
   static String _decimal(double amount) {
     if (amount < 0) return '$_minus${_decimal(-amount)}';
     if (amount >= 10) return amount.round().toString();
     final String oneDp = amount.toStringAsFixed(1);
     return oneDp.endsWith('.0') ? oneDp.substring(0, oneDp.length - 2) : oneDp;
+  }
+
+  /// Imperial mass (oz/lb): a trimmed decimal, up to two places, that never
+  /// collapses a package's real weight to a whole number above ten ("14.5 oz"
+  /// must not become "15 oz"), and never rounds a tiny amount all the way to
+  /// zero.
+  static String _imperialMassDecimal(double amount) {
+    if (amount < 0) return '$_minus${_imperialMassDecimal(-amount)}';
+    if (amount == 0) return '0';
+    if (amount < 0.01) return _significantDecimal(amount);
+    return _trimmedFixed(amount, 2);
+  }
+
+  static String _significantDecimal(double amount) {
+    final String text = amount.toStringAsPrecision(2);
+    if (text.contains('e')) return text.replaceFirst(RegExp(r'\.0+e'), 'e');
+    return text.contains('.') ? text.replaceFirst(RegExp(r'\.?0+$'), '') : text;
+  }
+
+  static String _authoredMassDecimal(double amount) {
+    if (amount < 0) return '$_minus${_authoredMassDecimal(-amount)}';
+    if (amount == 0) return '0';
+    if (amount < 1e-8) return _significantDecimal(amount);
+    // Remove conversion noise, retaining the precision printed on packages.
+    return _trimmedFixed(amount, 9);
+  }
+
+  /// [amount] fixed to [decimals] places, with trailing zeros (and a bare
+  /// trailing decimal point) trimmed away.
+  static String _trimmedFixed(double amount, int decimals) {
+    final String text = amount.toStringAsFixed(decimals);
+    if (!text.contains('.')) return text;
+    final String trimmed = text.replaceFirst(RegExp(r'0+$'), '');
+    return trimmed.endsWith('.')
+        ? trimmed.substring(0, trimmed.length - 1)
+        : trimmed;
   }
 
   /// Volume and count: mixed numbers with cooking fractions where one fits.

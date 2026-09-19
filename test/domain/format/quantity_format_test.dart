@@ -99,7 +99,7 @@ void main() {
     test('an imperial reader sees the same stored grams as ounces', () {
       // Per-user display preference (spec §4) — one stored value, two readings.
       final Quantity q = Quantity.of(50, Units.gram);
-      expect(QuantityFormat.format(q), '1.8 oz');
+      expect(QuantityFormat.format(q), '1.76 oz');
       expect(QuantityFormat.format(q, system: UnitSystem.metric), '50 g');
     });
 
@@ -150,7 +150,7 @@ void main() {
       // being shown "3.3 lb" makes that harder, not easier.
       final Quantity q = Quantity.of(1.5, Units.kilogram);
       expect(QuantityFormat.formatAsAuthored(q), '1.5 kg');
-      expect(QuantityFormat.format(q), '3.3 lb');
+      expect(QuantityFormat.format(q), '3.31 lb');
     });
 
     test('keeps imperial units as authored too', () {

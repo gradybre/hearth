@@ -65,7 +65,7 @@ void main() {
       // Every source reports metrically however the box is written.
       expect(
         ServingFormat.describe(serving(label: '150 g', amount: 150)),
-        '5.3 oz',
+        '5.29 oz',
       );
     });
 
