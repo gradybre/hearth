@@ -397,24 +397,16 @@ void main() {
   });
 
   group('the step in focus', () {
-    testWidgets('sits in the middle of the space it has', (
+    testWidgets('starts beneath the progress label for predictable reading', (
       WidgetTester tester,
     ) async {
       await pumpCookAlong(tester);
-
-      final double stepCentre = tester
-          .getCenter(find.text('Season the ribs generously'))
-          .dy;
-      final double screenCentre =
-          tester.getSize(find.byType(Scaffold)).height / 2;
-
-      expect(
-        (stepCentre - screenCentre).abs(),
-        lessThan(120),
-        reason:
-            'the step should read as the subject of the screen, not as a '
-            'caption above a lot of empty space',
+      final Rect progress = tester.getRect(find.text('Step 1 of 3'));
+      final Rect instruction = tester.getRect(
+        find.text('Season the ribs generously'),
       );
+      expect(instruction.left, closeTo(progress.left, 1));
+      expect(instruction.top - progress.bottom, inInclusiveRange(12, 24));
     });
 
     testWidgets('a long step scrolls rather than overflowing', (

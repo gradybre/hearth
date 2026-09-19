@@ -1,0 +1,61 @@
+{
+  "status": "local_checks_passed_reviews_and_native_walkthrough_pending",
+  "runId": "cook-directions-20260919",
+  "root": "/private/tmp/hearth-directions-20260919",
+  "author": {
+    "model": "claude-sonnet-5",
+    "sessionId": "f2eb2ff2-a319-4fb0-b9da-b8043e2b0b73",
+    "ownerStopped": true,
+    "controllerRunStopped": true,
+    "recovery": "Rejected strict JSON (unescaped control character, oversized summary); exact own transcript parsed with strict=False after shutdown, all complete files inspected and remapped to assigned feature paths. Raw and normalized output preserved."
+  },
+  "uiAuthor": {
+    "model": "claude-sonnet-5",
+    "sessionId": "5cd917d0-34e4-4d68-8847-38daa67764c0",
+    "ownerStopped": true,
+    "integration": "Astra fixed loose column width, superseded centering assertion, and moved progress into scrolling content after red regression."
+  },
+  "nativeMac": "build/start passed; interactive check blocked by locked Mac; fixture stopped",
+  "independentCodeReview": "pending explicit egress permission",
+  "independentVisualReview": "pending explicit egress permission",
+  "checks": [
+    {
+      "name": "format",
+      "code": 0,
+      "signal": null,
+      "elapsedMs": 1498
+    },
+    {
+      "name": "analyze",
+      "code": 0,
+      "signal": null,
+      "elapsedMs": 3708
+    },
+    {
+      "name": "full-test",
+      "code": 0,
+      "signal": null,
+      "elapsedMs": 89176
+    },
+    {
+      "name": "gallery",
+      "code": 0,
+      "signal": null,
+      "elapsedMs": 10122
+    }
+  ],
+  "fullTest": {
+    "passed": 3478,
+    "skipped": 71,
+    "exitCode": 0
+  },
+  "gallery": {
+    "passed": 49,
+    "exitCode": 0
+  },
+  "negativeTests": [
+    "Old centered paragraph fails three-block layout assertion",
+    "No-split formatter fails three-sentence assertion",
+    "Fixed progress chrome fails full completion-label visibility at 320x568 3x with a running timer"
+  ]
+}

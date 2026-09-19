@@ -13,6 +13,7 @@ import '../../data/local/cook_session_store.dart';
 import '../../domain/cooking/cook_session.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/recipe.dart';
+import 'cook_instruction_blocks.dart';
 import 'step_amounts.dart';
 import 'timer_bar.dart';
 
@@ -278,7 +279,7 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                       now: now,
                       onDismiss: () => _dismissTimer(timer),
                     ),
-                  _Progress(session: _session),
+                  if (showAllSteps) _Progress(session: _session),
                   Expanded(
                     child: showAllSteps
                         ? _StepList(
@@ -295,6 +296,10 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                             onStartTimer: _startTimer,
                           )
                         : _StepCard(
+                            progress: _Progress(
+                              session: _session,
+                              focused: true,
+                            ),
                             step: step,
                             section: _sectionsById[step.sectionId],
                             recipe: widget.recipe,
@@ -365,20 +370,32 @@ String _duration(Duration d) {
 }
 
 class _Progress extends StatelessWidget {
-  const _Progress({required this.session});
+  const _Progress({required this.session, this.focused = false});
 
   final CookSession session;
+
+  /// True for the single active step view; false for the compact
+  /// "All steps" list, which must keep its original centred look.
+  final bool focused;
 
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    // Centred, and on one line with the count: the step below it is centred,
-    // and a lone label pinned to the left corner reads as though it belongs to
-    // a different screen.
     final String label = session.checkedCount > 0
         ? 'Step ${session.currentStep + 1} of ${session.stepCount}'
               '  ·  ${session.checkedCount} done'
         : 'Step ${session.currentStep + 1} of ${session.stepCount}';
+
+    if (focused) {
+      return Text(
+        label,
+        textAlign: TextAlign.left,
+        style: context.text.metadata.copyWith(
+          color: colors.textMuted,
+          fontSize: 17,
+        ),
+      );
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -629,6 +646,7 @@ class _TimerChip extends StatelessWidget {
 
 class _StepCard extends StatelessWidget {
   const _StepCard({
+    required this.progress,
     required this.step,
     required this.section,
     required this.recipe,
@@ -640,6 +658,7 @@ class _StepCard extends StatelessWidget {
     this.onStartTimer,
   });
 
+  final Widget progress;
   final RecipeStep step;
   final RecipeSection? section;
 
@@ -658,64 +677,69 @@ class _StepCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    final Widget content = ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 560),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: <Widget>[
-          // The step number and its instruction collapse into
-          // one semantics node carrying the tap-to-advance
-          // action: exposing the instruction `Text` a second
-          // time on top of this label would announce it
-          // twice.
-          Semantics(
-            button: true,
-            label: 'Step ${step.stepNumber}. ${step.text}. Tap to go on.',
-            onTap: onAdvance,
-            excludeSemantics: true,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: <Widget>[
-                Text(
-                  '${step.stepNumber}',
-                  textAlign: TextAlign.center,
-                  style: context.text.recipeTitle.copyWith(
-                    color: colors.accent,
-                  ),
-                ),
-                const SizedBox(height: HearthSpacing.md),
-                Text(
-                  step.text,
-                  textAlign: TextAlign.center,
-                  // Kitchen-first legibility: read at arm's
-                  // length across a counter (spec §6.1).
-                  style: context.text.body.copyWith(
-                    fontSize: 26,
-                    height: 1.4,
-                    color: isChecked ? colors.textMuted : colors.textPrimary,
-                  ),
-                ),
-              ],
+
+    // Deterministic presentation split only; storage and the original
+    // full text are untouched. `cookInstructionBlocks` is authored and
+    // imported separately.
+    final List<String> blocks = cookInstructionBlocks(step.text);
+    final Color textColor = isChecked ? colors.textMuted : colors.textPrimary;
+
+    final List<Widget> paragraphs = <Widget>[
+      for (int i = 0; i < blocks.length; i++)
+        Padding(
+          padding: EdgeInsets.only(bottom: i == blocks.length - 1 ? 0 : 18),
+          child: Text(
+            blocks[i],
+            textAlign: TextAlign.left,
+            // Kitchen-first legibility: read at arm's length across a
+            // counter (spec §6.1). All paragraphs share one size,
+            // weight and colour; the split is visual only.
+            style: context.text.body.copyWith(
+              fontSize: 24,
+              height: 1.4,
+              color: textColor,
             ),
           ),
-          // Outside the excluded group above and not wrapped in
-          // any `excludeSemantics` ancestor, so a screen reader
-          // reaches every ingredient line on its own — the
-          // amounts belong on this screen above all others:
-          // hands busy, and the ingredient list a whole screen
-          // away. `forCooking: true` selects the "For this
-          // step" panel (D7); the panel itself supplies its own
-          // top gap only when there is something to show.
-          if (section case final RecipeSection s)
-            StepAmounts(
-              step: step,
-              section: s,
-              recipe: recipe,
-              forCooking: true,
+        ),
+    ];
+
+    final Widget content = Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            // Scroll the label too, leaving room for controls at large type.
+            progress,
+            const SizedBox(height: HearthSpacing.lg),
+            // The visual paragraphs and the tap-to-advance action
+            // collapse into one semantics node carrying the original,
+            // unsplit instruction text and label: exposing each
+            // paragraph `Text` a second time would announce the step
+            // multiple times.
+            Semantics(
+              button: true,
+              label: 'Step ${step.stepNumber}. ${step.text}. Tap to go on.',
+              onTap: onAdvance,
+              excludeSemantics: true,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: paragraphs,
+              ),
             ),
-        ],
+            // Ingredients remain separately reachable by assistive technology.
+            if (section case final RecipeSection s)
+              StepAmounts(
+                step: step,
+                section: s,
+                recipe: recipe,
+                forCooking: true,
+              ),
+          ],
+        ),
       ),
     );
     final List<Widget> actions = <Widget>[
@@ -761,10 +785,14 @@ class _StepCard extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.all(HearthSpacing.lg),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 Expanded(
-                  child: Center(
+                  // Top-anchored at every height, not vertically centred:
+                  // short content should sit at the top of the reading
+                  // column rather than floating mid-screen.
+                  child: Align(
+                    alignment: Alignment.topCenter,
                     child: SingleChildScrollView(
                       key: ValueKey<String>('cook-scroll-${step.id}'),
                       child: content,

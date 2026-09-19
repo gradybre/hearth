@@ -1,0 +1,22 @@
+{
+  "sources": {
+    "lib/features/recipes/cook_along_screen.dart": "880848e40226397bc590b744b604c7d8cd7461cec1288fc3a630d4186bde2078",
+    "lib/features/recipes/cook_instruction_blocks.dart": "7e25802d7852f8641b0ffb16ab0d2290ecd2215b3cac584c3261a76b8a6877da"
+  },
+  "images": {
+    "before-dark.png": "30c134a0d889d9bbc702badd1ac3e0f9415e53c553b8ad8d2560c589537dc4aa",
+    "24pt-comparison.png": "73272f913690bdf31857060a56811c723767c7afacc12df7a20d620982ba2875",
+    "26pt-comparison.png": "dc0e1344b5e547c70f6bcd2b1e6d585bd9d77cd5b7e16a6ab1bc5d2be3538a9f",
+    "phone-dark.png": "73272f913690bdf31857060a56811c723767c7afacc12df7a20d620982ba2875",
+    "phone-light-ingredients.png": "213b18b4e9cc743a41115966fa1a6e851958fad607024a8bb85fcbedf97c1a41",
+    "desktop.png": "194a36fb4af0c7b90edc594096019304e5019a41f65f33d4e08c1ff6aa772c17",
+    "short.png": "51855d135ff982cd22008ef1c289cb0944ff491fef5a7b42384ba061406aba2c",
+    "unpunctuated.png": "e88761b4870c719f1326ab4fbea1a6b84cd8ea1a2bd3e2e44940c20d7808c7ba",
+    "eight-ingredients.png": "415b6db59372d03ae7ce3f60f9f1d8264933fba5357d90b3a7e0675b26d2401a",
+    "small-2x.png": "1828a163e03ebf3ea8557c1aa4f30820fd716637f0c53202cae37a73237fb1f5",
+    "small-3x.png": "22e03e46c8881af5072b89376e438c7f6d74ee5c08d7f58dbf0dbe78cf2fb7e6",
+    "small-3x-timer.png": "6bafb272a90842256a365d08a7ec8e40b37700bf9f20a80a1281b9e3c1cdb7e3"
+  },
+  "comparison_note": "24/26 comparison images captured before the same-height progress label moved inside the scroll region. Final candidate captures include that viewport repair; body typography is unchanged.",
+  "fixture": "Synthetic recipe using user-supplied instruction wording; no household database queried."
+}
