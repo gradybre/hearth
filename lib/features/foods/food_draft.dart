@@ -68,6 +68,7 @@ class ServingDraft {
     this.sourceAmount,
     this.sourceAmountText,
     this.id,
+    this.isStarter = false,
   });
 
   final String amount;
@@ -89,6 +90,17 @@ class ServingDraft {
 
   /// Set when editing an existing serving, so a save updates it in place.
   final String? id;
+
+  /// True only for the row Hearth itself opened the editor with, and only
+  /// while nobody has touched it (spec R11).
+  ///
+  /// Ownership has to be stated rather than inferred from the values. A food
+  /// really can carry a saved 100 g row with no macros on it -- a half-filled
+  /// import is the commonest thing in the library -- and a merge that guessed
+  /// a starter from '100', 'g' and four blanks would delete somebody's own
+  /// row, and its id, to make room for a photo. Cleared by [copyWith], which
+  /// is how every edit in the editor arrives.
+  final bool isStarter;
 
   /// The exact quantity this row was loaded with, and the text that stood
   /// for it (spec R6). An untouched amount is saved back as [sourceAmount]
@@ -134,13 +146,21 @@ class ServingDraft {
   bool get hasNoMacros => macros.isZero;
 
   bool get isUntouchedStarter =>
-      id == null &&
+      isStarter &&
       amount == '100' &&
       unitId == 'g' &&
       kcal.trim().isEmpty &&
       protein.trim().isEmpty &&
       carbs.trim().isEmpty &&
-      fat.trim().isEmpty;
+      fat.trim().isEmpty &&
+      // The minor three as well. A stated 0 mg of sodium is an answer, and
+      // it can be the whole of what somebody has entered so far -- a row
+      // holding one is theirs, whatever a stale marker says about it. The
+      // marker and [copyWith] already cover the ordinary path; this covers a
+      // restored draft whose marker outlived the row's being touched.
+      fiber.trim().isEmpty &&
+      sodium.trim().isEmpty &&
+      cholesterol.trim().isEmpty;
 
   /// Whether two rows describe the same portion, so one need not be added
   /// twice. Compared on the amount as displayed rather than as a double: a
@@ -226,13 +246,18 @@ class ServingDraft {
     }
   }
 
-  /// How the portion reads in a picker: "100 g", "1 item".
+  /// How the portion reads in a picker: "100 g", "2/3 cup", "1 item".
+  ///
+  /// Written by `writeAmount`, the documented inverse of the `parseAmount`
+  /// that read it: a measuring amount is marked on a jug as 2/3, and the
+  /// package/nutrition dropdown was offering "0.6666666666666666 cup" --
+  /// a number nobody typed and nobody could check against the packet in
+  /// their hand. Whole numbers are unaffected, and this is display alone:
+  /// `resolvedAmount` still saves the exact quantity the row was given.
   String get label {
     final double? value = amountValue;
     if (value == null) return unit.label;
-    final String number = value == value.roundToDouble()
-        ? value.round().toString()
-        : value.toString();
+    final String number = writeAmount(value);
     return unit.label.isEmpty ? number : '$number ${unit.label}';
   }
 
@@ -247,6 +272,7 @@ class ServingDraft {
     String? sodium,
     String? cholesterol,
     String? id,
+    bool? isStarter,
   }) => ServingDraft(
     amount: amount ?? this.amount,
     unitId: unitId ?? this.unitId,
@@ -260,6 +286,9 @@ class ServingDraft {
     sourceAmount: sourceAmount,
     sourceAmountText: sourceAmountText,
     id: id ?? this.id,
+    // An edit is somebody taking the row for their own, so the starter mark
+    // goes unless a caller deliberately keeps it.
+    isStarter: isStarter ?? false,
   );
 
   /// Everything a person can change, for the unsaved-work guard (review F01).
@@ -281,6 +310,7 @@ class ServingDraft {
     sourceAmountText,
     sourceAmount?.canonicalAmount,
     id,
+    isStarter,
   ];
 
   /// For the local draft record (review N01).
@@ -302,6 +332,7 @@ class ServingDraft {
     'source_amount': _quantityToJsonOrNull(sourceAmount),
     'source_amount_text': sourceAmountText,
     'id': id,
+    'is_starter': isStarter,
   };
 
   static ServingDraft fromJson(Map<String, Object?> json) => ServingDraft(
@@ -317,6 +348,7 @@ class ServingDraft {
     sourceAmount: _quantityFromJsonMap(json['source_amount']),
     sourceAmountText: json['source_amount_text'] as String?,
     id: json['id'] as String?,
+    isStarter: json['is_starter'] == true,
   );
 
   @override
@@ -375,7 +407,7 @@ class FoodDraft {
     // row has to keep pointing at it through every rebuild between now and
     // Save.
     servings: <ServingDraft>[
-      ServingDraft(amount: '100', id: const Uuid().v4()),
+      ServingDraft(amount: '100', id: const Uuid().v4(), isStarter: true),
     ],
   );
 
@@ -574,9 +606,10 @@ class FoodDraft {
   factory FoodDraft.forBarcode(String barcode) => FoodDraft(
     name: '',
     barcode: barcode,
-    // A stable id from the moment the row exists, like every other path.
+    // A stable id from the moment the row exists, like every other path,
+    // and marked as Hearth's own so a read can replace it.
     servings: <ServingDraft>[
-      ServingDraft(amount: '100', id: const Uuid().v4()),
+      ServingDraft(amount: '100', id: const Uuid().v4(), isStarter: true),
     ],
   );
 
@@ -621,20 +654,45 @@ class FoodDraft {
         reading.servingsPerContainer == null) {
       return withWalmartLink(reading.walmartLink);
     }
-    // A row with a portion and no macros is a gap, not an answer — unless the
-    // household has said this food really is zero, which is the one case where
-    // four zeroes are the measurement. Only ever dropped when the label has
-    // something to put in its place.
-    final bool replaceEmptyRows = !isZeroCalorie && reading.servings.isNotEmpty;
+    // What this read is allowed to say about nutrition (spec R11).
+    //
+    // Servings the reading itself marks as having come from the package
+    // photograph are not transcribed panel facts, and they neither replace
+    // nor join what is already here. Missing provenance is deliberately NOT
+    // read as package provenance: an older server says nothing at all, and a
+    // legacy read that really did transcribe a panel has to keep working.
+    // The authority on a panel-less read is the request's own intent, which
+    // the controller and the adapter apply before this ever sees it.
+    final bool nutritionIsFromPackagePhoto =
+        reading.fieldSources['servings'] == 'package';
+    final List<LabelServing> offered = nutritionIsFromPackagePhoto
+        ? const <LabelServing>[]
+        : reading.servings;
+
+    // The read said something worth acting on, so Hearth's own opening row --
+    // 100 g, untouched, never an answer -- gives way. Nothing else does. An
+    // existing row is somebody's work, zero macros and all, and the filter
+    // that used to clear 'empty' rows took real ones with it, along with the
+    // ids any package relationship was anchored to (spec R10).
+    final bool readSomething =
+        offered.isNotEmpty ||
+        reading.packageSize != null ||
+        reading.servingsPerContainer != null;
 
     final List<ServingDraft> kept = <ServingDraft>[
       for (final ServingDraft serving in servings)
-        if (reading.servings.isEmpty || !serving.isUntouchedStarter)
-          if (!replaceEmptyRows || !serving.hasNoMacros) serving,
+        if (!readSomething || !serving.isUntouchedStarter) serving,
     ];
 
     final List<ServingDraft> added = <ServingDraft>[];
-    for (final LabelServing read in reading.servings) {
+    final List<String> nutritionNotes = <String>[];
+    if (nutritionIsFromPackagePhoto && reading.servings.isNotEmpty) {
+      nutritionNotes.add(
+        'Only the package photo was selected, so the nutrition that came '
+        'back with it was not used. Your existing nutrition has been kept.',
+      );
+    }
+    for (final LabelServing read in offered) {
       final ServingDraft candidate = ServingDraft(
         // A row read from a photo needs a stable id of its own the moment it
         // exists, not one invented later by `toFood`: a package/nutrition
@@ -657,11 +715,35 @@ class FoodDraft {
             ? ''
             : _rounded('${read.cholesterolMg}', decimals: 0),
       );
-      final bool alreadyHere = <ServingDraft>[
-        ...kept,
-        ...added,
-      ].any((ServingDraft existing) => existing.isSamePortionAs(candidate));
-      if (!alreadyHere) added.add(candidate);
+      final ServingDraft? samePortion = <ServingDraft>[...kept, ...added]
+          .firstWhereOrNull(
+            (ServingDraft existing) => existing.isSamePortionAs(candidate),
+          );
+      if (samePortion == null) {
+        added.add(candidate);
+        continue;
+      }
+      // The portion is already here, so what is entered against it stays:
+      // rewriting somebody's macros under a photo is the one failure a review
+      // screen cannot catch, because it looks correct. A disagreement is
+      // still worth saying out loud (spec R10).
+      final Macros mine = samePortion.macros;
+      final Macros theirs = candidate.macros;
+      // The minor three are compared as well, and compared as nullables: an
+      // unknown meeting a stated zero is a real difference, and flattening
+      // one into the other is the distinction spec 5.6 rests on.
+      if (mine.kcal != theirs.kcal ||
+          mine.proteinG != theirs.proteinG ||
+          mine.carbG != theirs.carbG ||
+          mine.fatG != theirs.fatG ||
+          mine.fiberG != theirs.fiberG ||
+          mine.sodiumMg != theirs.sodiumMg ||
+          mine.cholesterolMg != theirs.cholesterolMg) {
+        nutritionNotes.add(
+          'The photo read ${candidate.label} differently from what is '
+          'entered. Your entered nutrition has been kept.',
+        );
+      }
     }
 
     // The front-of-pack net amount (spec R11) fills the package-size field
@@ -694,6 +776,7 @@ class FoodDraft {
 
     final List<String> notes = <String>[
       ...packageReviewNotes,
+      ...nutritionNotes,
       for (final issue in reading.uncertain) '${issue.field}: ${issue.note}',
     ];
     if (packSize.trim().isNotEmpty &&
@@ -709,8 +792,33 @@ class FoodDraft {
     // the reading itself rather than on the accumulated notes: an old note
     // from an earlier scan must not re-ask a question already answered, and a
     // new unsafe scan must clear an answer given about different photos.
+    // A relationship somebody has already reviewed is not re-opened by a
+    // front-of-package photo. The basis is a fact about a panel, and a read
+    // with no panel in it reports 'unknown' because it saw none -- not
+    // because the answer given earlier has stopped being true (spec R10).
+    final bool alreadyReviewed =
+        packageNutritionReviewed &&
+        (originalPackageNutrition?.isValid ?? false);
+    // The one read a reviewed answer survives: a package photo adding
+    // package facts to the facts that answer was given about. No nutrition
+    // was offered, the basis is 'unknown' -- the absence of evidence about a
+    // panel rather than a different preparation -- and any count it read
+    // agrees with the count already entered.
+    //
+    // Anything else is new evidence and asks the question again: a prepared
+    // or drained panel describes different contents, and a count that
+    // disagrees means one of the two figures is wrong. Neither may inherit
+    // an acknowledgement given about something else.
+    final double? offeredCount = reading.servingsPerContainer;
+    final bool frontOnlyAugmentation =
+        alreadyReviewed &&
+        offered.isEmpty &&
+        reading.packageBasis == 'unknown' &&
+        (offeredCount == null ||
+            offeredCount == parseAmount(servingsPerPackage));
     final bool scanNeedsBasisReview =
         reading.packageBasis != 'as_packaged' &&
+        !frontOnlyAugmentation &&
         (reading.packageSize != null || reading.servingsPerContainer != null);
     if (scanNeedsBasisReview) {
       notes.add(
@@ -733,16 +841,24 @@ class FoodDraft {
     // A single new volume row is offered as the likely nutrition serving for
     // a package relationship — never activated, only pre-selected, so the
     // user still has to review and confirm it (spec R10).
+    // Only ever offered where the offer is usable: a serving pre-selected
+    // with no servings-per-package beside it makes the editor complain that
+    // 'Servings per package needs a positive number' about a field nobody
+    // has touched, immediately after a scan. The package amount and the
+    // serving are both still on screen to be paired by hand.
     String? suggestedServingId = packageServingId;
-    if (suggestedServingId == null && !packageNutritionReviewed) {
+    final double? mergedCount = parseAmount(mergedServingsPerPackage);
+    if (suggestedServingId == null &&
+        !packageNutritionReviewed &&
+        mergedCount != null &&
+        mergedCount.isFinite &&
+        mergedCount > 0) {
       final List<ServingDraft> volumeAdded = <ServingDraft>[...kept, ...added]
           .where(
             (ServingDraft s) => Units.byId(s.unitId)?.kind == UnitKind.volume,
           )
           .toList(growable: false);
-      if (volumeAdded.length == 1 &&
-          (reading.packageSize != null ||
-              reading.servingsPerContainer != null)) {
+      if (volumeAdded.length == 1) {
         suggestedServingId = volumeAdded.single.id;
       }
     }
@@ -773,8 +889,13 @@ class FoodDraft {
       // What this label actually said, kept for correction later. A scan that
       // supplied no package facts leaves whatever was already recorded.
       packageFieldSources: {...packageFieldSources, ...reading.fieldSources},
+      // Same reasoning, and the same predicate: an 'unknown' from a read
+      // that was never asked to look at a panel is the absence of evidence,
+      // and must not overwrite the evidence already recorded here.
       packageLabelBasis:
-          reading.packageSize != null || reading.servingsPerContainer != null
+          (reading.packageSize != null ||
+                  reading.servingsPerContainer != null) &&
+              !frontOnlyAugmentation
           ? reading.packageBasis
           : packageLabelBasis,
       preservedDensity: preservedDensity,

@@ -28,10 +28,19 @@ class EdgeFunctionLabelReader implements LabelReader, WalmartLinkReader {
 
   final SupabaseClient _client;
 
+  /// Gated on the roles the request actually carried, the same way the
+  /// controller gates it (spec R11): a caller that reaches past the
+  /// controller gets the same protection, and a reply that states nutrition
+  /// for a photo set with no panel in it is narrowed here too. Applying the
+  /// gate twice removes nothing the first pass left.
   @override
-  Future<LabelReading> read(List<AiImage> images) async => readingFrom(
-    await _ask('label', images, 'Take a photo of the label first.'),
-  );
+  Future<LabelReading> read(List<AiImage> images) async =>
+      gateLabelReadingToRequest(
+        readingFrom(
+          await _ask('label', images, 'Take a photo of the label first.'),
+        ),
+        LabelRequestIntent.ofRoles(images.map((AiImage image) => image.role)),
+      );
 
   @override
   Future<PackReading> readPack(List<AiImage> images) async => packFrom(

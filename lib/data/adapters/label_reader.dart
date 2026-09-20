@@ -42,11 +42,11 @@ class LabelServing {
 /// What a photographed label says.
 ///
 /// The plural in [servings] is the point. A US panel usually states one
-/// portion several ways — "Serving size 1oz (28g/about 1/4 cup)" — and a
-/// weight and a volume for the same portion are, between them, the only
-/// statement of how dense the food is. That is the fact a recipe line
-/// measured in cups needs from a food the shops sell by weight, and no other
-/// source in the chain provides it.
+/// portion several ways — "Serving size 2/3 cup (85g)" — and a weight and a
+/// volume for the same portion are, between them, the only statement of how
+/// dense the food is. That is the fact a recipe line measured in cups needs
+/// from a food the shops sell by weight, and no other source in the chain
+/// provides it.
 @immutable
 class LabelReading {
   const LabelReading({
@@ -65,6 +65,11 @@ class LabelReading {
   final List<LabelServing> servings;
 
   /// Photo provenance for the transcribed package and serving facts.
+  ///
+  /// 'nutrition', 'package', 'both' or 'unknown', by field. Advisory: it is
+  /// the model's account of its own reading, and an older server sends none
+  /// at all. The request's own intent — which photos were actually sent —
+  /// is the authority, and lives in [LabelRequestIntent].
   final Map<String, String> fieldSources;
 
   /// Null when the photo is of the panel alone, which is the common case.
@@ -74,7 +79,7 @@ class LabelReading {
   /// Anything blurred, cut off, or ambiguous (spec §5.3's flag-never-guess).
   final List<AiUncertainty> uncertain;
 
-  /// What the front of the package says it holds — 'NET WT 24 OZ' — when a
+  /// What the front of the package says it holds — 'NET WT 10 OZ' — when a
   /// front-of-package photo was part of this read (spec §5.7/R11). Null when
   /// no package photo was supplied or none was legible.
   final Quantity? packageSize;
@@ -83,7 +88,7 @@ class LabelReading {
   /// holds, straight off the label. Null when not stated or not read.
   final double? servingsPerContainer;
 
-  /// True when the panel itself hedges the count — 'about 6 servings'.
+  /// True when the panel itself hedges the count — 'about 3.5 servings'.
   final bool servingsApproximate;
 
   /// 'as_packaged', 'prepared', 'drained', or 'unknown' when the panel did
@@ -99,6 +104,128 @@ class LabelReading {
       packageSize == null &&
       servingsPerContainer == null &&
       !walmartLink.hasLink;
+
+  /// This reading with its serving nutrition removed, and a note saying why
+  /// (spec R11).
+  ///
+  /// Everything the package photographs *could* state — the net contents, a
+  /// printed count, the name, the link — is kept. Only the nutrition goes:
+  /// no panel photo was selected, so nothing in this reply was asked to come
+  /// off one, and nutrition nobody asked for is not nutrition to overwrite
+  /// somebody's own with.
+  LabelReading withoutPanelNutrition() => LabelReading(
+    servings: const <LabelServing>[],
+    name: name,
+    brand: brand,
+    packageSize: packageSize,
+    servingsPerContainer: servingsPerContainer,
+    servingsApproximate: servingsApproximate,
+    packageBasis: packageBasis,
+    fieldSources: <String, String>{...fieldSources, 'servings': 'package'},
+    walmartLink: walmartLink,
+    uncertain: <AiUncertainty>[
+      ...uncertain,
+      const AiUncertainty(
+        field: 'servings',
+        note:
+            'Only the package photo was selected, so the nutrition that came '
+            'back with it was not transcribed from a panel and was dropped.',
+      ),
+    ],
+  );
+}
+
+/// The role a photo was chosen for, as the client states it.
+///
+/// Two words, shared by the picker, the controller, the adapter and the Edge
+/// Function's own `labelRequestIntent`. They were string literals in four
+/// places, which is three places for them to drift.
+abstract final class LabelPhotoRole {
+  static const String nutrition = 'nutrition';
+  static const String package = 'package';
+
+  static bool isKnown(String? role) => role == nutrition || role == package;
+}
+
+/// What a label request was actually *for*, judged by the photos it carried
+/// (spec R11).
+///
+/// The authority on whether a reply may state nutrition. Provenance the model
+/// returns is its own account of its own work: an older server sends none at
+/// all, and a mistaken or an invented one reads exactly like a true one.
+/// Which slots the user filled is a fact the client knows for certain.
+///
+/// It states a *purpose*, not the contents of any pixel. Nothing here knows
+/// whether the photo in the package slot happens to show a panel as well.
+/// What it knows is that nobody asked for one to be read, which is enough:
+/// nutrition nobody asked for is not nutrition to replace somebody's own
+/// with, and the one they did ask for is one photo away.
+@immutable
+class LabelRequestIntent {
+  const LabelRequestIntent({required this.nutrition, required this.package});
+
+  /// The permissive intent: nutrition is allowed because nothing said it is
+  /// not. What a read with no roles at all means.
+  static const LabelRequestIntent unknown = LabelRequestIntent(
+    nutrition: true,
+    package: true,
+  );
+
+  /// The intent of a request carrying [roles], one per image.
+  ///
+  /// Anything unrecognised, or an empty set, falls back to [unknown] rather
+  /// than to a gate — and so does the server, on the same reasoning rather
+  /// than as a second line of defence behind this one.
+  ///
+  /// Failing open is deliberate. The cost of the gate misfiring is a panel
+  /// somebody photographed being thrown away; the requests it cannot
+  /// classify are the legacy ones, which never expressed a package-only
+  /// purpose to begin with and read panels perfectly well before any of this
+  /// existed.
+  factory LabelRequestIntent.ofRoles(Iterable<String?> roles) {
+    final List<String?> all = roles.toList(growable: false);
+    if (all.isEmpty || all.any((String? r) => !LabelPhotoRole.isKnown(r))) {
+      return unknown;
+    }
+    return LabelRequestIntent(
+      nutrition: all.contains(LabelPhotoRole.nutrition),
+      package: all.contains(LabelPhotoRole.package),
+    );
+  }
+
+  final bool nutrition;
+  final bool package;
+
+  /// A front-of-package read: no panel was sent, so no panel was read.
+  bool get isPackageOnly => package && !nutrition;
+}
+
+/// [reading], narrowed to what the request it answers could possibly have
+/// seen (spec R11).
+///
+/// Applied by the controller and by the adapter both, because they guard
+/// different things: the controller covers any reader at all, including a
+/// stub and a server too old to know about roles; the adapter covers a caller
+/// that reaches past the controller. Applying it twice is harmless — the
+/// second pass has nothing left to remove.
+LabelReading gateLabelReadingToRequest(
+  LabelReading reading,
+  LabelRequestIntent intent,
+) {
+  if (!intent.isPackageOnly || reading.servings.isEmpty) return reading;
+  final LabelReading gated = reading.withoutPanelNutrition();
+  // Everything that reply had to say was nutrition nobody asked for, so once
+  // it is gone there is nothing left to merge at all. Saying so beats the
+  // sheet closing on a draft that did not change, with only a snackbar to
+  // explain it: the controller keeps both photos through a failure, so
+  // trying again is one tap rather than another trip to the cupboard.
+  if (gated.isEmpty) {
+    throw const RecipeAiException(
+      'No package size came off that photo. Try again with the net weight '
+      'filling the frame, or add the nutrition panel photo too.',
+    );
+  }
+  return gated;
 }
 
 /// What a package says it holds — "NET WT 24 OZ" (spec §5.7).
