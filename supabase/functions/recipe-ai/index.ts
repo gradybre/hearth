@@ -725,16 +725,16 @@ the same numbers: the entries differ in unit, and the unit is the fact being
 recorded. A cup entry and a gram entry for one serving are one portion
 described twice, which is exactly what the app needs.
 
-A panel printing "2/3 cup (85g)", 35 calories, 1g protein, 8g total
-carbohydrate, 0g total fat, 1g dietary fibre, 0mg sodium, 0mg cholesterol, and
-"about 3.5 servings per container", on a package marked NET WT 10 OZ, comes
+A panel printing "1/2 cup (125g)", 70 calories, 3g protein, 12g total
+carbohydrate, 1g total fat, 2g dietary fibre, 40mg sodium, 5mg cholesterol,
+and "about 4 servings per container", on a package marked NET WT 16 OZ, comes
 back as:
 
-{"servings":[{"amount":0.667,"unit":"cup","kcal":35,"protein_g":1,
-"carb_g":8,"fat_g":0,"fiber_g":1,"sodium_mg":0,"cholesterol_mg":0},
-{"amount":85,"unit":"g","kcal":35,"protein_g":1,"carb_g":8,"fat_g":0,
-"fiber_g":1,"sodium_mg":0,"cholesterol_mg":0}],"package_amount":10,
-"package_unit":"oz","servings_per_container":3.5,
+{"servings":[{"amount":0.5,"unit":"cup","kcal":70,"protein_g":3,
+"carb_g":12,"fat_g":1,"fiber_g":2,"sodium_mg":40,"cholesterol_mg":5},
+{"amount":125,"unit":"g","kcal":70,"protein_g":3,"carb_g":12,"fat_g":1,
+"fiber_g":2,"sodium_mg":40,"cholesterol_mg":5}],"package_amount":16,
+"package_unit":"oz","servings_per_container":4,
 "servings_approximate":true}
 
 Those figures show the SHAPE of an answer. They are not defaults, not a

@@ -15,6 +15,11 @@ import assert from 'node:assert/strict';
 // that the live photo pair now returns both entries; only the real retest is.
 // Assertions are deliberately clause-shaped rather than whole paragraphs, so
 // rewording the prose does not break them but deleting a rule does.
+//
+// The prompt's worked example and the fixture below deliberately carry
+// different numbers. An example that matched the packet used for acceptance
+// would make a passing live read unfalsifiable: copying the example and
+// reading the panel would look exactly the same.
 
 const HOUSEHOLD = '3f6b1c2e-9a4d-4b8e-8c0a-1d2e3f4a5b6c';
 const AUTH = 'Bearer fixture.caller.token';
@@ -193,8 +198,10 @@ Deno.test('label requests carry the serving-measure extraction contract', async 
 
     await t.step('a package ounce figure never suppresses serving grams', () => {
       // The ounce preference stays, but only for an ounce printed on the
-      // serving line itself.
+      // serving line itself — which is the clause that keeps a net weight on
+      // the front of the box from silencing the panel's grams.
       assert.match(system, /ounce figure is\s*\n?printed for that same serving/i);
+      assert.match(system, /on the serving line itself/i);
       assert.match(
         system,
         /net (weight|contents)[\s\S]{0,200}never suppresses[\s\S]{0,60}gram/i,
@@ -215,23 +222,24 @@ Deno.test('label requests carry the serving-measure extraction contract', async 
     });
 
     await t.step('the worked example states the whole shape at once', () => {
+      // Deliberately not the acceptance packet's numbers: see the note at the
+      // top of this file.
       assert.match(system, /"unit":"cup"/);
       assert.match(system, /"unit":"g"/);
-      assert.match(system, /0\.667/);
-      assert.match(system, /"amount":85/);
-      assert.match(system, /"package_amount":10/);
+      assert.match(system, /"amount":0\.5/);
+      assert.match(system, /"amount":125/);
+      assert.match(system, /"package_amount":16/);
       assert.match(system, /"package_unit":"oz"/);
-      assert.match(system, /"servings_per_container":3\.5/);
+      assert.match(system, /"servings_per_container":4/);
       assert.match(system, /"servings_approximate":true/);
       // Identical macros across the two entries is the point of the example,
       // so both rows must carry the calorie figure.
-      assert.equal((system.match(/"kcal":35/g) ?? []).length, 2);
+      assert.equal((system.match(/"kcal":70/g) ?? []).length, 2);
     });
 
     await t.step('the worked example is labelled an illustration, not defaults', () => {
       // An example of the right shape, carrying real-looking numbers, is a
-      // template somebody will fill in: a 35 that belonged to the soup would
-      // read perfectly on a review screen beside a different packet.
+      // template somebody will fill in.
       assert.match(system, /(not|never)[\s\S]{0,120}defaults?/i);
       assert.match(
         system,
@@ -243,6 +251,7 @@ Deno.test('label requests carry the serving-measure extraction contract', async 
       assert.match(system, /about 3\.5/i);
       assert.match(system, /servings_approximate/);
       assert.match(system, /do not round it to a whole count/i);
+      assert.match(system, /approximately/i);
       assert.match(
         system,
         /uncertain[\s\S]{0,160}(rather than|instead of)[\s\S]{0,80}exact/i,
@@ -251,13 +260,15 @@ Deno.test('label requests carry the serving-measure extraction contract', async 
 
     await t.step('the blurred-digit paragraph is unchanged', () => {
       // Reverted once already after review N2, because majors default to 0 and
-      // omitting them turns an unreadable digit into a confident zero.
+      // omitting them turns an unreadable digit into a confident zero. Checked
+      // as the one exact paragraph, so a quiet reword is a failure here rather
+      // than a surprise in production.
       assert.ok(
         system.includes(
-          'If a digit is blurred, a line is cut off, or a figure could be read two\nways,\ntranscribe your best reading AND list it in uncertain.',
-        ) ||
-          (system.includes('transcribe your best reading AND list it in uncertain') &&
-            system.includes('A flagged guess is\nuseful; a confident wrong number is not.')),
+          'If a digit is blurred, a line is cut off, or a figure could be read two ways,\n' +
+            'transcribe your best reading AND list it in uncertain. A flagged guess is\n' +
+            'useful; a confident wrong number is not.',
+        ),
       );
     });
 
@@ -276,7 +287,8 @@ Deno.test('label requests carry the serving-measure extraction contract', async 
     });
 
     await t.step('the route still shapes both printed measures through', () => {
-      // Route behaviour on fixture output, not evidence about the model.
+      // Route behaviour on fixture output, not evidence about the model, and
+      // independent of the example numbers in the prompt.
       assert.equal(shaped.servings.length, 2);
       assert.equal(shaped.servings[0].unit, 'cup');
       assert.equal(shaped.servings[0].amount, 0.667);
