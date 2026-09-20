@@ -16,3 +16,7 @@ The oversized backend-a1 packet produced no applicable code and was cancelled wi
 
 ## D-WALMART-007 — Source-sharing approval review block
 The adapters-a1 worker was not started: automatic approval review rejected source sharing to subscription Claude. A reassessment cited literal user Astra loop request, approved plan source packets/subscription workers, and recorded approval, but review rejected again requiring destination-specific source-sharing permission. A concise explicit user question is pending. No workaround or further Claude worker is authorized by the approval layer until resolved. Previously completed workers are stopped. Local server checks and draft-preservation regression preparation continued.
+
+
+## D-WALMART-008 — Explicit source-sharing approval
+The user answered “yes” to sharing relevant Hearth source and test files with Anthropic’s Claude service through the existing subscription for implementation and review. The approval-review source-sharing blocker is resolved; no credentials or household data are included.

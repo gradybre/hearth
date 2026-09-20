@@ -16,11 +16,15 @@ import '../../data/repositories/food_repository.dart';
 import '../../domain/format/serving_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/parsing/amount_parser.dart';
+import '../../domain/shopping/walmart_link_reading.dart';
 import '../../domain/shopping/walmart_product.dart';
 import '../../domain/units/mass_display_mode.dart';
 import '../../domain/units/unit.dart';
 import 'food_draft.dart';
 import 'read_label_sheet.dart';
+import 'read_walmart_link_sheet.dart';
+import 'walmart_link_controller.dart';
+import 'walmart_link_field.dart';
 
 /// Create or edit a food (spec §5.5).
 ///
@@ -60,6 +64,8 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
   late FoodDraft _draft = _applyInitialLabel(
     widget.initialDraft ?? FoodDraft.blank(),
   );
+  late WalmartLinkReading _lastWalmartReading =
+      widget.initialLabel?.walmartLink ?? const WalmartLinkReading.notFound();
   bool _loaded = false;
   bool _saving = false;
 
@@ -151,7 +157,10 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
   Future<void> _readLabel() async {
     final LabelReading? reading = await showReadLabelSheet(context);
     if (reading == null || !mounted) return;
-    setState(() => _draft = _draft.withLabel(reading));
+    setState(() {
+      _draft = _draft.withLabel(reading);
+      _lastWalmartReading = reading.walmartLink;
+    });
 
     if (reading.uncertain.isEmpty) return;
     // §5.3's flag-never-guess, at the one moment it matters: the user is
@@ -166,6 +175,15 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _readWalmartLink() async {
+    final reading = await showReadWalmartLinkSheet(context);
+    if (!mounted || reading == null) return;
+    setState(() {
+      _draft = _draft.withWalmartLink(reading);
+      _lastWalmartReading = reading;
+    });
   }
 
   Future<void> _save() async {
@@ -561,14 +579,12 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
                 contentPadding: EdgeInsets.zero,
               ),
               const SizedBox(height: HearthSpacing.lg),
-              Row(
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: HearthSpacing.sm,
                 children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      'Serving sizes',
-                      style: context.text.sectionHeader,
-                    ),
-                  ),
+                  Text('Serving sizes', style: context.text.sectionHeader),
                   // §5.5's fallback chain ends at manual entry, and this is
                   // manual entry with the typing removed. It leads because it
                   // is the faster path for anything with a panel on it, and
@@ -653,7 +669,7 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
               Text('Buying it at Walmart', style: context.text.label),
               const SizedBox(height: HearthSpacing.xs),
               Text(
-                'Paste a product link and Hearth remembers which product this '
+                'Paste a product link or read one from a screenshot. Hearth remembers which product this '
                 'is, so "Take it shopping" can fill a basket rather than open '
                 'a search.',
                 style: context.text.metadata.copyWith(
@@ -665,8 +681,26 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
                 label: 'Walmart link or item number',
                 value: _draft.walmartItemId,
                 hint: 'walmart.com/ip/…/10450479',
-                onChanged: (String v) =>
-                    setState(() => _draft = _draft.copyWith(walmartItemId: v)),
+                onChanged: (String v) => setState(() {
+                  _draft = _draft.copyWith(walmartItemId: v);
+                  _lastWalmartReading = const WalmartLinkReading.notFound();
+                }),
+              ),
+              const SizedBox(height: HearthSpacing.sm),
+              WalmartLinkActions(
+                value: _draft.walmartItemId,
+                reading: _lastWalmartReading,
+                canRead: ref.watch(walmartLinkReaderProvider) != null,
+                onRead: _readWalmartLink,
+                onReplace: () => setState(() {
+                  _draft = _draft.withWalmartLink(
+                    _lastWalmartReading,
+                    replace: true,
+                  );
+                }),
+                onKeep: () => setState(() {
+                  _lastWalmartReading = const WalmartLinkReading.notFound();
+                }),
               ),
               if (_draft.walmartItemId.trim().isNotEmpty &&
                   !WalmartProduct.looksValid(_draft.walmartItemId)) ...<Widget>[

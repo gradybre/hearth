@@ -62,7 +62,9 @@ class _ReadLabelSheetState extends ConsumerState<_ReadLabelSheet> {
     if (state is LabelScanDone && !_delivered) {
       _delivered = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) Navigator.of(context).pop(state.reading);
+        if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {
+          Navigator.of(context).pop(state.reading);
+        }
       });
     }
 
@@ -96,7 +98,7 @@ class _ReadLabelSheetState extends ConsumerState<_ReadLabelSheet> {
                   Text(
                     'Photograph the Nutrition Facts panel, the package size, '
                     'or both, and Hearth will fill in what it can read for '
-                    'you to check.',
+                    'you to check. Either photo can also include a readable Walmart link.',
                     style: context.text.metadata.copyWith(
                       color: colors.textMuted,
                     ),

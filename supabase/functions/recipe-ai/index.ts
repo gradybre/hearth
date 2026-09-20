@@ -1078,7 +1078,8 @@ function imageBlocks(images: string[]): unknown[] {
     const data = stripDataUrl(raw);
     // base64 is 4 characters per 3 bytes; close enough to hold a line on size
     // without decoding the whole thing to measure it.
-    const bytes = Math.floor((data.length * 3) / 4);
+    const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
+    const bytes = Math.floor((data.length * 3) / 4) - padding;
     total += bytes;
     if (bytes > MAX_IMAGE_BYTES) {
       throw new Error('bad request: an image is too large');

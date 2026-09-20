@@ -11,6 +11,7 @@ import '../../domain/models/macros.dart';
 import '../../domain/models/package_nutrition.dart';
 import '../../domain/parsing/amount_parser.dart';
 import '../../domain/parsing/pack_size.dart';
+import '../../domain/shopping/walmart_link_reading.dart';
 import '../../domain/shopping/walmart_product.dart';
 import '../../domain/units/mass_display_mode.dart';
 import '../../domain/units/quantity.dart';
@@ -600,8 +601,26 @@ class FoodDraft {
   /// Numbers are rounded the way [fromLookup] rounds them, and for the same
   /// reason: this lands on a screen the user is being asked to *check*, and
   /// digits that look measured invite trust they have not earned.
+  FoodDraft withWalmartLink(
+    WalmartLinkReading reading, {
+    bool replace = false,
+  }) {
+    if (!reading.hasLink) return this;
+    if (WalmartProduct.idFrom(walmartItemId) ==
+        WalmartProduct.idFrom(reading.url!)) {
+      return this;
+    }
+    if (walmartItemId.trim().isNotEmpty && !replace) return this;
+    return copyWith(walmartItemId: reading.url!);
+  }
+
   FoodDraft withLabel(LabelReading reading) {
     if (reading.isEmpty) return this;
+    if (reading.servings.isEmpty &&
+        reading.packageSize == null &&
+        reading.servingsPerContainer == null) {
+      return withWalmartLink(reading.walmartLink);
+    }
     // A row with a portion and no macros is a gap, not an answer — unless the
     // household has said this food really is zero, which is the one case where
     // four zeroes are the measurement. Only ever dropped when the label has
@@ -734,7 +753,7 @@ class FoodDraft {
       menuGroup: menuGroup,
       menuOrder: menuOrder,
       storeTag: storeTag,
-      walmartItemId: walmartItemId,
+      walmartItemId: withWalmartLink(reading.walmartLink).walmartItemId,
       packSize: mergedPackSize,
       barcode: barcode,
       existingId: existingId,

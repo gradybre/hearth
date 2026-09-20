@@ -171,7 +171,7 @@ class LabelScanController extends Notifier<LabelScanState> {
   /// side reads roles positionally, and a stable order is what makes that
   /// safe.
   Future<void> read() async {
-    if (_disposed) return;
+    if (_disposed || state is LabelScanReading) return;
     if (_back == null && _front == null) return;
 
     final int run = ++_read;

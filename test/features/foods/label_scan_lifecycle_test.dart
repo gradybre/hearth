@@ -34,8 +34,10 @@ class Picker implements PhotoPicker {
 class Reader implements LabelReader {
   final Completer<LabelReading> pending = Completer<LabelReading>();
   List<AiImage> received = [];
+  int calls = 0;
   @override
   Future<LabelReading> read(List<AiImage> images) {
+    calls++;
     received = images;
     return pending.future;
   }
@@ -46,6 +48,29 @@ class Reader implements LabelReader {
 }
 
 void main() {
+  test('repeated Read while pending makes one label request', () async {
+    final reader = Reader();
+    final container = ProviderContainer(
+      overrides: [
+        photoPickerProvider.overrideWithValue(Picker()),
+        labelReaderProvider.overrideWithValue(reader),
+      ],
+    );
+    final sub = container.listen(labelScanProvider, (_, _) {});
+    addTearDown(() {
+      sub.close();
+      container.dispose();
+    });
+    final ctrl = container.read(labelScanProvider.notifier);
+    await ctrl.pick(LabelSlot.nutrition, PhotoOrigin.library);
+    final first = ctrl.read();
+    await ctrl.read();
+    expect(reader.calls, 1);
+    reader.pending.complete(
+      const LabelReading(servings: [LabelServing(amount: 30, unitId: 'g')]),
+    );
+    await first;
+  });
   for (final bool replace in [true, false]) {
     test(
       'a ${replace ? 'replacement' : 'removal'} invalidates a pending read',

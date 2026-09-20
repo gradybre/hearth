@@ -1,3 +1,4 @@
+import { reserveUsd, costOf } from './budget.ts';
 import { strict as assert } from 'node:assert/strict';
 import {
   WALMART_FIELDS,
@@ -146,4 +147,8 @@ Deno.test('combined prompt + schema stay concise (<=12000 characters)', () => {
     combinedLength <= 12000,
     `combined length ${combinedLength} exceeds 12000 character budget`,
   );
+});
+
+Deno.test('label reservation covers the added link prompt and tool overhead', () => {
+  assert.ok(reserveUsd('label') + 1e-9 >= reserveUsd('pack') + costOf({input_tokens: 4000, output_tokens: 3096}));
 });

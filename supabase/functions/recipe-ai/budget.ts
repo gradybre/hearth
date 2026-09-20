@@ -147,8 +147,10 @@ function maxInputTokens(mode: Mode): number {
         maxImages * perImage + (60_000 + maxSharedTextChars) * perChar,
         MAX_CONTEXT_TOKENS,
       );
-    case 'menu':
     case 'label':
+      // Combined label extraction includes the bounded Walmart prompt/tool.
+      return maxImages * perImage + 4000;
+    case 'menu':
     case 'pack':
       return maxImages * perImage;
     case 'generate':

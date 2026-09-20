@@ -327,6 +327,10 @@ const Map<String, String> notSweptYet = <String, String>{
   'lib/features/foods/food_picker.dart':
       'Opened from the recipe editor while matching an ingredient — several '
       'screens in, and needs a library with an unmatched line in it.',
+  'lib/features/foods/read_walmart_link_sheet.dart':
+      'Dedicated walmart_link_sheet_test.dart and walmart_link_render_test.dart '
+      'exercise picker, read, cancel, miss and retry with synthetic responses, '
+      'including 320px at 200% and 300%; the general sweep has no reader.',
   'lib/features/foods/read_label_sheet.dart':
       'Needs a photo picker and a label-reading response to get past its '
       'first frame.',

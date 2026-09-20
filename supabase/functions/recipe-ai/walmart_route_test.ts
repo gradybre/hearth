@@ -108,6 +108,13 @@ Deno.test('Walmart route preserves one-call extraction and budget boundaries', a
         assert.ok(calls.at(-1)?.url.endsWith('/rpc/release_ai_spend'));
       }
     });
+    await t.step('exactly 5 MiB decoded is accepted despite base64 expansion', async () => {
+      reset();
+      const encoded = 'A'.repeat(Math.ceil(5 * 1024 * 1024 / 3) * 4 - 1) + '=';
+      const result = await request({mode: 'walmart', images: ['data:image/png;base64,' + encoded]});
+      assert.equal(result.response.status, 200);
+      assert.equal(modelCalls().length, 1);
+    });
     await t.step('oversized screenshot is refused before model', async () => {
       reset();
       const result = await request({ mode: 'walmart', images: ['data:image/png;base64,' + 'A'.repeat(7 * 1024 * 1024)] });

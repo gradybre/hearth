@@ -1,5 +1,6 @@
 import 'package:meta/meta.dart';
 
+import '../../domain/shopping/walmart_link_reading.dart';
 import '../../domain/units/quantity.dart';
 import 'recipe_ai.dart';
 
@@ -58,6 +59,7 @@ class LabelReading {
     this.servingsApproximate = false,
     this.packageBasis = 'unknown',
     this.fieldSources = const <String, String>{},
+    this.walmartLink = const WalmartLinkReading.notFound(),
   });
 
   final List<LabelServing> servings;
@@ -88,8 +90,15 @@ class LabelReading {
   /// not say or the photo did not make it clear.
   final String packageBasis;
 
+  /// A Walmart product link read off screenshots, when the label read also
+  /// included them. [WalmartLinkReading.notFound] when it did not.
+  final WalmartLinkReading walmartLink;
+
   bool get isEmpty =>
-      servings.isEmpty && packageSize == null && servingsPerContainer == null;
+      servings.isEmpty &&
+      packageSize == null &&
+      servingsPerContainer == null &&
+      !walmartLink.hasLink;
 }
 
 /// What a package says it holds — "NET WT 24 OZ" (spec §5.7).
