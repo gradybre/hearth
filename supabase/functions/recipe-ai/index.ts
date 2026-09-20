@@ -375,8 +375,12 @@ const LABEL_TOOL = {
           'when an ounce figure is printed for that SAME serving; when only ' +
           'a volume and a gram figure are printed, such as 2/3 cup (85g), ' +
           'return both, because together they are the only statement of how ' +
-          'dense the food is. A net weight on the front of the package is ' +
-          'not a serving and never suppresses anything. When the ' +
+          'dense the food is. Two entries whose macros are identical are ' +
+          'expected here and are never duplicates: never drop one printed ' +
+          'measure because another entry already carries the same numbers. ' +
+          'A net weight or net contents printed anywhere on the package, in ' +
+          'ounces or otherwise, is not a serving and never suppresses a ' +
+          "serving's gram figure. When the " +
           'label names a packet unit and a weight — "1 Scoop (30g)", "1 Bar ' +
           '(45g)" — return both, with identical macros: together they are ' +
           'the only statement of what that scoop or bar weighs.',
@@ -710,9 +714,32 @@ portion together are the only statement of how dense the food is, and it is
 what lets the app use this food in a recipe that measures in cups. A serving
 printed as \"2/3 cup (85g)\" is TWO entries with identical macros: return the cup
 AND the gram figure. Only suppress the gram figure when an ounce figure is
-printed for that same serving, and then return the ounce and the other
-measures. A net weight in ounces on the front of the package is not an ounce
-serving and never suppresses anything.
+printed for that same serving on the serving line itself, and then return the
+ounce and the other measures. A net weight or net contents in ounces --- on the
+front of the package, on its side, or beside the panel --- is not an ounce
+serving, and it NEVER suppresses a serving's gram figure.
+
+Identical macros across those entries are correct and expected. Never drop,
+merge or deduplicate a printed measure because another entry already carries
+the same numbers: the entries differ in unit, and the unit is the fact being
+recorded. A cup entry and a gram entry for one serving are one portion
+described twice, which is exactly what the app needs.
+
+A panel printing "2/3 cup (85g)", 35 calories, 1g protein, 8g total
+carbohydrate, 0g total fat, 1g dietary fibre, 0mg sodium, 0mg cholesterol, and
+"about 3.5 servings per container", on a package marked NET WT 10 OZ, comes
+back as:
+
+{"servings":[{"amount":0.667,"unit":"cup","kcal":35,"protein_g":1,
+"carb_g":8,"fat_g":0,"fiber_g":1,"sodium_mg":0,"cholesterol_mg":0},
+{"amount":85,"unit":"g","kcal":35,"protein_g":1,"carb_g":8,"fat_g":0,
+"fiber_g":1,"sodium_mg":0,"cholesterol_mg":0}],"package_amount":10,
+"package_unit":"oz","servings_per_container":3.5,
+"servings_approximate":true}
+
+Those figures show the SHAPE of an answer. They are not defaults, not a
+template of values, and not a fallback for anything you cannot read. Every
+number you return is transcribed from the photographs in front of you.
 
 The Nutrition Facts panel governs. Ignore nutrition in a sidebar, a product
 summary, a search result or a thumbnail; where one of those disagrees with the
@@ -726,7 +753,14 @@ serving's own macros.
 
 If the label itself calls the servings-per-container figure approximate, such
 as about 2 servings per container, set servings_approximate and keep the
-number as printed; do not round it to a whole count.
+number as printed; do not round it to a whole count. Read the qualifier
+literally: "about 3.5 servings per container" is servings_per_container 3.5
+with servings_approximate true. About is not the only qualifier --- so are
+approximately, approx., roughly, and any similar hedge printed beside the
+figure; treat all of them the same way. Only a figure printed with no
+qualifier at all is exact. If the words are cut off, or too blurred to tell
+whether a qualifier is printed, say so in uncertain rather than claiming an
+exact count.
 
 Say what the panel's numbers describe: package_basis is as_packaged for an
 ordinary Nutrition Facts panel describing the food as sold, prepared when the
@@ -742,7 +776,13 @@ with a panel that does not show one — omit it and say so in uncertain
 instead. If the photos plainly show different products, or different sizes of
 the same product, say so in uncertain rather than treating them as one packet.
 
-Return at most the servings the label states. Do not invent a 100 g row.
+Return at most the servings the label states: that rules out a portion the
+label never printed, such as an invented 100 g row. It does not mean
+collapsing the alternate measures of one printed serving into a single entry.
+Every measure printed on the serving line is stated by the label, so every one
+of them is returned --- with the one exception already given above: where an
+ounce figure is printed for that same serving, that serving's gram figure is
+not returned, and the ounce and the other measures are.
 
 If a digit is blurred, a line is cut off, or a figure could be read two ways,
 transcribe your best reading AND list it in uncertain. A flagged guess is
