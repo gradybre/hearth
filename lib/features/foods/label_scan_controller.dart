@@ -194,7 +194,17 @@ class LabelScanController extends Notifier<LabelScanState> {
         if (_back != null) AiImage.ofPhoto(_back!, role: 'nutrition'),
         if (_front != null) AiImage.ofPhoto(_front!, role: 'package'),
       ];
-      final LabelReading reading = await reader.read(images);
+      // Gated on what was actually sent, not on what the answer claims
+      // (spec R11). The slots the user filled are a fact this controller
+      // knows for certain; provenance in the reply is the reader's account of
+      // its own work, which an older server omits and anything else can
+      // simply invent. Applied here as well as server-side so that a stub, a
+      // stale deployment or a reader that never learned about roles cannot
+      // put a serving nobody photographed into the editor.
+      final LabelReading reading = gateLabelReadingToRequest(
+        await reader.read(images),
+        LabelRequestIntent.ofRoles(images.map((AiImage image) => image.role)),
+      );
       // A late response after a newer request (or a reset) must not
       // overwrite what is on screen now.
       if (_disposed || _read != run) return;

@@ -152,6 +152,185 @@ Deno.test('Walmart route preserves one-call extraction and budget boundaries', a
         assert.equal(result.body.walmart_link.url, null);
       }
     });
+
+    // The request-intent gate, exercised through the route rather than against
+    // the pure helper: the helper's own tests prove the rule, and these prove
+    // it is actually wired in and that the package facts beside it survive.
+    await t.step('a package-only request refuses volunteered nutrition end to end', async () => {
+      reset();
+      modelInput = {
+        name: 'Tomato Basil Soup',
+        brand: 'Hearthside',
+        // No panel was photographed, so this row came from somewhere else —
+        // a thumbnail, a sidebar, or the model's own memory. It claims a
+        // panel as its source, which is exactly the claim the server refuses.
+        servings: [{
+          amount: 100, unit: 'g', kcal: 60,
+          protein_g: 2, carb_g: 9, fat_g: 2,
+          fiber_g: 1, sodium_mg: 480, cholesterol_mg: 0,
+        }],
+        package_amount: 10,
+        package_unit: 'oz',
+        field_sources: { servings: 'nutrition', package_amount: 'package' },
+        walmart_candidates: [{ ...candidate, source: 'package' }],
+      };
+      const result = await request({
+        mode: 'label', images: [image], image_roles: ['package'],
+      });
+
+      assert.equal(result.response.status, 200);
+      assert.deepEqual(result.body.servings, []);
+      // The model said it read a panel. The server knows which photographs it
+      // was sent, and overrides the claim rather than arguing with it.
+      assert.equal(result.body.field_sources.servings, 'package');
+      assert.equal(result.body.field_sources.package_amount, 'package');
+      assert.equal(result.body.uncertain.length, 1);
+      assert.equal(result.body.uncertain[0].field, 'servings');
+      assert.ok(result.body.uncertain[0].note.includes('was dropped'));
+      // Everything the front of the packet actually showed is still here:
+      // dropping the nutrition is not dropping the reading.
+      assert.equal(result.body.name, 'Tomato Basil Soup');
+      assert.equal(result.body.brand, 'Hearthside');
+      assert.equal(result.body.package_amount, 10);
+      assert.equal(result.body.package_unit, 'oz');
+      assert.equal(result.body.servings_per_container, null);
+      assert.equal(result.body.servings_approximate, false);
+      assert.equal(result.body.package_basis, 'unknown');
+      assert.equal(result.body.walmart_link.url, 'https://www.walmart.com/ip/10450479');
+      assert.equal(modelCalls().length, 1);
+      authFirst();
+      assert.ok(calls[1].url.endsWith('/rpc/reserve_ai_spend'));
+      assert.ok(calls.at(-1)?.url.endsWith('/rpc/settle_ai_spend'));
+    });
+
+    await t.step('a package-only request with nothing to drop adds no note', async () => {
+      reset();
+      modelInput = {
+        name: 'Tomato Basil Soup',
+        servings: [],
+        package_amount: 10,
+        package_unit: 'oz',
+        package_basis: 'as_packaged',
+        uncertain: [{ field: 'package_amount', note: 'The net weight was at an angle.' }],
+        walmart_candidates: [{ ...candidate, source: 'package' }],
+      };
+      const result = await request({
+        mode: 'label', images: [image], image_roles: ['package'],
+      });
+
+      assert.equal(result.response.status, 200);
+      assert.deepEqual(result.body.servings, []);
+      // A warning about a drop that did not happen would send somebody back to
+      // check a photograph they never took.
+      assert.deepEqual(result.body.uncertain, [
+        { field: 'package_amount', note: 'The net weight was at an angle.' },
+      ]);
+      assert.equal(result.body.field_sources.servings, 'package');
+      assert.equal(result.body.package_amount, 10);
+      assert.equal(result.body.package_unit, 'oz');
+      assert.equal(result.body.package_basis, 'as_packaged');
+      assert.equal(result.body.name, 'Tomato Basil Soup');
+      assert.equal(modelCalls().length, 1);
+    });
+
+    await t.step('a nutrition and package pair returns both readings in one call', async () => {
+      reset();
+      // The cup and the gram figure are both printed on this panel, and
+      // together they are the only statement of how dense the food is.
+      const macros = {
+        kcal: 35, protein_g: 1, carb_g: 8, fat_g: 0,
+        fiber_g: 1, sodium_mg: 0, cholesterol_mg: 0,
+      };
+      modelInput = {
+        name: 'Tomato Basil Soup',
+        brand: 'Hearthside',
+        servings: [
+          { amount: 0.667, unit: 'cup', ...macros },
+          { amount: 85, unit: 'g', ...macros },
+        ],
+        package_amount: 10,
+        package_unit: 'oz',
+        servings_per_container: 3.5,
+        servings_approximate: true,
+        package_basis: 'as_packaged',
+        field_sources: { servings: 'nutrition', package_amount: 'package' },
+        walmart_candidates: [{ ...candidate, source: 'package' }],
+      };
+      const result = await request({
+        mode: 'label',
+        images: [image, image],
+        image_roles: ['nutrition', 'package'],
+      });
+
+      assert.equal(result.response.status, 200);
+      assert.equal(result.body.servings.length, 2);
+      assert.equal(result.body.servings[0].unit, 'cup');
+      assert.equal(result.body.servings[0].amount, 0.667);
+      assert.equal(result.body.servings[1].unit, 'g');
+      assert.equal(result.body.servings[1].amount, 85);
+      for (const row of result.body.servings) {
+        assert.equal(row.kcal, 35);
+        assert.equal(row.protein_g, 1);
+        assert.equal(row.carb_g, 8);
+        assert.equal(row.fat_g, 0);
+        // A printed zero is a fact the panel stated. It stays a zero, and is
+        // not flattened into the null that means "the label did not say".
+        assert.equal(row.fiber_g, 1);
+        assert.equal(row.sodium_mg, 0);
+        assert.equal(row.cholesterol_mg, 0);
+      }
+      // A panel was photographed, so the model's own provenance stands.
+      assert.equal(result.body.field_sources.servings, 'nutrition');
+      assert.equal(result.body.field_sources.package_amount, 'package');
+      assert.equal(result.body.servings_per_container, 3.5);
+      assert.equal(result.body.servings_approximate, true);
+      assert.equal(result.body.package_amount, 10);
+      assert.equal(result.body.package_unit, 'oz');
+      assert.equal(result.body.package_basis, 'as_packaged');
+      assert.deepEqual(result.body.uncertain, []);
+      assert.equal(result.body.walmart_link.url, 'https://www.walmart.com/ip/10450479');
+      // Both photographs, one reading, one paid call.
+      assert.equal(modelCalls().length, 1);
+      authFirst();
+      assert.ok(calls.at(-1)?.url.endsWith('/rpc/settle_ai_spend'));
+    });
+
+    await t.step('a roleless request keeps its rows and still drops malformed ones', async () => {
+      reset();
+      modelInput = {
+        name: 'Tomato Basil Soup',
+        servings: [
+          {
+            amount: 1, unit: 'cup', kcal: 90,
+            protein_g: 3, carb_g: 14, fat_g: 2,
+          },
+          // A unit Hearth has no meaning for, and an amount that cannot be a
+          // portion. Both are dropped by the shaper before the gate ever sees
+          // them, rather than reinterpreted into something plausible.
+          { amount: 1, unit: 'sprinkle', kcal: 10 },
+          { amount: -2, unit: 'g', kcal: 5 },
+        ],
+      };
+      // An older client that knows nothing about roles. It read panels
+      // perfectly well before the gate existed and must keep doing so.
+      const result = await request({ mode: 'label', images: [image] });
+
+      assert.equal(result.response.status, 200);
+      assert.equal(result.body.servings.length, 1);
+      assert.equal(result.body.servings[0].unit, 'cup');
+      assert.equal(result.body.servings[0].kcal, 90);
+      // Nothing the panel did not print: the omitted minor fields stay null.
+      assert.equal(result.body.servings[0].fiber_g, null);
+      assert.equal(result.body.servings[0].sodium_mg, null);
+      // The model said nothing about where it read this, so neither does the
+      // server — 'unknown' rather than a guess in either direction.
+      assert.equal(result.body.field_sources.servings, 'unknown');
+      assert.deepEqual(result.body.uncertain, []);
+      assert.equal(result.body.package_amount, null);
+      assert.equal(result.body.package_unit, null);
+      assert.ok('walmart_link' in result.body);
+      assert.equal(modelCalls().length, 1);
+    });
   } finally {
     Deno.serve = originalServe;
     Deno.env.get = originalGet;

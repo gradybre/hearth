@@ -1,4 +1,9 @@
-import { labelPhotoRoles } from './label_photo_roles.ts';
+import {
+  labelPhotoRoles,
+  type LabelRequestIntent,
+  labelRequestIntent,
+} from './label_photo_roles.ts';
+import { gateNutrition } from './label_nutrition_gate.ts';
 // Recipe import, generation, and label reading, behind the server
 // (spec §5.3, §5.4, §5.5).
 //
@@ -340,6 +345,12 @@ const MENU_TOOL = {
   },
 } as const;
 
+/// Nothing here is required, deliberately. A front-only photo set is a
+/// complete, valid reading with no servings in it at all, and a required
+/// servings array would make a model that was shown no panel invent one. An
+/// empty tool result is a real answer: the client is the thing that decides a
+/// reading with nothing usable in it is nothing to save, and it says so in
+/// those words rather than storing a fabricated portion.
 const LABEL_TOOL = {
   name: 'nutrition_label',
   description: "Return what the food's label states.",
@@ -361,7 +372,11 @@ const LABEL_TOOL = {
           'reading "Serving size 1oz (28g/about 1/4 cup)" is three ways of ' +
           'saying one portion: return the ounces and the cups as two ' +
           'entries with identical macros. Do not return the grams as well ' +
-          'when an ounce figure is given for the same portion. When the ' +
+          'when an ounce figure is printed for that SAME serving; when only ' +
+          'a volume and a gram figure are printed, such as 2/3 cup (85g), ' +
+          'return both, because together they are the only statement of how ' +
+          'dense the food is. A net weight on the front of the package is ' +
+          'not a serving and never suppresses anything. When the ' +
           'label names a packet unit and a weight — "1 Scoop (30g)", "1 Bar ' +
           '(45g)" — return both, with identical macros: together they are ' +
           'the only statement of what that scoop or bar weighs.',
@@ -470,7 +485,6 @@ const LABEL_TOOL = {
         },
       },
     },
-    required: ['servings'],
   },
 } as const;
 
@@ -693,9 +707,16 @@ The serving line is the important part, and US labels usually state one portion
 several ways: "Serving size 1oz (28g/about 1/4 cup)". Return each measurable
 way as its own serving with the SAME macros — the weight and the volume of one
 portion together are the only statement of how dense the food is, and it is
-what lets the app use this food in a recipe that measures in cups. Prefer the
-ounce figure over the gram figure when both are given for the same portion; if
-only grams are printed, return the grams.
+what lets the app use this food in a recipe that measures in cups. A serving
+printed as \"2/3 cup (85g)\" is TWO entries with identical macros: return the cup
+AND the gram figure. Only suppress the gram figure when an ounce figure is
+printed for that same serving, and then return the ounce and the other
+measures. A net weight in ounces on the front of the package is not an ounce
+serving and never suppresses anything.
+
+The Nutrition Facts panel governs. Ignore nutrition in a sidebar, a product
+summary, a search result or a thumbnail; where one of those disagrees with the
+panel, the panel is right. Never return a 100 g row the panel does not print.
 
 Also read the package as a whole, when it is shown: the net contents printed
 on the front or the panel, and the servings-per-container figure — how many
@@ -930,7 +951,10 @@ Deno.serve(async (request: Request): Promise<Response> => {
       ? shapeMenu(answer.input, answer.truncated)
       : mode === 'label'
       ? {
-        ...shapeLabel(answer.input),
+        ...shapeLabel(
+          answer.input,
+          labelRequestIntent(body.image_roles, body.images?.length ?? 0),
+        ),
         walmart_link: shapeWalmartLink(
           walmartInput,
           allowedWalmartSources(body.image_roles, body.images?.length ?? 0),
@@ -1041,13 +1065,21 @@ function labelContent(images: string[], roles?: unknown): unknown[] {
     throw new Error('bad request: give a photo of the label');
   }
 
+  const intent = labelRequestIntent(roles, images.length);
   return [
     ...imageBlocks(images),
     {
       type: 'text',
       text: (images.length > 1
-        ? 'These are photos of one packet. Read its label.'
-        : 'Read this label.') + labelPhotoRoles(roles, images.length),
+          ? 'These are photos of one packet. Read its label.'
+          : 'Read this label.') +
+        labelPhotoRoles(roles, images.length) +
+        (intent.package && !intent.nutrition
+          ? ' No Nutrition Facts panel was photographed. Return an empty ' +
+            'servings array and read only the package facts. Do not supply ' +
+            'nutrition from memory, from a product thumbnail, from a ' +
+            'sidebar, or from a product summary.'
+          : ''),
     },
   ];
 }
@@ -1529,7 +1561,10 @@ function shapeMenu(
 /// to grams: a portion silently reinterpreted as a weight it is not would put
 /// a wrong number into a day, which is the one failure mode a review screen
 /// cannot catch, because it looks correct.
-function shapeLabel(input: Record<string, unknown>): Record<string, unknown> {
+function shapeLabel(
+  input: Record<string, unknown>,
+  intent: LabelRequestIntent,
+): Record<string, unknown> {
   // Must stay in step with LABEL_TOOL's own enum. It did not: the packet units
   // were added to what the model may answer and not to what this accepts, so
   // every scoop and every bar was dropped here — by the very filter whose
@@ -1537,10 +1572,7 @@ function shapeLabel(input: Record<string, unknown>): Record<string, unknown> {
   const units: readonly string[] = LABEL_UNITS;
   const servings = Array.isArray(input.servings) ? input.servings : [];
 
-  return {
-    name: text(input.name) || null,
-    brand: text(input.brand) || null,
-    servings: (servings as Record<string, unknown>[])
+  const rows = (servings as Record<string, unknown>[])
       .filter((s) => {
         const amount = number(s?.amount);
         return amount !== null && amount > 0 && units.includes(text(s?.unit));
@@ -1557,13 +1589,42 @@ function shapeLabel(input: Record<string, unknown>): Record<string, unknown> {
         fiber_g: number(s.fiber_g),
         sodium_mg: number(s.sodium_mg),
         cholesterol_mg: number(s.cholesterol_mg),
-      })),
-    ...shapePackageFields(input),
-    uncertain: Array.isArray(input.uncertain)
-      ? (input.uncertain as Uncertain[])
-        .filter((u) => u?.field || u?.note)
-        .map((u) => ({ field: text(u.field), note: text(u.note) }))
-      : [],
+      }));
+
+  // The deterministic half of the request-intent gate (spec R11). A photo set
+  // with no Nutrition Facts panel in it did not read one, whatever the model
+  // volunteered from a thumbnail, a sidebar or general knowledge -- and the
+  // prompt asking it not to is not a guarantee. Dropped here rather than left
+  // for the client to argue with, because the server is the one end that
+  // knows for certain which photos it was sent.
+  const fields = shapePackageFields(input);
+  // The rule itself lives in label_nutrition_gate.ts, so it can be tested
+  // without standing up the route. Same behaviour, one place.
+  const gate = gateNutrition({
+    rows,
+    fieldSources: fields.field_sources,
+    intent,
+  });
+
+  return {
+    name: text(input.name) || null,
+    brand: text(input.brand) || null,
+    servings: gate.servings,
+    ...fields,
+    field_sources: {
+      ...(fields.field_sources ?? {}),
+      // Provenance the server knows rather than guesses, so it overrides
+      // whatever the model said about its own work.
+      servings: gate.servings_source,
+    },
+    uncertain: [
+      ...gate.uncertain,
+      ...(Array.isArray(input.uncertain)
+        ? (input.uncertain as Uncertain[])
+          .filter((u) => u?.field || u?.note)
+          .map((u) => ({ field: text(u.field), note: text(u.note) }))
+        : []),
+    ],
   };
 }
 

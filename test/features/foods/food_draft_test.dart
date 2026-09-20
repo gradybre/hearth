@@ -367,20 +367,29 @@ void withLabelTests() {
   }) => LabelReading(servings: servings, name: name, brand: brand);
 
   group('FoodDraft.withLabel', () {
-    test('a row the source left empty gives way to the label', () {
-      // Open Food Facts answers with a name and no numbers constantly, and
-      // that is exactly when somebody reaches for the camera. Keeping the
-      // empty row would leave "100 g · 0 kcal" sitting above two rows read
-      // off the packet, for the user to notice and delete.
+    test('a row the source left empty is kept, not cleared out', () {
+      // It used to give way, on the theory that a zero row is a gap. The
+      // theory was right about imports and catastrophic about people: the
+      // same filter deleted a row somebody had typed a portion into and not
+      // yet the macros, and took its id -- and any package relationship
+      // anchored to it -- with it. Only Hearth's own untouched starter is
+      // removed now, and it says so about itself (spec R10, R11).
       final FoodDraft merged = const FoodDraft(
         name: 'Shredded cheddar',
         servings: <ServingDraft>[
-          ServingDraft(amount: '100', kcal: '0', protein: '0', carbs: '0'),
+          ServingDraft(
+            id: 'serving-1',
+            amount: '100',
+            kcal: '0',
+            protein: '0',
+            carbs: '0',
+          ),
         ],
       ).withLabel(reading());
 
-      expect(merged.servings, hasLength(2));
-      expect(merged.servings.first.unitId, 'oz');
+      expect(merged.servings, hasLength(3));
+      expect(merged.servings.first.id, 'serving-1');
+      expect(merged.servings[1].unitId, 'oz');
     });
 
     test('unless the food really is zero, in which case it stays', () {

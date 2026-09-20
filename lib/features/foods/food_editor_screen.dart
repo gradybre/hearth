@@ -644,6 +644,12 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: HearthSpacing.md),
                   child: _ServingRow(
+                    // Keyed by the row's own id, so its state -- the minor
+                    // nutrient disclosure, and the unit dropdown's initial
+                    // value -- follows the row rather than its position. An
+                    // unkeyed row left the first position showing the
+                    // starter's unit after a read replaced it (spec R11).
+                    key: ValueKey<String>(_draft.servings[i].id ?? 'row-$i'),
                     serving: _draft.servings[i],
                     units: _servingUnits,
                     canRemove: _draft.servings.length > 1,
@@ -1117,6 +1123,7 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
 
 class _ServingRow extends StatefulWidget {
   const _ServingRow({
+    super.key,
     required this.serving,
     required this.units,
     required this.canRemove,
@@ -1208,6 +1215,13 @@ class _ServingRowState extends State<_ServingRow> {
                       ),
                       const SizedBox(height: HearthSpacing.xs),
                       DropdownButtonFormField<String>(
+                        // Re-seeded when the row's unit changes underneath
+                        // it: initialValue is read once per field state, so
+                        // without this a row filled in from a photo could go
+                        // on displaying the unit it used to have.
+                        key: ValueKey<String>(
+                          'unit-${serving.id ?? ''}-${serving.unitId}',
+                        ),
                         initialValue: serving.unitId,
                         isExpanded: true,
                         style: context.text.body.copyWith(
