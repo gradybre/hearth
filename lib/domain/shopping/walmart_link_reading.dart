@@ -1,11 +1,11 @@
-/// Structured Walmart product link result and pure canonicalizer
-/// (D-WALMART-001, plan P-HEARTH-WALMART-001).
-///
-/// Pure Dart: no Flutter or package imports. The shaping decision (which
-/// candidate strings are accepted, merged or rejected) happens server-side
-/// in `supabase/functions/recipe-ai/walmart_link.ts`; this file only knows
-/// how to canonicalize a single candidate URL and how to parse the already
-/// shaped envelope the server returns.
+// Structured Walmart product link result and pure canonicalizer
+// (D-WALMART-001, plan P-HEARTH-WALMART-001).
+//
+// Pure Dart: no Flutter or package imports. The shaping decision (which
+// candidate strings are accepted, merged or rejected) happens server-side
+// in `supabase/functions/recipe-ai/walmart_link.ts`; this file only knows
+// how to canonicalize a single candidate URL and how to parse the already
+// shaped envelope the server returns.
 
 /// Outcome of attempting to read a Walmart product link from screenshots.
 enum WalmartLinkStatus { found, notFound, ambiguous, unreadable }
@@ -156,10 +156,11 @@ final class WalmartLinkReading {
     if (trimmed.startsWith('//')) return null; // scheme-relative
 
     String rest = trimmed;
+    String scheme = 'https';
     final RegExpMatch? schemeMatch = RegExp(r'^([a-zA-Z]+)://')
         .firstMatch(trimmed);
     if (schemeMatch != null) {
-      final String scheme = schemeMatch.group(1)!.toLowerCase();
+      scheme = schemeMatch.group(1)!.toLowerCase();
       if (scheme != 'http' && scheme != 'https') return null;
       rest = trimmed.substring(schemeMatch.end);
     }
@@ -171,7 +172,11 @@ final class WalmartLinkReading {
     if (fIdx >= 0 && fIdx < cut) cut = fIdx;
     final String preQuery = rest.substring(0, cut);
 
-    if (preQuery.contains('@')) return null; // credentials
+    if (preQuery.contains('%') ||
+        preQuery.contains('...') ||
+        preQuery.contains('\u2026')) {
+      return null;
+    }
 
     final int slashIdx = preQuery.indexOf('/');
     if (slashIdx < 0) return null; // numeric-only or path-less input
@@ -184,7 +189,7 @@ final class WalmartLinkReading {
     final String host = authParts[0].toLowerCase();
     if (authParts.length == 2) {
       final String port = authParts[1];
-      if (port != '80' && port != '443') return null;
+      if (port != (scheme == 'http' ? '80' : '443')) return null;
     }
 
     const Set<String> allowedHosts = <String>{
@@ -225,8 +230,6 @@ final class WalmartLinkReading {
       if (rune <= 0x1F || rune == 0x7F) return true; // control characters
     }
     if (s.contains('\\')) return true;
-    if (s.contains('%')) return true;
-    if (s.contains('...') || s.contains('\u2026')) return true;
     if (RegExp(r'\s').hasMatch(s)) return true; // interior whitespace
     return false;
   }

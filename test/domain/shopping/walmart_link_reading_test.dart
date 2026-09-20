@@ -1,6 +1,5 @@
-import 'package:test/test.dart';
-
 import 'package:hearth/domain/shopping/walmart_link_reading.dart';
+import 'package:test/test.dart';
 
 // Regression tests for D-WALMART-001 (plan P-HEARTH-WALMART-001).
 // Includes two Astra findings that the current canonicalUrl implementation

@@ -78,7 +78,8 @@ export type Mode =
   | 'pack'
   | 'shopping'
   | 'menu'
-  | 'icon';
+  | 'icon'
+  | 'walmart';
 
 /// The most a mode may write, and so the most its output can cost.
 ///
@@ -99,7 +100,7 @@ export function maxOutputTokens(mode: Mode): number {
     ? 16_000
     : mode === 'icon'
     ? 1500
-    : mode === 'pack'
+    : mode === 'pack' || mode === 'walmart'
     ? 1000
     : 4096;
 }
@@ -153,6 +154,9 @@ function maxInputTokens(mode: Mode): number {
     case 'generate':
     case 'shopping':
       return 60_000 * perChar;
+    case 'walmart':
+      // One screenshot plus a conservative allowance for the bounded prompt/tool.
+      return perImage + 4000;
     case 'icon':
       // A title sliced to 200 characters, and the prompt around it.
       return 1000;

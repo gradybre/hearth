@@ -29,8 +29,6 @@ function hasForbiddenChars(s: string): boolean {
     if (code <= 0x1f || code === 0x7f) return true; // control characters
   }
   if (s.includes("\\")) return true;
-  if (s.includes("%")) return true;
-  if (s.includes("...") || s.includes("\u2026")) return true;
   if (/\s/.test(s)) return true; // interior whitespace (outer already trimmed)
   return false;
 }
@@ -51,9 +49,10 @@ export function canonicalWalmartUrl(raw: unknown): string | null {
   if (trimmed.startsWith("//")) return null; // scheme-relative
 
   let rest = trimmed;
+  let scheme = "https";
   const schemeMatch = SCHEME_RE.exec(trimmed);
   if (schemeMatch !== null) {
-    const scheme = schemeMatch[1].toLowerCase();
+    scheme = schemeMatch[1].toLowerCase();
     if (scheme !== "http" && scheme !== "https") return null;
     rest = trimmed.slice(schemeMatch[0].length);
   }
@@ -65,7 +64,7 @@ export function canonicalWalmartUrl(raw: unknown): string | null {
   if (fIdx >= 0 && fIdx < cut) cut = fIdx;
   const preQuery = rest.slice(0, cut);
 
-  if (preQuery.includes("@")) return null; // credentials
+  if (preQuery.includes("%") || preQuery.includes("...") || preQuery.includes("\u2026")) return null;
 
   const slashIdx = preQuery.indexOf("/");
   if (slashIdx < 0) return null; // numeric-only or path-less input
@@ -78,7 +77,7 @@ export function canonicalWalmartUrl(raw: unknown): string | null {
   const host = authParts[0].toLowerCase();
   if (authParts.length === 2) {
     const port = authParts[1];
-    if (port !== "80" && port !== "443") return null;
+    if (port !== (scheme === "http" ? "80" : "443")) return null;
   }
   if (!ALLOWED_HOSTS.has(host)) return null;
 
