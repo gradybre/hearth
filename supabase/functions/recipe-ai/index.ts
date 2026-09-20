@@ -1,3 +1,4 @@
+import { requireHousehold } from './caller_auth.ts';
 import { labelPhotoRoles } from './label_photo_roles.ts';
 // Recipe import, generation, and label reading, behind the server
 // (spec §5.3, §5.4, §5.5).
@@ -26,8 +27,13 @@ import { labelPhotoRoles } from './label_photo_roles.ts';
 // The key is the reason this exists at all. ANTHROPIC_API_KEY in the client is
 // a key anyone can pull out of the app bundle and spend (CLAUDE.md §8.1).
 //
-// verify_jwt is on (the default), so only a signed-in Hearth user can spend
-// this project's quota.
+// verify_jwt is on (the default), and it is not on its own enough to say a
+// signed-in Hearth user is spending this project's quota: the gateway also
+// accepts an API-key-only request without a user token; that public key
+// ships in the app bundle. So the route asks the database who is calling before it does
+// anything else — `requireHousehold` resolves `current_household_id` with the
+// caller's own token, and a resolved household is the only accepted proof.
+// Nothing here decodes a JWT.
 
 import {
   BilledFailure,
@@ -774,6 +780,12 @@ Deno.serve(async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') {
     return json({ error: 'POST only' }, 405);
   }
+
+  // Ahead of everything a caller could spend or steer: the key is not read,
+  // the body is not parsed and no reservation is taken until the database has
+  // vouched for whoever sent this.
+  const refusal = await requireHousehold(request);
+  if (refusal) return refusal;
 
   const key = Deno.env.get('ANTHROPIC_API_KEY');
   if (!key) {
