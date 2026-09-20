@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 
 // Exercises the actual route without opening a socket, reading credentials,
-// contacting a model, or writing household data. Gateway JWT enforcement is
-// provided by Supabase and is not claimed by this in-process test.
+// contacting a model, or writing household data. The caller is a signed-in
+// member of a household here — who that is, and whether they may spend at
+// all, is covered by auth_route_test.ts.
+const HOUSEHOLD = '3f6b1c2e-9a4d-4b8e-8c0a-1d2e3f4a5b6c';
+const AUTH = 'Bearer fixture.caller.token';
+
 Deno.test('Walmart route preserves one-call extraction and budget boundaries', async (t) => {
   const originalServe = Deno.serve;
   const originalGet = Deno.env.get;
@@ -37,6 +41,7 @@ Deno.test('Walmart route preserves one-call extraction and budget boundaries', a
     const url = String(input);
     const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
     calls.push({ url, body });
+    if (url.endsWith('/rpc/current_household_id')) return Promise.resolve(json(HOUSEHOLD));
     if (url.endsWith('/rpc/reserve_ai_spend')) {
       if (reserve === 'fail') return Promise.resolve(json({}, 503));
       return Promise.resolve(json([{
@@ -60,11 +65,15 @@ Deno.test('Walmart route preserves one-call extraction and budget boundaries', a
   const request = async (body: Record<string, unknown>) => {
     assert.ok(handler);
     const response = await handler(new Request('https://hearth-fixture.invalid/functions/v1/recipe-ai', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: AUTH },
+      body: JSON.stringify(body),
     }));
     return { response, body: await response.json() };
   };
   const modelCalls = () => calls.filter(c => c.url === 'https://api.anthropic.com/v1/messages');
+  // Who is calling is settled first; the reservation is the call after it.
+  const authFirst = () => assert.ok(calls[0]?.url.endsWith('/rpc/current_household_id'));
   try {
     await import('./index.ts');
     await t.step('standalone mode reserves, calls once with bounded output, then settles', async () => {
@@ -74,8 +83,9 @@ Deno.test('Walmart route preserves one-call extraction and budget boundaries', a
       assert.equal(result.body.walmart_link.url, 'https://www.walmart.com/ip/10450479');
       assert.equal(modelCalls().length, 1);
       assert.equal(modelCalls()[0].body.max_tokens, 1000);
-      assert.ok(calls[0].url.endsWith('/rpc/reserve_ai_spend'));
-      assert.equal(calls[0].body.p_mode, 'walmart');
+      authFirst();
+      assert.ok(calls[1].url.endsWith('/rpc/reserve_ai_spend'));
+      assert.equal(calls[1].body.p_mode, 'walmart');
       assert.ok(calls.at(-1)?.url.endsWith('/rpc/settle_ai_spend'));
     });
     await t.step('combined label keeps nutrition and adds link in one model call', async () => {
@@ -89,6 +99,7 @@ Deno.test('Walmart route preserves one-call extraction and budget boundaries', a
       assert.equal(result.body.servings[0].kcal, 120);
       assert.equal(result.body.walmart_link.source, 'nutrition');
       assert.equal(modelCalls().length, 1);
+      authFirst();
     });
     await t.step('budget denial and unreadable ledger never call model', async () => {
       for (const mode of ['deny', 'fail'] as const) {
@@ -96,7 +107,8 @@ Deno.test('Walmart route preserves one-call extraction and budget boundaries', a
         const result = await request({ mode: 'walmart', images: [image] });
         assert.equal(result.response.status, mode === 'deny' ? 429 : 503);
         assert.equal(modelCalls().length, 0);
-        assert.ok(calls[0]?.url.endsWith('/rpc/reserve_ai_spend'));
+        authFirst();
+        assert.ok(calls[1]?.url.endsWith('/rpc/reserve_ai_spend'));
       }
     });
     await t.step('wrong image counts and types release reservation without model call', async () => {
@@ -105,6 +117,7 @@ Deno.test('Walmart route preserves one-call extraction and budget boundaries', a
         const result = await request({ mode: 'walmart', images });
         assert.equal(result.response.status, 400);
         assert.equal(modelCalls().length, 0);
+        authFirst();
         assert.ok(calls.at(-1)?.url.endsWith('/rpc/release_ai_spend'));
       }
     });
