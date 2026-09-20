@@ -160,5 +160,12 @@ extension PackSizeFill on Food {
     isModifier: isModifier,
     isDeleted: isDeleted,
     updatedAt: updatedAt,
+    massDisplayMode: massDisplayMode,
+    // Kept exactly as it stands, deliberately, even though changing the pack
+    // size is the thing most likely to make it stale. The snapshots are what
+    // the user reviewed: refreshing them here would silently reconfirm a
+    // relationship against a package nobody has looked at, where preserving
+    // them lets `hasStalePackageNutrition` ask for a look (spec R10).
+    packageNutrition: packageNutrition,
   );
 }

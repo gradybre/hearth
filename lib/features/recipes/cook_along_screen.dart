@@ -11,7 +11,8 @@ import '../../app/theme/hearth_theme.dart';
 import '../../data/adapters/kitchen_devices.dart';
 import '../../data/local/cook_session_store.dart';
 import '../../domain/cooking/cook_session.dart';
-import '../../domain/format/quantity_format.dart';
+import '../../domain/format/food_quantity_format.dart';
+import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
 import 'cook_instruction_blocks.dart';
 import 'step_amounts.dart';
@@ -196,6 +197,13 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
     final bool showAllSteps =
         ref.watch(cookShowAllStepsProvider).value ?? false;
     final RecipeStep? step = _session.step;
+    final Map<String, Food> foods = <String, Food>{
+      for (final Food food
+          in _session.recipe.allIngredients.any((i) => i.foodId != null)
+              ? ref.watch(foodLibraryProvider).value ?? const <Food>[]
+              : const <Food>[])
+        food.id: food,
+    };
     final DateTime now = DateTime.now();
     // Timers come from the app-wide store, not from the session: they are
     // shared with the rest of the app and survive this screen closing.
@@ -287,6 +295,7 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                             recipe: widget.recipe,
                             sections: _sectionsById,
                             timerByStep: timerByStep,
+                            foods: foods,
                             // Anywhere on the row ticks the step off. Nothing
                             // in the list navigates: the toggle above is the
                             // only way between the two views, so a tap here
@@ -303,6 +312,7 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                             step: step,
                             section: _sectionsById[step.sectionId],
                             recipe: widget.recipe,
+                            foods: foods,
                             isChecked: _session.isChecked(step),
                             onAdvance: () => _update(_session.next()),
                             onCheck: () => _update(_session.toggle(step)),
@@ -341,6 +351,13 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
       // From the snapshot, not the library — mid-cook is the wrong moment to
       // find out the list has changed underneath you.
       recipe: _session.recipe,
+      foods: <String, Food>{
+        for (final Food food
+            in _session.recipe.allIngredients.any((i) => i.foodId != null)
+                ? ref.read(foodLibraryProvider).value ?? const <Food>[]
+                : const <Food>[])
+          food.id: food,
+      },
     ),
   );
 
@@ -425,6 +442,7 @@ class _StepList extends StatelessWidget {
     required this.timerByStep,
     required this.onCheck,
     required this.onStartTimer,
+    this.foods,
   });
 
   final CookSession session;
@@ -439,6 +457,11 @@ class _StepList extends StatelessWidget {
   final Map<String, CookTimer> timerByStep;
   final ValueChanged<RecipeStep> onCheck;
   final ValueChanged<RecipeStep> onStartTimer;
+
+  /// The household's food library, keyed by id — one snapshot from the
+  /// screen, so the matched-food display preference (spec R1–R8) is resolved
+  /// without a per-row lookup.
+  final Map<String, Food>? foods;
 
   @override
   Widget build(BuildContext context) {
@@ -462,6 +485,7 @@ class _StepList extends StatelessWidget {
         onStartTimer: steps[index].hasTimer
             ? () => onStartTimer(steps[index])
             : null,
+        foods: foods,
       ),
     );
   }
@@ -477,6 +501,7 @@ class _StepListRow extends StatelessWidget {
     required this.isTimerRunning,
     required this.onCheck,
     this.onStartTimer,
+    this.foods,
   });
 
   final RecipeStep step;
@@ -493,6 +518,9 @@ class _StepListRow extends StatelessWidget {
 
   final VoidCallback onCheck;
   final VoidCallback? onStartTimer;
+
+  /// The household's food library, keyed by id — see [_StepList.foods].
+  final Map<String, Food>? foods;
 
   @override
   Widget build(BuildContext context) {
@@ -563,7 +591,12 @@ class _StepListRow extends StatelessWidget {
                             ),
                           ),
                           if (section case final RecipeSection s)
-                            StepAmounts(step: step, section: s, recipe: recipe),
+                            StepAmounts(
+                              step: step,
+                              section: s,
+                              recipe: recipe,
+                              foods: foods,
+                            ),
                           if (onStartTimer != null &&
                               !isTimerRunning) ...<Widget>[
                             const SizedBox(height: HearthSpacing.sm),
@@ -656,6 +689,7 @@ class _StepCard extends StatelessWidget {
     required this.now,
     this.runningTimer,
     this.onStartTimer,
+    this.foods,
   });
 
   final Widget progress;
@@ -673,6 +707,9 @@ class _StepCard extends StatelessWidget {
   final CookTimer? runningTimer;
 
   final VoidCallback? onStartTimer;
+
+  /// The household's food library, keyed by id — see [_StepList.foods].
+  final Map<String, Food>? foods;
 
   @override
   Widget build(BuildContext context) {
@@ -737,6 +774,7 @@ class _StepCard extends StatelessWidget {
                 section: s,
                 recipe: recipe,
                 forCooking: true,
+                foods: foods,
               ),
           ],
         ),
@@ -1100,9 +1138,12 @@ class _TimerTray extends StatelessWidget {
 
 /// The ingredients, on demand and pinned over the step (spec §5.2).
 class _IngredientSheet extends StatelessWidget {
-  const _IngredientSheet({required this.recipe});
+  const _IngredientSheet({required this.recipe, this.foods});
 
   final Recipe recipe;
+
+  /// The household's food library, keyed by id — see [_StepList.foods].
+  final Map<String, Food>? foods;
 
   @override
   Widget build(BuildContext context) {
@@ -1148,8 +1189,12 @@ class _IngredientSheet extends StatelessWidget {
                               child: Text(
                                 ingredient.quantity == null
                                     ? ''
-                                    : QuantityFormat.formatAsAuthored(
+                                    : FoodQuantityFormat.format(
                                         ingredient.quantity!,
+                                        rawSources: [ingredient.rawText ?? ''],
+                                        food: ingredient.foodId == null
+                                            ? null
+                                            : foods?[ingredient.foodId],
                                       ),
                                 style: context.text.ingredient.copyWith(
                                   fontSize: 18,

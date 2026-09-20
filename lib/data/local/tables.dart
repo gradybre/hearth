@@ -157,6 +157,29 @@ class Foods extends Table {
   /// (spec §5.2). Its servings may hold negative macros; nothing else may.
   BoolColumn get isModifier => boolean().withDefault(const Constant(false))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+
+  /// How this food's imperial masses are totalled for display (spec R3-R4).
+  ///
+  /// A presentation choice only: `automatic`, `ounces` or `weight`. Non-null
+  /// with a default, because every food already in this cache has one --
+  /// automatic -- and a nullable column would make `nothing chosen yet` and
+  /// `decide for me` two ways of saying the same thing.
+  TextColumn get massDisplayMode =>
+      text().withDefault(const Constant('automatic'))();
+
+  /// One reviewed package-to-serving relationship, as version-stamped JSON
+  /// text (spec R9-R13).
+  ///
+  /// Stored whole rather than as three columns, for the same reason the
+  /// server stores one jsonb: the count, the serving it counts, and the two
+  /// amounts it was reviewed against are a single claim. Split up, a write
+  /// carrying only some of them would leave a count pointing at a serving it
+  /// never saw, and the result is a wrong cup weight rather than a missing
+  /// one. Nullable, because having none is the ordinary state.
+  ///
+  /// Only ever read through `FoodMapper`, which keeps an unrecognised version
+  /// verbatim so an older build round-trips it untouched.
+  TextColumn get packageNutrition => text().nullable()();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
@@ -225,6 +248,15 @@ class MealPlanEntries extends Table {
   TextColumn get refType => text()();
   TextColumn get refId => text()();
   RealColumn get servings => real()();
+
+  /// Which of the food's servings [servings] counts (spec R12).
+  ///
+  /// Null — the ordinary state, and every row written before this existed —
+  /// means a count of the food's first serving, which is what `servings` has
+  /// always meant. A value names one serving row by id, so a package-derived
+  /// amount is read back against the row its label was reviewed against
+  /// rather than against whichever row is listed first.
+  TextColumn get servingOptionId => text().nullable()();
   BoolColumn get isPlanned => boolean().withDefault(const Constant(true))();
   BoolColumn get isLogged => boolean().withDefault(const Constant(false))();
   DateTimeColumn get loggedAt => dateTime().nullable()();

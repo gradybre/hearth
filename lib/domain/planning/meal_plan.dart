@@ -41,6 +41,7 @@ class MacroSnapshot {
     required this.capturedAt,
     required this.label,
     this.coverage = const NutrientCoverage.notRecorded(),
+    this.usesApproximatePackageNutrition = false,
     this.unreadFields = const <String, Object?>{},
   });
 
@@ -70,6 +71,17 @@ class MacroSnapshot {
   /// ever checked.
   final NutrientCoverage coverage;
 
+  /// Whether these macros were reached through a package's 'about N servings'
+  /// count rather than an exact one (spec R10, R12).
+  ///
+  /// Frozen with everything else, and for the same reason: the relationship
+  /// it came from can be corrected, re-reviewed or removed tomorrow, and none
+  /// of that may change what a meal eaten last Tuesday says about itself.
+  ///
+  /// Defaults to false so that every snapshot frozen before this existed reads
+  /// as making no approximate claim — which is exactly what it made.
+  final bool usesApproximatePackageNutrition;
+
   /// Keys this version does not understand, carried so it cannot destroy them.
   ///
   /// A snapshot is frozen history, and a *newer* client may have written
@@ -90,6 +102,8 @@ class MacroSnapshot {
       other.macros == macros &&
       other.servings == servings &&
       other.coverage == coverage &&
+      other.usesApproximatePackageNutrition ==
+          usesApproximatePackageNutrition &&
       // In the comparison because a round-trip test written as
       // `roundTrip(x) == x` is the natural way to guard this, and without it
       // that test passes while the fields are being lost.
@@ -105,6 +119,7 @@ class MacroSnapshot {
     macros,
     servings,
     coverage,
+    usesApproximatePackageNutrition,
     const MapEquality<String, Object?>().hash(unreadFields),
     capturedAt,
     label,
@@ -128,6 +143,7 @@ class MealPlanEntry {
     required this.refType,
     required this.refId,
     required this.servings,
+    this.servingOptionId,
     this.isPlanned = true,
     this.isLogged = false,
     this.loggedAt,
@@ -142,6 +158,21 @@ class MealPlanEntry {
 
   /// The portion. Independent per person — no shared portion maths (spec §5.6).
   final double servings;
+
+  /// Which of the food's servings [servings] counts, when it is not the
+  /// food's first one (spec R12).
+  ///
+  /// Null is the ordinary state and means exactly what it always meant: a
+  /// count of [Food.defaultServing]. A non-null id names one serving row, and
+  /// is always resolved by id rather than by position — a package-derived
+  /// amount is six of the row the label was reviewed against, and reading
+  /// that count against whichever row happens to be listed first is how a
+  /// planned 30 oz reopened at twice its calories.
+  ///
+  /// A row that has since been removed leaves a *planned* entry uncostable
+  /// rather than silently re-costed. A logged one answers from its snapshot
+  /// and is unaffected either way (spec §4).
+  final String? servingOptionId;
 
   final bool isPlanned;
   final bool isLogged;
@@ -160,6 +191,11 @@ class MealPlanEntry {
     required String label,
     double? portion,
     required NutrientCoverage coverage,
+    // Optional, and null means 'keep what was already frozen' — the same
+    // shape `unreadFields` uses. Correcting a portion on an already-logged
+    // meal must not quietly drop the qualifier the meal was recorded with,
+    // and a caller that has nothing new to say should not have to restate it.
+    bool? usesApproximatePackage,
   }) {
     final double logged = portion ?? servings;
     return MealPlanEntry(
@@ -169,6 +205,9 @@ class MealPlanEntry {
       refType: refType,
       refId: refId,
       servings: logged,
+      // Carried, never recomputed: the count and the row it counts only mean
+      // anything together.
+      servingOptionId: servingOptionId,
       isPlanned: isPlanned,
       isLogged: true,
       loggedAt: at,
@@ -188,6 +227,12 @@ class MealPlanEntry {
         // Scaling a portion cannot change what was known: half a recipe whose
         // fibre was partial is still partial.
         coverage: coverage,
+        // Scaling a portion cannot make an approximate basis exact, so this
+        // survives a re-log untouched unless the caller says otherwise.
+        usesApproximatePackageNutrition:
+            usesApproximatePackage ??
+            macroSnapshot?.usesApproximatePackageNutrition ??
+            false,
         // Carried across a re-log. Editing a portion on an already-logged meal
         // comes through here, and that is exactly the local edit `unreadFields`
         // exists to survive — dropping them would delete a newer client's
@@ -211,6 +256,7 @@ class MealPlanEntry {
     refType: refType,
     refId: refId,
     servings: servings,
+    servingOptionId: servingOptionId,
     // Unlogging a thing that was never planned still leaves it on the day —
     // it is on the plate list either way, and losing the row entirely is
     // what the delete gesture is for.
@@ -231,21 +277,32 @@ class MealPlanEntry {
     return plannedMacros.scaledBy(servings);
   }
 
-  MealPlanEntry copyWith({double? servings, bool? isPlanned, MealSlot? slot}) =>
-      MealPlanEntry(
-        id: id,
-        dayId: dayId,
-        slot: slot ?? this.slot,
-        refType: refType,
-        refId: refId,
-        servings: servings ?? this.servings,
-        isPlanned: isPlanned ?? this.isPlanned,
-        isLogged: isLogged,
-        loggedAt: loggedAt,
-        // Deliberately carried through untouched: editing a plan entry must
-        // never disturb a snapshot that has already been taken.
-        macroSnapshot: macroSnapshot,
-      );
+  MealPlanEntry copyWith({
+    double? servings,
+    bool? isPlanned,
+    MealSlot? slot,
+    String? servingOptionId,
+    // Explicit, because null already means 'leave it alone' on every other
+    // parameter here — and repointing an entry at another food has to be able
+    // to say that the row it named is no longer the row it counts.
+    bool clearServingOption = false,
+  }) => MealPlanEntry(
+    id: id,
+    dayId: dayId,
+    slot: slot ?? this.slot,
+    refType: refType,
+    refId: refId,
+    servings: servings ?? this.servings,
+    servingOptionId: clearServingOption
+        ? null
+        : servingOptionId ?? this.servingOptionId,
+    isPlanned: isPlanned ?? this.isPlanned,
+    isLogged: isLogged,
+    loggedAt: loggedAt,
+    // Deliberately carried through untouched: editing a plan entry must
+    // never disturb a snapshot that has already been taken.
+    macroSnapshot: macroSnapshot,
+  );
 
   /// The same meal, filed under a different day and slot (review N02).
   ///
@@ -273,6 +330,7 @@ class MealPlanEntry {
     refType: refType,
     refId: refId,
     servings: servings,
+    servingOptionId: servingOptionId,
     isPlanned: isPlanned,
     isLogged: isLogged,
     loggedAt: loggedAt,

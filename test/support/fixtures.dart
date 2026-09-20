@@ -1,6 +1,8 @@
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
+import 'package:hearth/domain/models/package_nutrition.dart';
 import 'package:hearth/domain/models/recipe.dart';
+import 'package:hearth/domain/units/mass_display_mode.dart';
 import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
@@ -157,6 +159,9 @@ Food aFood(
   String? id,
   String? brand,
   String? barcode,
+  Quantity? packSize,
+  PackageNutrition? packageNutrition,
+  MassDisplayMode massDisplayMode = MassDisplayMode.automatic,
   List<ServingOption>? servingOptions,
   double? gramsPerMillilitre,
   String? menuGroup,
@@ -171,6 +176,9 @@ Food aFood(
   name: name,
   brand: brand,
   barcode: barcode,
+  packSize: packSize,
+  packageNutrition: packageNutrition,
+  massDisplayMode: massDisplayMode,
   servingOptions: servingOptions ?? const <ServingOption>[],
   gramsPerMillilitre: gramsPerMillilitre,
   menuGroup: menuGroup,
@@ -243,6 +251,8 @@ extension FoodTestCopies on Food {
     brand: brand ?? this.brand,
     storeTag: storeTag ?? this.storeTag,
     packSize: packSize ?? this.packSize,
+    packageNutrition: packageNutrition,
+    massDisplayMode: massDisplayMode,
     barcode: barcode ?? this.barcode,
     gramsPerMillilitre: gramsPerMillilitre,
     macrosOverridden: macrosOverridden,

@@ -125,5 +125,11 @@ class FoodRepository {
     isModifier: food.isModifier,
     isDeleted: food.isDeleted,
     updatedAt: food.updatedAt,
+    // Carried, not defaulted. This copier exists to stamp the household and
+    // nothing else, and dropping either of these would silently reset a
+    // display preference and delete a reviewed package relationship on every
+    // ordinary save (spec R4, R13).
+    massDisplayMode: food.massDisplayMode,
+    packageNutrition: food.packageNutrition,
   );
 }

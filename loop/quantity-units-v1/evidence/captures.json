@@ -1,0 +1,72 @@
+[
+  {
+    "path": "loop/quantity-units-v1/evidence/screens/package-editor-phone.png",
+    "sha256": "7c2fc5c4207455f894d67716b347a144ac6bfca2adfcb04e3e16472e553a2ece",
+    "source": "Flutter widget runtime with synthetic memory database; not native device capture"
+  },
+  {
+    "path": "loop/quantity-units-v1/evidence/screens/package-editor-dark.png",
+    "sha256": "d43d847b53e00fb660ceba4be04caa4ea52d8126a269837ffedd2fbf2711a480",
+    "source": "Flutter widget runtime with synthetic memory database; not native device capture"
+  },
+  {
+    "path": "loop/quantity-units-v1/evidence/screens/package-editor-desktop.png",
+    "sha256": "eaf3fba12c902d6ad11d06e75bfc7271752d4cb664438ec597d8bcf13b7e5ad2",
+    "source": "Flutter widget runtime with synthetic memory database; not native device capture"
+  },
+  {
+    "path": "loop/quantity-units-v1/evidence/screens/package-editor-small-2x.png",
+    "sha256": "517c8d7a7182349811952ea29426a93e00f9c5710238a029427cc3a89bbb4722",
+    "source": "Flutter widget runtime with synthetic memory database; not native device capture"
+  },
+  {
+    "path": "loop/quantity-units-v1/evidence/screens/package-photos-phone-selected.png",
+    "sha256": "3803b3325519362222fca20023ef75ec29c4365962194f5fb6c9c444892d93a8",
+    "source": "Flutter widget runtime with synthetic memory database; not native device capture"
+  },
+  {
+    "path": "loop/quantity-units-v1/evidence/screens/package-photos-small-2x-selected.png",
+    "sha256": "ed8ea3245e03b410cf93f146995c7b6ebe6ed25cea1edb3c277913a9dfd80d27",
+    "source": "Flutter widget runtime with synthetic memory database; not native device capture"
+  },
+  {
+    "path": "loop/quantity-units-v1/evidence/screens/package-photos-phone-review.png",
+    "sha256": "83d666a09edd97add87468c8ca98a096a11ff1af1f4f270123a8d10e146ddb7b",
+    "source": "Flutter widget runtime with synthetic memory database; not native device capture"
+  },
+  {
+    "path": "loop/quantity-units-v1/evidence/screens/package-partial-review.png",
+    "sha256": "1a42308f8037e6fc1b040f5ea60e6c162ab160f05683f9a254e69cc64c811716",
+    "source": "Flutter widget runtime with synthetic memory database; not native device capture"
+  },
+  {
+    "path": "loop/quantity-units-v1/evidence/screens/package-photos-retry.png",
+    "sha256": "52f26a8243b99ea14541440b0bbd6ed01d7c5b9a9806068daa8582e253c780c5",
+    "source": "Flutter widget runtime with synthetic memory database; not native device capture"
+  },
+  {
+    "path": "loop/quantity-units-v1/evidence/screens/package-recipe.png",
+    "sha256": "8778e5b6e21da3ce6f9ce36bbc43a5ab68d96e9811d4969913227a38917e37d4",
+    "source": "Flutter widget runtime with synthetic memory database; not native device capture"
+  },
+  {
+    "path": "loop/quantity-units-v1/evidence/screens/package-recipe-scaled.png",
+    "sha256": "6eec823a22bee7829febbbca9318056ea36801e73fdb6af9eb428343f6053ff3",
+    "source": "Flutter widget runtime with synthetic memory database; not native device capture"
+  },
+  {
+    "path": "loop/quantity-units-v1/evidence/screens/package-cook-scaled.png",
+    "sha256": "71366d25532675ca8a1886638357dd06ad67b9ef81cb8f3beb57e4d2cf4cc633",
+    "source": "Flutter widget runtime with synthetic memory database; not native device capture"
+  },
+  {
+    "path": "loop/quantity-units-v1/evidence/screens/package-shopping-detail.png",
+    "sha256": "e02415e4f592a50f24f94ddd916ddf019873cabf504dcbef625e84f873e6642c",
+    "source": "Flutter widget runtime with synthetic memory database; not native device capture"
+  },
+  {
+    "path": "loop/quantity-units-v1/evidence/screens/package-shopping.png",
+    "sha256": "983a10ccb229734e47a465de4990e7440e9a0b541abb2bccdea37be76e854497",
+    "source": "Flutter widget runtime with synthetic memory database; not native device capture"
+  }
+]

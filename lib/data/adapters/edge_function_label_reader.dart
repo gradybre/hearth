@@ -56,6 +56,8 @@ class EdgeFunctionLabelReader implements LabelReader {
         functionName,
         body: <String, Object?>{
           'mode': mode,
+          if (mode == 'label')
+            'image_roles': [for (final image in images) image.role],
           'images': <String>[
             for (final AiImage image in images)
               'data:${image.mediaType};base64,${base64Encode(image.bytes)}',
@@ -86,25 +88,47 @@ class EdgeFunctionLabelReader implements LabelReader {
     return data;
   }
 
+  static Map<String, String> _fieldSources(Object? value) {
+    if (value is! Map) return const {};
+    return <String, String>{
+      for (final key in [
+        'package_amount',
+        'servings_per_container',
+        'servings',
+      ])
+        if (value[key] is String &&
+            ['nutrition', 'package', 'both', 'unknown'].contains(value[key]))
+          key: value[key] as String,
+    };
+  }
+
   /// Reads the function's response into a [LabelReading].
   ///
   /// Public because it is the seam worth testing: the parse can be exercised
   /// against every shape the function might send, including the malformed ones
   /// it should never send.
   static LabelReading readingFrom(Map<Object?, Object?> envelope) {
-    final Object? servings = envelope['servings'];
-    if (servings is! List) {
-      throw const RecipeAiException('No label could be read from that.');
-    }
+    final Object? servingsRaw = envelope['servings'];
+    final List<Object?> servingsList = servingsRaw is List
+        ? servingsRaw
+        : const <Object?>[];
 
     final LabelReading reading = LabelReading(
       name: _textOrNull(envelope['name']),
       brand: _textOrNull(envelope['brand']),
       servings: <LabelServing>[
-        for (final Object? item in servings)
+        for (final Object? item in servingsList)
           if (item is Map)
             if (_serving(item) case final LabelServing serving) serving,
       ],
+      packageSize: _pack(
+        _number(envelope['package_amount']),
+        _text(envelope['package_unit']),
+      ),
+      servingsPerContainer: _positiveCount(envelope['servings_per_container']),
+      servingsApproximate: envelope['servings_approximate'] == true,
+      packageBasis: _basis(envelope['package_basis']),
+      fieldSources: _fieldSources(envelope['field_sources']),
       uncertain: <AiUncertainty>[
         if (envelope['uncertain'] case final List<Object?> flagged)
           for (final Object? item in flagged)
@@ -117,14 +141,39 @@ class EdgeFunctionLabelReader implements LabelReader {
     );
 
     if (reading.isEmpty) {
-      // A photo of a hand, or a panel too dark to read. Saying so beats
-      // opening an editor full of blanks and letting the user work out why.
+      // A photo of a hand, or a panel too dark to read — and neither a
+      // package amount nor a serving count came through either. Saying so
+      // beats opening an editor full of blanks and letting the user work
+      // out why.
       throw const RecipeAiException(
-        'No serving sizes could be read off that. Try again with the '
-        'Nutrition Facts panel filling the frame.',
+        'Nothing legible came off that. Try again with the label filling '
+        'the frame.',
       );
     }
     return reading;
+  }
+
+  /// A finite count greater than zero, or null. A servings-per-container of
+  /// 0 or a negative number is not a real count, and keeping it out here
+  /// stops a malformed figure ever reaching a nutrition calculation as
+  /// though it had been read cleanly.
+  static double? _positiveCount(Object? value) {
+    final double? n = _number(value);
+    return (n != null && n > 0) ? n : null;
+  }
+
+  /// 'as_packaged', 'prepared', 'drained', or the conservative 'unknown'
+  /// when the panel did not say or the model's answer is not one of the
+  /// three recognised possibilities.
+  static String _basis(Object? value) {
+    const Set<String> known = <String>{
+      'as_packaged',
+      'prepared',
+      'drained',
+      'unknown',
+    };
+    final String text = _text(value);
+    return known.contains(text) ? text : 'unknown';
   }
 
   /// Reads the function's response into a [PackReading].

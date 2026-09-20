@@ -111,7 +111,13 @@ abstract final class EntryResolver {
 
       case PlanRefType.food:
         final Food? food = foods[entry.refId];
-        final ServingOption? serving = food?.defaultServing;
+        // By id, never by position. `servings` counts the row the entry
+        // names, and a row that has since been removed leaves a planned
+        // entry uncostable rather than quietly re-costed against whichever
+        // serving happens to be first (spec R12).
+        final ServingOption? serving = food == null
+            ? null
+            : servingForEntry(food, entry.servingOptionId);
         if (food == null || serving == null) {
           return ResolvedEntry(
             entry: entry,
@@ -135,6 +141,19 @@ abstract final class EntryResolver {
           servingLabel: serving.label,
         );
     }
+  }
+
+  /// The serving an entry's [MealPlanEntry.servings] counts.
+  ///
+  /// The food's first when the entry names none — which is what a count of
+  /// servings has always meant — and otherwise the named row, or nothing at
+  /// all when that row is gone.
+  static ServingOption? servingForEntry(Food food, String? servingOptionId) {
+    if (servingOptionId == null) return food.defaultServing;
+    for (final ServingOption option in food.servingOptions) {
+      if (option.id == servingOptionId) return option;
+    }
+    return null;
   }
 
   static List<ResolvedEntry> resolveAll(

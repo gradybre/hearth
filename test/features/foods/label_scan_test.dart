@@ -8,6 +8,7 @@ import 'package:hearth/data/adapters/photo_picker.dart';
 import 'package:hearth/data/adapters/recipe_ai.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
+import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/app_harness.dart';
@@ -112,6 +113,19 @@ class FakeCamera implements PhotoPicker {
   ];
 }
 
+/// A picker that always backs out, for the cancelled-selection case.
+class _CancellingCamera implements PhotoPicker {
+  @override
+  bool get canUseCamera => true;
+
+  @override
+  Future<PickedPhoto?> pick(PhotoOrigin origin) async => null;
+
+  @override
+  Future<List<PickedPhoto>> pickMultiple({int max = 10}) async =>
+      <PickedPhoto>[];
+}
+
 Future<void> openFoods(
   WidgetTester tester, {
   List<Food> foods = const <Food>[],
@@ -144,7 +158,11 @@ Future<void> openEditor(
 }
 
 Future<void> takePhoto(WidgetTester tester) async {
-  await tester.tap(find.text('Take a photo'));
+  await tester.tap(
+    find.byKey(const ValueKey<String>('LabelSlot.nutrition-camera')),
+  );
+  await pumpFrames(tester, frames: 10);
+  await tester.tap(find.text('Read photos'));
   await pumpFrames(tester, frames: 10);
 }
 
@@ -223,7 +241,7 @@ void main() {
     await takePhoto(tester);
 
     expect(find.text('The reader is busy.'), findsOneWidget);
-    await tester.tap(find.text('Try again'));
+    await tester.tap(find.text('Read photos'));
     await pumpFrames(tester, frames: 10);
 
     // Asked again without making anybody photograph the packet twice.
@@ -250,7 +268,7 @@ void main() {
     await pumpFrames(tester);
 
     expect(find.text('Take a photo'), findsNothing);
-    expect(find.text('Choose a photo'), findsOneWidget);
+    expect(find.text('Choose a photo'), findsNWidgets(2));
   });
 
   testWidgets('the Foods list offers it for a food with no barcode at all', (
@@ -350,7 +368,168 @@ void main() {
 
     // Still on the sheet, asking — not popped straight back with the old
     // reading.
-    expect(find.text('Take a photo'), findsOneWidget);
-    expect(find.text('Choose a photo'), findsOneWidget);
+    expect(find.text('Take a photo'), findsNWidgets(2));
+    expect(find.text('Choose a photo'), findsNWidgets(2));
+  });
+
+  testWidgets('reading with both photos sends them together in one call', (
+    WidgetTester tester,
+  ) async {
+    final FakeLabelReader reader = FakeLabelReader();
+    await openEditor(tester, reader: reader);
+    await tester.tap(find.text('Read label'));
+    await pumpFrames(tester);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('LabelSlot.nutrition-camera')),
+    );
+    await pumpFrames(tester, frames: 10);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('LabelSlot.package-camera')),
+    );
+    await pumpFrames(tester, frames: 10);
+    await tester.tap(find.text('Read photos'));
+    await pumpFrames(tester, frames: 10);
+
+    expect(reader.calls, 1);
+    expect(reader.lastImages, hasLength(2));
+  });
+
+  testWidgets('replacing a photo before reading discards the first pick', (
+    WidgetTester tester,
+  ) async {
+    final FakeLabelReader reader = FakeLabelReader();
+    await openEditor(tester, reader: reader);
+    await tester.tap(find.text('Read label'));
+    await pumpFrames(tester);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('LabelSlot.nutrition-camera')),
+    );
+    await pumpFrames(tester, frames: 10);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('LabelSlot.nutrition-replace')),
+    );
+    await pumpFrames(tester, frames: 10);
+    await tester.tap(find.text('Read photos'));
+    await pumpFrames(tester, frames: 10);
+
+    expect(reader.calls, 1);
+    expect(reader.lastImages, hasLength(1));
+  });
+
+  testWidgets('removing a photo clears that slot', (WidgetTester tester) async {
+    await openEditor(tester, reader: FakeLabelReader());
+    await tester.tap(find.text('Read label'));
+    await pumpFrames(tester);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('LabelSlot.nutrition-camera')),
+    );
+    await pumpFrames(tester, frames: 10);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('LabelSlot.nutrition-remove')),
+    );
+    await pumpFrames(tester, frames: 10);
+
+    expect(
+      find.byKey(const ValueKey<String>('LabelSlot.nutrition-camera')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a cancelled picker leaves the slot empty', (
+    WidgetTester tester,
+  ) async {
+    await openEditor(
+      tester,
+      reader: FakeLabelReader(),
+      picker: _CancellingCamera(),
+    );
+    await tester.tap(find.text('Read label'));
+    await pumpFrames(tester);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('LabelSlot.nutrition-camera')),
+    );
+    await pumpFrames(tester, frames: 10);
+
+    expect(
+      find.byKey(const ValueKey<String>('LabelSlot.nutrition-camera')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a retry after failure sends both photos again', (
+    WidgetTester tester,
+  ) async {
+    final FakeLabelReader reader = FakeLabelReader(
+      error: const RecipeAiException('The reader is busy.'),
+    );
+    await openEditor(tester, reader: reader);
+    await tester.tap(find.text('Read label'));
+    await pumpFrames(tester);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('LabelSlot.nutrition-camera')),
+    );
+    await pumpFrames(tester, frames: 10);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('LabelSlot.package-camera')),
+    );
+    await pumpFrames(tester, frames: 10);
+    await tester.tap(find.text('Read photos'));
+    await pumpFrames(tester, frames: 10);
+
+    expect(find.text('The reader is busy.'), findsOneWidget);
+
+    await tester.tap(find.text('Read photos'));
+    await pumpFrames(tester, frames: 10);
+
+    expect(reader.calls, 2);
+    expect(reader.lastImages, hasLength(2));
+  });
+
+  testWidgets('a front-only photo returns a package size without erroring', (
+    WidgetTester tester,
+  ) async {
+    final FakeLabelReader reader = FakeLabelReader(
+      answer: LabelReading(
+        servings: const <LabelServing>[],
+        packageSize: Quantity.of(24, Units.ounce),
+        servingsPerContainer: 6,
+      ),
+    );
+    await openEditor(tester, reader: reader);
+    await tester.tap(find.text('Read label'));
+    await pumpFrames(tester);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('LabelSlot.package-camera')),
+    );
+    await pumpFrames(tester, frames: 10);
+    await tester.tap(find.text('Read photos'));
+    await pumpFrames(tester, frames: 10);
+
+    expect(reader.calls, 1);
+    expect(reader.lastImages, hasLength(1));
+    expect(find.text('New food'), findsOneWidget);
+  });
+
+  testWidgets('a stale response cannot overwrite a newer selection', (
+    WidgetTester tester,
+  ) async {
+    final FakeLabelReader reader = FakeLabelReader();
+    await openEditor(tester, reader: reader);
+    await tester.tap(find.text('Read label'));
+    await pumpFrames(tester);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('LabelSlot.nutrition-camera')),
+    );
+    await pumpFrames(tester, frames: 10);
+
+    // First read, abandoned before it settles.
+    await tester.tap(find.text('Read photos'));
+    // A second edit before the first read returns invalidates it.
+    await tester.tap(
+      find.byKey(const ValueKey<String>('LabelSlot.nutrition-remove')),
+    );
+    await pumpFrames(tester, frames: 20);
+
+    expect(tester.takeException(), isNull);
   });
 }

@@ -105,7 +105,9 @@ class _FailingPlans implements PlanRepository {
     required double servings,
     Macros? loggedMacros,
     NutrientCoverage? loggedCoverage,
+    bool usesApproximatePackage = false,
     String? label,
+    String? servingOptionId,
   }) async {
     if (fail) throw StateError('the entry could not be written');
     return MealPlanEntry(
@@ -115,6 +117,7 @@ class _FailingPlans implements PlanRepository {
       refType: refType,
       refId: refId,
       servings: servings,
+      servingOptionId: servingOptionId,
     );
   }
 

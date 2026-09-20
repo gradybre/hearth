@@ -1,0 +1,22 @@
+{
+  "plan_id": "P-HEARTH-QUANTITY-001",
+  "version": 1,
+  "status": "proposed_awaiting_initial_plan_approval",
+  "approval": null,
+  "baseline": "4be6bc8292db5b4038ce4ebf5341878911e382d3",
+  "mode": "feature",
+  "product_changes": false,
+  "baseline_tests": {
+    "passed": 156,
+    "exit_code": 0
+  },
+  "optional_feedback": "No answer received at publication; recommended behavior remains proposed.",
+  "files": {
+    "PLAN.md": "8aab4c3022db582999db5ef4ec7014db15e585e5bfbc17f1157d7e3850be57d8",
+    "DISCOVERY.md": "685e3f1ce1e81b933d8ad480bf4dbe11974bb1e63e1e8dda905bbd4d891165c7",
+    "EXECUTION.md": "7a539bfd6af4dc45d5f7c328956a7b964c0b5aa50eac2e61a58c5cefc0acc3e1",
+    "evidence/baseline_probe.dart": "e4743e978723e6a8d00c63f578e0a02078153be4d658f1ca74776adfc17795e4",
+    "evidence/baseline-probe.txt": "033da608b25d5b35341c139ada8102eaac76a938c64dae7a85c98a347a9d5f15",
+    "evidence/baseline-tests.txt": "1c84689a3abb5d31715e2dd9221fdb9dca7cef6082637e66f26030cf8689d9bb"
+  }
+}

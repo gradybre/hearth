@@ -91,6 +91,7 @@ class PlanRepository {
     required MealSlot slot,
     required Macros liveMacros,
     NutrientCoverage? liveCoverage,
+    bool usesApproximatePackage = false,
     double? portion,
   }) => add(
     date: date,
@@ -98,7 +99,12 @@ class PlanRepository {
     refType: recent.refType,
     refId: recent.refId,
     servings: portion ?? recent.servings,
+    // The row that count is in travels with it. Without it the repeat is
+    // re-read against the food's first serving, which is how a 30 oz
+    // package portion came back at twice its calories (spec R12).
+    servingOptionId: recent.servingOptionId,
     loggedCoverage: liveCoverage,
+    usesApproximatePackage: usesApproximatePackage,
     // Macros are recomputed from the current library rather than copied from
     // the old snapshot: repeating a meal should record what that food is
     // today, not what it was when first logged.
@@ -122,8 +128,14 @@ class PlanRepository {
     required PlanRefType refType,
     required String refId,
     required double servings,
+    // Which serving [servings] counts, when it is not the food's first one
+    // (spec R12). Null is the ordinary state and means the default serving.
+    String? servingOptionId,
     Macros? loggedMacros,
     NutrientCoverage? loggedCoverage,
+    // Whether [loggedMacros] came through a package's 'about N servings'
+    // count (spec R10, R12). Frozen with them, never inferred afterwards.
+    bool usesApproximatePackage = false,
     String? label,
   }) async {
     assert(
@@ -152,6 +164,7 @@ class PlanRepository {
         refType: refType,
         refId: refId,
         servings: servings,
+        servingOptionId: servingOptionId,
         isPlanned: loggedMacros == null,
       );
 
@@ -165,6 +178,7 @@ class PlanRepository {
           // food stated it. A recipe's caller must pass its own coverage —
           // see `log`'s note on why the default was the bug (spec §5.6).
           coverage: loggedCoverage ?? NutrientCoverage.ofOne(loggedMacros),
+          usesApproximatePackage: usesApproximatePackage,
         );
       }
 
@@ -184,10 +198,16 @@ class PlanRepository {
     required Macros liveMacros,
     required String label,
     double? portion,
+    // Which serving [portion] counts. Null leaves the reference exactly as
+    // it was, which is what an ordinary correction is.
+    String? servingOptionId,
     // Required. Its optional twin on `log` was the whole defect, and leaving
     // one here put it back one level up: the day screen's one-tap confirm
     // promptly fell through it and froze "complete" on a partial recipe.
     required NutrientCoverage liveCoverage,
+    // Optional here, unlike coverage: null means 'whatever was frozen'. A
+    // correction to the portion is not a statement about the basis.
+    bool? usesApproximatePackage,
   }) async {
     final DateTime now = _now();
 
@@ -202,12 +222,23 @@ class PlanRepository {
       // today's meals in the recents list — which orders by exactly this —
       // and have the export say it was eaten in September. `restore` goes out
       // of its way to preserve this; correcting a portion has to as well.
-      final MealPlanEntry logged = existing.log(
+      // A portion typed in a unit only the package relationship can answer
+      // counts a different row from the one the entry named, and the two have
+      // to move together. Anything else preserves the reference, and a meal
+      // already logged is frozen (spec §4).
+      final MealPlanEntry base =
+          servingOptionId == null ||
+              existing.isLogged ||
+              servingOptionId == existing.servingOptionId
+          ? existing
+          : existing.copyWith(servingOptionId: servingOptionId);
+      final MealPlanEntry logged = base.log(
         liveMacros: liveMacros,
         at: existing.loggedAt ?? now,
         label: label,
         portion: portion,
         coverage: liveCoverage,
+        usesApproximatePackage: usesApproximatePackage,
       );
       await _store.upsertEntry(logged, updatedAt: now);
       await _queueEntry(logged, now);
@@ -358,6 +389,8 @@ class PlanRepository {
     refType: entry.refType,
     refId: entry.refId,
     servings: entry.servings,
+    // The same portion means the same row it was counted in.
+    servingOptionId: entry.servingOptionId,
   );
 
   /// [at], on [date], at the same time of day.
@@ -406,7 +439,18 @@ class PlanRepository {
       if (changed == 0) return 0;
 
       final MealPlanEntry? entry = await _store.entryById(entryId);
-      if (entry != null) await _queueEntry(entry, now);
+      if (entry != null) {
+        // The serving it named belonged to the food it no longer points at.
+        // Left behind it would resolve to nothing on the new food, which
+        // reads as a broken entry rather than as the portion somebody kept.
+        final MealPlanEntry repointed = entry.servingOptionId == null
+            ? entry
+            : entry.copyWith(clearServingOption: true);
+        if (repointed.servingOptionId != entry.servingOptionId) {
+          await _store.upsertEntry(repointed, updatedAt: now);
+        }
+        await _queueEntry(repointed, now);
+      }
       return changed;
     });
   }

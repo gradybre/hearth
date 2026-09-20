@@ -12,6 +12,7 @@ import '../../domain/shopping/shopping_line.dart';
 import '../../domain/shopping/shopping_list_builder.dart';
 import '../../domain/shopping/shopping_list_merge.dart';
 import '../../domain/units/quantity.dart';
+import '../local/food_store.dart';
 import '../local/hearth_database.dart';
 import '../local/pending_write_store.dart';
 import '../local/shopping_store.dart';
@@ -77,7 +78,7 @@ class ShoppingRepository {
     required String foodId,
   }) async {
     final DateTime now = _now();
-    return _db.transaction(() async {
+    final int changed = await _db.transaction(() async {
       final int changed =
           await (_db.update(
             _db.shoppingListItems,
@@ -104,6 +105,16 @@ class ShoppingRepository {
       }
       return changed;
     });
+
+    // The line points at a different food now, and a food is what decides
+    // whether its asks can be added at all and which kind the total is
+    // counted in. So the arithmetic is redone against the new match rather
+    // than left describing the old one (spec R5).
+    if (changed > 0) {
+      final ShoppingListSnapshot? existing = await current();
+      if (existing != null) await replace(existing.lines);
+    }
+    return changed;
   }
 
   Future<ShoppingListSnapshot?> current() =>
@@ -152,7 +163,7 @@ class ShoppingRepository {
 
     final List<ShoppingLine> merged = existing == null
         ? ordered
-        : ShoppingListMerge.into(existing.lines, ordered);
+        : ShoppingListMerge.into(existing.lines, ordered, foods: foods);
 
     return _write(
       listId: existing?.id ?? _idFactory(),
@@ -186,13 +197,20 @@ class ShoppingRepository {
     // asked, and invisible once it is there.
     _positive(servings);
 
+    // Source mode: the ask records what the recipe asked for, in the
+    // measure it was written in. Turning it into a number of packages is
+    // [ShoppingContributions.settle]'s job in [_add], and is redone from
+    // these asks on every later write — so changing the servings per
+    // package, or removing the relationship, recomputes the line instead of
+    // leaving a stale converted amount behind (spec R5, R12).
     final List<ConsolidatedIngredient> wanted =
         IngredientConsolidator.mergeRecipes(
           <Recipe>[recipe],
           servingsFor: <String, double>{recipe.id: servings},
+          sourceMode: true,
         );
 
-    return _add(<_Ask>[
+    return _add(foods, <_Ask>[
       for (final ConsolidatedIngredient line in wanted)
         (
           key: line.key,
@@ -222,24 +240,27 @@ class ShoppingRepository {
     required double servings,
   }) async {
     _positive(servings);
-    return _add(<_Ask>[
-      (
-        key: food.id,
-        name: food.name,
-        foodId: food.id,
-        storeTag: food.storeTag,
-        sourceRecipeIds: const <String>[],
-        contribution: ShoppingContribution(
-          kind: ShoppingSourceKind.food,
-          refId: food.id,
-          label: food.name,
-          servings: servings,
-          quantities: <Quantity>[
-            ShoppingListBuilder.portionsOf(food, servings),
-          ],
+    return _add(
+      <String, Food>{food.id: food},
+      <_Ask>[
+        (
+          key: food.id,
+          name: food.name,
+          foodId: food.id,
+          storeTag: food.storeTag,
+          sourceRecipeIds: const <String>[],
+          contribution: ShoppingContribution(
+            kind: ShoppingSourceKind.food,
+            refId: food.id,
+            label: food.name,
+            servings: servings,
+            quantities: <Quantity>[
+              ShoppingListBuilder.portionsOf(food, servings),
+            ],
+          ),
         ),
-      ),
-    ]);
+      ],
+    );
   }
 
   /// Nothing is added for no servings, and asking says so.
@@ -283,7 +304,10 @@ class ShoppingRepository {
   }
 
   /// Folds a set of asks into the list as it stands.
-  Future<List<ShoppingLine>> _add(List<_Ask> asks) async {
+  Future<List<ShoppingLine>> _add(
+    Map<String, Food> foods,
+    List<_Ask> asks,
+  ) async {
     final ShoppingListSnapshot? existing = await current();
     final List<ShoppingLine> lines = <ShoppingLine>[
       ...existing?.lines ?? const <ShoppingLine>[],
@@ -310,6 +334,7 @@ class ShoppingRepository {
               sourceRecipeIds: ask.sourceRecipeIds,
             ),
             contributions: <ShoppingContribution>[ask.contribution],
+            food: foods[ask.foodId],
           ),
         );
         continue;
@@ -332,7 +357,9 @@ class ShoppingRepository {
               : was.contributions,
           <ShoppingContribution>[ask.contribution],
           displayName: was.name,
+          food: foods[was.foodId ?? ask.foodId],
         ),
+        food: foods[was.foodId ?? ask.foodId],
       );
     }
 
@@ -346,12 +373,41 @@ class ShoppingRepository {
         ? defaultRange()
         : (from: existing.from, to: existing.to);
 
+    // One library read for the whole write, never one per line. Every write
+    // to the list passes through here, so this is where a line's total is
+    // brought back into step with the food it is matched to (spec R5).
+    final Map<String, Food> foods = await _foodsById();
+
     return _write(
       listId: existing?.id ?? _idFactory(),
       from: range.from,
       to: range.to,
-      lines: lines,
+      lines: <ShoppingLine>[
+        for (final ShoppingLine line in lines) _settled(line, foods),
+      ],
     );
+  }
+
+  /// [line] with its total recomputed from its own asks, against the food it
+  /// is matched to now.
+  ///
+  /// Idempotent, because the asks are what it reads — settling twice cannot
+  /// compound, and a line written before contributions existed is read
+  /// through [ShoppingContributions.legacy] exactly as it was.
+  static ShoppingLine _settled(ShoppingLine line, Map<String, Food> foods) =>
+      ShoppingContributions.settle(
+        line,
+        contributions: line.contributions.isEmpty
+            ? ShoppingContributions.legacy(line)
+            : line.contributions,
+        food: foods[line.foodId],
+      );
+
+  /// The household's foods, and the globals, by id.
+  Future<Map<String, Food>> _foodsById() async {
+    final List<Food> library = await FoodStore(_db)
+        .all(householdId: _householdId);
+    return <String, Food>{for (final Food food in library) food.id: food};
   }
 
   /// Puts one removed line back, on the list as it stands *now* (spec §5.7).

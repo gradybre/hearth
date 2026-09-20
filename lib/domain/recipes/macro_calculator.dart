@@ -45,11 +45,21 @@ class IngredientMacros {
     required this.ingredient,
     required this.macros,
     required this.status,
+    this.usesApproximatePackage = false,
   });
 
   final RecipeIngredient ingredient;
   final Macros macros;
   final IngredientMacroStatus status;
+
+  /// True when this ingredient's macros were bridged through a package's
+  /// "about N servings" count rather than an exact one (spec R10, R12).
+  ///
+  /// Carried on the ingredient rather than folded silently into [macros] so
+  /// a recipe or food nutrition screen can show "uses approximate package
+  /// servings" beside a number that still looks, and adds up, exactly like
+  /// any other.
+  final bool usesApproximatePackage;
 
   bool get isResolved => status == IngredientMacroStatus.resolved;
 
@@ -86,6 +96,15 @@ class RecipeMacros {
   /// Missing data flags, never blocks: the recipe still saves and still shows
   /// what is known (spec §5.3).
   bool get isIncomplete => ingredients.any((IngredientMacros i) => i.isDataGap);
+
+  /// True when at least one resolved ingredient's macros came from an
+  /// approximate package/serving count (spec R10, R12).
+  ///
+  /// The recipe/food nutrition screen's cue to show "Nutrition uses
+  /// approximate package servings" beside an otherwise ordinary-looking
+  /// total.
+  bool get usesApproximatePackageNutrition =>
+      ingredients.any((IngredientMacros i) => i.usesApproximatePackage);
 
   /// The ingredients behind [isIncomplete], for the UI to name explicitly.
   List<RecipeIngredient> get incompleteIngredients => <RecipeIngredient>[
@@ -285,18 +304,80 @@ abstract final class MacroCalculator {
       );
     }
 
-    // Otherwise try to cross volume <-> weight, using the food's own density
-    // first and the generic table only as a fallback.
+    // Otherwise try to cross volume <-> weight. The food's own density —
+    // stated, or inferred from its own servings — always answers first.
+    final double? ownDensity = food.ownGramsPerMillilitre;
+    if (ownDensity != null) {
+      final IngredientMacros? resolved = _tryCrossKind(
+        ingredient,
+        quantity,
+        food,
+        ownDensity,
+      );
+      if (resolved != null) return resolved;
+    }
+
+    // With no density of its own, a reviewed package relationship (spec
+    // R9–R13) can bridge the gap — but only against the specific serving it
+    // was reviewed for, never an arbitrary volume row on the food.
+    if (ownDensity == null) {
+      final ServingOption? packageServing = food.activePackageServing;
+      final double? packageDensity = food.packageGramsPerMillilitre;
+      if (packageServing != null &&
+          packageDensity != null &&
+          packageServing.amount.canonicalAmount != 0) {
+        final ConversionResult converted = UnitConverter.crossKind(
+          quantity,
+          packageServing.amount.kind,
+          gramsPerMillilitre: packageDensity,
+        );
+        if (converted.isExact) {
+          final double ratio =
+              converted.quantity.canonicalAmount /
+              packageServing.amount.canonicalAmount;
+          return IngredientMacros(
+            ingredient: ingredient,
+            macros: packageServing.macros.scaledBy(ratio),
+            status: IngredientMacroStatus.resolved,
+            usesApproximatePackage:
+                food.packageNutrition?.isApproximate ?? false,
+          );
+        }
+      }
+    }
+
+    // Last resort: the generic density-by-name table.
+    final IngredientMacros? viaGenericTable = _tryCrossKind(
+      ingredient,
+      quantity,
+      food,
+      null,
+    );
+    if (viaGenericTable != null) return viaGenericTable;
+
+    return IngredientMacros(
+      ingredient: ingredient,
+      macros: Macros.zero,
+      status: IngredientMacroStatus.unconvertible,
+    );
+  }
+
+  /// Tries every serving option on [food] against [density] — or, when
+  /// [density] is null, the generic table looked up by [food]'s name —
+  /// returning the first exact match.
+  static IngredientMacros? _tryCrossKind(
+    RecipeIngredient ingredient,
+    Quantity quantity,
+    Food food,
+    double? density,
+  ) {
     for (final ServingOption option in food.servingOptions) {
       if (option.amount.canonicalAmount == 0) continue;
       final ConversionResult converted = UnitConverter.crossKind(
         quantity,
         option.amount.kind,
         ingredient: food.name,
-        // The food's own figure when it has one, otherwise the one implied
-        // by its own serving sizes — either beats the generic table, which
-        // is only consulted when the food itself cannot answer.
-        gramsPerMillilitre: food.effectiveGramsPerMillilitre,
+        gramsPerMillilitre: density,
       );
       if (!converted.isExact) continue;
       final double ratio =
@@ -307,12 +388,7 @@ abstract final class MacroCalculator {
         status: IngredientMacroStatus.resolved,
       );
     }
-
-    return IngredientMacros(
-      ingredient: ingredient,
-      macros: Macros.zero,
-      status: IngredientMacroStatus.unconvertible,
-    );
+    return null;
   }
 
   /// A recipe's macros, derived live from its ingredients (spec §4).

@@ -248,7 +248,11 @@ void main() {
 
     await tester.tap(find.text('Read the label'));
     await pumpFrames(tester);
-    await tester.tap(find.text('Take a photo'));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('LabelSlot.nutrition-camera')),
+    );
+    await pumpFrames(tester);
+    await tester.tap(find.text('Read photos'));
     await pumpFrames(tester, frames: 10);
 
     // The same destination as adding by hand — this is manual entry with the
@@ -283,7 +287,11 @@ void main() {
 
     await tester.tap(find.text('No barcode? Read the label'));
     await pumpFrames(tester);
-    await tester.tap(find.text('Take a photo'));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('LabelSlot.nutrition-camera')),
+    );
+    await pumpFrames(tester);
+    await tester.tap(find.text('Read photos'));
     await pumpFrames(tester, frames: 10);
 
     // The same editor as every other way in, because nothing reaches the
@@ -321,7 +329,11 @@ void main() {
     expect(find.textContaining('looks incomplete'), findsOneWidget);
     await tester.tap(find.text('Read the label'));
     await pumpFrames(tester);
-    await tester.tap(find.text('Take a photo'));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('LabelSlot.nutrition-camera')),
+    );
+    await pumpFrames(tester);
+    await tester.tap(find.text('Read photos'));
     await pumpFrames(tester, frames: 10);
 
     // What the lookup got right is kept — the name it knew, and the barcode,
@@ -371,7 +383,11 @@ void main() {
 
     await tester.tap(offer);
     await pumpFrames(tester);
-    await tester.tap(find.text('Take a photo'));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('LabelSlot.nutrition-camera')),
+    );
+    await pumpFrames(tester);
+    await tester.tap(find.text('Read photos'));
     await pumpFrames(tester, frames: 10);
 
     expect(find.text('New food'), findsOneWidget);

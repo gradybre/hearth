@@ -12,6 +12,7 @@ MealPlanEntry logged({
   double servings = 1,
   String label = 'Thing',
   double kcal = 100,
+  String? servingOptionId,
 }) =>
     MealPlanEntry(
       id: id,
@@ -20,6 +21,7 @@ MealPlanEntry logged({
       refType: refType,
       refId: refId,
       servings: servings,
+      servingOptionId: servingOptionId,
     ).log(
       liveMacros: Macros(kcal: kcal),
       at: at,
@@ -94,6 +96,48 @@ void main() {
         logged(id: 'b', refId: 'food-1', at: wednesday, label: 'New name'),
       ]);
       expect(recents.single.label, 'New name');
+    });
+
+    test('the serving that portion counted, carried with it', () {
+      // The count and the row it counts only mean anything together.
+      final List<RecentLog> recents = RecentLogs.from(<MealPlanEntry>[
+        logged(
+          id: 'a',
+          refId: 'food-1',
+          at: monday,
+          servings: 6,
+          servingOptionId: 'cup-b',
+        ),
+      ]);
+
+      expect(recents.single.servings, 6);
+      expect(recents.single.servingOptionId, 'cup-b');
+    });
+
+    test('a newer logging naming no serving clears the older one', () {
+      // Null is a row too — the food's first. Keeping the old id would
+      // repeat the newest portion in a serving it was never counted in.
+      final List<RecentLog> recents = RecentLogs.from(<MealPlanEntry>[
+        logged(id: 'a', refId: 'food-1', at: monday, servingOptionId: 'cup-b'),
+        logged(id: 'b', refId: 'food-1', at: wednesday),
+      ]);
+
+      expect(recents.single.servingOptionId, isNull);
+      expect(recents.single.timesLogged, 2);
+    });
+
+    test('and an older one leaves the newer reference alone', () {
+      final List<RecentLog> recents = RecentLogs.from(<MealPlanEntry>[
+        logged(
+          id: 'a',
+          refId: 'food-1',
+          at: wednesday,
+          servingOptionId: 'cup-b',
+        ),
+        logged(id: 'b', refId: 'food-1', at: monday),
+      ]);
+
+      expect(recents.single.servingOptionId, 'cup-b');
     });
 
     test('order of arrival does not matter', () {

@@ -51,11 +51,28 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 28;
+  int get schemaVersion => 29;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (Migrator m, int from, int to) async {
+      // v29 lets a food say how its masses should read, and carry one
+      // reviewed package-to-serving relationship (spec R3-R4, R9-R13). Both
+      // are additive: the mode defaults to `automatic`, which is what every
+      // food saved before today already was, and the relationship is null,
+      // which is having none.
+      if (from < 29) {
+        await _addColumnIfMissing(m, foods, foods.massDisplayMode);
+        await _addColumnIfMissing(m, foods, foods.packageNutrition);
+        // And which serving a portion counts. Additive and nullable, which
+        // is what every entry already on this device is: a count of the
+        // food's first serving.
+        await _addColumnIfMissing(
+          m,
+          mealPlanEntries,
+          mealPlanEntries.servingOptionId,
+        );
+      }
       // v28 records what each source asked for on a shopping line, so a
       // rebuild can replace the plan's share without touching a recipe
       // somebody added to the list themselves (spec §5.7).

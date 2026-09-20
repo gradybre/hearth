@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/domain/models/recipe.dart';
+import 'package:hearth/domain/units/mass_display_mode.dart';
 import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/app_harness.dart';
@@ -28,6 +29,7 @@ void main() {
             amount: 16,
             unit: Units.ounce,
             sectionId: 'sec',
+            foodId: 'turkey-weight',
           ),
         ],
         steps: <RecipeStep>[
@@ -38,7 +40,17 @@ void main() {
   );
 
   Future<void> openRecipe(WidgetTester tester) async {
-    await pumpHearthApp(tester, recipes: <Recipe>[turkeyBowl()]);
+    await pumpHearthApp(
+      tester,
+      recipes: <Recipe>[turkeyBowl()],
+      foods: [
+        aFood(
+          'ground turkey',
+          id: 'turkey-weight',
+          massDisplayMode: MassDisplayMode.weight,
+        ),
+      ],
+    );
     await pumpFrames(tester);
     await tester.tap(find.text('Turkey apple bowl'));
     await pumpFrames(tester, frames: 12);
