@@ -2,10 +2,12 @@ import 'dart:convert';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../domain/shopping/walmart_link_reading.dart';
 import '../../domain/units/quantity.dart';
 import '../../domain/units/unit.dart';
 import 'label_reader.dart';
 import 'recipe_ai.dart';
+import 'walmart_link_reader.dart';
 
 /// Reading a nutrition label through the `recipe-ai` Edge Function
 /// (spec §5.5).
@@ -19,7 +21,7 @@ import 'recipe_ai.dart';
 /// (CLAUDE.md §8.1). The response is narrowed to a small stable shape there
 /// too, so a change in what the model returns is a redeploy rather than an App
 /// Store release — the same reasoning as [EdgeFunctionRecipeAi].
-class EdgeFunctionLabelReader implements LabelReader {
+class EdgeFunctionLabelReader implements LabelReader, WalmartLinkReader {
   EdgeFunctionLabelReader(this._client);
 
   static const String functionName = 'recipe-ai';
@@ -35,6 +37,60 @@ class EdgeFunctionLabelReader implements LabelReader {
   Future<PackReading> readPack(List<AiImage> images) async => packFrom(
     await _ask('pack', images, 'Take a photo of the package first.'),
   );
+
+  static const int _maxWalmartImageBytes = 5 * 1024 * 1024;
+
+  static const Set<String> _allowedWalmartMediaTypes = <String>{
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+  };
+
+  @override
+  Future<WalmartLinkReading> readWalmartLink(List<AiImage> images) async {
+    if (images.length != 1) {
+      throw const RecipeAiException(
+        'Take exactly one screenshot to read a Walmart link from.',
+        isRetryable: false,
+      );
+    }
+    final AiImage image = images.single;
+    if (image.bytes.isEmpty) {
+      throw const RecipeAiException(
+        'That screenshot has no image data.',
+        isRetryable: false,
+      );
+    }
+    if (image.bytes.length > _maxWalmartImageBytes) {
+      throw const RecipeAiException(
+        'That screenshot is too large. Try a smaller image.',
+        isRetryable: false,
+      );
+    }
+    if (!_allowedWalmartMediaTypes.contains(image.mediaType)) {
+      throw const RecipeAiException(
+        'That image type is not supported.',
+        isRetryable: false,
+      );
+    }
+
+    final Map<Object?, Object?> envelope = await _ask(
+      'walmart',
+      images,
+      'Take a screenshot first.',
+    );
+    return walmartLinkFrom(envelope);
+  }
+
+  /// Reads the function's response into a [WalmartLinkReading].
+  ///
+  /// Public for the same reason as [readingFrom]: the parse is the seam
+  /// worth testing, including against shapes the server should never send.
+  /// The client re-validates even a shaped server envelope rather than
+  /// trusting it outright.
+  static WalmartLinkReading walmartLinkFrom(Map<Object?, Object?> envelope) =>
+      WalmartLinkReading.fromJson(envelope['walmart_link']);
 
   /// One call to the function, in whichever mode, as a decoded envelope.
   ///
@@ -129,6 +185,7 @@ class EdgeFunctionLabelReader implements LabelReader {
       servingsApproximate: envelope['servings_approximate'] == true,
       packageBasis: _basis(envelope['package_basis']),
       fieldSources: _fieldSources(envelope['field_sources']),
+      walmartLink: WalmartLinkReading.fromJson(envelope['walmart_link']),
       uncertain: <AiUncertainty>[
         if (envelope['uncertain'] case final List<Object?> flagged)
           for (final Object? item in flagged)

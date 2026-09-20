@@ -1,0 +1,61 @@
+{
+  "time_utc": "2026-09-20T01:12:41.415843+00:00",
+  "counts": {
+    "flutter_pass": 3818,
+    "flutter_skipped": 86,
+    "gallery_pass": 64,
+    "architecture_pass": 24,
+    "deno_pass": 121,
+    "deno_steps": 84
+  },
+  "logs": {
+    "flutter-full": {
+      "path": "/private/tmp/hearth-walmart-20260919/flutter-release.log",
+      "sha256": "9ed56f11b7cd83de130dbe5fad706c75f2f521523f455a4a6efe35067e4ac0eb"
+    },
+    "gallery-all": {
+      "path": "/private/tmp/hearth-walmart-20260919/gallery-all.log",
+      "sha256": "324802f93735730a192c73bffcba0e4b0d0f3c6f0d1d812b03b4000f7f661138"
+    },
+    "gallery-feature": {
+      "path": "/private/tmp/hearth-walmart-20260919/gallery-reviewed-final.log",
+      "sha256": "409fc3e00c065334c95e5192b80dd5d0c23f3b711e791111da7fd686e6bc7f5d"
+    },
+    "analyze": {
+      "path": "/private/tmp/hearth-walmart-20260919/analyze-verified.log",
+      "sha256": "4149d2557a3a23a5169acc9c5cef76bcc0704019968093843416f6fa80733f36"
+    },
+    "format": {
+      "path": "/private/tmp/hearth-walmart-20260919/format-final.log",
+      "sha256": "cfe218bfcb8d830b6871bdbdea0595342219942d2d5c040b70f64f38e6d58ea9"
+    },
+    "architecture": {
+      "path": "/private/tmp/hearth-walmart-20260919/architecture-final.log",
+      "sha256": "fc1c74e9d925457d5b58291ff564a9207b49e1e213ad254ce172c1e2d6a4f527"
+    },
+    "deno-types": {
+      "path": "/private/tmp/hearth-walmart-20260919/deno-types-final.log",
+      "sha256": "095befe60a6e801185829262ca05325d2ce070fb474fae4eac2285d5b5243471"
+    },
+    "deno-full": {
+      "path": "/private/tmp/hearth-walmart-20260919/deno-final.log",
+      "sha256": "85b44f5e64517e819c72d8da119803712cd520bb9ea06e7b3126ef27b8b5bbc0"
+    },
+    "dismiss-race-red": {
+      "path": "/private/tmp/hearth-walmart-20260919/dismiss-race-red.log",
+      "sha256": "b80d86f345fcc73933948e666bf22df2c14a379f9cd1d722ea2ca5faab95f8fa"
+    },
+    "dismiss-race-green": {
+      "path": "/private/tmp/hearth-walmart-20260919/dismiss-race-green.log",
+      "sha256": "a2f401e49d19788920b244686c85ccb254fdd921f662fad0b174e7f1b58292be"
+    }
+  },
+  "unfulfilled": [
+    "native macOS walkthrough",
+    "iOS/Windows runtime not claimed",
+    "PR110 dependency clearance",
+    "deployed synthetic extraction/cost accounting"
+  ],
+  "deployed": false,
+  "merged": false
+}

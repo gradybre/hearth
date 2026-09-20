@@ -39,6 +39,14 @@ void main() {
     // Settle first: text entered a moment ago has not rebuilt the tree yet,
     // and scrolling to a stale element lands the tap on nothing.
     await pumpFrames(tester);
+    if (finder.evaluate().isEmpty) {
+      // Typing can scroll the serving header out of the lazy list's cache.
+      await tester.scrollUntilVisible(
+        finder,
+        -100,
+        scrollable: find.byType(Scrollable).first,
+      );
+    }
     await tester.ensureVisible(finder);
     await pumpFrames(tester);
     await tester.tap(finder);

@@ -1,0 +1,22 @@
+{
+  "walmart-ambiguous.png": {
+    "sha256": "233ff75e4c818880b342d163db0c6ef77477a127c5df2ca8092beb34efeecc15",
+    "purpose": "synthetic screenshot extraction and UI fixture, no household data"
+  },
+  "walmart-label.png": {
+    "sha256": "63009dd6288de66aafdace648165dea1c9e50c79d0c3b0c6519a1f3342815eb9",
+    "purpose": "synthetic screenshot extraction and UI fixture, no household data"
+  },
+  "walmart-cropped.png": {
+    "sha256": "45a28bf2a2cafba24a4142e38b8905b35edc5988ccd8d139d8e93349f9e7f1ed",
+    "purpose": "synthetic screenshot extraction and UI fixture, no household data"
+  },
+  "walmart-no-link.png": {
+    "sha256": "96f746fd1b136ae17de7853661c471898924b8192740e7240c507a8ac7ad95f1",
+    "purpose": "synthetic screenshot extraction and UI fixture, no household data"
+  },
+  "walmart-link.png": {
+    "sha256": "e8a615e6fd01e1d62519df28d2112bf7ee28ddabc116262041b3f37238de885f",
+    "purpose": "synthetic screenshot extraction and UI fixture, no household data"
+  }
+}

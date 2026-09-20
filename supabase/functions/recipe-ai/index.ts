@@ -1,4 +1,3 @@
-import { requireHousehold } from './caller_auth.ts';
 import { labelPhotoRoles } from './label_photo_roles.ts';
 // Recipe import, generation, and label reading, behind the server
 // (spec §5.3, §5.4, §5.5).
@@ -44,6 +43,11 @@ import {
 } from './budget.ts';
 import { fetchGuarded, UrlRefused } from './url_guard.ts';
 import { shapePackageFields } from './label_package_fields.ts';
+import { shapeWalmartLink } from './walmart_link.ts';
+import {
+  allowedWalmartSources, WALMART_FIELDS, WALMART_PROMPT, WALMART_TOOL, walmartContent,
+} from './walmart_mode.ts';
+import { requireHousehold } from './caller_auth.ts';
 
 const ANTHROPIC = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -342,6 +346,7 @@ const LABEL_TOOL = {
   input_schema: {
     type: 'object',
     properties: {
+      ...WALMART_FIELDS,
       name: {
         type: 'string',
         description:
@@ -677,7 +682,7 @@ If a digit is unclear, a row is cut off, or two rows have run together,
 transcribe your best reading AND list it in uncertain. A flagged guess is
 useful; a confident wrong number corrupts every day it is logged into.`;
 
-const LABEL_PROMPT = `You read Nutrition Facts panels off packaging.
+const LABEL_PROMPT = WALMART_PROMPT + '\n\n' + `You read Nutrition Facts panels off packaging.
 
 Transcribe the printed numbers. Never compute: do not scale a per-100 g column
 to a serving, do not infer fat from calories, do not convert between units the
@@ -817,12 +822,12 @@ Deno.serve(async (request: Request): Promise<Response> => {
   if (
     mode !== 'extract' && mode !== 'generate' && mode !== 'label' &&
     mode !== 'pack' && mode !== 'shopping' && mode !== 'menu' &&
-    mode !== 'icon'
+    mode !== 'icon' && mode !== 'walmart'
   ) {
     return json(
       {
         error:
-          'mode must be extract, generate, label, pack, shopping, menu or icon',
+          'mode must be extract, generate, label, pack, shopping, menu, icon or walmart',
       },
       400,
     );
@@ -843,7 +848,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
   const ticket: Ticket = decision.ticket;
 
   try {
-    const content = mode === 'icon'
+    const content = mode === 'walmart'
+      ? walmartContent(body.images, imageBlocks)
+      : mode === 'icon'
       ? iconContent((body.title ?? '').trim())
       : mode === 'shopping'
       ? shoppingContent(body.messages ?? [], (body.list ?? '').trim())
@@ -866,7 +873,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
         (body.recipe ?? '').trim(),
       );
 
-    const system = mode === 'icon'
+    const system = mode === 'walmart'
+      ? WALMART_PROMPT
+      : mode === 'icon'
       ? ICON_PROMPT
       : mode === 'shopping'
       ? SHOPPING_PROMPT
@@ -879,7 +888,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
       : mode === 'extract'
       ? EXTRACT_PROMPT
       : GENERATE_PROMPT;
-    const tool = mode === 'icon'
+    const tool = mode === 'walmart'
+      ? WALMART_TOOL
+      : mode === 'icon'
       ? ICON_TOOL
       : mode === 'shopping'
       ? SHOPPING_TOOL
@@ -905,14 +916,26 @@ Deno.serve(async (request: Request): Promise<Response> => {
     // back — the estimate was deliberately the pessimistic one.
     const usage = await budget.settle(ticket, answer.usage);
 
-    const shaped = mode === 'icon'
+    // Partial output cannot establish that there was only one visible link.
+    const walmartInput = answer.truncated
+      ? { ...answer.input, walmart_unreadable: true }
+      : answer.input;
+    const shaped = mode === 'walmart'
+      ? { walmart_link: shapeWalmartLink(walmartInput, ['screenshot']) }
+      : mode === 'icon'
       ? shapeIcon(answer.input)
       : mode === 'shopping'
       ? shapeShopping(answer.input)
       : mode === 'menu'
       ? shapeMenu(answer.input, answer.truncated)
       : mode === 'label'
-      ? shapeLabel(answer.input)
+      ? {
+        ...shapeLabel(answer.input),
+        walmart_link: shapeWalmartLink(
+          walmartInput,
+          allowedWalmartSources(body.image_roles, body.images?.length ?? 0),
+        ),
+      }
       : mode === 'pack'
       ? shapePack(answer.input)
       : shape(answer.input);
@@ -1067,7 +1090,8 @@ function imageBlocks(images: string[]): unknown[] {
     const data = stripDataUrl(raw);
     // base64 is 4 characters per 3 bytes; close enough to hold a line on size
     // without decoding the whole thing to measure it.
-    const bytes = Math.floor((data.length * 3) / 4);
+    const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
+    const bytes = Math.floor((data.length * 3) / 4) - padding;
     total += bytes;
     if (bytes > MAX_IMAGE_BYTES) {
       throw new Error('bad request: an image is too large');
