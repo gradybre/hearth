@@ -47,9 +47,11 @@ class WalmartExport implements ShoppingExportAdapter {
   static Uri? cartLinkFor(List<ShoppingExportItem> items) {
     final List<String> named = <String>[
       for (final ShoppingExportItem item in items)
-        if (item.productId case final String id)
+        if (!item.hasUnquantified && item.productId != null)
           // A bare id already means one, so the suffix is noise on most lines.
-          item.quantity <= 1 ? id : '${id}_${item.quantity}',
+          item.quantity <= 1
+              ? item.productId!
+              : '${item.productId}_${item.quantity}',
     ];
     if (named.isEmpty) return null;
     return Uri.parse(_cart)
@@ -137,21 +139,29 @@ List<ShoppingExportItem> exportableLines(
   Map<String, Food> foods = const <String, Food>{},
 }) => <ShoppingExportItem>[
   for (final ShoppingLine line in lines)
-    if (!line.isChecked)
+    if (!line.checked)
       if (_food(line, foods) case final Food? food)
         // Resolved through the same helper the list reads from, so a
         // cupboard amount measured the other way comes off here too
         // (spec R5, R7).
         if (ShoppingLineResolver.resolve(line: line, food: food)
             case final ResolvedShoppingLine resolved)
-          if (!resolved.isChecked)
+          // A covered measured part cannot prove that an unmeasured ask is
+          // also covered. It remains on the Remaining list and must travel
+          // with the copy/search export until explicitly checked off.
+          if (line.hasUnquantified || !resolved.isChecked)
             if (_amount(resolved, food) case final _Amount amount)
               ShoppingExportItem(
                 name: line.name,
-                quantityLabel: amount.label,
+                quantityLabel: line.hasUnquantified
+                    ? amount.label == null
+                          ? 'amount not set'
+                          : '${amount.label} + amount not set'
+                    : amount.label,
                 shortfall: amount.shortfall,
                 storeTag: line.storeTag,
                 productId: food?.walmartItemId,
+                hasUnquantified: line.hasUnquantified,
                 quantity: CartQuantity.forLine(
                   line: resolved.line,
                   pack: resolved.pack,

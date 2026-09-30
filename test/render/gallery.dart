@@ -1554,6 +1554,18 @@ const List<Scene> scenes = <Scene>[
     taps: <String>['Shopping', 'More', 'List help'],
   ),
   Scene(
+    name: 'shopping-export',
+    shoppingList: true,
+    taps: <String>['Shopping', 'More', 'Share or export'],
+  ),
+  Scene(
+    name: 'shopping-export-3x',
+    shoppingList: true,
+    size: Size(320, 568),
+    textScale: 3,
+    taps: <String>['Shopping', 'More', 'Share or export'],
+  ),
+  Scene(
     name: 'shopping-amount',
     shoppingList: true,
     taps: <String>['Shopping', '2 lb'],

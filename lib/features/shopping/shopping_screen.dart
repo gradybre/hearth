@@ -94,6 +94,23 @@ class _BodyState extends ConsumerState<_Body> {
   Map<String, Food>? _heldFoods;
   List<String>? _dragKeys;
   int? _dragFrom;
+  final Map<String, ShoppingLine> _removedLines = <String, ShoppingLine>{};
+
+  /// Holding a row freezes its presentation, never the fact an action edits.
+  ShoppingLine? _currentLine(String key) {
+    for (final ShoppingLine line in lines) {
+      if (line.key == key) return line;
+    }
+    return null;
+  }
+
+  Food? _currentFood(ShoppingLine line) {
+    for (final Food food
+        in ref.read(foodLibraryProvider).value ?? const <Food>[]) {
+      if (food.id == line.foodId) return food;
+    }
+    return null;
+  }
 
   void _hold() {
     _heldLines ??= lines;
@@ -280,11 +297,11 @@ class _BodyState extends ConsumerState<_Body> {
                       onReorder: (int from, int to) =>
                           _reorder(store, groups[store]!, from, to),
                       onTick: (ShoppingLine line, bool value) =>
-                          _tick(line, value, foods[line.foodId]),
+                          _tick(line.key, value),
                       onEdit: (ShoppingLine line) =>
-                          _edit(context, ref, line, foods[line.foodId]),
-                      onRemove: (ShoppingLine line) => _remove(ref, line),
-                      onRestore: (ShoppingLine line) => _restore(ref, line),
+                          _edit(context, ref, line.key),
+                      onRemove: (ShoppingLine line) => _remove(ref, line.key),
+                      onRestore: (ShoppingLine line) => _restore(ref, line.key),
                     ),
                     const SizedBox(height: HearthSpacing.md),
                   ],
@@ -305,7 +322,10 @@ class _BodyState extends ConsumerState<_Body> {
     );
   }
 
-  Future<void> _tick(ShoppingLine line, bool value, Food? food) async {
+  Future<void> _tick(String key, bool value) async {
+    final ShoppingLine? line = _currentLine(key);
+    if (line == null) return;
+    final Food? food = _currentFood(line);
     // The resolver may have established coverage through a known package
     // relationship. Unticking that row must clear the stored cupboard fact,
     // too, even when its stored unit differs from the needed unit.
@@ -411,11 +431,19 @@ class _BodyState extends ConsumerState<_Body> {
   /// The snackbar and its undo belong to [SwipeToDelete], which every other
   /// list in Hearth uses — one place for how long the window is and for the
   /// fact that tapping Undo dismisses it immediately.
-  Future<void> _remove(WidgetRef ref, ShoppingLine line) =>
-      _save(ref, <ShoppingLine>[
-        for (final ShoppingLine other in lines)
-          if (other.key != line.key) other,
-      ]);
+  Future<void> _remove(WidgetRef ref, String key) async {
+    final ShoppingLine? removed = _currentLine(key);
+    _removedLines.remove(key);
+    if (removed == null) return;
+    await _save(ref, <ShoppingLine>[
+      for (final ShoppingLine other in lines)
+        if (other.key != key) other,
+    ]);
+    // SwipeToDelete retains the row it drew for its Undo callback. Remember
+    // what this action actually removed so a held display cannot restore an
+    // older amount over a partner's update received before deletion.
+    _removedLines[key] = removed;
+  }
 
   /// Puts a removed line back where it was.
   ///
@@ -424,28 +452,29 @@ class _BodyState extends ConsumerState<_Body> {
   /// between is somebody's more recent decision and stays (spec §5.7); the
   /// repository owns that, because it is the only thing here that can read
   /// what the list is *now* rather than what this screen last drew.
-  Future<void> _restore(WidgetRef ref, ShoppingLine line) async {
-    await ref.read(shoppingRepositoryProvider).restoreLine(line);
+  Future<void> _restore(WidgetRef ref, String key) async {
+    final ShoppingLine? removed = _removedLines.remove(key);
+    if (removed == null) return;
+    await ref.read(shoppingRepositoryProvider).restoreLine(removed);
     ref.invalidate(shoppingListProvider);
   }
 
-  Future<void> _edit(
-    BuildContext context,
-    WidgetRef ref,
-    ShoppingLine line,
-    Food? food,
-  ) async {
+  Future<void> _edit(BuildContext context, WidgetRef ref, String key) async {
+    final ShoppingLine? line = _currentLine(key);
+    if (line == null) return;
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     final ShoppingLine? changed = await showShoppingAmountSheet(
       context,
       line,
-      food: food,
+      food: _currentFood(line),
       onRemove: () async {
-        await _remove(ref, line);
+        await _remove(ref, key);
+        final ShoppingLine? removed = _removedLines[key];
+        if (removed == null) return;
         showUndoSnackBar(
           messenger,
-          message: 'Deleted ${line.name}',
-          onUndo: () => _restore(ref, line),
+          message: 'Deleted ${removed.name}',
+          onUndo: () => _restore(ref, key),
         );
       },
     );
@@ -1414,6 +1443,8 @@ class _ChatCard extends ConsumerStatefulWidget {
 
 class _ChatCardState extends ConsumerState<_ChatCard> {
   final TextEditingController _said = TextEditingController();
+  final GlobalKey _undoNoticeKey = GlobalKey();
+  String? _undoNotice;
 
   @override
   void dispose() {
@@ -1424,6 +1455,7 @@ class _ChatCardState extends ConsumerState<_ChatCard> {
   Future<void> _send() async {
     final String text = _said.text.trim();
     if (text.isEmpty) return;
+    setState(() => _undoNotice = null);
     _said.clear();
 
     final List<ShoppingLine>? next = await ref
@@ -1433,6 +1465,7 @@ class _ChatCardState extends ConsumerState<_ChatCard> {
   }
 
   Future<void> _retry() async {
+    setState(() => _undoNotice = null);
     final List<ShoppingLine>? next = await ref
         .read(shoppingChatProvider.notifier)
         .retry(widget.lines);
@@ -1440,7 +1473,6 @@ class _ChatCardState extends ConsumerState<_ChatCard> {
   }
 
   Future<void> _undo() async {
-    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     final ShoppingUndo? undone = await ref
         .read(shoppingChatProvider.notifier)
         .undo();
@@ -1455,16 +1487,18 @@ class _ChatCardState extends ConsumerState<_ChatCard> {
     // changed since is somebody's own more recent decision, and leaving it
     // without a word would look like undo had missed.
     if (undone.kept > 0 && mounted) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            undone.kept == 1
-                ? 'Undone. One line you changed since was left as it is.'
-                : 'Undone. ${undone.kept} lines you changed since were left '
-                      'as they are.',
-          ),
-        ),
-      );
+      setState(() {
+        _undoNotice = undone.kept == 1
+            ? 'Undone. One line you changed since was left as it is.'
+            : 'Undone. ${undone.kept} lines you changed since were left as they are.';
+      });
+      // A root snackbar sits behind this modal. Keep the result in the
+      // active sheet and bring it into view even after large-text scrolling.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_undoNoticeKey.currentContext case final BuildContext notice) {
+          Scrollable.ensureVisible(notice);
+        }
+      });
     }
   }
 
@@ -1586,6 +1620,14 @@ class _ChatCardState extends ConsumerState<_ChatCard> {
                 ),
               ],
             ),
+            if (_undoNotice case final String notice) ...<Widget>[
+              const SizedBox(height: HearthSpacing.md),
+              Semantics(
+                key: _undoNoticeKey,
+                liveRegion: true,
+                child: Text(notice, style: context.text.body),
+              ),
+            ],
           ],
         ),
       ),

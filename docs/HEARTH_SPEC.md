@@ -422,7 +422,9 @@ belongs to the Nutrition section.
   Bought counts explicit check-offs; At home counts amounts covered by known
   on-hand quantities. Other zero-need cases must not imply that something was
   bought or is in the cupboard. Store groups and manual order survive the
-  filter, including reordering with completed rows hidden. *(Phase 2: UX-058.)*
+  filter, including reordering with completed rows hidden. Holding a displayed
+  row steady during a gesture does not make its old quantities authoritative:
+  actions use the latest received record. *(Phase 2: UX-058.)*
 - **Add item is the primary shopping action.** Share/export and the existing
   assistant entry live under a labeled More action. Explanations belong with
   the action they explain. At large text, controls may move into the scroll
@@ -479,6 +481,11 @@ belongs to the Nutrition section.
   counts accompany the purchase quantity. An unchanged formatted field keeps
   its exact stored value; mixed or unknown amounts remain explicit, and
   conversions require existing food/package evidence. *(Phase 2: UX-060.)*
+- **An unmeasured ask stays on the list.** Covering its measured portion does
+  not establish that the rest is at home. Until explicitly checked off, these
+  lines remain in Remaining and in copy/search export, with the missing amount
+  stated. They are excluded from a direct basket handoff rather than given a
+  guessed complete purchase count; the export review explains the exclusion.
 - **Ordering:** items can be dragged into the order you walk the shop in, and a new list inherits the last one's order — a hand-made order beats an aisle guessed from a name.
 - **Chat:** the list can be edited by asking — add an item, set a quantity, mark something as already had. Tapping Ask sends the request and current list to the assistant; the existing flow applies the returned operations with an undo. Sharing with a shop remains a separate reviewed handoff. The missing before/after AI proposal review is recorded as UX-063; moving the entry under More does not implement that separate change.
 - **Store tagging:** each food can carry a store tag (Costco / Publix / Walmart); tagging is flexible (single store or preference).

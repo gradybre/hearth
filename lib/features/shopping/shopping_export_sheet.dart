@@ -46,8 +46,13 @@ class _ExportSheet extends StatelessWidget {
     // are the same thing to somebody in a shop: nothing to pick up.
     final List<ShoppingExportItem> items = exportableLines(lines, foods: foods);
     final Uri? cart = WalmartExport.cartLinkFor(items);
-    final int unnamed = items
-        .where((ShoppingExportItem i) => i.productId == null)
+    final int excludedFromCart = items
+        .where(
+          (ShoppingExportItem i) => i.productId == null || i.hasUnquantified,
+        )
+        .length;
+    final int unquantified = items
+        .where((ShoppingExportItem item) => item.hasUnquantified)
         .length;
 
     return SafeArea(
@@ -88,6 +93,17 @@ class _ExportSheet extends StatelessWidget {
                 ),
                 if (items.isNotEmpty) ...<Widget>[
                   const SizedBox(height: HearthSpacing.lg),
+                  if (unquantified > 0) ...<Widget>[
+                    Text(
+                      unquantified == 1
+                          ? '1 item still has an amount to check. It stays in the copied list and is left out of the basket.'
+                          : '$unquantified items still have amounts to check. They stay in the copied list and are left out of the basket.',
+                      style: context.text.metadata.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: HearthSpacing.md),
+                  ],
                   if (cart != null) ...<Widget>[
                     SizedBox(
                       width: double.infinity,
@@ -104,11 +120,11 @@ class _ExportSheet extends StatelessWidget {
                     // the whole list and the copy is what makes the rest
                     // survivable.
                     Text(
-                      unnamed == 0
+                      excludedFromCart == 0
                           ? 'Everything left has a saved product.'
-                          : '$unnamed of these have no saved product, so they '
-                                'are left out of the basket. Copy the list to '
-                                'catch them.',
+                          : '$excludedFromCart of these are left out of the basket: '
+                                'no saved product or an amount still to check. '
+                                'Copy the list to catch them.',
                       style: context.text.metadata.copyWith(
                         color: colors.textSecondary,
                       ),

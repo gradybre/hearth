@@ -183,6 +183,54 @@ void main() {
     expect(find.textContaining('have 1 lb'), findsOneWidget);
   });
 
+  testWidgets(
+    'undo explains kept newer rows inside the active assistant sheet',
+    (WidgetTester tester) async {
+      final FakeAssistant assistant = FakeAssistant(
+        answer: answer(<ShoppingEdit>[
+          const ShoppingEdit(kind: ShoppingEditKind.add, name: 'Coffee'),
+        ], reply: 'Added coffee.'),
+      );
+      await openWithList(tester, assistant: assistant);
+      await ask(tester, 'add coffee');
+      await tester.tapAt(const Offset(200, 40));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Coffee'));
+      await pumpFrames(tester, frames: 20);
+      expect(find.text('Bought 1'), findsOneWidget);
+      await tester.tap(find.text('More'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Ask for a change'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.widgetWithText(TextButton, 'Undo'));
+      await pumpFrames(tester, frames: 20);
+
+      final Finder notice = find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text(
+          'Undone. One line you changed since was left as it is.',
+        ),
+      );
+      expect(
+        notice,
+        findsOneWidget,
+        reason: 'a snackbar behind the modal is invisible',
+      );
+      expect(notice.hitTestable(), findsOneWidget);
+      expect(
+        find.ancestor(
+          of: notice,
+          matching: find.byWidgetPredicate(
+            (Widget widget) =>
+                widget is Semantics && widget.properties.liveRegion == true,
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Bought 1'), findsOneWidget);
+    },
+  );
+
   testWidgets('the question carries the list it is about', (
     WidgetTester tester,
   ) async {
@@ -195,6 +243,55 @@ void main() {
     await ask(tester, 'what is on here?');
 
     expect(assistant.sawList, contains('ground beef'));
+  });
+
+  testWidgets('the kept-row Undo notice comes into view at 320pt and 3x', (
+    WidgetTester tester,
+  ) async {
+    final FakeAssistant assistant = FakeAssistant(
+      answer: answer(<ShoppingEdit>[
+        const ShoppingEdit(kind: ShoppingEditKind.add, name: 'Coffee'),
+      ], reply: 'Added coffee.'),
+    );
+    await pumpHearthApp(
+      tester,
+      size: const Size(320, 568),
+      textScale: 3,
+      viewPadding: const EdgeInsets.only(top: 24, bottom: 34),
+      shoppingLines: <ShoppingLine>[
+        ShoppingLine.manual(key: 'bread', name: 'Bread'),
+      ],
+      shoppingAssistant: assistant,
+    );
+    final SweepTools tools = SweepTools(tester);
+    await tools.tab('Shopping');
+    await tools.reach(find.text('More'));
+    await tools.reach(find.text('Ask for a change'));
+    final Finder question = find.widgetWithText(
+      TextField,
+      'What should change?',
+    );
+    await tools.bring(question);
+    await tester.enterText(question, 'add coffee');
+    await tools.reach(find.widgetWithText(FilledButton, 'Ask'));
+    await pumpFrames(tester, frames: 20);
+    Navigator.of(tester.element(question)).pop();
+    await pumpFrames(tester, frames: 12);
+    await tools.reach(find.text('Coffee'));
+    await tools.reach(find.text('More'));
+    await tools.reach(find.text('Ask for a change'));
+    await tools.reach(find.widgetWithText(TextButton, 'Undo'));
+    await pumpFrames(tester, frames: 20);
+
+    final Finder notice = find.descendant(
+      of: find.byType(BottomSheet),
+      matching: find.text(
+        'Undone. One line you changed since was left as it is.',
+      ),
+    );
+    expect(notice.hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(assistant.calls, 1);
   });
 
   testWidgets('a failure says the list is untouched, and offers another go', (

@@ -52,13 +52,14 @@ void main() {
 
   final Quantity jar = Quantity.of(24, Units.ounce);
 
-  Food sauce({Quantity? pack}) => Food(
+  Food sauce({Quantity? pack, String? walmartId}) => Food(
     id: 'f-sauce',
     householdId: 'household-1',
     name: 'Marinara sauce',
     source: FoodSource.manual,
     servingOptions: const <ServingOption>[],
     packSize: pack,
+    walmartItemId: walmartId,
   );
 
   ShoppingLine sauceLine(Quantity planned) => ShoppingLine(
@@ -149,4 +150,41 @@ void main() {
       '- 2 lb marinara sauce',
     );
   });
+
+  for (final double scale in <double>[1, 3]) {
+    testWidgets(
+      'unresolved amounts remain in the review without a guessed basket at ${scale}x',
+      (WidgetTester tester) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = const Size(320, 568);
+        tester.view.padding = const FakeViewPadding(top: 24, bottom: 34);
+        tester.view.viewPadding = const FakeViewPadding(top: 24, bottom: 34);
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.view.reset);
+        addTearDown(tester.platformDispatcher.clearAllTestValues);
+        final Food food = sauce(pack: jar, walmartId: '123456789');
+        await openSheet(
+          tester,
+          lines: <ShoppingLine>[
+            sauceLine(jar).copyWith(onHand: jar, hasUnquantified: true),
+          ],
+          foods: <String, Food>{food.id: food},
+        );
+        expect(find.textContaining('1 item still to buy'), findsOneWidget);
+        expect(find.textContaining('amount to check'), findsOneWidget);
+        expect(find.text('Fill a Walmart basket'), findsNothing);
+        expect(sent, isEmpty);
+        await tester.ensureVisible(find.text('Copy the list'));
+        await tester.pumpAndSettle();
+        expect(find.text('Copy the list').hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.text('Copy the list'));
+        await tester.pumpAndSettle();
+        expect(
+          (sent.single.arguments as Map<Object?, Object?>)['text'],
+          '- amount not set marinara sauce',
+        );
+      },
+    );
+  }
 }

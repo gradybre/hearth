@@ -216,6 +216,131 @@ void main() {
     expect((await stored(tester)).length, 3);
   });
 
+  testWidgets('releasing a neutral pointer schedules the held update', (
+    WidgetTester tester,
+  ) async {
+    await pumpHearthApp(
+      tester,
+      shoppingLines: <ShoppingLine>[line('Bread', order: 1)],
+    );
+    await tester.tap(find.text('Shopping').last);
+    await pumpFrames(tester);
+    await tester.pumpAndSettle();
+    final Finder list = find.byKey(
+      const ValueKey<String>('grocery-list-scroll'),
+    );
+    final Offset neutral = tester.getBottomRight(list) - const Offset(30, 50);
+    final TestGesture pointer = await tester.startGesture(neutral);
+    final ProviderContainer scope = container(tester);
+    await tester.runAsync(
+      () => scope.read(shoppingRepositoryProvider).replace(<ShoppingLine>[
+        line('Apples'),
+        line('Bread', order: 1),
+      ]),
+    );
+    scope.invalidate(shoppingListProvider);
+    await pumpFrames(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('Apples'), findsNothing);
+    expect(tester.binding.hasScheduledFrame, isFalse);
+
+    await pointer.up();
+    expect(
+      tester.binding.hasScheduledFrame,
+      isTrue,
+      reason: 'reconciliation cannot depend on an unrelated future frame',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Apples'), findsOneWidget);
+  });
+
+  testWidgets('a held check-off preserves newly received amounts', (
+    WidgetTester tester,
+  ) async {
+    await pumpHearthApp(tester, shoppingLines: <ShoppingLine>[line('Bread')]);
+    await tester.tap(find.text('Shopping').last);
+    await pumpFrames(tester);
+    final TestGesture pointer = await tester.startGesture(
+      tester.getCenter(find.text('Bread')),
+    );
+    final ProviderContainer scope = container(tester);
+    await tester.runAsync(
+      () => scope.read(shoppingRepositoryProvider).replace(<ShoppingLine>[
+        line('Bread', wanted: 5, have: 1),
+      ]),
+    );
+    scope.invalidate(shoppingListProvider);
+    await pumpFrames(tester);
+    await pointer.up();
+    await pumpFrames(tester, frames: 24);
+
+    final ShoppingLine bread = (await stored(tester)).single;
+    expect(bread.checked, isTrue);
+    expect(bread.wanted?.canonicalAmount, 5);
+    expect(bread.onHand?.canonicalAmount, 1);
+  });
+
+  testWidgets('a held amount tap opens the newly received amounts', (
+    WidgetTester tester,
+  ) async {
+    await pumpHearthApp(tester, shoppingLines: <ShoppingLine>[line('Bread')]);
+    await tester.tap(find.text('Shopping').last);
+    await pumpFrames(tester);
+    final TestGesture pointer = await tester.startGesture(
+      tester.getCenter(find.text('2')),
+    );
+    final ProviderContainer scope = container(tester);
+    await tester.runAsync(
+      () => scope.read(shoppingRepositoryProvider).replace(<ShoppingLine>[
+        line('Bread', wanted: 5, have: 1),
+      ]),
+    );
+    scope.invalidate(shoppingListProvider);
+    await pumpFrames(tester);
+    await pointer.up();
+    await pumpFrames(tester, frames: 24);
+
+    final List<TextField> amounts = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .toList();
+    expect(amounts.first.controller!.text, '5');
+    expect(amounts.last.controller!.text, '1');
+    expect(find.text('Buy 4'), findsOneWidget);
+    await tester.tap(find.text('Done'));
+    await pumpFrames(tester, frames: 24);
+    expect((await stored(tester)).single.wanted?.canonicalAmount, 5);
+  });
+
+  testWidgets('a held deletion restores the row that was actually removed', (
+    WidgetTester tester,
+  ) async {
+    await pumpHearthApp(tester, shoppingLines: <ShoppingLine>[line('Bread')]);
+    await tester.tap(find.text('Shopping').last);
+    await pumpFrames(tester);
+    await tester.drag(find.text('Bread'), const Offset(-200, 0));
+    await pumpFrames(tester, frames: 20);
+    final TestGesture pointer = await tester.startGesture(
+      tester.getCenter(find.text('Delete')),
+    );
+    final ProviderContainer scope = container(tester);
+    await tester.runAsync(
+      () => scope.read(shoppingRepositoryProvider).replace(<ShoppingLine>[
+        line('Bread', wanted: 5, have: 1),
+      ]),
+    );
+    scope.invalidate(shoppingListProvider);
+    await pumpFrames(tester);
+    await pointer.up();
+    await pumpFrames(tester, frames: 24);
+    expect(find.text('Bread'), findsNothing);
+    await tester.tap(find.text('Undo'));
+    await pumpFrames(tester, frames: 24);
+
+    final ShoppingLine restored = (await stored(tester)).single;
+    expect(restored.wanted?.canonicalAmount, 5);
+    expect(restored.onHand?.canonicalAmount, 1);
+  });
+
   for (final Brightness brightness in Brightness.values) {
     testWidgets(
       '320pt at 3x keeps groceries visible and More reachable in ${brightness.name}',
