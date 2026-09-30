@@ -12,7 +12,7 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
 | Group | Scope | Approval | Implementation | Automated checks | Fresh-context review | Real-device verification |
 |---|---|---|---|---|---|---|
 | 1 — Daily logging | UX-039, UX-041, UX-053 | Approved 2026-09-30 | Merged in [PR #116](https://github.com/gradybre/hearth/pull/116) | 3,925 passed; analyze clean; 71 render checks and all CI passed | Passed after corrections; code candidate `9e50bd1` | Not performed |
-| 2 — Grocery clarity | UX-058, UX-060 | Approved 2026-09-30 | Implemented; review pending | 3,974 passed; analyze clean; 85 render checks passed | Pending | Not performed |
+| 2 — Grocery clarity | UX-058, UX-060 | Approved 2026-09-30 | Implemented in [PR #117](https://github.com/gradybre/hearth/pull/117) | 3,985 passed; analyze clean; 87 render checks passed; CI status on PR | Passed after corrections; code candidate `7d2121f` | Not performed |
 | 3 — Recipe actions and nutrition | UX-001; recipe-detail scope of UX-010 | Awaiting decision | Not started | — | — | — |
 
 ## Group 1 — Daily logging
@@ -59,6 +59,16 @@ the complete suite and inspected light, dark, desktop and enlarged-text
 rendered fixtures. New journeys also reach the options, help, amount editor,
 export review and assistant controls; they do not perform real AI requests or
 external handoffs. Native-device acceptance remains unperformed.
+
+Fresh-context review prompted further guards for acting on a held row after
+new quantities arrive, keeping partial-Undo explanations visible inside the
+assistant sheet, and matching Remaining with export when part of a need is
+unmeasured. Those unresolved asks travel in copy/search with a stated missing
+amount; a direct basket handoff excludes them instead of guessing a complete
+purchase count. The coordinating agent reran formatting, analysis, all 3,985
+tests (109 opt-in skips), and 87 render checks after the corrections. The
+fresh-context reviewer found no remaining findings on code candidate
+`7d2121f`. Native-device verification remains separate and unperformed.
 
 This group does not include shopping-trip lifecycle (UX-057), realtime/conflict
 changes (UX-059), or the AI proposal/review protocol (UX-063). The existing AI
