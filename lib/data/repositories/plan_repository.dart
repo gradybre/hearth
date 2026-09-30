@@ -76,11 +76,14 @@ class PlanRepository {
 
   /// Things logged recently, collapsed to one row each, for fast entry
   /// (spec §5.6).
-  Future<List<RecentLog>> recentLogs({int limit = 8}) async {
+  Future<List<RecentLog>> recentLogs({
+    int limit = 8,
+    MealSlot? preferredSlot,
+  }) async {
     final List<MealPlanEntry> logged = await _store.recentlyLogged(
       userId: _userId,
     );
-    return RecentLogs.from(logged, limit: limit);
+    return RecentLogs.from(logged, limit: limit, preferredSlot: preferredSlot);
   }
 
   /// Logs something again with the portion it was last logged at — the
@@ -251,20 +254,30 @@ class PlanRepository {
   /// Never touches a snapshot: [MealPlanEntry.copyWith] carries it through
   /// untouched, so moving a logged meal to another slot cannot rewrite what it
   /// recorded.
+  ///
+  /// [requirePlanned] is for an open planned-portion editor. Null then means
+  /// the row was removed or logged meanwhile; no part of it was written.
   Future<MealPlanEntry?> updateEntry(
     String entryId, {
     double? servings,
     MealSlot? slot,
+    String? servingOptionId,
+    bool requirePlanned = false,
   }) async {
     final DateTime now = _now();
 
     return _db.transaction(() async {
       final MealPlanEntry? existing = await _store.entryById(entryId);
-      if (existing == null) return null;
+      if (existing == null || (requirePlanned && existing.isLogged)) {
+        return null;
+      }
 
       final MealPlanEntry updated = existing.copyWith(
         servings: servings,
         slot: slot,
+        // Only a planned portion can adopt a new nutrition basis. Logged
+        // snapshots and their references remain the historical record.
+        servingOptionId: existing.isLogged ? null : servingOptionId,
       );
       await _store.upsertEntry(updated, updatedAt: now);
       await _queueEntry(updated, now);

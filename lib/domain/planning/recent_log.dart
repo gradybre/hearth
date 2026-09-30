@@ -18,6 +18,7 @@ class RecentLog {
     required this.lastLoggedAt,
     required this.timesLogged,
     this.servingOptionId,
+    this.mealSlot,
   });
 
   final PlanRefType refType;
@@ -43,6 +44,10 @@ class RecentLog {
   /// count of the food's default serving.
   final String? servingOptionId;
 
+  /// The meal whose remembered portion this row offers. Legacy callers may
+  /// omit it; those rows stay available in the unranked fallback group.
+  final MealSlot? mealSlot;
+
   final DateTime lastLoggedAt;
 
   /// How many times this has been logged, for ordering by habit rather than
@@ -60,13 +65,13 @@ class RecentLog {
 abstract final class RecentLogs {
   /// Collapses [entries] into one row per referenced thing, most useful first.
   ///
-  /// Ordering is recency, plainly. Frequency is carried on the row for the UI
-  /// to show, but is deliberately not blended into the sort: a "smart" ranking
-  /// that reorders itself is worse than a predictable one you can build muscle
-  /// memory against.
+  /// With [preferredSlot], that meal's latest portion wins for each source
+  /// and those sources come first. Otherwise the latest portion anywhere
+  /// wins. Both groups stay in recency order; frequency never reshuffles them.
   static List<RecentLog> from(
     Iterable<MealPlanEntry> entries, {
     int limit = 8,
+    MealSlot? preferredSlot,
   }) {
     final Map<String, RecentLog> byRef = <String, RecentLog>{};
 
@@ -86,18 +91,25 @@ abstract final class RecentLogs {
           // From the entry rather than the snapshot: the reference is a live
           // pointer at a serving row, not part of what was frozen.
           servingOptionId: entry.servingOptionId,
+          mealSlot: entry.slot,
           lastLoggedAt: snapshot.capturedAt,
           timesLogged: 1,
         );
         continue;
       }
 
-      final bool isNewer = snapshot.capturedAt.isAfter(existing.lastLoggedAt);
+      final bool matchesMeal =
+          preferredSlot != null && entry.slot == preferredSlot;
+      final bool existingMatchesMeal =
+          preferredSlot != null && existing.mealSlot == preferredSlot;
+      final bool isNewer = matchesMeal != existingMatchesMeal
+          ? matchesMeal
+          : snapshot.capturedAt.isAfter(existing.lastLoggedAt);
       byRef[key] = RecentLog(
         refType: existing.refType,
         refId: existing.refId,
-        // The most recent logging wins for label and portion: it is the best
-        // guess at what you would repeat.
+        // The chosen meal's most recent portion wins when available; the
+        // global recents list still uses the latest logging anywhere.
         label: isNewer ? snapshot.label : existing.label,
         servings: isNewer ? snapshot.servings : existing.servings,
         // Moves with the portion, null included: the newest logging naming
@@ -106,15 +118,31 @@ abstract final class RecentLogs {
         servingOptionId: isNewer
             ? entry.servingOptionId
             : existing.servingOptionId,
+        mealSlot: isNewer ? entry.slot : existing.mealSlot,
         lastLoggedAt: isNewer ? snapshot.capturedAt : existing.lastLoggedAt,
         timesLogged: existing.timesLogged + 1,
       );
     }
 
-    final List<RecentLog> recents = byRef.values.toList()
-      ..sort(
-        (RecentLog a, RecentLog b) => b.lastLoggedAt.compareTo(a.lastLoggedAt),
-      );
+    final List<RecentLog> recents = prioritize(
+      byRef.values,
+      slot: preferredSlot,
+    );
     return recents.take(limit).toList(growable: false);
   }
+
+  /// Current-meal rows first, then all other recents; each group remains in
+  /// recency order. No frequency score reshuffles a familiar list.
+  static List<RecentLog> prioritize(
+    Iterable<RecentLog> recents, {
+    MealSlot? slot,
+  }) => recents.toList()
+    ..sort((RecentLog a, RecentLog b) {
+      if (slot != null) {
+        final bool aMatches = a.mealSlot == slot;
+        final bool bMatches = b.mealSlot == slot;
+        if (aMatches != bMatches) return aMatches ? -1 : 1;
+      }
+      return b.lastLoggedAt.compareTo(a.lastLoggedAt);
+    });
 }

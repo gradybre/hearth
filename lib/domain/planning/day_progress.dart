@@ -113,6 +113,8 @@ class MacroProgress {
   final double target;
   final MacroProgressState state;
 
+  bool get hasTarget => target > 0;
+
   /// What's left for the day. Negative once the target is passed, which is how
   /// the "142 g protein left" readout gets its over/under sign (spec §5.6).
   double get remaining => target - consumed;
@@ -183,6 +185,8 @@ class MinorProgress {
 
   final double target;
   final MacroProgressState state;
+
+  bool get hasTarget => target > 0;
 
   /// How many of the things that counted said nothing about this nutrient.
   ///
@@ -279,7 +283,7 @@ class DayProgress {
   /// It defaults to exact, so a caller has to opt into fuzziness.
   factory DayProgress.from({
     required Macros consumed,
-    required MacroTargets targets,
+    MacroTargets? targets,
     double tolerance = 0,
     Map<MinorNutrient, int> unknownCounts = const <MinorNutrient, int>{},
     int countedParts = 0,
@@ -293,17 +297,22 @@ class DayProgress {
     calories: _progress(
       MacroKind.calories,
       consumed.kcal,
-      targets.kcal,
+      targets?.kcal ?? 0,
       tolerance,
     ),
     protein: _progress(
       MacroKind.protein,
       consumed.proteinG,
-      targets.proteinG,
+      targets?.proteinG ?? 0,
       tolerance,
     ),
-    carbs: _progress(MacroKind.carbs, consumed.carbG, targets.carbG, tolerance),
-    fat: _progress(MacroKind.fat, consumed.fatG, targets.fatG, tolerance),
+    carbs: _progress(
+      MacroKind.carbs,
+      consumed.carbG,
+      targets?.carbG ?? 0,
+      tolerance,
+    ),
+    fat: _progress(MacroKind.fat, consumed.fatG, targets?.fatG ?? 0, tolerance),
   );
 
   /// The same, from the parts rather than the total, so each bar can say how
@@ -313,7 +322,7 @@ class DayProgress {
   /// from one food out of six, and only one of those is worth reading.
   factory DayProgress.fromParts({
     required Iterable<Macros> parts,
-    required MacroTargets targets,
+    MacroTargets? targets,
     double tolerance = 0,
     Iterable<NutrientCoverage>? coverage,
   }) {
@@ -344,7 +353,7 @@ class DayProgress {
   }
 
   final Macros consumed;
-  final MacroTargets targets;
+  final MacroTargets? targets;
 
   /// How many of the contributing parts said nothing about each nutrient.
   ///
@@ -382,7 +391,9 @@ class DayProgress {
   /// counted has stated a value** — which is not the same as none (spec §5.6).
   MinorProgress minor(MinorNutrient nutrient) {
     final double? eaten = consumed.minor(nutrient);
-    final double target = targets.forNutrient(nutrient);
+    // Daily Values apply only once a target set exists. Merely logging food
+    // does not opt somebody into comparisons or nutrition judgments.
+    final double target = targets?.forNutrient(nutrient) ?? 0;
     final MacroProgressState state;
     if (eaten == null || target <= 0) {
       state = MacroProgressState.under;

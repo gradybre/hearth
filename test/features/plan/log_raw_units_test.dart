@@ -347,7 +347,7 @@ void main() {
     await openTheEntry();
     await tester.tap(find.widgetWithText(ChoiceChip, 'oz'));
     await pumpFrames(tester, frames: 8);
-    await tester.tap(find.text('Update'));
+    await tester.tap(find.text('Update logged portion'));
     await pumpFrames(tester, frames: 20);
 
     // The same food logged again in grams, so grams is now what this food is

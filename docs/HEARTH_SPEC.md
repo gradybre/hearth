@@ -238,6 +238,14 @@ belongs to the Nutrition section.
 ### 5.6 Daily / Weekly Planner + Logging
 - **Combined plan + track in one view.** Each day/slot supports a *planned* state and a *logged* (actually eaten) state.
 - **Meal slots:** breakfast, lunch, dinner, snack.
+- **The destination determines the primary action.** A new meal on a future
+  calendar day defaults to **Add to plan**; logging it as eaten is an explicit
+  secondary action that names the destination. Today and past days keep
+  **Log it** first. Editing a planned portion defaults to **Save planned
+  portion**, with a separate action to log it. Editing an eaten portion keeps
+  the frozen-basis correction described below. Recent-item shortcuts and the
+  restaurant handoff follow the same date and intent rules; choosing Tuesday's
+  dinner must not silently record that it was eaten. *(Phase 2: UX-041.)*
 - **Changing a portion is visible, not a gesture you have to know.** Each
   meal row carries a way in to Edit portion and Remove. Long press stays as a
   shortcut for those who know it, and one tap still logs and unlogs — but a
@@ -354,6 +362,15 @@ belongs to the Nutrition section.
   - **Partial totals are reported as partial.** A recipe where five of eight ingredients know their fibre reports the fibre it can see and says how many it could not — §4's "incomplete data flags, never blocks", not a new rule. The alternative, null unless every ingredient knows, would render them blank essentially always.
   - **Unknown never renders as zero.** A food with no fibre data showing "0 g" is a wrong number where no number was the honest answer.
 - **Macro targets:** fixed daily targets set per week (can change week to week), set **manually** (goal presets that calculate from body stats are a later option). Progress bars fill against targets.
+- **Targets are optional to seeing intake.** Daily totals always show what
+  has been logged: calories, protein, carbohydrates, fat, and the available
+  minor nutrients, retaining unknown and partial-data labels. Without a
+  target set, totals have no denominator or progress judgment; **Set targets**
+  is a quiet action and **Details** remains available. An empty diary says
+  **Nothing logged yet**, rather than implying a recorded zero-intake day.
+  Within a target set, only positive macro targets produce comparisons;
+  the existing minor-nutrient Daily Value defaults remain as specified above.
+  *(Phase 2: UX-053.)*
 - **At-a-glance tracking:** a **remaining-for-the-day** view ("142 g protein left") with over/under **color coding**, not just totals. **Calories are the primary focus**, with the three macros secondary.
 - **Portions are fully independent per person.** You and your partner each log your own amounts against your own targets; no shared portion math.
 - **Meal-prep assignment:** assign a specific recipe at a specific serving size to a meal slot across **multiple selected days at once** (e.g., "this batch is my dinner Mon/Tue/Wed") — one action, not adding it day by day. Distinct from copy-day (which copies a whole day's contents).
@@ -365,6 +382,12 @@ belongs to the Nutrition section.
   unrecoverable. Applied meals arrive **planned, never logged**, the same rule
   copy-day follows (§4).
 - **Fast entry:** recents, favorites, and "log again" surfaced in the logging flow for quick daily use. (Research: logging speed is the single biggest driver of whether a tracker gets used — "every extra tap is a tax you pay three times a day.")
+  - The no-search picker shows existing personal recipe **Favorites**, then
+    meal-relevant **Recents**, with **All recents** one tap away. **All / Foods /
+    Recipes** scopes are optional filters, never a required step before
+    searching. Recent rows show their remembered portion and a separate
+    portion-edit action; repeating today's or a past day's meal retains its
+    instant action and serving-option identity. *(Phase 2: UX-039.)*
 - **Planned → logged:** confirming a planned item as eaten is **one tap by default**, with the option to adjust the portion.
 - **Partial servings:** a portion stepper at log time (e.g., 0.5× a plated serving). *[Flagged for review — Brendan to refine this UX against a live draft.]*
 - **Log without a plan:** logging never requires a pre-existing plan entry — eat something unplanned and log it straight to today.

@@ -181,40 +181,63 @@ List<Object> galleryOverrides(Scene scene) => <Object>[
 /// only what is near the viewport — so a food below the fold is not merely
 /// off-screen, it is absent from the tree and no finder can see it.
 Future<void> pressLabel(WidgetTester tester, String label) async {
+  Finder inFront(Finder finder) {
+    // A label in the day behind a modal is not a choice in that modal. At
+    // large text the actual choice may not even be built until we scroll.
+    final Finder dialogs = find.byType(AlertDialog);
+    if (dialogs.evaluate().isNotEmpty) {
+      return find.descendant(of: dialogs.last, matching: finder);
+    }
+    final Finder sheets = find.byType(BottomSheet);
+    return sheets.evaluate().isEmpty
+        ? finder
+        : find.descendant(of: sheets.last, matching: finder);
+  }
+
   Finder? onScreen() {
-    final Finder byText = find.text(label);
+    final Finder byText = inFront(find.text(label));
     if (byText.evaluate().isNotEmpty) return byText.last;
-    final Finder byTooltip = find.byTooltip(label);
+    final Finder byTooltip = inFront(find.byTooltip(label));
     if (byTooltip.evaluate().isNotEmpty) return byTooltip.last;
     return null;
   }
 
-  if (onScreen() == null) {
-    final Finder scrollables = find.byType(Scrollable);
+  for (int attempt = 0; onScreen() == null && attempt < 40; attempt++) {
+    final Finder scrollables = inFront(
+      find.byWidgetPredicate(
+        (Widget widget) =>
+            widget is Scrollable && widget.axisDirection == AxisDirection.down,
+      ),
+    );
     if (scrollables.evaluate().isEmpty) {
       throw StateError('Nothing on screen is labelled "$label" to press.');
     }
     // The innermost list, for the same reason `.last` is used above: the one
     // in front is the one being read.
-    await tester.scrollUntilVisible(
-      find.text(label),
-      120,
-      scrollable: scrollables.last,
-      maxScrolls: 40,
-    );
+    // Recheck text and tooltip after each drag. scrollUntilVisible with only
+    // find.text could never reach an off-screen icon such as Add to breakfast.
+    await tester.drag(scrollables.last, const Offset(0, -120));
+    await tester.pumpAndSettle();
   }
 
   final Finder? target = onScreen();
   if (target == null) {
     throw StateError('Nothing on screen is labelled "$label" to press.');
   }
-  await tester.ensureVisible(target);
+  if (target.hitTestable().evaluate().isEmpty) {
+    await tester.ensureVisible(target);
+  }
   // `ensureVisible` starts the scroll and pumps once; a scroll animation is
   // not one frame long. Without settling it, the card is still where it was
   // and the tap lands outside the window — which is how the launcher's last
   // card became untappable at three times the text on a small phone, and
   // nothing before that scene had a label below the fold to press.
   await tester.pumpAndSettle();
+  expect(
+    target.hitTestable(),
+    findsOneWidget,
+    reason: 'The gallery could not reach "$label" on the active surface.',
+  );
   await tester.tap(target);
 }
 
@@ -311,6 +334,8 @@ class Scene {
     this.longMenu = false,
     this.shoppingList = false,
     this.thermostats = false,
+    this.withTargets = true,
+    this.loggingShortcuts = false,
   });
 
   /// The file name, without extension. Also the caption in the index.
@@ -365,6 +390,13 @@ class Scene {
   /// opposite: it is the empty state, and a list seeded into every scene would
   /// quietly delete that picture.
   final bool shoppingList;
+
+  /// Intake is useful before somebody chooses goals as well as afterwards.
+  final bool withTargets;
+
+  /// Favorites and a remembered breakfast make the picker a returning-user
+  /// screen rather than an empty shortcut list.
+  final bool loggingShortcuts;
 
   final Size size;
   final Brightness brightness;
@@ -1312,6 +1344,50 @@ List<ShoppingLine> galleryShoppingLines() => <ShoppingLine>[
 /// neither was drawn, so the review had nothing to compare its proposals to.
 const List<Scene> scenes = <Scene>[
   Scene(name: 'today', target: LaunchTarget.today),
+  Scene(
+    name: 'today-without-targets',
+    target: LaunchTarget.today,
+    withTargets: false,
+  ),
+  Scene(
+    name: 'today-without-targets-dark',
+    target: LaunchTarget.today,
+    brightness: Brightness.dark,
+    withTargets: false,
+  ),
+  Scene(
+    name: 'today-without-targets-large-text',
+    target: LaunchTarget.today,
+    size: Size(320, 568),
+    textScale: 2.0,
+    withTargets: false,
+  ),
+  Scene(
+    name: 'today-without-targets-details',
+    target: LaunchTarget.today,
+    withTargets: false,
+    taps: <String>['Details'],
+  ),
+  Scene(
+    name: 'log-picker-favorites',
+    target: LaunchTarget.today,
+    loggingShortcuts: true,
+    taps: <String>['Add to breakfast'],
+  ),
+  Scene(
+    name: 'log-picker-favorites-large-text',
+    target: LaunchTarget.today,
+    loggingShortcuts: true,
+    size: Size(320, 640),
+    textScale: 2.0,
+    taps: <String>['Add to breakfast'],
+  ),
+  Scene(
+    name: 'log-sheet-future',
+    target: LaunchTarget.today,
+    dayOffset: 2,
+    taps: <String>['Add to breakfast', 'Greek yogurt, 0%'],
+  ),
   // The same screen, three days back. Its own scene because the day view is
   // not one screen: everything on it is supposed to follow the date in the
   // header, and a redesign judged only against today cannot show whether it

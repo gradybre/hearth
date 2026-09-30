@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/data/mappers/plan_mapper.dart';
 import 'package:hearth/domain/models/food.dart';
@@ -73,7 +74,11 @@ void main() {
         await pumpFrames(tester);
         await tester.tap(find.byTooltip('Add to breakfast'));
         await pumpFrames(tester);
-        await tester.tap(find.text('log again · 6 servings'));
+        await tester.tap(
+          find.text(
+            removed ? 'log again · 6 servings' : 'log again · 6 × Label cup',
+          ),
+        );
         await pumpFrames(tester, frames: 12);
         final rows = await db.select(db.mealPlanEntries).get();
         if (removed) {
@@ -89,4 +94,31 @@ void main() {
       },
     );
   }
+  testWidgets(
+    'reviewing a package recent retains the selected serving and qualifier',
+    (tester) async {
+      final db = await pumpHearthApp(
+        tester,
+        foods: [food()],
+        recentLogs: RecentLogs.from([source]),
+      );
+      await tester.tap(find.text('Plan').last);
+      await pumpFrames(tester);
+      await tester.tap(find.byTooltip('Add to breakfast'));
+      await pumpFrames(tester);
+      await tester.tap(find.byTooltip('Review Corn portion'));
+      await pumpFrames(tester);
+      expect(find.textContaining('600 kcal'), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, 'Label cup'), findsOneWidget);
+      await tester.tap(find.text('Log it'));
+      await pumpFrames(tester, frames: 12);
+      final entry = PlanMapper.entryToDomain(
+        (await db.select(db.mealPlanEntries).get()).single,
+      );
+      expect(entry.servingOptionId, 'label-cup');
+      expect(entry.macroSnapshot!.macros.kcal, 600);
+      expect(entry.macroSnapshot!.macros.fiberG, isNull);
+      expect(entry.macroSnapshot!.usesApproximatePackageNutrition, isTrue);
+    },
+  );
 }

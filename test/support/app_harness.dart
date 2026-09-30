@@ -373,6 +373,10 @@ Future<HearthDatabase> pumpHearthApp(
           (Ref ref) => const Stream<void>.empty(),
         ),
         recentLogsProvider.overrideWith((Ref ref) async => recentLogs),
+        mealRecentLogsProvider.overrideWith(
+          (Ref ref, MealSlot slot) async =>
+              RecentLogs.prioritize(recentLogs, slot: slot),
+        ),
         weekEntriesProvider.overrideWith((Ref ref) async => weekEntries),
         // Favourites and collections are sqlite-backed streams too, so they
         // need the same treatment — without these the library screen sits on

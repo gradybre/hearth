@@ -79,7 +79,34 @@ void main() {
     );
     await pumpFrames(tester, frames: 12);
     expect(find.textContaining('600 kcal'), findsOneWidget);
-    await tester.tap(find.text('Log it'));
+    // Reading the same portion in the default row's unit does not replace
+    // the package-selected nutrition basis when the plan is saved.
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Default cup'));
+    await pumpFrames(tester);
+    await tester.tap(find.text('Save planned portion'));
+    await pumpFrames(tester, frames: 12);
+    final stillPlanned = PlanMapper.entryToDomain(
+      (await db.select(db.mealPlanEntries).get()).single,
+    );
+    expect(stillPlanned.isLogged, isFalse);
+    expect(stillPlanned.servings, closeTo(6, 1e-8));
+    expect(stillPlanned.servingOptionId, 'package');
+    expect(stillPlanned.macroSnapshot, isNull);
+    unawaited(
+      showLogSheet(
+        tester.element(find.byType(Scaffold).first),
+        date: DateTime.now(),
+        slot: MealSlot.breakfast,
+        existing: EntryResolver.resolve(
+          stillPlanned,
+          recipes: {},
+          foods: {food.id: food},
+        ),
+      ),
+    );
+    await pumpFrames(tester, frames: 12);
+    expect(find.textContaining('600 kcal'), findsOneWidget);
+    await tester.tap(find.text('Log as eaten · Breakfast · Today'));
     await pumpFrames(tester, frames: 12);
     final logged = PlanMapper.entryToDomain(
       (await db.select(db.mealPlanEntries).get()).single,

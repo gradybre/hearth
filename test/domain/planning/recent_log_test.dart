@@ -13,11 +13,12 @@ MealPlanEntry logged({
   String label = 'Thing',
   double kcal = 100,
   String? servingOptionId,
+  MealSlot slot = MealSlot.lunch,
 }) =>
     MealPlanEntry(
       id: id,
       dayId: 'day-1',
-      slot: MealSlot.lunch,
+      slot: slot,
       refType: refType,
       refId: refId,
       servings: servings,
@@ -153,6 +154,80 @@ void main() {
   });
 
   group('ordering', () {
+    test(
+      'the chosen meal uses its own latest portion before other recents',
+      () {
+        final List<MealPlanEntry> history = <MealPlanEntry>[
+          logged(
+            id: 'new-lunch',
+            refId: 'oats',
+            at: wednesday,
+            servings: 4,
+            servingOptionId: 'lunch-bowl',
+          ),
+          logged(
+            id: 'breakfast',
+            refId: 'oats',
+            at: tuesday,
+            servings: 2,
+            servingOptionId: 'breakfast-pot',
+            slot: MealSlot.breakfast,
+          ),
+          logged(
+            id: 'old-breakfast',
+            refId: 'oats',
+            at: monday,
+            servings: 1,
+            slot: MealSlot.breakfast,
+          ),
+          logged(
+            id: 'new-snack',
+            refId: 'apple',
+            at: wednesday,
+            slot: MealSlot.snack,
+          ),
+        ];
+        for (final Iterable<MealPlanEntry> entries in <Iterable<MealPlanEntry>>[
+          history,
+          history.reversed,
+        ]) {
+          final List<RecentLog> breakfast = RecentLogs.from(
+            entries,
+            preferredSlot: MealSlot.breakfast,
+          );
+          expect(breakfast.first.refId, 'oats');
+          expect(breakfast.first.servings, 2);
+          expect(breakfast.first.servingOptionId, 'breakfast-pot');
+          expect(breakfast.first.lastLoggedAt, tuesday);
+          expect(breakfast.first.timesLogged, 3);
+          expect(breakfast.first.mealSlot, MealSlot.breakfast);
+          expect(breakfast.last.refId, 'apple');
+          final RecentLog allOats = RecentLogs.from(entries)
+              .firstWhere((RecentLog recent) => recent.refId == 'oats');
+          expect(allOats.servings, 4);
+          expect(allOats.servingOptionId, 'lunch-bowl');
+        }
+      },
+    );
+    test('meal relevance is applied before the visible limit', () {
+      final List<RecentLog> recents = RecentLogs.from(
+        <MealPlanEntry>[
+          logged(
+            id: 'breakfast',
+            refId: 'oats',
+            at: monday,
+            slot: MealSlot.breakfast,
+          ),
+          for (int i = 0; i < 12; i++)
+            logged(id: 'lunch-$i', refId: 'lunch-$i', at: tuesday),
+        ],
+        preferredSlot: MealSlot.breakfast,
+        limit: 8,
+      );
+      expect(recents, hasLength(8));
+      expect(recents.first.refId, 'oats');
+    });
+
     test('most recently logged first', () {
       final List<RecentLog> recents = RecentLogs.from(<MealPlanEntry>[
         logged(id: 'a', refId: 'food-old', at: monday),

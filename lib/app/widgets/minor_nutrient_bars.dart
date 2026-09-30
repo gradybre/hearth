@@ -103,7 +103,11 @@ class _Bar extends StatelessWidget {
     // "— of 28 g" rather than "0 of 28 g". The dash is the honest character
     // for a number nobody has stated, and it keeps the target visible so the
     // row still says what it is for.
-    final String amounts = nutrient.isKnown
+    final String amounts = !nutrient.hasTarget
+        ? (nutrient.isKnown
+              ? '${_number(nutrient.consumed!)} ${kind.unit}'
+              : '—')
+        : nutrient.isKnown
         ? '${_number(nutrient.consumed!)} of ${_number(nutrient.target)} '
               '${kind.unit}'
         : '— of ${_number(nutrient.target)} ${kind.unit}';
@@ -152,47 +156,52 @@ class _Bar extends StatelessWidget {
       // silent about the thing that matters. The word carries it instead.
       label:
           '${kind.label}, '
-          '${nutrient.isKnown ? amounts : 'not stated, '
-                    'of ${_number(nutrient.target)} ${kind.unit}'}.'
+          '${nutrient.isKnown ? amounts : 'not stated${nutrient.hasTarget ? ', of ${_number(nutrient.target)} ${kind.unit}' : ''}'}.'
           '${coverage == null ? '' : ' $coverage.'}'
           '${indicator == null ? '' : ' ${indicator.semanticLabel}'}',
       excludeSemantics: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Row(
+          Wrap(
+            spacing: HearthSpacing.md,
+            runSpacing: HearthSpacing.xxs,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: <Widget>[
-              Expanded(
-                child: Text(
-                  kind.label,
-                  style: text.metadata.copyWith(color: colors.textSecondary),
-                ),
+              Text(
+                kind.label,
+                style: text.metadata.copyWith(color: colors.textSecondary),
               ),
               Text(
                 amounts,
                 style: text.metadata.copyWith(color: colors.textMuted),
               ),
-              if (indicator case final TargetIndicator flag) ...<Widget>[
-                const SizedBox(width: HearthSpacing.xs),
-                Icon(flag.icon, size: 12, color: fill),
-                const SizedBox(width: HearthSpacing.xxs),
-                Text(
-                  flag.shortLabel,
-                  style: text.metadata.copyWith(color: fill),
+              if (indicator case final TargetIndicator flag)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(flag.icon, size: 12, color: fill),
+                    const SizedBox(width: HearthSpacing.xxs),
+                    Text(
+                      flag.shortLabel,
+                      style: text.metadata.copyWith(color: fill),
+                    ),
+                  ],
                 ),
-              ],
             ],
           ),
-          const SizedBox(height: HearthSpacing.xxs),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(_height),
-            child: LinearProgressIndicator(
-              value: nutrient.barFill,
-              minHeight: _height,
-              backgroundColor: colors.progressTrack,
-              valueColor: AlwaysStoppedAnimation<Color>(fill),
+          if (nutrient.hasTarget) ...<Widget>[
+            const SizedBox(height: HearthSpacing.xxs),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(_height),
+              child: LinearProgressIndicator(
+                value: nutrient.barFill,
+                minHeight: _height,
+                backgroundColor: colors.progressTrack,
+                valueColor: AlwaysStoppedAnimation<Color>(fill),
+              ),
             ),
-          ),
+          ],
           if (coverage case final String note) ...<Widget>[
             const SizedBox(height: HearthSpacing.xxs),
             Text(note, style: text.metadata.copyWith(color: colors.textMuted)),

@@ -205,53 +205,25 @@ class _RemainingCard extends ConsumerWidget {
     final HearthColors colors = context.colors;
     final Macros planned = EntryResolver.stillPlanned(entries);
 
-    if (targets == null) {
-      return _Card(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text('No targets set for this week', style: context.text.body),
-            const SizedBox(height: HearthSpacing.xs),
-            Text(
-              'Set them once and every day this week measures against them.',
-              style: context.text.metadata.copyWith(color: colors.textMuted),
-            ),
-            const SizedBox(height: HearthSpacing.md),
-            FilledButton(
-              onPressed: () => showMacroTargetsSheet(context),
-              child: const Text('Set weekly targets'),
-            ),
-          ],
-        ),
-      );
-    }
-
     final DayProgress progress = DayProgress.fromParts(
       parts: EntryResolver.eatenParts(entries),
       coverage: EntryResolver.eatenCoverage(entries),
-      targets: targets!,
+      targets: targets,
     );
 
     final bool expanded = ref.watch(daySummaryExpandedProvider).value ?? false;
 
     return _Card(
-      onTap: () => showMacroTargetsSheet(context),
+      onTap: targets == null ? null : () => showMacroTargetsSheet(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Row(
+          Wrap(
+            spacing: HearthSpacing.md,
+            runSpacing: HearthSpacing.xs,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: <Widget>[
-              // The rings lead with what has been eaten, so the card is no
-              // longer "what is left" and does not say so. What is left is
-              // under each ring, and only when it is worth saying.
-              // Not the date. The header six lines up already names the day,
-              // and this said the literal string 'Today' whatever was
-              // selected — a card claiming today's numbers directly under a
-              // header reading "Monday 7 September" (review F05). A caption
-              // with nothing to compute is a caption that cannot go stale.
-              Expanded(
-                child: Text('Daily totals', style: context.text.sectionHeader),
-              ),
+              Text('Daily totals', style: context.text.sectionHeader),
               if (!planned.isZero)
                 Text(
                   '${planned.kcal.round()} kcal still planned',
@@ -261,6 +233,13 @@ class _RemainingCard extends ConsumerWidget {
                 ),
             ],
           ),
+          if (progress.countedParts == 0) ...<Widget>[
+            const SizedBox(height: HearthSpacing.xs),
+            Text(
+              'Nothing logged yet',
+              style: context.text.metadata.copyWith(color: colors.textMuted),
+            ),
+          ],
           const SizedBox(height: HearthSpacing.md),
           if (expanded) ...<Widget>[
             MacroRings(progress: progress),
@@ -279,14 +258,27 @@ class _RemainingCard extends ConsumerWidget {
           ] else
             _CompactSummary(progress: progress),
           const SizedBox(height: HearthSpacing.sm),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: () => ref
-                  .read(daySummaryExpandedProvider.notifier)
-                  .set(expanded: !expanded),
-              child: Text(expanded ? 'Less' : 'Details'),
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              if (targets == null)
+                Flexible(
+                  child: TextButton(
+                    onPressed: () => showMacroTargetsSheet(context),
+                    child: const Text('Set targets'),
+                  ),
+                )
+              else
+                const Spacer(),
+              Flexible(
+                child: TextButton(
+                  onPressed: () => ref
+                      .read(daySummaryExpandedProvider.notifier)
+                      .set(expanded: !expanded),
+                  child: Text(expanded ? 'Less' : 'Details'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -314,50 +306,62 @@ class _CompactSummary extends StatelessWidget {
     // made a day landing exactly on its target read "0 left" with a down
     // arrow here while the ring beside it said "on target" — the same day,
     // contradicted by two views of itself.
-    final TargetIndicator calories = switch (kcal.tone) {
-      MacroTone.over => TargetIndicator.forState(
-        TargetState.over,
-        amount: kcal.remaining.abs().round().toString(),
-      ),
-      MacroTone.good when kcal.state == MacroProgressState.met =>
-        TargetIndicator.forState(TargetState.met),
-      // Neutral is the untouched day: still "left", and the honest amount.
-      MacroTone.good || MacroTone.neutral => TargetIndicator.forState(
-        TargetState.under,
-        amount: kcal.remaining.round().toString(),
-      ),
-    };
+    final TargetIndicator? calories = !kcal.hasTarget
+        ? null
+        : switch (kcal.tone) {
+            MacroTone.over => TargetIndicator.forState(
+              TargetState.over,
+              amount: kcal.remaining.abs().round().toString(),
+            ),
+            MacroTone.good when kcal.state == MacroProgressState.met =>
+              TargetIndicator.forState(TargetState.met),
+            // Neutral is the untouched day: still "left", and the honest amount.
+            MacroTone.good || MacroTone.neutral => TargetIndicator.forState(
+              TargetState.under,
+              amount: kcal.remaining.round().toString(),
+            ),
+          };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         // Calories loudest, as everywhere else.
         Semantics(
-          label:
-              '${kcal.consumed.round()} of ${kcal.target.round()} calories. '
-              '${calories.semanticLabel}',
+          label: kcal.hasTarget
+              ? '${kcal.consumed.round()} of ${kcal.target.round()} calories. ${calories!.semanticLabel}'
+              : '${kcal.consumed.round()} calories consumed.',
           excludeSemantics: true,
-          child: Row(
+          child: Wrap(
+            spacing: HearthSpacing.md,
+            runSpacing: HearthSpacing.xxs,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: <Widget>[
-              Expanded(
-                child: Text(
-                  '${kcal.consumed.round()} of ${kcal.target.round()} kcal',
-                  style: context.text.body,
-                ),
-              ),
-              // Never colour alone: the word travels with the arrow (§6.3).
-              Icon(
-                calories.icon,
-                size: 16,
-                color: kcal.isOver ? colors.overAccent : colors.textMuted,
-              ),
-              const SizedBox(width: HearthSpacing.xxs),
               Text(
-                calories.shortLabel,
-                style: context.text.metadata.copyWith(
-                  color: kcal.isOver ? colors.overAccent : colors.textMuted,
-                ),
+                kcal.hasTarget
+                    ? '${kcal.consumed.round()} of ${kcal.target.round()} kcal'
+                    : '${kcal.consumed.round()} kcal',
+                style: context.text.body,
               ),
+              if (calories != null)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      calories.icon,
+                      size: 16,
+                      color: kcal.isOver ? colors.overAccent : colors.textMuted,
+                    ),
+                    const SizedBox(width: HearthSpacing.xxs),
+                    Text(
+                      calories.shortLabel,
+                      style: context.text.metadata.copyWith(
+                        color: kcal.isOver
+                            ? colors.overAccent
+                            : colors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),
@@ -389,13 +393,16 @@ class _CompactSummary extends StatelessWidget {
     final String label = MacroRings.labelFor(macro.kind);
     final String unit = MacroRings.unitFor(macro.kind);
     return _Readout(
-      text: '$label ${macro.consumed.round()}/${macro.target.round()}$unit',
+      text: macro.hasTarget
+          ? '$label ${macro.consumed.round()}/${macro.target.round()}$unit'
+          : '$label ${macro.consumed.round()}$unit',
       // Spoken in words. A slash is punctuation and an unspaced unit is not a
       // word — the rings say "Protein: 20 of 150 g" and this has to say the
       // same thing, or the compact view is a downgrade for anyone listening
       // to it rather than looking at it (spec §6.3).
-      spoken:
-          '$label, ${macro.consumed.round()} of ${macro.target.round()} $unit.',
+      spoken: macro.hasTarget
+          ? '$label, ${macro.consumed.round()} of ${macro.target.round()} $unit.'
+          : '$label, ${macro.consumed.round()} $unit consumed.',
     );
   }
 
@@ -412,13 +419,14 @@ class _CompactSummary extends StatelessWidget {
 
     if (!nutrient.isKnown) {
       return _Readout(
-        text: '${kind.label} —/$target',
+        text: nutrient.hasTarget
+            ? '${kind.label} —/$target'
+            : '${kind.label} —',
         // The word, not the dash: most screen readers pass over punctuation
         // at default verbosity, so "Fibre, of 28 g" would be both
         // ungrammatical and silent about the thing that matters.
         spoken:
-            '${kind.label}, not stated, of ${nutrient.target.round()} '
-            '${kind.unit}.'
+            '${kind.label}, not stated${nutrient.hasTarget ? ', of ${nutrient.target.round()} ${kind.unit}' : ''}.'
             '${nutrient.countedParts == 0 ? ' Nothing logged yet.' : ''}',
       );
     }
@@ -429,10 +437,10 @@ class _CompactSummary extends StatelessWidget {
       // "≥" rather than a bare number: at a glance it is the difference
       // between "you have had 14 g of fibre" and "you have had at least 14 g,
       // and something you ate never said".
-      text: '${kind.label} ${floor ? '≥' : ''}$amount/$target',
+      text:
+          '${kind.label} ${floor ? '≥' : ''}$amount${nutrient.hasTarget ? '/$target' : kind.unit}',
       spoken:
-          '${kind.label}, ${floor ? 'at least ' : ''}$amount of '
-          '${nutrient.target.round()} ${kind.unit}.'
+          '${kind.label}, ${floor ? 'at least ' : ''}$amount${nutrient.hasTarget ? ' of ${nutrient.target.round()}' : ''} ${kind.unit}.'
           '${floor ? ' Not a full count.' : ''}',
     );
   }

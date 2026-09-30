@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../domain/planning/meal_plan.dart';
+import '../../domain/planning/week.dart';
 
 /// Why the restaurant builder was opened, and what to do when it finishes
 /// (spec §5.6, U04).
@@ -24,6 +25,18 @@ class LoggingIntent {
     required this.eaten,
   });
 
+  /// A day ahead on the calendar starts as a plan, even across a daylight
+  /// saving boundary. Today and backdated meals retain quick logging.
+  factory LoggingIntent.forMeal({
+    required DateTime date,
+    required MealSlot slot,
+    DateTime? today,
+  }) => LoggingIntent(
+    date: date,
+    slot: slot,
+    eaten: calendarDaysBetween(today ?? DateTime.now(), date) <= 0,
+  );
+
   /// The day the meal belongs to. Never re-derived at the far end.
   final DateTime date;
 
@@ -31,8 +44,7 @@ class LoggingIntent {
 
   /// Whether it was eaten, or is only planned.
   ///
-  /// From the log sheet it was eaten — you are building it because you are
-  /// about to eat it or just have. From the planner it is a plan.
+  /// Preserved across the entire build; a future restaurant meal is a plan.
   final bool eaten;
 
   /// What the button at the end of the build should say.
