@@ -34,25 +34,35 @@ import 'logging_intent.dart';
 /// short: pick a thing, tap Log. The portion stepper is right there for the
 /// half-servings that come up in real life, but nothing has to be adjusted to
 /// finish (spec §5.6).
+///
+/// [clock] makes the boundary between calendar days testable without a global
+/// clock. The opening intent is fixed; relative date words may refresh.
 Future<void> showLogSheet(
   BuildContext context, {
   required DateTime date,
   required MealSlot slot,
   ResolvedEntry? existing,
+  DateTime Function()? clock,
 }) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
   backgroundColor: Colors.transparent,
   builder: (BuildContext context) =>
-      _LogSheet(date: date, slot: slot, existing: existing),
+      _LogSheet(date: date, slot: slot, existing: existing, clock: clock),
 );
 
 class _LogSheet extends ConsumerStatefulWidget {
-  const _LogSheet({required this.date, required this.slot, this.existing});
+  const _LogSheet({
+    required this.date,
+    required this.slot,
+    this.existing,
+    this.clock,
+  });
 
   final DateTime date;
   final MealSlot slot;
   final ResolvedEntry? existing;
+  final DateTime Function()? clock;
 
   @override
   ConsumerState<_LogSheet> createState() => _LogSheetState();
@@ -60,6 +70,10 @@ class _LogSheet extends ConsumerStatefulWidget {
 
 class _LogSheetState extends ConsumerState<_LogSheet> {
   final TextEditingController _search = TextEditingController();
+  final GlobalKey<_PortionStepperState> _portionField =
+      GlobalKey<_PortionStepperState>();
+  PlanRefType? _scope;
+  bool _allRecents = false;
 
   /// What the user is about to log: a recipe, a food, or the entry they opened.
   Recipe? _recipe;
@@ -155,6 +169,10 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     required Map<String, Food> foods,
     required Map<String, Recipe> recipes,
   }) {
+    // Touching a save action does not necessarily blur the field first.
+    // Commit only pending edits before any save resolves the portion; an
+    // untouched rounded display must never replace the stored amount.
+    _portionField.currentState?._commitPendingInput();
     // A meal already logged is corrected against what it was logged as, and
     // its reference is part of that record (spec §4).
     if (_frozenPerServing case final Macros frozen) {
@@ -241,12 +259,24 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
 
   bool get _isExisting => widget.existing != null;
 
+  DateTime get _now => widget.clock?.call() ?? DateTime.now();
+
+  /// The action this sheet opened to offer. Re-reading the clock on a tap
+  /// could make an unchanged Add to plan button log a meal after midnight.
+  /// The absolute destination and this intent travel together through every
+  /// path, including a recent repeat and the restaurant builder.
+  late final LoggingIntent _openingIntent;
+
+  bool get _defaultsToPlan => widget.existing != null
+      ? !widget.existing!.entry.isLogged
+      : !_openingIntent.eaten;
+
   /// How far the day being logged to is from today, on the calendar.
   ///
   /// One reading of the clock, used for both the words and the colour. Two
   /// would be two sources of truth for one fact — and this change has just
   /// finished collapsing three copies of the weekday list into one.
-  int get _daysFromToday => calendarDaysBetween(DateTime.now(), widget.date);
+  int get _daysFromToday => calendarDaysBetween(_now, widget.date);
 
   /// The day this is going to, in the fewest words that identify it.
   ///
@@ -263,6 +293,11 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   @override
   void initState() {
     super.initState();
+    _openingIntent = LoggingIntent.forMeal(
+      date: widget.date,
+      slot: widget.slot,
+      today: _now,
+    );
     // A correction opens in the unit it was typed in. The food it belongs to
     // may not have arrived yet, so this is read by entry id and matched to a
     // unit once the library resolves.
@@ -379,7 +414,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     if (_recipe != null) {
       return MacroCalculator.forRecipe(_recipe!, foods: foods).perServing;
     }
-    final ServingOption? serving = _food?.defaultServing;
+    final ServingOption? serving = _standardFor(foods);
     return serving?.macros ?? Macros.zero;
   }
 
@@ -408,7 +443,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     if (_recipe != null) {
       return MacroCalculator.forRecipe(_recipe!, foods: foods).coverage;
     }
-    final ServingOption? serving = _food?.defaultServing;
+    final ServingOption? serving = _standardFor(foods);
     return serving == null
         ? const NutrientCoverage.notRecorded()
         : NutrientCoverage.ofOne(serving.macros);
@@ -495,17 +530,41 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
       // thing standing between 30 oz and a reopened day that doubles it.
       final ({Macros perServing, double portion, String? servingOptionId})
       basis = _basis(foods: foods, recipes: recipes);
-      final MealPlanEntry added = await ref
-          .read(planRepositoryProvider)
-          .add(
-            date: widget.date,
-            slot: widget.slot,
-            refType: _recipe != null ? PlanRefType.recipe : PlanRefType.food,
-            refId: _recipe?.id ?? _food!.id,
-            servings: basis.portion,
-            servingOptionId: basis.servingOptionId,
+      final MealPlanEntry? saved;
+      if (widget.existing case final ResolvedEntry existing) {
+        saved = await ref
+            .read(planRepositoryProvider)
+            .updateEntry(
+              existing.entry.id,
+              servings: basis.portion,
+              servingOptionId: basis.servingOptionId,
+              requirePlanned: true,
+            );
+      } else {
+        saved = await ref
+            .read(planRepositoryProvider)
+            .add(
+              date: widget.date,
+              slot: widget.slot,
+              refType: _recipe != null ? PlanRefType.recipe : PlanRefType.food,
+              refId: _recipe?.id ?? _food!.id,
+              servings: basis.portion,
+              servingOptionId: basis.servingOptionId,
+            );
+      }
+      if (saved == null) {
+        if (mounted) {
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+            const SnackBar(
+              content: Text(
+                'This meal was logged or removed while you were editing. Your portion is still here; reopen the meal to review its latest state.',
+              ),
+            ),
           );
-      await _recordEntryUnit(added.id, typedIn, foods);
+        }
+        return;
+      }
+      await _recordEntryUnit(saved.id, typedIn, foods);
       ref.invalidate(dayEntriesProvider);
       if (mounted) Navigator.of(context).pop();
     } finally {
@@ -591,18 +650,32 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
               (food?.packageNutrition?.isApproximate ?? false),
       };
 
-      await ref
-          .read(planRepositoryProvider)
-          .logAgain(
-            recent: recent,
-            date: widget.date,
-            slot: widget.slot,
-            liveMacros: perServing,
-            liveCoverage: coverage,
-            usesApproximatePackage: approximate,
-          );
+      if (_defaultsToPlan) {
+        await ref
+            .read(planRepositoryProvider)
+            .add(
+              date: widget.date,
+              slot: widget.slot,
+              refType: recent.refType,
+              refId: recent.refId,
+              servings: recent.servings,
+              servingOptionId: recent.servingOptionId,
+            );
+      } else {
+        await ref
+            .read(planRepositoryProvider)
+            .logAgain(
+              recent: recent,
+              date: widget.date,
+              slot: widget.slot,
+              liveMacros: perServing,
+              liveCoverage: coverage,
+              usesApproximatePackage: approximate,
+            );
+      }
       ref.invalidate(dayEntriesProvider);
       ref.invalidate(recentLogsProvider);
+      ref.invalidate(mealRecentLogsProvider);
       if (mounted) Navigator.of(context).pop();
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -614,7 +687,11 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   ///
   /// "This batch is my dinner Mon/Tue/Wed" is one decision, so it is one
   /// action — not the same add repeated three times.
-  Future<void> _assignAcrossDays() async {
+  Future<void> _assignAcrossDays({
+    required Map<String, Food> foods,
+    required Map<String, Recipe> recipes,
+    PortionUnit? typedIn,
+  }) async {
     final List<DateTime>? days = await showDayPicker(
       context,
       title: 'Add to which days?',
@@ -622,17 +699,26 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     );
     if (days == null || days.isEmpty || !mounted) return;
 
+    // Resolve the latest portion after the day choice, including any input
+    // committed when the picker took focus. The save boundary also commits
+    // pending input synchronously if focus has not moved yet.
+    final ({Macros perServing, double portion, String? servingOptionId}) basis =
+        _basis(foods: foods, recipes: recipes);
     setState(() => _busy = true);
     try {
-      await ref
+      final List<MealPlanEntry> added = await ref
           .read(planRepositoryProvider)
           .assignAcrossDays(
             dates: days,
             slot: widget.slot,
             refType: _recipe != null ? PlanRefType.recipe : PlanRefType.food,
             refId: _recipe?.id ?? _food!.id,
-            servings: _servings,
+            servings: basis.portion,
+            servingOptionId: basis.servingOptionId,
           );
+      for (final MealPlanEntry entry in added) {
+        await _recordEntryUnit(entry.id, typedIn, foods);
+      }
       ref.invalidate(dayEntriesProvider);
       if (mounted) Navigator.of(context).pop();
     } finally {
@@ -663,6 +749,38 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
       _servingOptionId = null;
     });
     unawaited(_recallUnit('${PreferenceStore.logUnitForFood}${food.id}'));
+  }
+
+  void _reviewRecent(
+    RecentLog recent,
+    Map<String, Food> foods,
+    Map<String, Recipe> recipes,
+  ) {
+    if (recent.refType == PlanRefType.recipe) {
+      final Recipe? recipe = recipes[recent.refId];
+      if (recipe == null) return;
+      setState(() {
+        _recipe = recipe;
+        _servings = recent.servings;
+      });
+      return;
+    }
+    final Food? food = foods[recent.refId];
+    if (food == null) return;
+    _choose(food);
+    // A missing named row must be chosen again; it is not the default row.
+    if (EntryResolver.servingForEntry(food, recent.servingOptionId) == null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text('That serving was removed. Choose a portion again.'),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _servings = recent.servings;
+      _servingOptionId = recent.servingOptionId;
+    });
   }
 
   Future<void> _remove() async {
@@ -718,13 +836,6 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     );
   }
 
-  /// The button the sheet exists to offer, shared by both arrangements above.
-  ///
-  /// [update] is whether this entry has *already been logged*, which is not
-  /// the same as whether it exists: a planned meal exists and has not been
-  /// logged, and that is precisely the entry whose button has to say "Log
-  /// it". Collapsing the two is how the one button whose whole job is to log
-  /// a planned meal stopped saying so.
   Widget _primaryAction({
     required Map<String, Food> foods,
     required Map<String, Recipe> recipes,
@@ -733,13 +844,36 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   }) => FilledButton(
     onPressed: _busy
         ? null
-        : () => _log(foods: foods, recipes: recipes, typedIn: typedIn),
+        : () => _defaultsToPlan
+              ? _plan(foods: foods, recipes: recipes, typedIn: typedIn)
+              : _log(foods: foods, recipes: recipes, typedIn: typedIn),
     child: Text(
       _busy
           ? 'Saving…'
           : update
-          ? 'Update'
+          ? 'Update logged portion'
+          : _isExisting
+          ? 'Save planned portion'
+          : _defaultsToPlan
+          ? 'Add to plan'
           : 'Log it',
+    ),
+  );
+
+  Widget _secondaryAction({
+    required Map<String, Food> foods,
+    required Map<String, Recipe> recipes,
+    PortionUnit? typedIn,
+  }) => TextButton(
+    onPressed: _busy
+        ? null
+        : () => _defaultsToPlan
+              ? _log(foods: foods, recipes: recipes, typedIn: typedIn)
+              : _plan(foods: foods, recipes: recipes, typedIn: typedIn),
+    child: Text(
+      _defaultsToPlan
+          ? 'Log as eaten · ${widget.slot.label} · ${_when()}'
+          : 'Plan only',
     ),
   );
 
@@ -884,6 +1018,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
               ),
             ),
           _PortionStepper(
+            key: _portionField,
             servings: count,
             step: unit?.step ?? 0.25,
             basisId: unit?.id,
@@ -915,7 +1050,13 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
-                onPressed: _busy ? null : _assignAcrossDays,
+                onPressed: _busy
+                    ? null
+                    : () => _assignAcrossDays(
+                        foods: foods,
+                        recipes: recipes,
+                        typedIn: unit,
+                      ),
                 icon: const Icon(Icons.event_repeat_outlined, size: 18),
                 label: const Text('Add to several days'),
               ),
@@ -936,6 +1077,17 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
           // `spaceBetween` keeps the width of the sheet between them while
           // they share a line, and `runSpacing` keeps them apart when they do
           // not.
+          if (_isExisting && !alreadyLogged) ...<Widget>[
+            Align(
+              alignment: Alignment.centerRight,
+              child: _secondaryAction(
+                foods: foods,
+                recipes: recipes,
+                typedIn: unit,
+              ),
+            ),
+            const SizedBox(height: HearthSpacing.sm),
+          ],
           if (_isExisting)
             // Side by side while they fit, stacked when they do not — and
             // stacked with the primary *above* Remove, a full gap apart.
@@ -978,16 +1130,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
               spacing: HearthSpacing.sm,
               overflowSpacing: HearthSpacing.sm,
               children: <Widget>[
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () => _plan(
-                          foods: foods,
-                          recipes: recipes,
-                          typedIn: unit,
-                        ),
-                  child: const Text('Plan only'),
-                ),
+                _secondaryAction(foods: foods, recipes: recipes, typedIn: unit),
                 _primaryAction(
                   foods: foods,
                   recipes: recipes,
@@ -1008,177 +1151,216 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   ) {
     final HearthColors colors = context.colors;
     final String needle = _search.text.trim().toLowerCase();
-    // Recents are hidden once the user starts searching: they have told us
-    // what they are looking for, and a stale shortcut list would just be in
-    // the way.
     final List<RecentLog> recents = needle.isEmpty
-        ? (ref.watch(recentLogsProvider).value ?? const <RecentLog>[])
+        ? (ref
+                      .watch(
+                        _allRecents
+                            ? recentLogsProvider
+                            : mealRecentLogsProvider(widget.slot),
+                      )
+                      .value ??
+                  const <RecentLog>[])
+              .where(
+                (RecentLog recent) =>
+                    (_scope == null || recent.refType == _scope) &&
+                    (recent.refType == PlanRefType.recipe
+                        ? recipes.containsKey(recent.refId)
+                        : eatableFoods(foods.values)
+                              .any((Food f) => f.id == recent.refId)),
+              )
+              .toList(growable: false)
         : const <RecentLog>[];
-
-    final List<Recipe> matchingRecipes = recipes.values
-        .where(
-          (Recipe r) =>
-              needle.isEmpty || r.title.toLowerCase().contains(needle),
-        )
-        .toList(growable: false);
-    // `eatableFoods` rather than `foods.values`: a modifier is a deduction,
-    // and logging one on its own would make a day read lighter than the day
-    // that happened. The unfiltered map stays in use above for *resolving* an
-    // entry's macros, where a modifier is a legitimate ingredient of an
-    // eaten-out recipe.
-    final List<Food> matchingFoods = eatableFoods(foods.values)
-        .where(
-          (Food f) => needle.isEmpty || f.name.toLowerCase().contains(needle),
-        )
-        .toList(growable: false);
+    final Set<String> favorites =
+        ref.watch(favoriteRecipeIdsProvider).value ?? const <String>{};
+    final List<Recipe> favoriteRecipes =
+        needle.isEmpty && _scope != PlanRefType.food
+        ? recipes.values
+              .where((Recipe r) => favorites.contains(r.id))
+              .take(4)
+              .toList(growable: false)
+        : const <Recipe>[];
+    final Set<String> shownFavorites = favoriteRecipes
+        .map((Recipe r) => r.id)
+        .toSet();
+    final List<Recipe> matchingRecipes = _scope == PlanRefType.food
+        ? const <Recipe>[]
+        : recipes.values
+              .where(
+                (Recipe r) =>
+                    !shownFavorites.contains(r.id) &&
+                    (needle.isEmpty || r.title.toLowerCase().contains(needle)),
+              )
+              .toList(growable: false);
+    final List<Food> matchingFoods = _scope == PlanRefType.recipe
+        ? const <Food>[]
+        : eatableFoods(foods.values)
+              .where(
+                (Food f) =>
+                    needle.isEmpty || f.name.toLowerCase().contains(needle),
+              )
+              .toList(growable: false);
     final bool nothingLocally =
-        matchingRecipes.isEmpty && matchingFoods.isEmpty;
+        matchingRecipes.isEmpty &&
+        matchingFoods.isEmpty &&
+        favoriteRecipes.isEmpty;
 
     return SafeArea(
-      child: Column(
+      child: ListView(
+        controller: controller,
+        padding: const EdgeInsets.all(HearthSpacing.lg),
         children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.all(HearthSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text('Add to this meal', style: context.text.sectionHeader),
-                const SizedBox(height: HearthSpacing.md),
-                TextField(
-                  controller: _search,
-                  // The library filters as you type; the wider search waits
-                  // for a pause and lands underneath when it arrives — the
-                  // same arrangement the Foods tab uses, so the daily path
-                  // never waits on the network.
-                  onChanged: (String value) {
-                    ref.read(foodSearchProvider.notifier).search(value);
-                    setState(() {});
+          Text('Add to this meal', style: context.text.sectionHeader),
+          const SizedBox(height: HearthSpacing.xs),
+          Text(
+            '${widget.slot.label} · ${_when()}',
+            style: context.text.metadata.copyWith(color: colors.textMuted),
+          ),
+          const SizedBox(height: HearthSpacing.md),
+          TextField(
+            controller: _search,
+            onChanged: (String value) {
+              if (_scope != PlanRefType.recipe) {
+                ref.read(foodSearchProvider.notifier).search(value);
+              }
+              setState(() {});
+            },
+            style: context.text.body,
+            decoration: InputDecoration(
+              hintText: 'Search recipes and foods',
+              prefixIcon: Icon(Icons.search, color: colors.textMuted),
+            ),
+          ),
+          const SizedBox(height: HearthSpacing.sm),
+          Wrap(
+            spacing: HearthSpacing.sm,
+            runSpacing: HearthSpacing.xs,
+            children: <Widget>[
+              for (final ({PlanRefType? type, String label}) scope
+                  in <({PlanRefType? type, String label})>[
+                    (type: null, label: 'All'),
+                    (type: PlanRefType.food, label: 'Foods'),
+                    (type: PlanRefType.recipe, label: 'Recipes'),
+                  ])
+                ChoiceChip(
+                  label: Text(scope.label),
+                  selected: _scope == scope.type,
+                  onSelected: (_) {
+                    setState(() => _scope = scope.type);
+                    if (_scope != PlanRefType.recipe) {
+                      ref
+                          .read(foodSearchProvider.notifier)
+                          .search(_search.text);
+                    }
                   },
-                  style: context.text.body,
-                  decoration: InputDecoration(
-                    hintText: 'Search recipes and foods',
-                    prefixIcon: Icon(Icons.search, color: colors.textMuted),
-                  ),
                 ),
-                const SizedBox(height: HearthSpacing.sm),
-                // The other way in, for the meal that is not in the library
-                // yet because you are standing in the queue. Closes the sheet
-                // first: the builder ends in the recipe editor, and a sheet
-                // left open underneath would be waiting for a choice nobody
-                // is going to make.
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: SizedBox(
-                    height: HearthTouch.minTarget,
-                    child: TextButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        // The day and the slot travel with it. Three screens
-                        // later the editor has no other way to know them, and
-                        // recovering them there would recover today's — so a
-                        // dinner built for last Tuesday would become tonight's
-                        // (spec §5.6, U04).
-                        context.push(
-                          '/recipe/eat-out',
-                          extra: LoggingIntent(
-                            date: widget.date,
-                            slot: widget.slot,
-                            eaten: true,
-                          ),
-                        );
-                      },
-                      style: TextButton.styleFrom(
-                        foregroundColor: colors.textSecondary,
-                      ),
-                      icon: const Icon(Icons.storefront, size: 18),
-                      label: const Text('Ate out — build it from a menu'),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            ],
           ),
-          Expanded(
-            // One scroll view for both: what the household has, then what the
-            // wider sources turned up. Logging used to dead-end at the
-            // library — anything not already saved had to be added from the
-            // Foods tab and the meal picked up again afterwards, which is
-            // three screens for one sandwich.
-            child: ListView(
-              controller: controller,
-              padding: const EdgeInsets.fromLTRB(
-                HearthSpacing.lg,
-                0,
-                HearthSpacing.lg,
-                HearthSpacing.xl,
+          const SizedBox(height: HearthSpacing.sm),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                context.push('/recipe/eat-out', extra: _openingIntent);
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: colors.textSecondary,
               ),
+              icon: const Icon(Icons.storefront, size: 18),
+              label: Text(
+                _defaultsToPlan
+                    ? 'Plan a restaurant meal'
+                    : 'Ate out — build it from a menu',
+              ),
+            ),
+          ),
+          if (favoriteRecipes.isNotEmpty) ...<Widget>[
+            const _GroupLabel(text: 'Favorites'),
+            for (final Recipe recipe in favoriteRecipes)
+              _PickRow(
+                title: recipe.title,
+                subtitle: 'Review portion',
+                onTap: () => setState(() => _recipe = recipe),
+              ),
+          ],
+          if (needle.isEmpty) ...<Widget>[
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: <Widget>[
-                if (recents.isNotEmpty) ...<Widget>[
-                  const _GroupLabel(text: 'Recent'),
-                  for (final RecentLog recent in recents)
-                    _RecentRow(
-                      recent: recent,
-                      onTap: _busy
-                          ? null
-                          : () => _logAgain(
-                              recent,
-                              foods: foods,
-                              recipes: recipes,
-                            ),
-                    ),
-                ],
-                if (matchingRecipes.isNotEmpty)
-                  // "Yours", because the next heading down is "Elsewhere"
-                  // and those rows write to the library when one is picked.
-                  // The kind alone left the two readable as one list (review
-                  // §7's picker scopes).
-                  const _GroupLabel(text: 'Your recipes'),
-                for (final Recipe recipe in matchingRecipes)
-                  _PickRow(
-                    title: recipe.title,
-                    subtitle:
-                        'serves ${recipe.servings == recipe.servings.roundToDouble() ? recipe.servings.round() : recipe.servings}',
-                    onTap: () => setState(() => _recipe = recipe),
+                _GroupLabel(
+                  text: _allRecents ? 'Recent' : '${widget.slot.label} first',
+                ),
+                TextButton(
+                  onPressed: () => setState(() => _allRecents = !_allRecents),
+                  child: Text(
+                    _allRecents ? '${widget.slot.label} first' : 'All recents',
                   ),
-                if (matchingFoods.isNotEmpty)
-                  const _GroupLabel(text: 'Your foods'),
-                for (final Food food in matchingFoods)
-                  _PickRow(
-                    title: food.name,
-                    subtitle: food.defaultServing == null
-                        ? 'no serving size'
-                        : '${food.defaultServing!.macros.kcal.round()} kcal '
-                              'per ${food.defaultServing!.label}',
-                    onTap: () => _choose(food),
-                  ),
-                // Only ever about what the household already has: results
-                // from further afield may well be listed directly underneath,
-                // and "nothing matches" above a list of matches reads as a
-                // broken screen.
-                if (nothingLocally)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: HearthSpacing.xl,
-                    ),
-                    child: Text(
-                      recipes.isEmpty && foods.isEmpty
-                          ? 'Nothing saved yet. Search for a food and it can '
-                                'be added straight from here.'
-                          : 'None of your recipes or foods match.',
-                      style: context.text.body,
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                // Saved to the library first, then logged — the same review
-                // every other route into the library goes through
-                // (CLAUDE.md rule 4). Nothing reaches a day unchecked.
-                ExternalFoodResults(
-                  query: _search.text,
-                  onSaved: _useSavedFood,
                 ),
               ],
             ),
-          ),
+            if (recents.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: HearthSpacing.md),
+                child: Text(
+                  'Your recent meals will appear here.',
+                  style: context.text.metadata.copyWith(
+                    color: colors.textMuted,
+                  ),
+                ),
+              ),
+            for (final RecentLog recent in recents)
+              _RecentRow(
+                recent: recent,
+                planning: _defaultsToPlan,
+                servingLabel: recent.refType == PlanRefType.food
+                    ? EntryResolver.servingForEntry(
+                        foods[recent.refId]!,
+                        recent.servingOptionId,
+                      )?.label
+                    : null,
+                onTap: _busy
+                    ? null
+                    : () => _logAgain(recent, foods: foods, recipes: recipes),
+                onReview: _busy
+                    ? null
+                    : () => _reviewRecent(recent, foods, recipes),
+              ),
+          ],
+          if (matchingRecipes.isNotEmpty)
+            const _GroupLabel(text: 'Your recipes'),
+          for (final Recipe recipe in matchingRecipes)
+            _PickRow(
+              title: recipe.title,
+              subtitle: 'serves ${writeAmount(recipe.servings)}',
+              onTap: () => setState(() => _recipe = recipe),
+            ),
+          if (matchingFoods.isNotEmpty) const _GroupLabel(text: 'Your foods'),
+          for (final Food food in matchingFoods)
+            _PickRow(
+              title: food.name,
+              subtitle: food.defaultServing == null
+                  ? 'no serving size'
+                  : '${food.defaultServing!.macros.kcal.round()} kcal per ${food.defaultServing!.label}',
+              onTap: () => _choose(food),
+            ),
+          if (nothingLocally)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: HearthSpacing.xl),
+              child: Text(
+                recipes.isEmpty && foods.isEmpty
+                    ? 'Nothing saved yet. Search for a food and it can be added straight from here.'
+                    : _scope == PlanRefType.recipe
+                    ? 'None of your recipes match.'
+                    : _scope == PlanRefType.food
+                    ? 'None of your foods match.'
+                    : 'None of your recipes or foods match.',
+                style: context.text.body,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          if (_scope != PlanRefType.recipe)
+            ExternalFoodResults(query: _search.text, onSaved: _useSavedFood),
         ],
       ),
     );
@@ -1285,6 +1467,7 @@ class _ResolvedPortion extends StatelessWidget {
 
 class _PortionStepper extends StatefulWidget {
   const _PortionStepper({
+    super.key,
     required this.servings,
     required this.onChanged,
     this.step = 0.25,
@@ -1319,6 +1502,7 @@ class _PortionStepperState extends State<_PortionStepper> {
     text: widget.format(widget.servings),
   );
   final FocusNode _focus = FocusNode();
+  bool _hasPendingInput = false;
 
   @override
   void initState() {
@@ -1332,7 +1516,7 @@ class _PortionStepperState extends State<_PortionStepper> {
           extentOffset: _field.text.length,
         );
       } else {
-        _commit();
+        _commitPendingInput();
       }
     });
   }
@@ -1345,6 +1529,7 @@ class _PortionStepperState extends State<_PortionStepper> {
     // it, and half-typed input is not a number to be corrected yet.
     if (!_focus.hasFocus &&
         (widget.servings != old.servings || widget.basisId != old.basisId)) {
+      _hasPendingInput = false;
       _field.text = widget.format(widget.servings);
     }
   }
@@ -1361,7 +1546,9 @@ class _PortionStepperState extends State<_PortionStepper> {
   /// A portion of zero is not a smaller portion, it is a deletion — and this
   /// is not the control that deletes things. Anything unreadable reverts
   /// rather than silently logging a number nobody chose.
-  void _commit() {
+  void _commitPendingInput() {
+    if (!_hasPendingInput) return;
+    _hasPendingInput = false;
     final double? typed = parseAmount(_field.text);
     // Not finite is not a portion either: "1e999" parses to infinity, and
     // infinity is neither caught by `<= 0` nor anything you can eat.
@@ -1377,6 +1564,7 @@ class _PortionStepperState extends State<_PortionStepper> {
     final double next = ((widget.servings + by) * 100).roundToDouble() / 100;
     if (next <= 0) return;
     _focus.unfocus();
+    _hasPendingInput = false;
     _field.text = widget.format(next);
     widget.onChanged(next);
   }
@@ -1414,6 +1602,7 @@ class _PortionStepperState extends State<_PortionStepper> {
               FilteringTextInputFormatter.allow(amountCharacters),
             ],
             textInputAction: TextInputAction.done,
+            onChanged: (_) => _hasPendingInput = true,
             onSubmitted: (_) => _focus.unfocus(),
             decoration: InputDecoration(
               isDense: true,
@@ -1520,63 +1709,85 @@ class _PickRow extends StatelessWidget {
 /// dialog, no confirmation. The portion comes from last time, and it is
 /// editable afterwards from the day view like any other entry.
 class _RecentRow extends StatelessWidget {
-  const _RecentRow({required this.recent, required this.onTap});
+  const _RecentRow({
+    required this.recent,
+    required this.onTap,
+    required this.onReview,
+    required this.planning,
+    this.servingLabel,
+  });
 
   final RecentLog recent;
   final VoidCallback? onTap;
+  final VoidCallback? onReview;
+  final bool planning;
+  final String? servingLabel;
 
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    final String portion = recent.servings == recent.servings.roundToDouble()
-        ? recent.servings.round().toString()
-        : recent.servings.toString();
-    final String detail = recent.servings == 1
-        ? 'log again · 1 serving'
-        : 'log again · $portion servings';
-
+    final String portion =
+        '${writeAmount(recent.servings)} ${servingLabel == null ? (recent.servings == 1 ? 'serving' : 'servings') : '× $servingLabel'}';
+    final String action = planning ? 'add to plan' : 'log again';
     return Padding(
       padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
-      child: Semantics(
-        button: true,
-        label: '${recent.label}. Log again, $detail.',
-        onTap: onTap,
-        excludeSemantics: true,
-        child: Material(
-          color: colors.surfaceSunken,
+      child: Material(
+        color: colors.surfaceSunken,
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(HearthRadius.md),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(HearthRadius.md),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(HearthRadius.md),
-                border: Border.all(color: colors.outline),
-              ),
-              padding: const EdgeInsets.all(HearthSpacing.md),
-              child: Row(
-                children: <Widget>[
-                  Icon(Icons.replay, size: 18, color: colors.accent),
-                  const SizedBox(width: HearthSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+          side: BorderSide(color: colors.outline),
+        ),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Semantics(
+                button: true,
+                label: '${recent.label}. $action, $portion.',
+                onTap: onTap,
+                excludeSemantics: true,
+                child: InkWell(
+                  onTap: onTap,
+                  borderRadius: BorderRadius.circular(HearthRadius.md),
+                  child: Padding(
+                    padding: const EdgeInsets.all(HearthSpacing.md),
+                    child: Row(
                       children: <Widget>[
-                        Text(recent.label, style: context.text.ingredient),
-                        const SizedBox(height: HearthSpacing.xxs),
-                        Text(
-                          detail,
-                          style: context.text.metadata.copyWith(
-                            color: colors.textMuted,
+                        Icon(
+                          planning ? Icons.event_outlined : Icons.replay,
+                          size: 18,
+                          color: colors.accent,
+                        ),
+                        const SizedBox(width: HearthSpacing.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                recent.label,
+                                style: context.text.ingredient,
+                              ),
+                              const SizedBox(height: HearthSpacing.xxs),
+                              Text(
+                                '$action · $portion',
+                                style: context.text.metadata.copyWith(
+                                  color: colors.textMuted,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
                   ),
-                ],
+                ),
               ),
             ),
-          ),
+            IconButton(
+              tooltip: 'Review ${recent.label} portion',
+              onPressed: onReview,
+              icon: const Icon(Icons.edit_outlined),
+            ),
+          ],
         ),
       ),
     );

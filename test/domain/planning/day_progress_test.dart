@@ -10,6 +10,35 @@ void main() {
     fatG: 70,
   );
 
+  test(
+    'intake without targets retains known, unknown and partial nutrients',
+    () {
+      final DayProgress day = DayProgress.fromParts(
+        parts: const <Macros>[
+          Macros(kcal: 400, proteinG: 20, fiberG: 4),
+          Macros(kcal: 100),
+        ],
+      );
+      expect(day.consumed.kcal, 500);
+      expect(day.calories.hasTarget, isFalse);
+      expect(day.calories.tone, MacroTone.neutral);
+      expect(day.minor(MinorNutrient.fiber).consumed, 4);
+      expect(day.minor(MinorNutrient.fiber).isPartial, isTrue);
+      expect(day.minor(MinorNutrient.fiber).hasTarget, isFalse);
+      expect(day.minor(MinorNutrient.sodium).isKnown, isFalse);
+      expect(day.countedParts, 2);
+    },
+  );
+  test('a logged zero and an empty day remain different', () {
+    final DayProgress empty = DayProgress.fromParts(parts: const <Macros>[]);
+    final DayProgress zero = DayProgress.fromParts(
+      parts: const <Macros>[Macros.zero],
+    );
+    expect(empty.consumed.kcal, zero.consumed.kcal);
+    expect(empty.countedParts, 0);
+    expect(zero.countedParts, 1);
+  });
+
   group('remaining for the day (spec §5.6)', () {
     test('reports what is left', () {
       final DayProgress day = DayProgress.from(

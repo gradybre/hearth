@@ -85,7 +85,7 @@ void main() {
     await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Edit portion'));
     await pumpFrames(tester, frames: 12);
-    await tester.tap(find.text('Update'));
+    await tester.tap(find.text('Update logged portion'));
     await pumpFrames(tester, frames: 20);
 
     expect(
@@ -131,7 +131,7 @@ void main() {
     await tester.enterText(find.byType(TextField).last, '0.5');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await pumpFrames(tester, frames: 8);
-    await tester.tap(find.text('Update'));
+    await tester.tap(find.text('Update logged portion'));
     await pumpFrames(tester, frames: 20);
 
     double kcalOf(String? snapshot) =>
@@ -196,7 +196,7 @@ void main() {
     await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Edit portion'));
     await pumpFrames(tester, frames: 12);
-    await tester.tap(find.text('Update'));
+    await tester.tap(find.text('Update logged portion'));
     await pumpFrames(tester, frames: 20);
 
     final MealPlanEntryRow row =

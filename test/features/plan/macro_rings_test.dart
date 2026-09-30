@@ -189,14 +189,15 @@ void main() {
     }
   });
 
-  testWidgets('with no targets, the rings give way to the prompt', (
+  testWidgets('with no targets, intake and quiet setup stay available', (
     WidgetTester tester,
   ) async {
     await pumpHearthApp(tester);
     await tester.tap(find.text('Plan').last);
     await pumpFrames(tester);
 
-    expect(find.text('No targets set for this week'), findsOneWidget);
+    expect(find.text('Nothing logged yet'), findsOneWidget);
+    expect(find.text('Set targets'), findsOneWidget);
     expect(find.textContaining('of 180'), findsNothing);
   });
 }

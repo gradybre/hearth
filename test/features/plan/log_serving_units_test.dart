@@ -167,7 +167,7 @@ void main() {
     await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Edit portion'));
     await pumpFrames(tester, frames: 12);
-    await tester.tap(find.text('Update'));
+    await tester.tap(find.text('Update logged portion'));
     await pumpFrames(tester, frames: 20);
 
     expect(

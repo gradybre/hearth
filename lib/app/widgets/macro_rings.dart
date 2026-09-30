@@ -93,6 +93,28 @@ class _MacroRing extends StatelessWidget {
     final HearthTextStyles text = context.text;
 
     final String eaten = macro.consumed.round().toString();
+    if (!macro.hasTarget) {
+      return Semantics(
+        label:
+            '${MacroRings.labelFor(macro.kind)}: $eaten ${MacroRings.unitFor(macro.kind)} consumed.',
+        excludeSemantics: true,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(
+              MacroRings.labelFor(macro.kind),
+              style: text.metadata.copyWith(color: colors.textSecondary),
+            ),
+            const SizedBox(height: HearthSpacing.sm),
+            Text(eaten, style: text.macroReadout, textAlign: TextAlign.center),
+            Text(
+              MacroRings.unitFor(macro.kind),
+              style: text.metadata.copyWith(color: colors.textMuted),
+            ),
+          ],
+        ),
+      );
+    }
     // No unit inside the ring — the label above it already says which macro
     // this is, and the two words together would not fit without shrinking the
     // numbers, which is the one thing the dashboard never does. The spoken

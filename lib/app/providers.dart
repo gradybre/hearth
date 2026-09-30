@@ -486,6 +486,15 @@ final FutureProvider<List<RecentLog>> recentLogsProvider =
       return ref.watch(planRepositoryProvider).recentLogs();
     });
 
+/// The same quick repeats, preferring the portion used for this meal slot.
+/// All recents remains separate so switching scope preserves its ordering.
+final mealRecentLogsProvider = FutureProvider.family<List<RecentLog>, MealSlot>(
+  (Ref ref, MealSlot slot) {
+    ref.watch(planChangesProvider);
+    return ref.watch(planRepositoryProvider).recentLogs(preferredSlot: slot);
+  },
+);
+
 /// Which planner view is showing: the day, or the week summary.
 ///
 /// The day is the default because daily logging is the loop the app is judged

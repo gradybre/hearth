@@ -3,6 +3,8 @@ library;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/recent_log.dart';
 
 import '../support/app_harness.dart';
 import 'gallery.dart';
@@ -61,7 +63,21 @@ void main() {
         weekEntries: galleryWeek(day),
         shoppingLines: galleryShoppingLinesFor(scene),
         thermostat: scene.thermostats ? galleryThermostat() : null,
-        targets: galleryTargets,
+        targets: scene.withTargets ? galleryTargets : null,
+        favorites: scene.loggingShortcuts ? const <String>{'r-oats'} : const {},
+        recentLogs: scene.loggingShortcuts
+            ? <RecentLog>[
+                RecentLog(
+                  refType: PlanRefType.food,
+                  refId: 'f-yog',
+                  label: 'Greek yogurt, 0%',
+                  servings: 1.7,
+                  lastLoggedAt: day,
+                  timesLogged: 5,
+                  mealSlot: MealSlot.breakfast,
+                ),
+              ]
+            : const <RecentLog>[],
       );
       await pumpFrames(tester, frames: 20);
 

@@ -6,6 +6,34 @@ import 'package:hearth/features/plan/logging_intent.dart';
 void main() {
   final DateTime lastTuesday = DateTime(2026, 9, 1);
 
+  test('defaults follow calendar dates, not elapsed hours', () {
+    final DateTime today = DateTime(2026, 3, 8, 23, 30);
+    expect(
+      LoggingIntent.forMeal(
+        date: DateTime(2026, 3, 9),
+        slot: MealSlot.dinner,
+        today: today,
+      ).eaten,
+      isFalse,
+    );
+    expect(
+      LoggingIntent.forMeal(
+        date: DateTime(2026, 3, 8, 23, 59),
+        slot: MealSlot.dinner,
+        today: today,
+      ).eaten,
+      isTrue,
+    );
+    expect(
+      LoggingIntent.forMeal(
+        date: DateTime(2026, 3, 7),
+        slot: MealSlot.dinner,
+        today: today,
+      ).eaten,
+      isTrue,
+    );
+  });
+
   test('says what is about to happen, and to which meal', () {
     expect(
       LoggingIntent(date: _anyDay, slot: MealSlot.lunch, eaten: true).action,

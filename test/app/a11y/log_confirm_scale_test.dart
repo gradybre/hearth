@@ -81,7 +81,19 @@ void main() {
       expect(tester.takeException(), isNull, reason: 'the picker overflowed');
 
       // On a small phone at the largest text the row is below the fold, so
-      // it has to be brought on screen before it can be tapped.
+      // scroll the picker's single list until it is built before asking to
+      // bring it on screen. The new search/scope header scrolls with the rows.
+      await tester.scrollUntilVisible(
+        find.text('Slow chilli with all the trimmings'),
+        120,
+        scrollable: find
+            .byWidgetPredicate(
+              (Widget widget) =>
+                  widget is Scrollable &&
+                  widget.axisDirection == AxisDirection.down,
+            )
+            .last,
+      );
       await tester.ensureVisible(
         find.text('Slow chilli with all the trimmings').last,
       );
@@ -251,17 +263,22 @@ void main() {
     );
   });
 
-  testWidgets('a planned meal is logged, not updated', (
+  testWidgets('a planned edit saves the plan before offering to log it', (
     WidgetTester tester,
   ) async {
-    // A planned entry exists and has not been logged, so the button whose
-    // whole job is to log it has to say so. "There is an existing entry" and
-    // "it has already been logged" are different questions, and collapsing
-    // them is how this button stopped saying what it does.
+    // Editing a future dinner or adjusting an uneaten portion is a planning
+    // action. Eating remains available, with its destination stated.
     await openExistingEntry(tester, size: const Size(390, 844), scale: 1);
 
-    expect(find.text('Log it'), findsOneWidget);
-    expect(find.text('Update'), findsNothing);
+    expect(
+      find.ancestor(
+        of: find.text('Save planned portion'),
+        matching: find.byType(FilledButton),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Log as eaten · Breakfast · Today'), findsOneWidget);
+    expect(find.text('Update logged portion'), findsNothing);
   });
 }
 
