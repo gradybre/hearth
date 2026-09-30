@@ -248,6 +248,10 @@ belongs to the Nutrition section.
   dinner must not silently record that it was eaten. The open sheet retains
   its original planning or logging intent across midnight, so time passing
   cannot change what its action saves. *(Phase 2: UX-041.)*
+- **Saving commits the typed portion.** The save action reads edited input
+  without requiring keyboard Done first, including assignment across several
+  days. Focusing or saving an untouched rounded display does not change the
+  stored portion or its nutrition basis.
 - **Changing a portion is visible, not a gesture you have to know.** Each
   meal row carries a way in to Edit portion and Remove. Long press stays as a
   shortcut for those who know it, and one tap still logs and unlogs — but a

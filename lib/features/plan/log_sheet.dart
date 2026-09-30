@@ -70,6 +70,8 @@ class _LogSheet extends ConsumerStatefulWidget {
 
 class _LogSheetState extends ConsumerState<_LogSheet> {
   final TextEditingController _search = TextEditingController();
+  final GlobalKey<_PortionStepperState> _portionField =
+      GlobalKey<_PortionStepperState>();
   PlanRefType? _scope;
   bool _allRecents = false;
 
@@ -167,6 +169,10 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     required Map<String, Food> foods,
     required Map<String, Recipe> recipes,
   }) {
+    // Touching a save action does not necessarily blur the field first.
+    // Commit only pending edits before any save resolves the portion; an
+    // untouched rounded display must never replace the stored amount.
+    _portionField.currentState?._commitPendingInput();
     // A meal already logged is corrected against what it was logged as, and
     // its reference is part of that record (spec §4).
     if (_frozenPerServing case final Macros frozen) {
@@ -686,11 +692,6 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     required Map<String, Recipe> recipes,
     PortionUnit? typedIn,
   }) async {
-    // A portion's count and serving ID are inseparable here just as they are
-    // for a single-day plan. A package amount can count a different row from
-    // the food's default; copying only the count would change its nutrition.
-    final ({Macros perServing, double portion, String? servingOptionId}) basis =
-        _basis(foods: foods, recipes: recipes);
     final List<DateTime>? days = await showDayPicker(
       context,
       title: 'Add to which days?',
@@ -698,6 +699,11 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     );
     if (days == null || days.isEmpty || !mounted) return;
 
+    // Resolve the latest portion after the day choice, including any input
+    // committed when the picker took focus. The save boundary also commits
+    // pending input synchronously if focus has not moved yet.
+    final ({Macros perServing, double portion, String? servingOptionId}) basis =
+        _basis(foods: foods, recipes: recipes);
     setState(() => _busy = true);
     try {
       final List<MealPlanEntry> added = await ref
@@ -1012,6 +1018,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
               ),
             ),
           _PortionStepper(
+            key: _portionField,
             servings: count,
             step: unit?.step ?? 0.25,
             basisId: unit?.id,
@@ -1460,6 +1467,7 @@ class _ResolvedPortion extends StatelessWidget {
 
 class _PortionStepper extends StatefulWidget {
   const _PortionStepper({
+    super.key,
     required this.servings,
     required this.onChanged,
     this.step = 0.25,
@@ -1494,6 +1502,7 @@ class _PortionStepperState extends State<_PortionStepper> {
     text: widget.format(widget.servings),
   );
   final FocusNode _focus = FocusNode();
+  bool _hasPendingInput = false;
 
   @override
   void initState() {
@@ -1507,7 +1516,7 @@ class _PortionStepperState extends State<_PortionStepper> {
           extentOffset: _field.text.length,
         );
       } else {
-        _commit();
+        _commitPendingInput();
       }
     });
   }
@@ -1520,6 +1529,7 @@ class _PortionStepperState extends State<_PortionStepper> {
     // it, and half-typed input is not a number to be corrected yet.
     if (!_focus.hasFocus &&
         (widget.servings != old.servings || widget.basisId != old.basisId)) {
+      _hasPendingInput = false;
       _field.text = widget.format(widget.servings);
     }
   }
@@ -1536,7 +1546,9 @@ class _PortionStepperState extends State<_PortionStepper> {
   /// A portion of zero is not a smaller portion, it is a deletion — and this
   /// is not the control that deletes things. Anything unreadable reverts
   /// rather than silently logging a number nobody chose.
-  void _commit() {
+  void _commitPendingInput() {
+    if (!_hasPendingInput) return;
+    _hasPendingInput = false;
     final double? typed = parseAmount(_field.text);
     // Not finite is not a portion either: "1e999" parses to infinity, and
     // infinity is neither caught by `<= 0` nor anything you can eat.
@@ -1552,6 +1564,7 @@ class _PortionStepperState extends State<_PortionStepper> {
     final double next = ((widget.servings + by) * 100).roundToDouble() / 100;
     if (next <= 0) return;
     _focus.unfocus();
+    _hasPendingInput = false;
     _field.text = widget.format(next);
     widget.onChanged(next);
   }
@@ -1589,6 +1602,7 @@ class _PortionStepperState extends State<_PortionStepper> {
               FilteringTextInputFormatter.allow(amountCharacters),
             ],
             textInputAction: TextInputAction.done,
+            onChanged: (_) => _hasPendingInput = true,
             onSubmitted: (_) => _focus.unfocus(),
             decoration: InputDecoration(
               isDense: true,
