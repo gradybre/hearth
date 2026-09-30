@@ -11,7 +11,7 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
 
 | Group | Scope | Approval | Implementation | Automated checks | Fresh-context review | Real-device verification |
 |---|---|---|---|---|---|---|
-| 1 — Daily logging | UX-039, UX-041, UX-053 | Approved 2026-09-30 | Implemented; PR pending | 3,904 passed; analyze clean | Pending | Not performed |
+| 1 — Daily logging | UX-039, UX-041, UX-053 | Approved 2026-09-30 | Implemented in [PR #116](https://github.com/gradybre/hearth/pull/116) | 3,925 passed; analyze clean; 71 render checks passed | Passed after corrections; code candidate `9e50bd1` | Not performed |
 | 2 — Grocery clarity | UX-058, UX-060 | Awaiting decision | Not started | — | — | — |
 
 ## Group 1 — Daily logging
@@ -22,6 +22,14 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
   as a separate action. Today/past repeats retain their quick logging path.
 - Consumed totals remain useful without targets, with honest missing-data
   labels and no invented goal comparisons.
+- Save actions commit typed portions without requiring keyboard Done. An
+  untouched rounded display retains the exact stored portion.
+
+Review corrections preserve an open sheet's intent across midnight and carry
+the selected serving basis through multi-day assignment. Tests cover later
+logging, nutrient coverage, approximate package nutrition and frozen history.
+The coordinating agent reran the full suite and inspected the changed code
+and rendered fixtures after the corrections.
 
 This group does not include historical raw-portion storage (UX-040), target
 carry-forward (UX-052), or the broader Today/Week layout change (UX-087).
