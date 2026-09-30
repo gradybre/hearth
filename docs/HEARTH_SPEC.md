@@ -417,6 +417,18 @@ belongs to the Nutrition section.
   no week, so the list header states what is left rather than a range. The
   date range is a parameter of the build from the plan and lives with it,
   behind Manage list.
+- **Shopping opens on what remains.** Remaining / All switches between the
+  outstanding checklist and the complete list without removing records.
+  Bought counts explicit check-offs; At home counts amounts covered by known
+  on-hand quantities. Other zero-need cases must not imply that something was
+  bought or is in the cupboard. Store groups and manual order survive the
+  filter, including reordering with completed rows hidden. *(Phase 2: UX-058.)*
+- **Add item is the primary shopping action.** Share/export and the existing
+  assistant entry live under a labeled More action. Explanations belong with
+  the action they explain. At large text, controls may move into the scroll
+  content so persistent chrome does not consume the checklist; touch targets
+  and system text scaling remain intact. Opening an export still leads to its
+  existing review before any external handoff. *(Phase 2: UX-058.)*
 - **A source can be taken back off.** Removing a recipe removes its ask from
   every line it contributed to, and lines left asking for nothing go —
   unless they have been ticked or edited, which are decisions about the shop
@@ -461,10 +473,16 @@ belongs to the Nutrition section.
 - **Manual items:** arbitrary non-recipe items can be added to the list (paper towels, coffee) via `is_manual`.
 - **Seasonings are excluded by default.** Spices and salt are bought on their own rhythm, not per recipe; the existing `ingredient_match` "no match needed" rules already identify them. A toggle includes them for the shop where you do need them.
 - **Quantities are editable on the list without touching the recipe.** 1.5 lb of beef becomes 2 lb because that is how beef is sold. An edited line is marked as edited and keeps showing what the recipes called for, so a later rebuild changing the total is visible rather than silent.
+- **Needed minus Have equals Buy.** The amount editor labels a total-needed
+  override as **Total needed**, keeps the original recipe need visible, and
+  shows **Have at home** plus the calculated **Buy** amount. Known package
+  counts accompany the purchase quantity. An unchanged formatted field keeps
+  its exact stored value; mixed or unknown amounts remain explicit, and
+  conversions require existing food/package evidence. *(Phase 2: UX-060.)*
 - **Ordering:** items can be dragged into the order you walk the shop in, and a new list inherits the last one's order — a hand-made order beats an aisle guessed from a name.
-- **Chat:** the list can be edited by asking — add an item, set a quantity, mark something as already had. Operations apply with an undo; nothing leaves the app until an export is tapped.
+- **Chat:** the list can be edited by asking — add an item, set a quantity, mark something as already had. Tapping Ask sends the request and current list to the assistant; the existing flow applies the returned operations with an undo. Sharing with a shop remains a separate reviewed handoff. The missing before/after AI proposal review is recorded as UX-063; moving the entry under More does not implement that separate change.
 - **Store tagging:** each food can carry a store tag (Costco / Publix / Walmart); tagging is flexible (single store or preference).
-- **Pantry:** per line, how much you already have — 2 lb needed against 1 lb in the freezer buys 1 lb. The whole-line check-off is the same idea at full strength: ticking sets on-hand to the full amount. Still **not a maintained inventory** — on-hand belongs to a list, not to a fridge, and does not carry to the next list, because Hearth cannot see what you ate this week and a stale "you have 1 lb" is worse than asking again. *(Quantity-level subtraction was deferred in v0.8 and lifted at Brendan's request during phase 4.)*
+- **Pantry:** per line, how much you already have — 2 lb needed against 1 lb in the freezer buys 1 lb. An explicit whole-line check-off records Bought; known on-hand coverage is shown separately as At home. Still **not a maintained inventory** — on-hand belongs to a list, not to a fridge, and does not carry to the next list, because Hearth cannot see what you ate this week and a stale "you have 1 lb" is worse than asking again. *(Quantity-level subtraction was deferred in v0.8 and lifted at Brendan's request during phase 4; bought versus on-hand presentation clarified in Phase 2.)*
 - **Grouping:** list groups by store; within a store, by the order you put the items in (see Ordering). Aisle/category grouping was considered and declined — an aisle guessed from a food's name is wrong often and correctable never.
 - **Big user-review touchpoint:** the list is fully editable before any export — add/remove, adjust quantities, check off on-hand items.
 - **Walmart export (realistic v1):** *Amended v1.1 — the original text said Walmart has no public consumer cart API, which is not what the adapter found.* Walmart **does** publish an open add-to-cart URL (`/sc/cart/addToCart?items=`), available without partner onboarding. What it will not accept is a name: it wants Walmart **item ids**, and resolving "ground beef" to one needs the catalog API, which *is* partner-gated. So v1 export is a search link per item plus the list as text, until a food can carry an item id of its own — at which point the cart URL becomes reachable without a screen change. Built behind a swappable adapter interface so that, or Instacart's cart API, can replace it. **Nothing is ever sent by the adapter**: it builds links and text, and opening or copying is a separate deliberate tap (rule 4).

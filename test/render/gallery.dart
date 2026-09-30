@@ -158,8 +158,31 @@ List<Food> galleryFoodsFor(Scene scene) => <Food>[
 /// [galleryFoodsFor] keeps the long menu to itself: a list already on the
 /// phone is exactly what the `shopping` scene is a picture of *not* having,
 /// and the two states have to be able to stand beside each other.
-List<ShoppingLine> galleryShoppingLinesFor(Scene scene) =>
-    scene.shoppingList ? galleryShoppingLines() : const <ShoppingLine>[];
+List<ShoppingLine> galleryShoppingLinesFor(Scene scene) {
+  if (scene.shoppingResolved) {
+    return <ShoppingLine>[
+      _line(
+        'Milk',
+        order: 0,
+        planned: <Quantity>[Quantity.of(1, Units.litre)],
+        checked: true,
+      ),
+      _line(
+        'Rice',
+        order: 1,
+        planned: <Quantity>[Quantity.of(500, Units.gram)],
+        onHand: Quantity.of(500, Units.gram),
+      ),
+      _line(
+        'Coffee',
+        order: 2,
+        planned: <Quantity>[Quantity.of(1, Units.package)],
+        wanted: Quantity.of(0, Units.package),
+      ),
+    ];
+  }
+  return scene.shoppingList ? galleryShoppingLines() : const <ShoppingLine>[];
+}
 
 /// The provider overrides a scene needs, in the untyped shape `pumpHearthApp`
 /// takes — riverpod 3 exports the methods that make an `Override` and not the
@@ -206,7 +229,9 @@ Future<void> pressLabel(WidgetTester tester, String label) async {
     final Finder scrollables = inFront(
       find.byWidgetPredicate(
         (Widget widget) =>
-            widget is Scrollable && widget.axisDirection == AxisDirection.down,
+            widget is Scrollable &&
+            widget.physics?.allowUserScrolling != false &&
+            widget.axisDirection == AxisDirection.down,
       ),
     );
     if (scrollables.evaluate().isEmpty) {
@@ -333,6 +358,7 @@ class Scene {
     this.taps = const <String>[],
     this.longMenu = false,
     this.shoppingList = false,
+    this.shoppingResolved = false,
     this.thermostats = false,
     this.withTargets = true,
     this.loggingShortcuts = false,
@@ -390,6 +416,10 @@ class Scene {
   /// opposite: it is the empty state, and a list seeded into every scene would
   /// quietly delete that picture.
   final bool shoppingList;
+
+  /// A nonempty list with nothing left: bought, at home and not needed are
+  /// three different reasons, and none should look like a new empty list.
+  final bool shoppingResolved;
 
   /// Intake is useful before somebody chooses goals as well as afterwards.
   final bool withTargets;
@@ -1463,12 +1493,23 @@ const List<Scene> scenes = <Scene>[
   // And the sheet that is now the primary way a list gets filled. Reached by
   // pressing what a person presses: it is a modal, so no launch target opens
   // it, and it had no picture at all.
-  Scene(name: 'shopping-add', taps: <String>['Shopping', 'Add to list']),
+  Scene(name: 'shopping-add', taps: <String>['Shopping', 'Add item']),
   // The same tab with a shop's worth of list on it, which is the state the
   // screen is actually used in and the one nothing had a picture of. The
   // empty scene above cannot show the complaint: with no lines, the setup
   // card sitting above them is the only thing there is.
   Scene(name: 'shopping-list', shoppingList: true, taps: <String>['Shopping']),
+  Scene(
+    name: 'shopping-list-dark',
+    shoppingList: true,
+    brightness: Brightness.dark,
+    taps: <String>['Shopping'],
+  ),
+  Scene(
+    name: 'shopping-list-all',
+    shoppingList: true,
+    taps: <String>['Shopping', 'All'],
+  ),
   // A small phone at double text, where the setup card's cost is at its
   // worst: it grows with the type and the list starts below it either way.
   Scene(
@@ -1485,6 +1526,61 @@ const List<Scene> scenes = <Scene>[
     shoppingList: true,
     size: Size(1280, 900),
     taps: <String>['Shopping'],
+  ),
+  Scene(
+    name: 'shopping-list-3x',
+    shoppingList: true,
+    size: Size(320, 568),
+    textScale: 3,
+    taps: <String>['Shopping'],
+  ),
+  Scene(
+    name: 'shopping-more',
+    shoppingList: true,
+    taps: <String>['Shopping', 'More'],
+  ),
+  Scene(
+    name: 'shopping-more-3x',
+    shoppingList: true,
+    size: Size(320, 568),
+    textScale: 3,
+    taps: <String>['Shopping', 'More'],
+  ),
+  Scene(
+    name: 'shopping-help-3x',
+    shoppingList: true,
+    size: Size(320, 568),
+    textScale: 3,
+    taps: <String>['Shopping', 'More', 'List help'],
+  ),
+  Scene(
+    name: 'shopping-amount',
+    shoppingList: true,
+    taps: <String>['Shopping', '2 lb'],
+  ),
+  Scene(
+    name: 'shopping-amount-3x',
+    shoppingList: true,
+    size: Size(320, 568),
+    textScale: 3,
+    taps: <String>['Shopping', '2 lb'],
+  ),
+  Scene(
+    name: 'shopping-resolved',
+    shoppingResolved: true,
+    taps: <String>['Shopping'],
+  ),
+  Scene(
+    name: 'shopping-resolved-3x',
+    shoppingResolved: true,
+    size: Size(320, 568),
+    textScale: 3,
+    taps: <String>['Shopping'],
+  ),
+  Scene(
+    name: 'shopping-resolved-all',
+    shoppingResolved: true,
+    taps: <String>['Shopping', 'All'],
   ),
   // The sheet every logged meal goes through, in both of its arrangements.
   // Reached by pressing what a person presses, because it is a modal over the

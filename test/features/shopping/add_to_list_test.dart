@@ -81,7 +81,7 @@ void main() {
   /// Opens the add sheet, from whichever shape the screen is in — the empty
   /// card and the action bar over a list both carry it.
   Future<void> openAdd(WidgetTester tester) async {
-    await tester.tap(find.text('Add to list').last);
+    await tester.tap(find.text('Add item').last);
     await pumpFrames(tester, frames: 16);
   }
 
@@ -97,6 +97,8 @@ void main() {
   }
 
   Future<void> manage(WidgetTester tester) async {
+    await tester.tap(find.text('More'));
+    await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Manage list'));
     await pumpFrames(tester, frames: 16);
   }
@@ -108,7 +110,7 @@ void main() {
     // belong to the build from the plan, which is one of the two ways in.
     await openShopping(tester);
 
-    expect(find.text('Add to list'), findsOneWidget);
+    expect(find.text('Add item'), findsOneWidget);
     expect(find.text('Build from the plan'), findsOneWidget);
     expect(
       find.text('Nothing on the list yet.'),
@@ -314,19 +316,18 @@ void main() {
       await tester.tapAt(const Offset(200, 40));
       await pumpFrames(tester, frames: 20);
 
+      await tester.tap(find.text('All'));
+      await pumpFrames(tester);
       expect(find.text('ground beef'), findsOneWidget);
       expect(find.text('kidney beans'), findsNothing);
     });
   });
 
   group('clearing the list (spec §5.7)', () {
-    /// Clear lives at the end of the list, past however many lines there are.
+    /// Clear lives under More, away from the frequent Add item action.
     Future<void> reachClear(WidgetTester tester) async {
-      await tester.scrollUntilVisible(
-        find.text('Clear the list'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
+      await tester.tap(find.text('More'));
+      await pumpFrames(tester, frames: 12);
       await tester.tap(find.text('Clear the list'));
       await pumpFrames(tester, frames: 20);
     }
@@ -342,11 +343,8 @@ void main() {
     testWidgets('is reachable without opening Manage', (
       WidgetTester tester,
     ) async {
-      // Behind Manage it is two taps from a screen you are holding in a shop
-      // with a finished list in front of you. On the page itself, but at the
-      // *end* of it: the header is already tight at twice the text, and the
-      // action bar is what a thumb lands on while shopping — a destructive
-      // control does not belong in either.
+      // More exposes clearing without entering the plan-build setup. The
+      // destructive confirmation stays separate from the main shopping bar.
       await fill(tester);
       await reachClear(tester);
 

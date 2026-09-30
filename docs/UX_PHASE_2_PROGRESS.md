@@ -11,8 +11,9 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
 
 | Group | Scope | Approval | Implementation | Automated checks | Fresh-context review | Real-device verification |
 |---|---|---|---|---|---|---|
-| 1 — Daily logging | UX-039, UX-041, UX-053 | Approved 2026-09-30 | Implemented in [PR #116](https://github.com/gradybre/hearth/pull/116) | 3,925 passed; analyze clean; 71 render checks passed | Passed after corrections; code candidate `9e50bd1` | Not performed |
-| 2 — Grocery clarity | UX-058, UX-060 | Awaiting decision | Not started | — | — | — |
+| 1 — Daily logging | UX-039, UX-041, UX-053 | Approved 2026-09-30 | Merged in [PR #116](https://github.com/gradybre/hearth/pull/116) | 3,925 passed; analyze clean; 71 render checks and all CI passed | Passed after corrections; code candidate `9e50bd1` | Not performed |
+| 2 — Grocery clarity | UX-058, UX-060 | Approved 2026-09-30 | Implemented; review pending | 3,974 passed; analyze clean; 85 render checks passed | Pending | Not performed |
+| 3 — Recipe actions and nutrition | UX-001; recipe-detail scope of UX-010 | Awaiting decision | Not started | — | — | — |
 
 ## Group 1 — Daily logging
 
@@ -40,6 +41,39 @@ two-device sync or installed-build acceptance. Those remain distinct checks.
 
 ## Group 2 — Grocery clarity
 
-Proposed: Remaining/All views, separate Bought/At home counts, more room for the
+Approved: Remaining/All views, separate Bought/At home counts, more room for the
 checklist with Add item prominent, and explicit Needed − Have = Buy quantities
-with known package counts. No implementation is authorized until approved.
+with known package counts. Sharing/export and the existing AI entry move under
+a labeled More action. No migration, additional AI request or new dependency.
+
+Filtered reordering retains hidden rows, and a pointer already on the list
+holds its displayed rows until release. Bought, At home and zero-total Not
+needed remain distinct. The quantity preview retains original needs and
+unchanged stored precision, and only existing conversion evidence supplies
+package counts.
+
+Regression checks caught and corrected footer overlap with Undo, contrast on
+the selected list view, unticking cross-unit on-hand coverage, and dismissal
+of an assistant sheet with a request in flight. The coordinating agent reran
+the complete suite and inspected light, dark, desktop and enlarged-text
+rendered fixtures. New journeys also reach the options, help, amount editor,
+export review and assistant controls; they do not perform real AI requests or
+external handoffs. Native-device acceptance remains unperformed.
+
+This group does not include shopping-trip lifecycle (UX-057), realtime/conflict
+changes (UX-059), or the AI proposal/review protocol (UX-063). The existing AI
+chat's missing before/after proposal review remains the separately identified
+UX-063 work; relocating its entry does not complete that recommendation.
+
+## Group 3 — Recipe actions and nutrition
+
+Proposed: Plan and Shop directly from recipe detail, with a reviewed personal
+date/meal/portion and a reviewed shared shopping quantity respectively. Plan
+defaults to Today, Dinner and one personal serving, with Undo. Shop inherits
+the displayed cooking yield and offers View list after adding. Recipe detail
+also gains Per serving / Whole dish nutrition, retaining coverage labels and
+large-text accessibility. No implementation is authorized until approved.
+
+The nutrition portion of this group is limited to recipe detail; wording
+parity in the editor, cook completion and log confirmation remains later
+scope within UX-010.

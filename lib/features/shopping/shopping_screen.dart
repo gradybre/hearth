@@ -25,6 +25,7 @@ import '../../domain/shopping/shopping_list_builder.dart';
 import '../../domain/shopping/shopping_sources.dart';
 import '../../domain/units/quantity.dart';
 import 'add_to_list_sheet.dart';
+import 'grocery_clarity_view.dart';
 import 'shopping_amount_sheet.dart';
 import 'shopping_chat_controller.dart';
 import 'shopping_export_sheet.dart';
@@ -32,8 +33,8 @@ import 'shopping_export_sheet.dart';
 /// The shopping list (spec §5.7).
 ///
 /// Filled by adding recipes and foods to it, and owned from there on by
-/// whoever is shopping: everything here is editable, and nothing leaves the
-/// app until an export is deliberately tapped (rule 4).
+/// whoever is shopping. External shopping handoffs open the export review
+/// before the user chooses where to send the list (rule 4).
 ///
 /// Building the whole thing from a stretch of the plan is still here, and it
 /// is still the fastest way to shop for a planned week — but it is one way to
@@ -53,17 +54,19 @@ class ShoppingScreen extends ConsumerWidget {
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: SafeArea(
-        child: ReadingColumn(
-          child: list.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (Object e, StackTrace s) =>
-                Center(child: Text('The list could not be read.\n$e')),
-            data: (ShoppingListSnapshot? snapshot) => _Body(
-              lines: snapshot?.lines ?? const <ShoppingLine>[],
-              gutter: gutter,
+    return ScaffoldMessenger(
+      child: ColoredBox(
+        color: colors.background,
+        child: SafeArea(
+          child: ReadingColumn(
+            child: list.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (Object e, StackTrace s) =>
+                  Center(child: Text('The list could not be read.\n$e')),
+              data: (ShoppingListSnapshot? snapshot) => _Body(
+                lines: snapshot?.lines ?? const <ShoppingLine>[],
+                gutter: gutter,
+              ),
             ),
           ),
         ),
@@ -72,11 +75,46 @@ class ShoppingScreen extends ConsumerWidget {
   }
 }
 
-class _Body extends ConsumerWidget {
+class _Body extends ConsumerStatefulWidget {
   const _Body({required this.lines, required this.gutter});
 
   final List<ShoppingLine> lines;
   final double gutter;
+
+  @override
+  ConsumerState<_Body> createState() => _BodyState();
+}
+
+class _BodyState extends ConsumerState<_Body> {
+  List<ShoppingLine> get lines => widget.lines;
+  double get gutter => widget.gutter;
+  bool _showAll = false;
+  final Set<int> _pointers = <int>{};
+  List<ShoppingLine>? _heldLines;
+  Map<String, Food>? _heldFoods;
+  List<String>? _dragKeys;
+  int? _dragFrom;
+
+  void _hold() {
+    _heldLines ??= lines;
+    _heldFoods ??= <String, Food>{
+      for (final Food food
+          in ref.read(foodLibraryProvider).value ?? const <Food>[])
+        food.id: food,
+    };
+  }
+
+  void _release() {
+    // Pointer-up precedes the tap callback. Reconcile after that event so
+    // neither a partner update nor our own tick moves a row under a finger.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _pointers.isNotEmpty || _dragKeys != null) return;
+      setState(() {
+        _heldLines = null;
+        _heldFoods = null;
+      });
+    });
+  }
 
   /// Rebuilds from the plan, merging over what is already here.
   Future<void> _rebuild(BuildContext context, WidgetRef ref) async {
@@ -120,14 +158,36 @@ class _Body extends ConsumerWidget {
   ];
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Grouped by store, untagged last. Most foods carry no store tag yet, so
-    // a long "Anywhere" group at the top would bury the shops that are
-    // actually organised.
+  Widget build(BuildContext context) {
+    // The assistant used to remain mounted below the list. Keep its session
+    // alive while this screen is open so dismissing the new sheet during a
+    // request neither discards the answer nor disposes the controller's ref.
+    if (ref.watch(shoppingAssistantProvider) != null) {
+      ref.watch(shoppingChatProvider);
+    }
+    final Map<String, Food> currentFoods = <String, Food>{
+      for (final Food food
+          in ref.watch(foodLibraryProvider).value ?? const <Food>[])
+        food.id: food,
+    };
+    final Map<String, Food> foods = _heldFoods ?? currentFoods;
+    final List<ShoppingLine> displayed = _heldLines ?? lines;
+    final Map<GroceryLineState, int> counts = <GroceryLineState, int>{
+      for (final GroceryLineState state in GroceryLineState.values) state: 0,
+    };
     final Map<String, List<ShoppingLine>> groups =
         <String, List<ShoppingLine>>{};
-    for (final ShoppingLine line in lines) {
-      groups.putIfAbsent(line.storeTag ?? '', () => <ShoppingLine>[]).add(line);
+    for (final ShoppingLine line in displayed) {
+      final GroceryLineState state = groceryLineState(
+        line,
+        food: foods[line.foodId],
+      );
+      counts[state] = counts[state]! + 1;
+      if (_showAll || state == GroceryLineState.remaining) {
+        groups
+            .putIfAbsent(line.storeTag ?? '', () => <ShoppingLine>[])
+            .add(line);
+      }
     }
     final List<String> stores = groups.keys.toList()
       ..sort((String a, String b) {
@@ -136,150 +196,214 @@ class _Body extends ConsumerWidget {
         return a.compareTo(b);
       });
 
-    // Read once for the whole list rather than per line. The whole food is
-    // kept rather than just its pack size: how a total reads, whether a cup
-    // of it can be counted in jars, and what a cupboard amount comes off,
-    // are all answered by the matched food (spec R5).
-    final Map<String, Food> foods = <String, Food>{
-      for (final Food food
-          in ref.watch(foodLibraryProvider).value ?? const <Food>[])
-        food.id: food,
-    };
-
-    final int inBasket = lines
-        .where(
-          (ShoppingLine l) => ShoppingLineResolver.resolve(
-            line: l,
-            food: foods[l.foodId],
-          ).isChecked,
-        )
-        .length;
-
-    return Column(
-      children: <Widget>[
-        Expanded(
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, gutter),
-            children: <Widget>[
-              // An empty list is a setup task and a full one is not, so the two
-              // states are two shapes: an empty list leads with the two ways
-              // to fill it, and a list that exists keeps them out of the way
-              // of the thing you are holding the phone for (§6.2.5, §7.7).
-              // The card first and the words under it, which reads backwards
-              // and is right: at three times the text on a phone a paragraph
-              // above the buttons put the second of them 986 points down a
-              // 844-point screen, where nothing could reach it. Dynamic type
-              // is honoured, not capped, so what gives is the explanation's
-              // claim to the top (spec §6.3).
-              if (lines.isEmpty) ...<Widget>[
-                _StartCard(
-                  onAdd: () => _add(context, ref),
-                  onBuild: () => _manage(context, ref),
-                ),
-                const SizedBox(height: HearthSpacing.lg),
-                const _Empty(),
-              ] else ...<Widget>[
-                _ListHeader(
-                  inBasket: inBasket,
-                  total: lines.length,
-                  onManage: () => _manage(context, ref),
-                ),
-                const SizedBox(height: HearthSpacing.lg),
-                for (final String store in stores) ...<Widget>[
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
-                    child: Text(
-                      store.isEmpty ? 'Anywhere' : store,
-                      style: context.text.sectionHeader,
-                    ),
-                  ),
-                  _StoreGroup(
-                    lines: groups[store]!,
-                    foods: foods,
-                    onReorder: (int from, int to) =>
-                        _save(ref, _reordered(store, groups, from, to)),
-                    onTick: (ShoppingLine line, bool value) =>
-                        _save(ref, _replacing(line.ticked(value))),
-                    onEdit: (ShoppingLine line) =>
-                        _edit(context, ref, line, foods[line.foodId]),
-                    onRemove: (ShoppingLine line) => _remove(ref, line),
-                    onRestore: (ShoppingLine line) => _restore(ref, line),
+    final Widget actions = _ActionBar(
+      onAdd: () => _add(context, ref),
+      onMore: () => _more(context),
+    );
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints box) {
+        // Keep actual groceries in the initial viewport. At larger text or
+        // short heights the same actions flow with the list and can grow.
+        final bool inlineActions =
+            MediaQuery.textScalerOf(context).scale(14) > 21 ||
+            box.maxHeight < 360;
+        return Listener(
+          onPointerDown: (PointerDownEvent event) {
+            _pointers.add(event.pointer);
+            _hold();
+          },
+          onPointerUp: (PointerUpEvent event) {
+            _pointers.remove(event.pointer);
+            _release();
+          },
+          onPointerCancel: (PointerCancelEvent event) {
+            _pointers.remove(event.pointer);
+            _dragKeys = null;
+            _release();
+          },
+          child: Scaffold(
+            backgroundColor: context.colors.background,
+            body: ListView(
+              key: const ValueKey<String>('grocery-list-scroll'),
+              padding: EdgeInsets.all(gutter),
+              children: <Widget>[
+                if (displayed.isEmpty) ...<Widget>[
+                  _StartCard(
+                    onAdd: () => _add(context, ref),
+                    onBuild: () => _manage(context, ref),
+                    onMore: () => _more(context),
                   ),
                   const SizedBox(height: HearthSpacing.lg),
+                  const _Empty(),
+                ] else ...<Widget>[
+                  _ListHeader(
+                    showAll: _showAll,
+                    remaining: counts[GroceryLineState.remaining]!,
+                    total: displayed.length,
+                    onChanged: (bool value) => setState(() => _showAll = value),
+                  ),
+                  const SizedBox(height: HearthSpacing.sm),
+                  if (stores.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: HearthSpacing.lg,
+                      ),
+                      child: Text(
+                        'Nothing left to buy.',
+                        style: context.text.sectionHeader,
+                      ),
+                    ),
+                  for (final String store in stores) ...<Widget>[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
+                      child: Text(
+                        store.isEmpty ? 'Anywhere' : store,
+                        style: context.text.sectionHeader,
+                      ),
+                    ),
+                    _StoreGroup(
+                      lines: groups[store]!,
+                      foods: foods,
+                      onReorderStart: (int from) {
+                        _hold();
+                        _dragFrom = from;
+                        _dragKeys = groups[store]!
+                            .map((ShoppingLine line) => line.key)
+                            .toList();
+                      },
+                      onReorderEnd: (int to) {
+                        if (to == _dragFrom || to == (_dragFrom ?? -2) + 1) {
+                          _dragKeys = null;
+                          _release();
+                        }
+                      },
+                      onReorder: (int from, int to) =>
+                          _reorder(store, groups[store]!, from, to),
+                      onTick: (ShoppingLine line, bool value) =>
+                          _tick(line, value, foods[line.foodId]),
+                      onEdit: (ShoppingLine line) =>
+                          _edit(context, ref, line, foods[line.foodId]),
+                      onRemove: (ShoppingLine line) => _remove(ref, line),
+                      onRestore: (ShoppingLine line) => _restore(ref, line),
+                    ),
+                    const SizedBox(height: HearthSpacing.md),
+                  ],
+                  _ResolvedCounts(counts: counts),
+                  if (inlineActions) ...<Widget>[
+                    const SizedBox(height: HearthSpacing.md),
+                    actions,
+                  ],
                 ],
               ],
-              // At the end of the list, not in the header and not on the
-              // action bar. The header is already one line too tight at twice
-              // the text, and the bar is what a thumb lands on while shopping
-              // — neither is a place for something that empties the list. Down
-              // here it is where you arrive when you are finished with it,
-              // which is when it is wanted.
-              if (lines.isNotEmpty) ...<Widget>[
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: () => _clear(context, ref),
-                    icon: const Icon(Icons.delete_sweep_outlined, size: 18),
-                    label: const Text('Clear the list'),
-                  ),
-                ),
-                const SizedBox(height: HearthSpacing.lg),
-              ],
-              // Last, so a growing conversation never pushes the list about.
-              if (ref.watch(shoppingAssistantProvider) != null) ...<Widget>[
-                _ChatCard(
-                  lines: lines,
-                  onApply: (List<ShoppingLine> next) => _save(ref, next),
-                ),
-                const SizedBox(height: HearthSpacing.lg),
-              ],
-            ],
-          ),
-        ),
-        // Off the bottom of the scroll and onto a bar. It sat below every
-        // line — off screen in all three renders of a sixteen-line list —
-        // and it is the one control here that sends anything anywhere, so
-        // the words that say so travel with it (rule 4).
-        if (lines.isNotEmpty)
-          _ActionBar(
-            onAdd: () => _add(context, ref),
-            onExport: () => showShoppingExportSheet(
-              context,
-              lines,
-              // Passed in, so the sheet and the adapter stay free of
-              // Riverpod and of anything that could reach a network. The
-              // same map the lines were drawn from, so the copy in
-              // somebody's hand cannot disagree with the screen it came from.
-              foods: foods,
             ),
+            bottomNavigationBar: displayed.isNotEmpty && !inlineActions
+                ? actions
+                : null,
           ),
-      ],
+        );
+      },
     );
   }
 
-  /// The list with one store's group put back in a new order.
-  ///
-  /// Only that group's sort orders change; the other stores keep theirs, so
-  /// dragging in one shop cannot rearrange another.
-  List<ShoppingLine> _reordered(
+  Future<void> _tick(ShoppingLine line, bool value, Food? food) async {
+    // The resolver may have established coverage through a known package
+    // relationship. Unticking that row must clear the stored cupboard fact,
+    // too, even when its stored unit differs from the needed unit.
+    final ShoppingLine changed =
+        !value &&
+            groceryLineState(line.copyWith(checked: false), food: food) ==
+                GroceryLineState.atHome
+        ? line.copyWith(checked: false, clearOnHand: true)
+        : line.ticked(value);
+    await _save(ref, _replacing(changed));
+  }
+
+  Future<void> _reorder(
     String store,
-    Map<String, List<ShoppingLine>> groups,
+    List<ShoppingLine> visible,
     int from,
     int to,
-  ) {
-    final List<ShoppingLine> group = <ShoppingLine>[...groups[store]!];
-    group.insert(to, group.removeAt(from));
-
-    final Map<String, int> order = <String, int>{
-      for (int i = 0; i < group.length; i++) group[i].key: i,
-    };
-    return <ShoppingLine>[
-      for (final ShoppingLine line in lines)
-        if (order[line.key] case final int position)
-          line.copyWith(sortOrder: position)
-        else
-          line,
+  ) async {
+    final List<String> order = <String>[
+      ...?_dragKeys,
+      if (_dragKeys == null) ...visible.map((ShoppingLine line) => line.key),
     ];
+    order.insert(to, order.removeAt(from));
+    final ShoppingRepository repository = ref.read(shoppingRepositoryProvider);
+    final List<ShoppingLine> now =
+        (await repository.current())?.lines ?? const <ShoppingLine>[];
+    await _save(
+      ref,
+      reorderGroceryLines(lines: now, store: store, visibleOrder: order),
+    );
+    _dragKeys = null;
+    _release();
+  }
+
+  Future<void> _more(BuildContext context) async {
+    final _MoreAction? action = await showModalBottomSheet<_MoreAction>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.colors.background,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+      ),
+      builder: (BuildContext sheet) => _MoreSheet(
+        hasItems: lines.isNotEmpty,
+        hasAssistant: ref.read(shoppingAssistantProvider) != null,
+      ),
+    );
+    if (!context.mounted) return;
+    switch (action) {
+      case _MoreAction.export:
+        await showShoppingExportSheet(
+          context,
+          lines,
+          foods: <String, Food>{
+            for (final Food food
+                in ref.read(foodLibraryProvider).value ?? const <Food>[])
+              food.id: food,
+          },
+        );
+      case _MoreAction.manage:
+        await _manage(context, ref);
+      case _MoreAction.clear:
+        await _clear(context, ref);
+      case _MoreAction.assistant:
+        await showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: context.colors.background,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+          ),
+          builder: (BuildContext sheet) => SafeArea(
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(sheet).bottom,
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(HearthSpacing.lg),
+                child: Consumer(
+                  builder:
+                      (
+                        BuildContext context,
+                        WidgetRef sheetRef,
+                        Widget? child,
+                      ) => _ChatCard(
+                        lines:
+                            sheetRef.watch(shoppingListProvider).value?.lines ??
+                            const <ShoppingLine>[],
+                        onApply: (List<ShoppingLine> next) => _save(ref, next),
+                      ),
+                ),
+              ),
+            ),
+          ),
+        );
+      case null:
+        break;
+    }
   }
 
   /// Takes a line off the list.
@@ -501,9 +625,7 @@ class _Body extends ConsumerWidget {
 
 /// The list as a whole: what put it there, and how to build it from the plan.
 ///
-/// Clearing it is not here. It was, and having it in two places meant two
-/// answers to one act; it lives at the end of the list instead, where you
-/// arrive when you are finished with it.
+/// Clearing lives under More, separate from these source and build controls.
 class _ManageSheet extends ConsumerWidget {
   const _ManageSheet({required this.onRebuild, required this.onRemoveSource});
 
@@ -698,148 +820,191 @@ class _SourceRow extends StatelessWidget {
   }
 }
 
-/// The list's own header: how much of it is left.
-///
-/// The range card used to sit here — 244 points of a 605-point viewport on a
-/// phone, and 398 of 401 at twice the text, where not one line of the list
-/// was on screen. It shrank to a line of dates beside the count, and now it
-/// is gone entirely: a list filled by adding recipes to it does not cover a
-/// stretch of days, so a date range printed over it was describing the last
-/// build rather than the list. The dates moved to the one control they are
-/// still true of (review §6.2.5).
+/// Only the active view and its count precede the groceries.
 class _ListHeader extends StatelessWidget {
   const _ListHeader({
-    required this.inBasket,
+    required this.showAll,
+    required this.remaining,
     required this.total,
-    required this.onManage,
+    required this.onChanged,
   });
-
-  /// How many are already in the basket, and how many there are altogether.
-  final int inBasket;
+  final bool showAll;
+  final int remaining;
   final int total;
-
-  final VoidCallback onManage;
+  final ValueChanged<bool> onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    // No "Shopping" title. The tab underneath says Shopping and the section
-    // bar above says Nutrition; a third of the same word is the "too many
-    // headings of similar strength" §6.2.1 asks to be rid of. It also cost
-    // the whole viewport: at twice the text on a small phone the title, the
-    // button and the line together were taller than the 303 points the list
-    // had, so the list built its header and nothing else.
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: <Widget>[
-        Expanded(
-          child: Text(
-            '$total ${total == 1 ? 'item' : 'items'}'
-            '${inBasket == 0 ? '' : ' · $inBasket in the basket'}',
-            // One line. At twice the text on a 320pt phone this wrapped to
-            // five lines when it still carried the dates, and a confirmatory
-            // line that takes a third of the screen is the problem this
-            // header replaced. Truncated is the right failure for it.
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: context.text.metadata.copyWith(color: colors.textMuted),
-          ),
-        ),
-        const SizedBox(width: HearthSpacing.sm),
-        // Labelled, not an icon: what is behind it is what is on the list,
-        // a date range, a switch, a build and a clear, and no glyph says
-        // that (spec §6.3).
-        TextButton.icon(
-          onPressed: onManage,
-          icon: const Icon(Icons.tune, size: 18),
-          label: const Text('Manage list'),
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      Wrap(
+        spacing: HearthSpacing.sm,
+        runSpacing: HearthSpacing.xs,
+        children: <Widget>[
+          for (final bool all in <bool>[false, true])
+            Semantics(
+              selected: showAll == all,
+              child: TextButton(
+                onPressed: () => onChanged(all),
+                style: TextButton.styleFrom(
+                  foregroundColor: showAll == all
+                      ? context.colors.textPrimary
+                      : null,
+                  backgroundColor: showAll == all
+                      ? context.colors.surfaceSunken
+                      : null,
+                  side: showAll == all
+                      ? BorderSide(color: context.colors.accent)
+                      : null,
+                ),
+                child: Text(all ? 'All' : 'Remaining'),
+              ),
+            ),
+        ],
+      ),
+      Text(
+        showAll
+            ? '$total ${total == 1 ? 'item' : 'items'}'
+            : '$remaining left to buy',
+        style: context.text.metadata.copyWith(color: context.colors.textMuted),
+      ),
+    ],
+  );
 }
 
-/// Add and export, always reachable.
-class _ActionBar extends StatelessWidget {
-  const _ActionBar({required this.onAdd, required this.onExport});
-
-  final VoidCallback onAdd;
-  final VoidCallback onExport;
+class _ResolvedCounts extends StatelessWidget {
+  const _ResolvedCounts({required this.counts});
+  final Map<GroceryLineState, int> counts;
 
   @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colors.surfaceElevated,
-        border: Border(top: BorderSide(color: colors.outline)),
+  Widget build(BuildContext context) => Wrap(
+    spacing: HearthSpacing.lg,
+    runSpacing: HearthSpacing.xs,
+    children: <Widget>[
+      Text(
+        'Bought ${counts[GroceryLineState.bought]}',
+        style: context.text.metadata,
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.all(HearthSpacing.md),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+      Text(
+        'At home ${counts[GroceryLineState.atHome]}',
+        style: context.text.metadata,
+      ),
+      if (counts[GroceryLineState.notNeeded]! > 0)
+        Text(
+          'Not needed ${counts[GroceryLineState.notNeeded]}',
+          style: context.text.metadata,
+        ),
+    ],
+  );
+}
+
+/// The frequent action stays at thumb height when there is room.
+class _ActionBar extends StatelessWidget {
+  const _ActionBar({required this.onAdd, required this.onMore});
+  final VoidCallback onAdd;
+  final VoidCallback onMore;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: context.colors.surfaceElevated,
+      border: Border(top: BorderSide(color: context.colors.outline)),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(HearthSpacing.sm),
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints box) {
+          final Widget add = FilledButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Add item'),
+          );
+          final Widget more = OutlinedButton(
+            onPressed: onMore,
+            style: OutlinedButton.styleFrom(minimumSize: const Size(44, 44)),
+            child: const Text('More'),
+          );
+          if (box.maxWidth < MediaQuery.textScalerOf(context).scale(14) * 16) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                add,
+                const SizedBox(height: HearthSpacing.xs),
+                more,
+              ],
+            );
+          }
+          return Row(
             children: <Widget>[
-              // Side by side where they fit; stacked where they do not. At
-              // twice the text on a 320pt phone two buttons in a row wrap
-              // their labels onto three lines each, and the bar then takes
-              // the height the list needed (spec §6.3).
-              LayoutBuilder(
-                builder: (BuildContext context, BoxConstraints box) {
-                  // Filled, and first where they stack: adding is what fills
-                  // a list and exporting is what finishes one, so the one you
-                  // press many times a week outranks the one you press at the
-                  // door (spec §5.7, as amended).
-                  final Widget add = FilledButton.icon(
-                    onPressed: onAdd,
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Add to list'),
-                  );
-                  final Widget export = OutlinedButton.icon(
-                    onPressed: onExport,
-                    icon: const Icon(Icons.ios_share, size: 18),
-                    // What the destination actually opens. "Take it
-                    // shopping" named a feeling rather than an action.
-                    label: const Text('Share or export'),
-                  );
-                  final double scaled = MediaQuery.textScalerOf(context)
-                      .scale(14);
-                  if (box.maxWidth >= scaled * 22) {
-                    return Row(
-                      children: <Widget>[
-                        Expanded(child: add),
-                        const SizedBox(width: HearthSpacing.sm),
-                        Expanded(child: export),
-                      ],
-                    );
-                  }
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      add,
-                      const SizedBox(height: HearthSpacing.xs),
-                      export,
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: HearthSpacing.xs),
+              Expanded(child: add),
+              const SizedBox(width: HearthSpacing.sm),
+              more,
+            ],
+          );
+        },
+      ),
+    ),
+  );
+}
+
+enum _MoreAction { export, manage, assistant, clear }
+
+class _MoreSheet extends StatelessWidget {
+  const _MoreSheet({required this.hasItems, required this.hasAssistant});
+  final bool hasItems;
+  final bool hasAssistant;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.all(HearthSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text('More', style: context.text.sectionHeader),
+          const SizedBox(height: HearthSpacing.sm),
+          TextButton.icon(
+            onPressed: () => Navigator.of(context).pop(_MoreAction.export),
+            icon: const Icon(Icons.ios_share, size: 18),
+            label: const Text('Share or export'),
+          ),
+          TextButton.icon(
+            onPressed: () => Navigator.of(context).pop(_MoreAction.manage),
+            icon: const Icon(Icons.tune, size: 18),
+            label: const Text('Manage list'),
+          ),
+          if (hasAssistant)
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).pop(_MoreAction.assistant),
+              icon: const Icon(Icons.auto_awesome, size: 18),
+              label: const Text('Ask for a change'),
+            ),
+          ExpansionTile(
+            title: const Text('List help'),
+            tilePadding: EdgeInsets.zero,
+            children: <Widget>[
               Text(
-                // Named, not "that": the export is no longer the button
-                // nearest these words, and a promise about the wrong control
-                // is worse than no promise (rule 4).
-                'Nothing leaves the app until you tap Share or export.',
-                textAlign: TextAlign.center,
-                style: context.text.metadata.copyWith(color: colors.textMuted),
+                'Tap an item when bought. Tap its amount to set total needed or what you have at home. '
+                'Hold and drag to change the order; swipe to reveal Delete. '
+                'All shows bought, at-home and not-needed items. Share or export opens a review before anything leaves Hearth.',
+                style: context.text.body,
               ),
             ],
           ),
-        ),
+          if (hasItems) ...<Widget>[
+            const SizedBox(height: HearthSpacing.lg),
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).pop(_MoreAction.clear),
+              icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+              label: const Text('Clear the list'),
+            ),
+          ],
+        ],
       ),
-    );
-  }
+    ),
+  );
 }
 
 /// The two ways to fill an empty list.
@@ -851,13 +1016,18 @@ class _ActionBar extends StatelessWidget {
 /// (see [_ManageSheet]); what is left is the choice itself, which is the only
 /// thing an empty list actually asks.
 class _StartCard extends StatelessWidget {
-  const _StartCard({required this.onAdd, required this.onBuild});
+  const _StartCard({
+    required this.onAdd,
+    required this.onBuild,
+    required this.onMore,
+  });
 
   final VoidCallback onAdd;
 
   /// Opens the manage sheet rather than building. A build is over a stretch
   /// of days, and the days are the first thing you would want to see.
   final VoidCallback onBuild;
+  final VoidCallback onMore;
 
   @override
   Widget build(BuildContext context) {
@@ -883,7 +1053,7 @@ class _StartCard extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed: onAdd,
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add to list'),
+                label: const Text('Add item'),
               ),
             ),
             const SizedBox(height: HearthSpacing.xs),
@@ -910,6 +1080,8 @@ class _StartCard extends StatelessWidget {
               'Everything planned over a stretch of days.',
               style: context.text.metadata.copyWith(color: colors.textMuted),
             ),
+            const SizedBox(height: HearthSpacing.sm),
+            TextButton(onPressed: onMore, child: const Text('More')),
           ],
         ),
       ),
@@ -923,6 +1095,8 @@ class _StoreGroup extends StatelessWidget {
     required this.lines,
     required this.foods,
     required this.onReorder,
+    required this.onReorderStart,
+    required this.onReorderEnd,
     required this.onTick,
     required this.onEdit,
     required this.onRemove,
@@ -938,6 +1112,8 @@ class _StoreGroup extends StatelessWidget {
   /// up at — the older `onReorder` reported it as it would be before the item
   /// was taken out, and left every caller to subtract one.
   final void Function(int from, int to) onReorder;
+  final ValueChanged<int> onReorderStart;
+  final ValueChanged<int> onReorderEnd;
   final void Function(ShoppingLine line, bool value) onTick;
   final ValueChanged<ShoppingLine> onEdit;
   final Future<void> Function(ShoppingLine line) onRemove;
@@ -959,6 +1135,8 @@ class _StoreGroup extends StatelessWidget {
       buildDefaultDragHandles: true,
       itemCount: lines.length,
       onReorderItem: onReorder,
+      onReorderStart: onReorderStart,
+      onReorderEnd: onReorderEnd,
       itemBuilder: (BuildContext context, int index) {
         final ShoppingLine line = lines[index];
         // The key belongs to the outermost widget, which the reorder needs
@@ -1063,24 +1241,50 @@ class _LineTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     final HearthTextStyles text = context.text;
-    // Resolved, so a cupboard amount measured the other way still ticks the
-    // line off once it covers the need.
-    final bool done = _resolved.isChecked;
+    final GroceryLineState state = groceryLineState(line, food: food);
+    final bool done =
+        state == GroceryLineState.bought || state == GroceryLineState.atHome;
+    final String? status = switch (state) {
+      GroceryLineState.bought => 'Bought',
+      GroceryLineState.atHome => 'At home',
+      GroceryLineState.notNeeded => 'Not needed',
+      GroceryLineState.remaining => null,
+    };
+    final String detail = <String>[?status, ?_detail].join(' · ');
+    final Widget amount = InkWell(
+      onTap: onEdit,
+      borderRadius: BorderRadius.circular(HearthRadius.sm),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          minWidth: HearthTouch.androidTarget,
+          minHeight: HearthTouch.androidTarget,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(HearthSpacing.xs),
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: HearthSpacing.xxs,
+            children: <Widget>[
+              if (line.isEdited)
+                Icon(Icons.edit_outlined, size: 14, color: colors.textMuted),
+              Text(
+                _amount.isEmpty ? 'Set amount' : _amount,
+                style: text.ingredient,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
 
     return Padding(
       padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
       child: Semantics(
-        // Assembled by hand so the whole line is one thing to a screen reader
-        // rather than a checkbox, a name and two numbers read separately.
         label:
-            '${line.name}${_amount.isEmpty ? '' : ', $_amount'}'
-            '${_detail == null ? '' : ', ${_detail!}'}'
-            '${done ? '. Already have it.' : ''}',
+            '${line.name}${_amount.isEmpty ? '' : ', $_amount'}${detail.isEmpty ? '' : ', $detail'}',
         excludeSemantics: true,
-        // `excludeSemantics` swallows the amount field's own node, so the
-        // only way to reach it without sight is here. Removal is not listed:
-        // `SwipeToDelete` puts its own "Delete <name>" action on the node
-        // above this one, and two ways to say it would read as two controls.
+        checked: done,
+        onTap: () => onTick(!done),
         customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
           const CustomSemanticsAction(label: 'Set amounts'): onEdit,
         },
@@ -1089,10 +1293,6 @@ class _LineTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(HearthRadius.md),
           child: InkWell(
             onTap: () => onTick(!done),
-            // No long press. It starts a reorder drag — which is what
-            // `buildDefaultDragHandles` binds it to, and what dragging the
-            // list into the order you walk the shop in depends on. Removal
-            // moved to a swipe, where it is both discoverable and undoable.
             borderRadius: BorderRadius.circular(HearthRadius.md),
             child: Container(
               decoration: BoxDecoration(
@@ -1100,69 +1300,64 @@ class _LineTile extends StatelessWidget {
                 border: Border.all(color: colors.outline),
               ),
               padding: const EdgeInsets.all(HearthSpacing.md),
-              child: Row(
-                children: <Widget>[
-                  // Never colour alone (§6.3): a done line carries the tick
-                  // itself, not just a faded look.
-                  Icon(
-                    done ? Icons.check_circle : Icons.circle_outlined,
-                    size: 20,
-                    color: done ? colors.goodAccent : colors.textMuted,
-                  ),
-                  const SizedBox(width: HearthSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          line.name,
-                          style: text.ingredient.copyWith(
-                            color: done ? colors.textMuted : colors.textPrimary,
-                            decoration: done
-                                ? TextDecoration.lineThrough
-                                : TextDecoration.none,
-                          ),
+              child: LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints box) {
+                  final bool stacked =
+                      box.maxWidth <
+                      MediaQuery.textScalerOf(context).scale(16) * 17;
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Padding(
+                        padding: const EdgeInsets.only(top: HearthSpacing.xs),
+                        child: Icon(
+                          switch (state) {
+                            GroceryLineState.bought => Icons.check_circle,
+                            GroceryLineState.atHome => Icons.home_outlined,
+                            GroceryLineState.notNeeded =>
+                              Icons.remove_circle_outline,
+                            GroceryLineState.remaining => Icons.circle_outlined,
+                          },
+                          size: 20,
+                          color: done ? colors.goodAccent : colors.textMuted,
                         ),
-                        if (_detail case final String detail) ...<Widget>[
-                          const SizedBox(height: HearthSpacing.xxs),
-                          Text(
-                            detail,
-                            style: text.metadata.copyWith(
-                              color: colors.textMuted,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: HearthSpacing.sm),
-                  // Tapping the amount is how you change it, or say how much
-                  // of it you already have.
-                  InkWell(
-                    onTap: onEdit,
-                    borderRadius: BorderRadius.circular(HearthRadius.sm),
-                    child: Padding(
-                      padding: const EdgeInsets.all(HearthSpacing.xs),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          if (line.isEdited)
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                right: HearthSpacing.xxs,
-                              ),
-                              child: Icon(
-                                Icons.edit_outlined,
-                                size: 14,
-                                color: colors.textMuted,
-                              ),
-                            ),
-                          Text(_amount, style: text.ingredient),
-                        ],
                       ),
-                    ),
-                  ),
-                ],
+                      const SizedBox(width: HearthSpacing.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              line.name,
+                              style: text.ingredient.copyWith(
+                                color: done
+                                    ? colors.textMuted
+                                    : colors.textPrimary,
+                                decoration: done
+                                    ? TextDecoration.lineThrough
+                                    : TextDecoration.none,
+                              ),
+                            ),
+                            if (detail.isNotEmpty) ...<Widget>[
+                              const SizedBox(height: HearthSpacing.xxs),
+                              Text(
+                                detail,
+                                style: text.metadata.copyWith(
+                                  color: colors.textMuted,
+                                ),
+                              ),
+                            ],
+                            if (stacked) amount,
+                          ],
+                        ),
+                      ),
+                      if (!stacked) ...<Widget>[
+                        const SizedBox(width: HearthSpacing.sm),
+                        Flexible(child: amount),
+                      ],
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -1204,9 +1399,9 @@ class _Empty extends StatelessWidget {
 
 /// Changing the list by asking (spec §5.7).
 ///
-/// The answer lands straight on the list, with an undo. Safe for the reason
-/// the whole screen is: nothing leaves the app until an export is tapped, so
-/// the list is its own review surface (rule 4).
+/// The existing assistant applies its answer with targeted Undo. A structured
+/// proposal review is tracked separately as UX-063; moving this entry behind
+/// More does not change that protocol. Requests use the configured assistant.
 class _ChatCard extends ConsumerStatefulWidget {
   const _ChatCard({required this.lines, required this.onApply});
 
@@ -1379,8 +1574,10 @@ class _ChatCardState extends ConsumerState<_ChatCard> {
                   const SizedBox(width: HearthSpacing.sm),
                 ],
                 Expanded(
-                  child: SizedBox(
-                    height: HearthTouch.minTarget,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      minHeight: HearthTouch.minTarget,
+                    ),
                     child: FilledButton(
                       onPressed: state.isBusy ? null : _send,
                       child: Text(state.isBusy ? 'Thinking…' : 'Ask'),
