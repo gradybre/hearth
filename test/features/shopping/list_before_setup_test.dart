@@ -68,11 +68,13 @@ void main() {
     // The action bar, when there is one: it sits *above* the tab bar, so
     // measuring against the tabs called a row visible that the bar was
     // covering. The list ends where the bar begins.
-    final Finder bar = find.text(
-      'Nothing leaves the app until you tap Share or export.',
-    );
-    if (bar.evaluate().isNotEmpty) return tester.getTopLeft(bar).dy;
-    return tester.getTopLeft(find.text('Recipes').last).dy;
+    final double tabs = tester.getTopLeft(find.text('Recipes').last).dy;
+    final Finder add = find.text('Add item').hitTestable();
+    if (add.evaluate().isNotEmpty) {
+      final double actions = tester.getTopLeft(add).dy;
+      return actions < tabs ? actions : tabs;
+    }
+    return tabs;
   }
 
   testWidgets('the first thing to buy is above the fold', (
@@ -120,7 +122,7 @@ void main() {
     await openShopping(tester);
 
     expect(
-      find.textContaining('6 items'),
+      find.text('5 left to buy'),
       findsOneWidget,
       reason: 'the count of what is left is the fact a shop wants',
     );
@@ -135,13 +137,16 @@ void main() {
 
       expect(find.text('Include seasonings'), findsNothing);
       expect(find.text('Build from the plan'), findsNothing);
-      expect(find.text('Manage list'), findsOneWidget);
+      expect(find.text('More'), findsOneWidget);
+      expect(find.text('Manage list'), findsNothing);
     });
 
     testWidgets('and are all still there behind it, dates included', (
       WidgetTester tester,
     ) async {
       await openShopping(tester);
+      await tester.tap(find.text('More'));
+      await pumpFrames(tester, frames: 12);
       await tester.tap(find.text('Manage list'));
       await pumpFrames(tester, frames: 12);
 
@@ -155,18 +160,16 @@ void main() {
     });
 
     testWidgets('and clearing it is not in here', (WidgetTester tester) async {
-      // It was, and two places for one act is two answers to it. Clearing
-      // lives at the end of the list itself — reachable without opening a
-      // sheet, and still not under the thumb of somebody in a shop, because
-      // you have to get past the list to reach it.
+      // Clearing belongs to More, away from adding groceries and separate
+      // from the plan-build settings.
       await openShopping(tester);
+      await tester.tap(find.text('More'));
+      await pumpFrames(tester, frames: 12);
+      expect(find.text('Clear the list'), findsOneWidget);
       await tester.tap(find.text('Manage list'));
       await pumpFrames(tester, frames: 12);
 
-      // One, and it is the page's, behind the sheet — a modal does not take
-      // the screen out of the tree. Two would mean the sheet had grown its
-      // own.
-      expect(find.text('Clear the list'), findsOneWidget);
+      expect(find.text('Clear the list'), findsNothing);
       expect(
         find.descendant(
           of: find.byType(BottomSheet),
@@ -184,7 +187,7 @@ void main() {
       // two answers and are asked on the next screen.
       await openShopping(tester, lines: const <ShoppingLine>[]);
 
-      expect(find.text('Add to list'), findsOneWidget);
+      expect(find.text('Add item'), findsOneWidget);
       expect(find.text('Build from the plan'), findsOneWidget);
       expect(find.text('Manage list'), findsNothing);
       expect(find.textContaining('9/'), findsNothing);
@@ -195,10 +198,12 @@ void main() {
     testWidgets('export is reachable without scrolling past the list', (
       WidgetTester tester,
     ) async {
-      // It sat below all sixteen rows — off screen in every render — and it
-      // is the one action on this screen that sends anything anywhere
-      // (rule 4). The words that say so go with it.
+      // The compact bar opens More at ordinary text sizes without asking
+      // the shopper to walk past every grocery to reach sharing.
       await openShopping(tester);
+      expect(find.text('More').hitTestable(), findsOneWidget);
+      await tester.tap(find.text('More'));
+      await pumpFrames(tester, frames: 12);
 
       expect(find.text('Share or export'), findsOneWidget);
       final double y = tester.getTopLeft(find.text('Share or export')).dy;

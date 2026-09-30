@@ -172,7 +172,7 @@ void main() {
     await writeScene(tester, const Scene(name: 'package-shopping'));
     await tester.tap(find.text('3 × 10 oz'));
     await tester.pumpAndSettle();
-    expect(find.text('Buy'), findsOneWidget);
+    expect(find.text('Total needed'), findsOneWidget);
     await writeScene(tester, const Scene(name: 'package-shopping-detail'));
   }, skip: !renderingGallery);
   testWidgets('two photos survive a failed read and retry', (tester) async {

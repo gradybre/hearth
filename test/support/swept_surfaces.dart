@@ -74,15 +74,18 @@ class SweepTools {
 
   final WidgetTester _tester;
 
-  /// The last *vertical* scroll view.
+  /// The last vertical scroll view that accepts a person's drag.
   ///
   /// Every text field contains a horizontal one of its own for its editable,
   /// so "the last scrollable" on a sheet full of fields is a text box, and
-  /// dragging that goes nowhere.
+  /// dragging that goes nowhere. The shopping list's reorderable store groups
+  /// also contain Scrollables, but those have scrolling disabled: the outer
+  /// list owns the gesture, and an inner group's center can be off screen.
   static Finder get verticalScroller => find
       .byWidgetPredicate(
         (Widget widget) =>
             widget is Scrollable &&
+            widget.physics?.allowUserScrolling != false &&
             (widget.axisDirection == AxisDirection.down ||
                 widget.axisDirection == AxisDirection.up),
       )
@@ -193,9 +196,7 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     opensFrom: 'lib/features/shopping/shopping_screen.dart',
     open: (WidgetTester tester, SweepTools tools) async {
       await tools.tab('Shopping');
-      // The harness seeds a line, because the list screen has two shapes: an
-      // empty one leads with the two ways to fill it, and `Manage list` is
-      // what replaces that once there is something to shop for (§6.2.5).
+      await tools.reach(find.text('More'));
       await tools.reach(find.text('Manage list'));
     },
     arrived: find.text('Include seasonings'),
@@ -206,11 +207,54 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     farEnd: find.textContaining('Replaces what the plan put here'),
   ),
   SweptSurface(
+    name: 'the shopping list with completed items included',
+    opensFrom: 'lib/features/shopping/shopping_screen.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Shopping');
+      await tools.reach(find.text('All'));
+    },
+    arrived: find.text('1 item'),
+    farEnd: find.text('At home 0'),
+  ),
+  SweptSurface(
+    name: 'the shopping list options and help',
+    opensFrom: 'lib/features/shopping/shopping_screen.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Shopping');
+      await tools.reach(find.text('More'));
+      await tools.reach(find.text('List help'));
+    },
+    arrived: find.textContaining('Tap an item when bought.'),
+    farEnd: find.text('Clear the list'),
+  ),
+  SweptSurface(
+    name: 'needed, have and buy amounts',
+    opensFrom: 'lib/features/shopping/shopping_amount_sheet.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Shopping');
+      await tools.reach(find.text('2 lb'));
+    },
+    arrived: find.text('Total needed'),
+    farEnd: find.text('Remove from list'),
+  ),
+  SweptSurface(
+    name: 'the shopping export review',
+    opensFrom: 'lib/features/shopping/shopping_export_sheet.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Shopping');
+      await tools.reach(find.text('More'));
+      await tools.reach(find.text('Share or export'));
+    },
+    arrived: find.text('Take the list with you'),
+    // Read the handoff explanation without copying or opening anything.
+    farEnd: find.textContaining('Copying the list is usually quicker.'),
+  ),
+  SweptSurface(
     name: 'putting something on the shopping list',
     opensFrom: 'lib/features/shopping/add_to_list_sheet.dart',
     open: (WidgetTester tester, SweepTools tools) async {
       await tools.tab('Shopping');
-      await tools.reach(find.text('Add to list'));
+      await tools.reach(find.text('Add item'));
     },
     arrived: find.text('What do you need?'),
     // The recipe the sweep fixture carries, which with nothing typed is the
@@ -348,8 +392,4 @@ const Map<String, String> notSweptYet = <String, String>{
       'A discard-changes dialog, reachable only from a dirty editor.',
   'lib/features/recipes/timer_bar.dart':
       'The timers sheet only exists while a timer is running.',
-  'lib/features/shopping/shopping_amount_sheet.dart':
-      'Needs a built shopping list with a line on it.',
-  'lib/features/shopping/shopping_export_sheet.dart':
-      'Needs a built shopping list and an export destination.',
 };

@@ -60,13 +60,13 @@ void main() {
   /// the first thing you would want to see. `.last` is the sheet's own
   /// button: the card underneath the modal wears the same words.
   Future<void> build(WidgetTester tester) async {
-    await tester.tap(
-      find.text(
-        find.text('Manage list').evaluate().isEmpty
-            ? 'Build from the plan'
-            : 'Manage list',
-      ),
-    );
+    if (find.text('Build from the plan').evaluate().isEmpty) {
+      await tester.tap(find.text('More'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Manage list'));
+    } else {
+      await tester.tap(find.text('Build from the plan'));
+    }
     await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Build from the plan').last);
     await pumpFrames(tester, frames: 24);
@@ -82,7 +82,7 @@ void main() {
   /// dialog it replaced was a second door onto the same act, and a shopping
   /// list is mostly things no recipe asked for.
   Future<void> addByHand(WidgetTester tester, String name) async {
-    await tester.tap(find.text('Add to list').last);
+    await tester.tap(find.text('Add item').last);
     await pumpFrames(tester, frames: 16);
     await tester.enterText(find.byType(TextField).last, name);
     await pumpFrames(tester, frames: 8);
@@ -96,7 +96,7 @@ void main() {
     await openShopping(tester);
 
     expect(find.text('Nothing on the list yet.'), findsOneWidget);
-    expect(find.text('Add to list'), findsOneWidget);
+    expect(find.text('Add item'), findsOneWidget);
     expect(find.text('Build from the plan'), findsOneWidget);
   });
 
@@ -141,6 +141,8 @@ void main() {
     await tester.tap(find.text('ground beef'));
     await pumpFrames(tester, frames: 20);
 
+    await tester.tap(find.text('All'));
+    await pumpFrames(tester);
     expect(find.byIcon(Icons.check_circle), findsOneWidget);
   });
 
@@ -155,7 +157,7 @@ void main() {
     await tester.tap(find.text('1 lb'));
     await pumpFrames(tester, frames: 10);
     await tester.enterText(
-      find.widgetWithText(TextField, 'How much to get'),
+      find.widgetWithText(TextField, 'Before subtracting what is at home'),
       '2',
     );
     await tester.tap(find.text('Done'));
@@ -176,7 +178,7 @@ void main() {
     await tester.tap(find.text('1 lb'));
     await pumpFrames(tester, frames: 10);
     await tester.enterText(
-      find.widgetWithText(TextField, 'How much to get'),
+      find.widgetWithText(TextField, 'Before subtracting what is at home'),
       '2',
     );
     await tester.enterText(
@@ -212,6 +214,8 @@ void main() {
 
     await rebuild(tester);
 
+    await tester.tap(find.text('All'));
+    await pumpFrames(tester);
     expect(find.byIcon(Icons.check_circle), findsOneWidget);
   });
 
@@ -225,6 +229,8 @@ void main() {
     await openShopping(tester, entries: <MealPlanEntry>[tonight()]);
     await build(tester);
 
+    await tester.tap(find.text('More'));
+    await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Share or export'));
     await pumpFrames(tester, frames: 10);
 
@@ -241,6 +247,8 @@ void main() {
     await tester.tap(find.text('ground beef'));
     await pumpFrames(tester, frames: 20);
 
+    await tester.tap(find.text('More'));
+    await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Share or export'));
     await pumpFrames(tester, frames: 10);
 
@@ -290,6 +298,8 @@ void main() {
       await tester.tap(find.text('Shopping').last);
       await pumpFrames(tester);
       await rebuild(tester);
+      await tester.tap(find.text('More'));
+      await pumpFrames(tester, frames: 12);
       await tester.tap(find.text('Share or export'));
       await pumpFrames(tester, frames: 10);
     }
@@ -451,6 +461,8 @@ void main() {
       await swipeAndDelete(tester, 'ground beef');
       await tester.tap(find.text('Coffee'));
       await pumpFrames(tester, frames: 20);
+      await tester.tap(find.text('All'));
+      await pumpFrames(tester);
       expect(find.byIcon(Icons.check_circle), findsOneWidget);
 
       await undo(tester);
@@ -490,11 +502,15 @@ void main() {
 
       await tester.tap(find.text('Coffee'));
       await pumpFrames(tester, frames: 20);
+      await tester.tap(find.text('All'));
+      await pumpFrames(tester);
       expect(find.byIcon(Icons.check_circle), findsOneWidget);
 
       await undo(tester);
 
       expect(find.text('ground beef'), findsOneWidget);
+      await tester.tap(find.text('All'));
+      await pumpFrames(tester);
       expect(find.byIcon(Icons.check_circle), findsOneWidget);
     });
 

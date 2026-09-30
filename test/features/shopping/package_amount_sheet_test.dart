@@ -84,9 +84,32 @@ void main() {
   String haveText(WidgetTester tester) => fields(tester)[1].controller!.text;
 
   Future<void> pressDone(WidgetTester tester) async {
+    await tester.ensureVisible(find.text('Done'));
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
   }
+
+  testWidgets('total needed and have show the live purchase calculation', (
+    WidgetTester tester,
+  ) async {
+    final ShoppingLine? Function() result = await openSheet(
+      tester,
+      cornLine(planned: <Quantity>[Quantity.of(30, Units.ounce)]),
+      food: packageCorn(),
+    );
+
+    expect(find.text('Total needed'), findsOneWidget);
+    expect(find.text('Have at home'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).at(0), '25');
+    await tester.enterText(find.byType(TextField).at(1), '10');
+    await tester.pump();
+    expect(find.text('Buy 15 oz'), findsOneWidget);
+    expect(find.text('2 × 10 oz'), findsOneWidget);
+    expect(find.textContaining('Needed for meals: 30 oz'), findsOneWidget);
+    await pressDone(tester);
+    expect(result()!.wanted!.amountIn(Units.ounce), closeTo(25, 1e-9));
+    expect(result()!.onHand!.amountIn(Units.ounce), closeTo(10, 1e-9));
+  });
 
   testWidgets('a weight opens in the package unit rather than the ladder', (
     WidgetTester tester,
@@ -119,7 +142,8 @@ void main() {
     );
 
     expect(buyText(tester), '30');
-    expect(find.textContaining('30 oz'), findsOneWidget);
+    expect(find.text('Needed for meals: 30 oz'), findsOneWidget);
+    expect(find.text('Buy 30 oz'), findsOneWidget);
     expect(find.text('cup'), findsNothing);
   });
 
@@ -207,5 +231,148 @@ void main() {
     expect(haveText(tester), '8');
     expect(find.text('cup'), findsOneWidget);
     expect(find.text('oz'), findsOneWidget);
+    expect(find.text('Buy 6 cups'), findsOneWidget);
+    expect(find.textContaining('has not been subtracted'), findsOneWidget);
   });
+
+  testWidgets('mixed-unit needs stay separate until a total is set', (
+    WidgetTester tester,
+  ) async {
+    final ShoppingLine mixed = ShoppingLine(
+      key: 'test-plain',
+      name: 'Test pantry item',
+      planned: <Quantity>[
+        Quantity.of(6, Units.cup),
+        Quantity.of(8, Units.ounce),
+      ],
+    );
+    final ShoppingLine? Function() result = await openSheet(
+      tester,
+      mixed,
+      food: plainFood(),
+    );
+    expect(find.text('Needed for meals: 6 cups + 8 oz'), findsOneWidget);
+    expect(find.text('Buy: 6 cups + 8 oz'), findsOneWidget);
+    expect(find.textContaining('no known conversion'), findsOneWidget);
+    await pressDone(tester);
+    expect(result(), mixed);
+  });
+
+  testWidgets(
+    'a manual total overrides mixed units without rewriting the asks',
+    (WidgetTester tester) async {
+      final ShoppingLine mixed = ShoppingLine(
+        key: 'test-plain',
+        name: 'Test pantry item',
+        planned: <Quantity>[
+          Quantity.of(6, Units.cup),
+          Quantity.of(8, Units.ounce),
+        ],
+      );
+      final ShoppingLine? Function() result = await openSheet(
+        tester,
+        mixed,
+        food: plainFood(),
+      );
+      await tester.enterText(find.byType(TextField).first, '3');
+      await tester.enterText(find.byType(TextField).last, '1');
+      await tester.pump();
+      expect(find.text('Buy 2 cups'), findsOneWidget);
+      await pressDone(tester);
+      expect(result()!.planned, mixed.planned);
+      expect(result()!.wanted!.amountIn(Units.cup), closeTo(3, 1e-9));
+    },
+  );
+
+  testWidgets(
+    'unknown package facts show an amount without inventing a pack count',
+    (WidgetTester tester) async {
+      await openSheet(
+        tester,
+        ShoppingLine(
+          key: 'plain',
+          name: 'Test pantry item',
+          planned: <Quantity>[Quantity.of(3, Units.cup)],
+        ),
+        food: plainFood(),
+      );
+      expect(find.text('Buy 3 cups'), findsOneWidget);
+      expect(find.textContaining('×'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'a blank manual item stays unquantified until the user enters a total',
+    (WidgetTester tester) async {
+      final ShoppingLine? Function() result = await openSheet(
+        tester,
+        ShoppingLine.manual(key: 'towels', name: 'Paper towels'),
+      );
+      expect(find.text('Needed: no amount set.'), findsOneWidget);
+      expect(find.text('Buy: amount not set'), findsOneWidget);
+      await tester.enterText(find.byType(TextField).first, '3');
+      await tester.enterText(find.byType(TextField).last, '1');
+      await tester.pump();
+      expect(find.text('Buy 2'), findsOneWidget);
+      await pressDone(tester);
+      expect(result()!.toBuy!.canonicalAmount, 2);
+    },
+  );
+
+  testWidgets('display rounding never changes untouched stored precision', (
+    WidgetTester tester,
+  ) async {
+    final ShoppingLine exact = cornLine(
+      planned: <Quantity>[Quantity.of(30, Units.ounce)],
+      wanted: Quantity.of(14.5123456789, Units.ounce),
+      onHand: Quantity.of(1.123456789, Units.cup),
+    );
+    final ShoppingLine? Function() result = await openSheet(
+      tester,
+      exact,
+      food: packageCorn(),
+    );
+    await pressDone(tester);
+    expect(result(), exact);
+  });
+
+  testWidgets(
+    '3x text and the keyboard leave the equation and Done reachable',
+    (WidgetTester tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.padding = const FakeViewPadding(top: 24, bottom: 34);
+      tester.view.viewPadding = const FakeViewPadding(top: 24, bottom: 34);
+      tester.platformDispatcher.textScaleFactorTestValue = 3;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearAllTestValues);
+      final ShoppingLine? Function() result = await openSheet(
+        tester,
+        cornLine(planned: <Quantity>[Quantity.of(30, Units.ounce)]),
+        food: packageCorn(),
+      );
+      await tester.ensureVisible(find.byType(TextField).first);
+      await tester.enterText(find.byType(TextField).first, '25');
+      tester.view.viewInsets = const FakeViewPadding(bottom: 220);
+      tester.view.padding = const FakeViewPadding(top: 24);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.byType(TextField).last);
+      await tester.enterText(find.byType(TextField).last, '10');
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Buy 15 oz'));
+      expect(find.text('Buy 15 oz').hitTestable(), findsOneWidget);
+      expect(find.text('2 × 10 oz'), findsOneWidget);
+      await tester.ensureVisible(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(find.text('Done').hitTestable(), findsOneWidget);
+      expect(
+        tester.getSize(find.widgetWithText(FilledButton, 'Done')).height,
+        greaterThanOrEqualTo(44),
+      );
+      await pressDone(tester);
+      expect(result()!.wanted!.amountIn(Units.ounce), closeTo(25, 1e-9));
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

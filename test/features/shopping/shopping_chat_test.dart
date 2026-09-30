@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/data/adapters/recipe_ai.dart';
@@ -10,6 +12,7 @@ import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/fixtures.dart';
+import '../../support/swept_surfaces.dart';
 
 /// Changing the list by asking (spec §5.7).
 class FakeAssistant implements ShoppingAssistant {
@@ -32,6 +35,16 @@ class FakeAssistant implements ShoppingAssistant {
     if (error case final Object thrown) throw thrown;
     return answer!;
   }
+}
+
+class DeferredAssistant implements ShoppingAssistant {
+  final Completer<ShoppingAnswer> response = Completer<ShoppingAnswer>();
+
+  @override
+  Future<ShoppingAnswer> edit({
+    required List<ShoppingTurn> turns,
+    required List<ShoppingLine> lines,
+  }) => response.future;
 }
 
 void main() {
@@ -86,11 +99,10 @@ void main() {
   }
 
   Future<void> ask(WidgetTester tester, String what) async {
-    await tester.scrollUntilVisible(
-      find.text('Ask for a change'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await tester.tap(find.text('More'));
+    await pumpFrames(tester, frames: 12);
+    await tester.tap(find.text('Ask for a change'));
+    await pumpFrames(tester, frames: 12);
     await tester.enterText(
       find.widgetWithText(TextField, 'What should change?'),
       what,
@@ -108,6 +120,8 @@ void main() {
     // Null is the honest state of a build with no Edge Function, and a button
     // that can only fail is worse than no button.
     await openWithList(tester);
+    await tester.tap(find.text('More'));
+    await pumpFrames(tester, frames: 12);
 
     expect(find.text('Ask for a change'), findsNothing);
   });
@@ -129,8 +143,8 @@ void main() {
   });
 
   testWidgets('and it goes away again on undo', (WidgetTester tester) async {
-    // Applying straight to the list is what makes this quick; undo is what
-    // makes it safe when it guesses wrong.
+    // Preserve the existing apply/undo behavior while moving its entry.
+    // A before/after proposal review remains the separate UX-063 scope.
     final FakeAssistant assistant = FakeAssistant(
       answer: answer(<ShoppingEdit>[
         const ShoppingEdit(kind: ShoppingEditKind.add, name: 'Coffee'),
@@ -169,6 +183,54 @@ void main() {
     expect(find.textContaining('have 1 lb'), findsOneWidget);
   });
 
+  testWidgets(
+    'undo explains kept newer rows inside the active assistant sheet',
+    (WidgetTester tester) async {
+      final FakeAssistant assistant = FakeAssistant(
+        answer: answer(<ShoppingEdit>[
+          const ShoppingEdit(kind: ShoppingEditKind.add, name: 'Coffee'),
+        ], reply: 'Added coffee.'),
+      );
+      await openWithList(tester, assistant: assistant);
+      await ask(tester, 'add coffee');
+      await tester.tapAt(const Offset(200, 40));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Coffee'));
+      await pumpFrames(tester, frames: 20);
+      expect(find.text('Bought 1'), findsOneWidget);
+      await tester.tap(find.text('More'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Ask for a change'));
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.widgetWithText(TextButton, 'Undo'));
+      await pumpFrames(tester, frames: 20);
+
+      final Finder notice = find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text(
+          'Undone. One line you changed since was left as it is.',
+        ),
+      );
+      expect(
+        notice,
+        findsOneWidget,
+        reason: 'a snackbar behind the modal is invisible',
+      );
+      expect(notice.hitTestable(), findsOneWidget);
+      expect(
+        find.ancestor(
+          of: notice,
+          matching: find.byWidgetPredicate(
+            (Widget widget) =>
+                widget is Semantics && widget.properties.liveRegion == true,
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Bought 1'), findsOneWidget);
+    },
+  );
+
   testWidgets('the question carries the list it is about', (
     WidgetTester tester,
   ) async {
@@ -181,6 +243,55 @@ void main() {
     await ask(tester, 'what is on here?');
 
     expect(assistant.sawList, contains('ground beef'));
+  });
+
+  testWidgets('the kept-row Undo notice comes into view at 320pt and 3x', (
+    WidgetTester tester,
+  ) async {
+    final FakeAssistant assistant = FakeAssistant(
+      answer: answer(<ShoppingEdit>[
+        const ShoppingEdit(kind: ShoppingEditKind.add, name: 'Coffee'),
+      ], reply: 'Added coffee.'),
+    );
+    await pumpHearthApp(
+      tester,
+      size: const Size(320, 568),
+      textScale: 3,
+      viewPadding: const EdgeInsets.only(top: 24, bottom: 34),
+      shoppingLines: <ShoppingLine>[
+        ShoppingLine.manual(key: 'bread', name: 'Bread'),
+      ],
+      shoppingAssistant: assistant,
+    );
+    final SweepTools tools = SweepTools(tester);
+    await tools.tab('Shopping');
+    await tools.reach(find.text('More'));
+    await tools.reach(find.text('Ask for a change'));
+    final Finder question = find.widgetWithText(
+      TextField,
+      'What should change?',
+    );
+    await tools.bring(question);
+    await tester.enterText(question, 'add coffee');
+    await tools.reach(find.widgetWithText(FilledButton, 'Ask'));
+    await pumpFrames(tester, frames: 20);
+    Navigator.of(tester.element(question)).pop();
+    await pumpFrames(tester, frames: 12);
+    await tools.reach(find.text('Coffee'));
+    await tools.reach(find.text('More'));
+    await tools.reach(find.text('Ask for a change'));
+    await tools.reach(find.widgetWithText(TextButton, 'Undo'));
+    await pumpFrames(tester, frames: 20);
+
+    final Finder notice = find.descendant(
+      of: find.byType(BottomSheet),
+      matching: find.text(
+        'Undone. One line you changed since was left as it is.',
+      ),
+    );
+    expect(notice.hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(assistant.calls, 1);
   });
 
   testWidgets('a failure says the list is untouched, and offers another go', (
@@ -229,9 +340,11 @@ void main() {
     await openWithList(tester, assistant: assistant);
     await ask(tester, 'add coffee');
 
-    // Through `Manage list`: the setup left the list screen when it stopped
-    // leading with 244 points of it (review §6.2.5), so a rebuild is no
-    // longer a button you scroll up the shopping list to reach.
+    // Dismiss the assistant and open the separate list-management flow.
+    await tester.tapAt(const Offset(200, 40));
+    await pumpFrames(tester, frames: 12);
+    await tester.tap(find.text('More'));
+    await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Manage list'));
     await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Build from the plan'));
@@ -239,4 +352,80 @@ void main() {
 
     expect(find.text('Coffee'), findsOneWidget);
   });
+
+  testWidgets('closing the assistant while it thinks preserves the answer', (
+    WidgetTester tester,
+  ) async {
+    final DeferredAssistant assistant = DeferredAssistant();
+    await openWithList(tester, assistant: assistant);
+    await ask(tester, 'add coffee');
+    await tester.tapAt(const Offset(200, 40));
+    await pumpFrames(tester, frames: 20);
+    expect(find.widgetWithText(TextField, 'What should change?'), findsNothing);
+
+    assistant.response.complete(
+      answer(<ShoppingEdit>[
+        const ShoppingEdit(kind: ShoppingEditKind.add, name: 'Coffee'),
+      ], reply: 'Added coffee.'),
+    );
+    await pumpFrames(tester, frames: 24);
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Coffee'), findsOneWidget);
+    await tester.tap(find.text('More'));
+    await pumpFrames(tester, frames: 12);
+    await tester.tap(find.text('Ask for a change'));
+    await pumpFrames(tester, frames: 12);
+    expect(find.text('Added coffee.'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Undo'));
+    await pumpFrames(tester, frames: 20);
+    expect(find.text('Coffee'), findsNothing);
+  });
+
+  for (final Size size in <Size>[const Size(390, 844), const Size(320, 568)]) {
+    for (final double scale in <double>[1, 3]) {
+      testWidgets('the assistant remains reachable at $size and ${scale}x', (
+        WidgetTester tester,
+      ) async {
+        final FakeAssistant assistant = FakeAssistant(
+          answer: answer(const <ShoppingEdit>[]),
+        );
+        await pumpHearthApp(
+          tester,
+          size: size,
+          textScale: scale,
+          viewPadding: const EdgeInsets.only(top: 47, bottom: 34),
+          shoppingLines: const <ShoppingLine>[
+            ShoppingLine(
+              key: 'coffee',
+              name: 'Coffee',
+              planned: [],
+              isManual: true,
+            ),
+          ],
+          shoppingAssistant: assistant,
+        );
+        final SweepTools tools = SweepTools(tester);
+        await tools.tab('Shopping');
+        await tools.reach(find.text('More'));
+        await tools.reach(find.text('Ask for a change'));
+        expect(find.text('Ask for a change'), findsOneWidget);
+        await tools.bring(
+          find.widgetWithText(TextField, 'What should change?'),
+        );
+        expect(tester.takeException(), isNull);
+        await tools.bring(find.widgetWithText(FilledButton, 'Ask'));
+        expect(
+          find.widgetWithText(FilledButton, 'Ask').hitTestable(),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        expect(
+          assistant.calls,
+          0,
+          reason: 'opening the assistant costs nothing',
+        );
+      });
+    }
+  }
 }

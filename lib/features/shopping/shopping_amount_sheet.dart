@@ -8,6 +8,7 @@ import '../../domain/format/food_quantity_format.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/parsing/amount_parser.dart';
+import '../../domain/shopping/cart_quantity.dart';
 import '../../domain/shopping/shopping_line.dart';
 import '../../domain/shopping/shopping_list_builder.dart';
 import '../../domain/units/mass_display_mode.dart';
@@ -15,7 +16,7 @@ import '../../domain/units/quantity.dart';
 import '../../domain/units/unit.dart';
 import '../../domain/units/unit_converter.dart';
 
-/// Setting what to buy, and how much of it you already have (spec §5.7).
+/// Setting total needed and what is at home, with a live Buy result (§5.7).
 ///
 /// Two numbers, one sheet, because they answer the same question from either
 /// end: 1.5 lb of beef is two packets, and one of them is already in the
@@ -68,11 +69,11 @@ class _AmountSheetState extends State<_AmountSheet> {
     food: widget.food,
   );
 
-  /// The need the Buy field edits, and the recipes' own amount it is judged
+  /// The need the Total needed field edits, and the recipes' own amount it is judged
   /// against. Both derived, so the sheet opens on the number the list is
   /// already showing rather than on a stored total nobody has read in that
   /// form.
-  late final Quantity? _buyAmount = _resolved.line.fullAmount;
+  late final Quantity? _neededAmount = _resolved.line.fullAmount;
   late final Quantity? _plannedAmount = _resolved.planned.length == 1
       ? _resolved.planned.first
       : null;
@@ -89,9 +90,9 @@ class _AmountSheetState extends State<_AmountSheet> {
   /// sold in 10 oz bags stays 30 oz instead of climbing the ladder to
   /// 1.88 lb. The two fields are asked separately, because they are not
   /// always the same kind.
-  late final Unit _buyUnit = _unitFor(_buyAmount ?? _plannedAmount);
+  late final Unit _neededUnit = _unitFor(_neededAmount ?? _plannedAmount);
   late final Unit _haveUnit = _haveAmount == null
-      ? _buyUnit
+      ? _neededUnit
       : _unitFor(_haveAmount);
 
   Unit _unitFor(Quantity? quantity) => quantity == null
@@ -117,11 +118,11 @@ class _AmountSheetState extends State<_AmountSheet> {
   /// round 14.5 oz to whatever the editor happened to display, and must not
   /// turn a converted *view* of the cupboard into a new stored fact
   /// (spec R6).
-  late final String _buyInitial = _initial(_buyAmount, _buyUnit);
+  late final String _neededInitial = _initial(_neededAmount, _neededUnit);
   late final String _haveInitial = _initial(_haveAmount, _haveUnit);
 
-  late final TextEditingController _buy = TextEditingController(
-    text: _buyInitial,
+  late final TextEditingController _needed = TextEditingController(
+    text: _neededInitial,
   );
   late final TextEditingController _have = TextEditingController(
     text: _haveInitial,
@@ -132,8 +133,17 @@ class _AmountSheetState extends State<_AmountSheet> {
       : QuantityFormat.formatAmount(quantity.amountIn(unit), unit);
 
   @override
+  void initState() {
+    super.initState();
+    _needed.addListener(_changed);
+    _have.addListener(_changed);
+  }
+
+  void _changed() => setState(() {});
+
+  @override
   void dispose() {
-    _buy.dispose();
+    _needed.dispose();
     _have.dispose();
     super.dispose();
   }
@@ -158,11 +168,11 @@ class _AmountSheetState extends State<_AmountSheet> {
     return (edited: true, value: Quantity.of(amount, unit));
   }
 
-  void _apply() {
-    final ({bool edited, Quantity? value}) buy = _read(
-      _buy,
-      _buyInitial,
-      _buyUnit,
+  ShoppingLine get _draft {
+    final ({bool edited, Quantity? value}) needed = _read(
+      _needed,
+      _neededInitial,
+      _neededUnit,
       widget.line.wanted,
     );
     final ({bool edited, Quantity? value}) have = _read(
@@ -171,25 +181,28 @@ class _AmountSheetState extends State<_AmountSheet> {
       _haveUnit,
       widget.line.onHand,
     );
-
-    // An untouched Buy field leaves the line's own decision exactly as it
-    // was — including the case of no decision at all. Comparing the field
-    // against the line's *full* amount folded an existing chosen amount into
-    // the recipes' number and then cleared it, so opening the sheet and
-    // pressing Done silently undid the amount somebody had settled on.
-    final Quantity? wanted = buy.edited
-        ? _asOverride(buy.value)
+    // A field nobody changed returns the exact stored fact, not a reparse of
+    // rounded display text. That includes a null override and mixed units.
+    final Quantity? wanted = needed.edited
+        ? _asOverride(needed.value)
         : widget.line.wanted;
-
-    Navigator.of(context).pop(
-      widget.line.copyWith(
-        wanted: wanted,
-        clearWanted: wanted == null,
-        onHand: have.value,
-        clearOnHand: have.value == null,
-      ),
+    return widget.line.copyWith(
+      wanted: wanted,
+      clearWanted: wanted == null,
+      onHand: have.value,
+      clearOnHand: have.value == null,
     );
   }
+
+  bool _validField(TextEditingController field, String initial) =>
+      field.text.trim() == initial.trim() ||
+      field.text.trim().isEmpty ||
+      (parseAmount(field.text) ?? -1) >= 0;
+
+  bool get _valid =>
+      _validField(_needed, _neededInitial) && _validField(_have, _haveInitial);
+
+  void _apply() => Navigator.of(context).pop(_draft);
 
   /// [typed] as a decision of its own, or null when it is only the recipes'
   /// own amount retyped — which should not leave the line wearing an
@@ -212,7 +225,25 @@ class _AmountSheetState extends State<_AmountSheet> {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    final bool measurable = widget.line.isMeasurable;
+    final ResolvedShoppingLine preview = ShoppingLineResolver.resolve(
+      line: _draft,
+      food: widget.food,
+    );
+    final Quantity? buy = preview.toBuy;
+    final Quantity? pack = preview.pack;
+    final String? packs =
+        buy != null &&
+            !buy.isZero &&
+            pack != null &&
+            pack.canonicalAmount > 0 &&
+            buy.kind == pack.kind
+        ? '${CartQuantity.forLine(line: preview.line, pack: pack)} × ${QuantityFormat.formatAsAuthored(pack)}'
+        : null;
+    final bool cannotSubtract =
+        preview.onHand != null &&
+        preview.line.fullAmount != null &&
+        preview.onHand!.kind != preview.line.fullAmount!.kind;
+    final bool mixed = _resolved.planned.length > 1;
 
     return SafeArea(
       child: Padding(
@@ -239,24 +270,17 @@ class _AmountSheetState extends State<_AmountSheet> {
                 const SizedBox(height: HearthSpacing.xs),
                 Text(
                   _resolved.planned.isEmpty
-                      ? 'Added by hand.'
-                      // The settled amounts, so the sentence here and the
-                      // line on the list are the same reading of the same
-                      // asks (spec R5).
-                      : 'The recipes call for '
-                            '${_resolved.planned.map((Quantity q) => FoodQuantityFormat.format(q, food: widget.food)).join(' + ')}.',
+                      ? 'Needed: no amount set.'
+                      : '${widget.line.isManual ? 'Needed' : 'Needed for meals'}: '
+                            '${_resolved.planned.map((Quantity q) => FoodQuantityFormat.format(q, food: widget.food)).join(' + ')}',
                   style: context.text.metadata.copyWith(
                     color: colors.textMuted,
                   ),
                 ),
-                if (!measurable) ...<Widget>[
+                if (mixed) ...<Widget>[
                   const SizedBox(height: HearthSpacing.md),
-                  // Two units at once and no density to reconcile them, so
-                  // there is no single number to work from. Settling one by
-                  // hand is the way out, and the tick still works meanwhile.
                   Text(
-                    'This one is written two ways at once, so give it a single '
-                    'amount to work from.',
+                    'These amounts use different units with no known conversion. Keep them separate, or set one total needed below.',
                     style: context.text.metadata.copyWith(
                       color: colors.textSecondary,
                     ),
@@ -264,20 +288,66 @@ class _AmountSheetState extends State<_AmountSheet> {
                 ],
                 const SizedBox(height: HearthSpacing.lg),
                 _AmountField(
-                  controller: _buy,
-                  label: 'Buy',
-                  unit: _buyUnit,
-                  hint: 'How much to get',
+                  controller: _needed,
+                  label: 'Total needed',
+                  unit: _neededUnit,
+                  hint: 'Before subtracting what is at home',
                 ),
                 const SizedBox(height: HearthSpacing.md),
                 _AmountField(
                   controller: _have,
-                  label: 'Already have',
+                  label: 'Have at home',
                   // Its own unit, because what is in the cupboard is not
                   // always the same kind as what is needed and nothing here
                   // may convert it without the food's say-so.
                   unit: _haveUnit,
                   hint: 'Leave empty if none',
+                ),
+                const SizedBox(height: HearthSpacing.lg),
+                Semantics(
+                  liveRegion: true,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        !_valid
+                            ? 'Enter a valid amount'
+                            : buy == null
+                            ? 'Buy: ${preview.planned.isEmpty ? 'amount not set' : preview.planned.map((Quantity q) => FoodQuantityFormat.format(q, food: widget.food)).join(' + ')}'
+                            : 'Buy ${FoodQuantityFormat.format(buy, food: widget.food)}',
+                        style: context.text.sectionHeader,
+                      ),
+                      if (_valid && packs != null)
+                        Text(packs, style: context.text.body),
+                      Text(
+                        'Total needed minus have at home.',
+                        style: context.text.metadata.copyWith(
+                          color: colors.textMuted,
+                        ),
+                      ),
+                      if (cannotSubtract)
+                        Text(
+                          'The at-home amount has no known conversion to the needed unit, so it has not been subtracted.',
+                          style: context.text.metadata.copyWith(
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      if (widget.line.hasUnquantified)
+                        Text(
+                          'Plus an amount to taste that is not included in this calculation.',
+                          style: context.text.metadata.copyWith(
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      if (widget.line.checked)
+                        Text(
+                          'Marked bought. These amounts do not change that check.',
+                          style: context.text.metadata.copyWith(
+                            color: colors.textMuted,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: HearthSpacing.md),
                 // On its own line rather than beside Reset and Done: three
@@ -286,8 +356,10 @@ class _AmountSheetState extends State<_AmountSheet> {
                 if (widget.onRemove case final Future<void> Function() remove)
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: SizedBox(
-                      height: HearthTouch.minTarget,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minHeight: HearthTouch.minTarget,
+                      ),
                       child: TextButton.icon(
                         onPressed: () {
                           Navigator.of(context).pop();
@@ -314,10 +386,12 @@ class _AmountSheetState extends State<_AmountSheet> {
                       child: const Text('Reset'),
                     ),
                     const Spacer(),
-                    SizedBox(
-                      height: HearthTouch.minTarget,
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minHeight: HearthTouch.minTarget,
+                      ),
                       child: FilledButton(
-                        onPressed: _apply,
+                        onPressed: _valid ? _apply : null,
                         child: const Text('Done'),
                       ),
                     ),
@@ -348,38 +422,43 @@ class _AmountField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
+    final String unitLabel = unit.label.isEmpty ? 'item' : unit.label;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Expanded(
-          child: TextField(
-            controller: controller,
-            // Text, not number: a shop measures in halves and quarters, and
-            // the numeric keyboard has no way to type "1/2".
-            keyboardType: TextInputType.text,
-            inputFormatters: <TextInputFormatter>[
-              FilteringTextInputFormatter.allow(amountCharacters),
-            ],
-            style: context.text.body,
-            decoration: InputDecoration(
-              labelText: label,
-              hintText: hint,
-              filled: true,
-              fillColor: colors.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(HearthRadius.md),
-                borderSide: BorderSide(color: colors.outline),
+        Text(label, style: context.text.label),
+        const SizedBox(height: HearthSpacing.xs),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            Expanded(
+              child: Semantics(
+                label: '$label in $unitLabel',
+                child: TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.text,
+                  inputFormatters: <TextInputFormatter>[
+                    FilteringTextInputFormatter.allow(amountCharacters),
+                  ],
+                  style: context.text.body,
+                  decoration: InputDecoration(
+                    hintText: hint,
+                    filled: true,
+                    fillColor: colors.surface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(HearthRadius.md),
+                      borderSide: BorderSide(color: colors.outline),
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-        const SizedBox(width: HearthSpacing.sm),
-        Padding(
-          padding: const EdgeInsets.only(bottom: HearthSpacing.md),
-          child: Text(
-            unit.label.isEmpty ? 'item' : unit.label,
-            style: context.text.body.copyWith(color: colors.textSecondary),
-          ),
+            const SizedBox(width: HearthSpacing.sm),
+            Text(
+              unitLabel,
+              style: context.text.body.copyWith(color: colors.textSecondary),
+            ),
+          ],
         ),
       ],
     );

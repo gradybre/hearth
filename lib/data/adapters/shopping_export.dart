@@ -10,6 +10,7 @@ class ShoppingExportItem {
     this.storeTag,
     this.productId,
     this.quantity = 1,
+    this.hasUnquantified = false,
   });
 
   final String name;
@@ -34,7 +35,12 @@ class ShoppingExportItem {
   /// hand-off can only carry the ones it can name.
   final String? productId;
 
-  /// How many of that product to ask for. Meaningless without [productId].
+  /// At least one ask has no measured amount. Keep it in copy and search,
+  /// but do not present a cart count as covering the complete need.
+  final bool hasUnquantified;
+
+  /// How many of that product to ask for. Meaningless without [productId]
+  /// or while [hasUnquantified] is true.
   final int quantity;
 }
 

@@ -596,10 +596,13 @@ void main() {
       await pumpFrames(tester, frames: 24);
 
       await tester.scrollUntilVisible(
-        find.text('Share or export'),
+        find.text('More'),
         300,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.tap(find.text('More'));
+      await pumpFrames(tester, frames: 12);
+      await tester.ensureVisible(find.text('Share or export'));
       await tester.tap(find.text('Share or export'));
       await pumpFrames(tester, frames: 10);
 

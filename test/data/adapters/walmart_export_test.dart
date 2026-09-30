@@ -71,6 +71,62 @@ void main() {
       expect(items, isEmpty);
     });
 
+    test(
+      'covered measured needs retain an unresolved amount in the export',
+      () async {
+        final Food food = Food(
+          id: 'beef',
+          householdId: 'household-1',
+          name: 'Beef',
+          source: FoodSource.manual,
+          servingOptions: const <ServingOption>[],
+          walmartItemId: '123456789',
+          packSize: Quantity.of(1, Units.pound),
+        );
+        final ShoppingLine unresolved = line(
+          'beef',
+          planned: 2,
+          onHand: 2,
+        ).copyWith(foodId: food.id, hasUnquantified: true);
+        final List<ShoppingExportItem> items = exportableLines(
+          <ShoppingLine>[unresolved],
+          foods: <String, Food>{food.id: food},
+        );
+        expect(items.map((ShoppingExportItem item) => item.name), <String>[
+          'beef',
+        ]);
+        final ShoppingExportResult result = await const WalmartExport().export(
+          items,
+        );
+        expect(result.clipboardText, '- amount not set beef');
+        expect(result.deepLinks.single.queryParameters['q'], 'beef');
+        expect(
+          result.cartLink,
+          isNull,
+          reason: 'an unresolved amount is not one known pack',
+        );
+        expect(
+          exportableLines(<ShoppingLine>[unresolved.ticked(true)]),
+          isEmpty,
+        );
+      },
+    );
+
+    test(
+      'known quantities and unresolved remainders are both copied',
+      () async {
+        final ShoppingLine unresolved = line(
+          'beef',
+          planned: 2,
+          onHand: 1,
+        ).copyWith(hasUnquantified: true);
+        final ShoppingExportResult result = await const WalmartExport().export(
+          exportableLines(<ShoppingLine>[unresolved]),
+        );
+        expect(result.clipboardText, '- 1 lb + amount not set beef');
+      },
+    );
+
     test('a line written two ways at once keeps both', () {
       // Dropping one would be choosing an amount the app declined to choose.
       final List<ShoppingExportItem> items = exportableLines(<ShoppingLine>[
@@ -257,6 +313,28 @@ Anywhere
       planned: <Quantity>[planned],
       foodId: foodId,
     );
+
+    test('a known purchase goes to the basket while an unresolved ask stays in copy', () async {
+      final List<ShoppingExportItem> items = exportableLines(
+        <ShoppingLine>[
+          lineFor('food-a', Quantity.of(2, Units.pound)),
+          lineFor('food-b', Quantity.of(1, Units.pound)).copyWith(
+            onHand: Quantity.of(1, Units.pound),
+            hasUnquantified: true,
+          ),
+        ],
+        foods: <String, Food>{
+          'food-a': product('111111111', pack: Quantity.of(1, Units.pound)),
+          'food-b': product('222222222', pack: Quantity.of(1, Units.pound)),
+        },
+      );
+      final ShoppingExportResult result = await const WalmartExport().export(
+        items,
+      );
+      expect(result.cartLink!.queryParameters['items'], '111111111_2');
+      expect(result.deepLinks, hasLength(2));
+      expect(result.clipboardText, contains('amount not set ground beef'));
+    });
 
     test('several items ride in one link', () async {
       final List<ShoppingExportItem> items = exportableLines(
