@@ -495,12 +495,15 @@ class PlanRepository {
   /// single decision, and making the user repeat it three times is the kind of
   /// tax the success bar is measured against. Entries are added as planned,
   /// not logged — a batch you have cooked is not a batch you have eaten.
+  /// [servingOptionId] names the nutrition serving counted by [servings], so
+  /// assigning a reviewed package portion never substitutes the default row.
   Future<List<MealPlanEntry>> assignAcrossDays({
     required Iterable<DateTime> dates,
     required MealSlot slot,
     required PlanRefType refType,
     required String refId,
     required double servings,
+    String? servingOptionId,
   }) async {
     final List<MealPlanEntry> created = <MealPlanEntry>[];
     for (final DateTime date in dates) {
@@ -511,6 +514,7 @@ class PlanRepository {
           refType: refType,
           refId: refId,
           servings: servings,
+          servingOptionId: servingOptionId,
         ),
       );
     }

@@ -245,7 +245,9 @@ belongs to the Nutrition section.
   portion**, with a separate action to log it. Editing an eaten portion keeps
   the frozen-basis correction described below. Recent-item shortcuts and the
   restaurant handoff follow the same date and intent rules; choosing Tuesday's
-  dinner must not silently record that it was eaten. *(Phase 2: UX-041.)*
+  dinner must not silently record that it was eaten. The open sheet retains
+  its original planning or logging intent across midnight, so time passing
+  cannot change what its action saves. *(Phase 2: UX-041.)*
 - **Changing a portion is visible, not a gesture you have to know.** Each
   meal row carries a way in to Edit portion and Remove. Long press stays as a
   shortcut for those who know it, and one tap still logs and unlogs — but a
@@ -276,12 +278,14 @@ belongs to the Nutrition section.
 - **A meal built from a menu lands on the meal it was built for.** The
   restaurant builder starts on the day screen — a particular day, a particular
   slot — and ends three screens later in the recipe editor. A typed intent
-  travels with it, so the editor saves the recipe *and* logs it where the
-  build began; before, it saved and stopped, and the meal somebody was in the
-  middle of logging was never logged. The day and slot are never re-derived at
+  travels with it, so the editor saves the recipe *and* adds it where the
+  build began, planned or eaten according to that intent; before, it saved
+  and stopped, and the meal somebody was in the middle of logging was never
+  logged. The day and slot are never re-derived at
   the far end, because what is recoverable there is *today's*: a dinner built
   for last Tuesday must not become tonight's. The button says which meal it is
-  about to write to, and the reviewed nutrition is frozen once. Opened from
+  about to write to, and the reviewed nutrition is frozen once when logged.
+  Opened from
   the recipe library there is no meal in progress, and an ordinary Save is the
   right ending.
   - **The recipe is written first and the meal second, so the second can

@@ -34,25 +34,35 @@ import 'logging_intent.dart';
 /// short: pick a thing, tap Log. The portion stepper is right there for the
 /// half-servings that come up in real life, but nothing has to be adjusted to
 /// finish (spec §5.6).
+///
+/// [clock] makes the boundary between calendar days testable without a global
+/// clock. The opening intent is fixed; relative date words may refresh.
 Future<void> showLogSheet(
   BuildContext context, {
   required DateTime date,
   required MealSlot slot,
   ResolvedEntry? existing,
+  DateTime Function()? clock,
 }) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
   backgroundColor: Colors.transparent,
   builder: (BuildContext context) =>
-      _LogSheet(date: date, slot: slot, existing: existing),
+      _LogSheet(date: date, slot: slot, existing: existing, clock: clock),
 );
 
 class _LogSheet extends ConsumerStatefulWidget {
-  const _LogSheet({required this.date, required this.slot, this.existing});
+  const _LogSheet({
+    required this.date,
+    required this.slot,
+    this.existing,
+    this.clock,
+  });
 
   final DateTime date;
   final MealSlot slot;
   final ResolvedEntry? existing;
+  final DateTime Function()? clock;
 
   @override
   ConsumerState<_LogSheet> createState() => _LogSheetState();
@@ -243,16 +253,24 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
 
   bool get _isExisting => widget.existing != null;
 
+  DateTime get _now => widget.clock?.call() ?? DateTime.now();
+
+  /// The action this sheet opened to offer. Re-reading the clock on a tap
+  /// could make an unchanged Add to plan button log a meal after midnight.
+  /// The absolute destination and this intent travel together through every
+  /// path, including a recent repeat and the restaurant builder.
+  late final LoggingIntent _openingIntent;
+
   bool get _defaultsToPlan => widget.existing != null
       ? !widget.existing!.entry.isLogged
-      : !LoggingIntent.forMeal(date: widget.date, slot: widget.slot).eaten;
+      : !_openingIntent.eaten;
 
   /// How far the day being logged to is from today, on the calendar.
   ///
   /// One reading of the clock, used for both the words and the colour. Two
   /// would be two sources of truth for one fact — and this change has just
   /// finished collapsing three copies of the weekday list into one.
-  int get _daysFromToday => calendarDaysBetween(DateTime.now(), widget.date);
+  int get _daysFromToday => calendarDaysBetween(_now, widget.date);
 
   /// The day this is going to, in the fewest words that identify it.
   ///
@@ -269,6 +287,11 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   @override
   void initState() {
     super.initState();
+    _openingIntent = LoggingIntent.forMeal(
+      date: widget.date,
+      slot: widget.slot,
+      today: _now,
+    );
     // A correction opens in the unit it was typed in. The food it belongs to
     // may not have arrived yet, so this is read by entry id and matched to a
     // unit once the library resolves.
@@ -658,7 +681,16 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   ///
   /// "This batch is my dinner Mon/Tue/Wed" is one decision, so it is one
   /// action — not the same add repeated three times.
-  Future<void> _assignAcrossDays() async {
+  Future<void> _assignAcrossDays({
+    required Map<String, Food> foods,
+    required Map<String, Recipe> recipes,
+    PortionUnit? typedIn,
+  }) async {
+    // A portion's count and serving ID are inseparable here just as they are
+    // for a single-day plan. A package amount can count a different row from
+    // the food's default; copying only the count would change its nutrition.
+    final ({Macros perServing, double portion, String? servingOptionId}) basis =
+        _basis(foods: foods, recipes: recipes);
     final List<DateTime>? days = await showDayPicker(
       context,
       title: 'Add to which days?',
@@ -668,15 +700,19 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
 
     setState(() => _busy = true);
     try {
-      await ref
+      final List<MealPlanEntry> added = await ref
           .read(planRepositoryProvider)
           .assignAcrossDays(
             dates: days,
             slot: widget.slot,
             refType: _recipe != null ? PlanRefType.recipe : PlanRefType.food,
             refId: _recipe?.id ?? _food!.id,
-            servings: _servings,
+            servings: basis.portion,
+            servingOptionId: basis.servingOptionId,
           );
+      for (final MealPlanEntry entry in added) {
+        await _recordEntryUnit(entry.id, typedIn, foods);
+      }
       ref.invalidate(dayEntriesProvider);
       if (mounted) Navigator.of(context).pop();
     } finally {
@@ -1007,7 +1043,13 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
-                onPressed: _busy ? null : _assignAcrossDays,
+                onPressed: _busy
+                    ? null
+                    : () => _assignAcrossDays(
+                        foods: foods,
+                        recipes: recipes,
+                        typedIn: unit,
+                      ),
                 icon: const Icon(Icons.event_repeat_outlined, size: 18),
                 label: const Text('Add to several days'),
               ),
@@ -1211,12 +1253,8 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
               onPressed: () {
-                final LoggingIntent intent = LoggingIntent.forMeal(
-                  date: widget.date,
-                  slot: widget.slot,
-                );
                 Navigator.of(context).pop();
-                context.push('/recipe/eat-out', extra: intent);
+                context.push('/recipe/eat-out', extra: _openingIntent);
               },
               style: TextButton.styleFrom(
                 foregroundColor: colors.textSecondary,
