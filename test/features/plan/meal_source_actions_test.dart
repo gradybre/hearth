@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -153,6 +155,36 @@ Future<void> _tabTo(WidgetTester tester, Finder target) async {
 }
 
 void main() {
+  testWidgets(
+    'a held Log action rechecks a recipe removed since the row drew',
+    (WidgetTester tester) async {
+      final StreamController<List<Recipe>> library =
+          StreamController<List<Recipe>>();
+      addTearDown(library.close);
+      final HearthDatabase db = await pumpHearthApp(
+        tester,
+        launchTarget: LaunchTarget.today,
+        recipes: <Recipe>[_recipe()],
+        recipeStream: library.stream,
+        foods: <Food>[_food()],
+        entries: <MealPlanEntry>[_meal()],
+      );
+      library.add(<Recipe>[_recipe()]);
+      await pumpFrames(tester, frames: 12);
+      final VoidCallback held = tester
+          .widget<IconButton>(find.byKey(_log))
+          .onPressed!;
+      library.add(<Recipe>[_recipe(deleted: true)]);
+      await pumpFrames(tester, frames: 12);
+      held();
+      await pumpFrames(tester, frames: 20);
+      final MealPlanEntryRow saved = (await _stored(db)).single;
+      expect(saved.isLogged, isFalse);
+      expect(saved.macroSnapshot, isNull);
+      expect(find.textContaining('cannot be logged'), findsOneWidget);
+    },
+  );
+
   for (final PlanRefType type in PlanRefType.values) {
     for (final bool logged in <bool>[false, true]) {
       testWidgets(

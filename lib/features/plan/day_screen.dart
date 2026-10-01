@@ -654,10 +654,31 @@ class _EntryRow extends ConsumerWidget {
   /// on the row: repeating a meal should record what that food is now, and
   /// the snapshot is taken at this moment (§4).
   Future<void> _toggleLogged(BuildContext context, WidgetRef ref) async {
-    if (!entry.entry.isLogged && (entry.isUncostable || !_sourceAvailable)) {
+    // A row callback can outlive the frame that supplied its label and
+    // nutrition. Resolve from the current library before creating history.
+    final Map<String, Recipe> recipes = <String, Recipe>{
+      for (final Recipe current
+          in ref.read(recipeLibraryProvider).value ?? const <Recipe>[])
+        if (!current.isDeleted) current.id: current,
+    };
+    final Map<String, Food> foods = <String, Food>{
+      for (final Food current
+          in ref.read(foodLibraryProvider).value ?? const <Food>[])
+        if (!current.isDeleted) current.id: current,
+    };
+    final ResolvedEntry current = EntryResolver.resolve(
+      entry.entry,
+      recipes: recipes,
+      foods: foods,
+    );
+    final bool available = switch (entry.entry.refType) {
+      PlanRefType.recipe => recipes.containsKey(entry.entry.refId),
+      PlanRefType.food => foods.containsKey(entry.entry.refId),
+    };
+    if (!entry.entry.isLogged && (current.isUncostable || !available)) {
       _say(
         context,
-        _sourceAvailable
+        available
             ? 'This planned serving is no longer available. Open the food '
                   'to see its current servings.'
             : 'This ${entry.entry.refType.name} is no longer in your library '
@@ -671,14 +692,14 @@ class _EntryRow extends ConsumerWidget {
     } else {
       await plans.logEntry(
         entry.entry.id,
-        liveMacros: entry.perServing,
+        liveMacros: current.perServing,
         // Beside the macros, from the same resolve. Reading coverage back off
         // `perServing` answers "complete" for a partial recipe, because a
         // total is non-null the moment *any* ingredient states the nutrient —
         // and this is the commonest gesture in the app to freeze that on
         // (spec §5.6).
-        liveCoverage: entry.liveCoverage,
-        label: _label,
+        liveCoverage: current.liveCoverage,
+        label: current.label,
       );
     }
     ref.invalidate(dayEntriesProvider);

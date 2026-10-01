@@ -18,7 +18,7 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
 | 5 — Ongoing nutrition targets | UX-052, bounded personal carry-forward and weekly exceptions | Approved 2026-10-01 | Merged in [PR #120](https://github.com/gradybre/hearth/pull/120) after Brendan's merge approval | 4,259 passed in UTC; 72 checks in New York; clean analysis; 111 render checks and all CI passed | No actionable findings; candidate `cf3bdd8`; 133 independent checks passed | Not performed |
 | 6 — Cooking ingredient checklist | UX-018 | Approved 2026-10-01 | Merged in [PR #121](https://github.com/gradybre/hearth/pull/121) | 4,339 passed in UTC; 50 checks in New York; clean analysis; 115 render checks and all final CI passed | No actionable findings after the persistence correction; reviewed code unchanged by rebase onto main | Not performed |
 | 7 — Faster grocery additions | UX-061, plain-item quantity and reviewed paste scope | Approved 2026-10-01 | Merged in [PR #122](https://github.com/gradybre/hearth/pull/122) | 4,427 passed in UTC; 35 checks in New York; clean analysis; 119 render checks and all final CI passed | No actionable findings after dismissal correction; 47 independent final checks passed | Not performed |
-| 8 — Open meals from Plan | UX-051, source navigation and separate logging control; exact log/unlog Undo excluded | Approved 2026-10-01 | Implemented; shipping review pending | 4,499 UTC tests; 37 New York checks; clean analysis; 135 render checks | Pending | Not performed |
+| 8 — Open meals from Plan | UX-051, source navigation and separate logging control; exact log/unlog Undo excluded | Approved 2026-10-01 | Implemented in [PR #123](https://github.com/gradybre/hearth/pull/123); final review and CI pending | 4,500 UTC tests; 38 New York checks; clean analysis; 135 render checks | Design review passed; code correction under final review | Not performed |
 | 9 — Trustworthy logged portions | UX-040, new food-log portion evidence and frozen details; Plan-only input continuity excluded | Approved 2026-10-01 | Data work in parallel; shared Plan integration follows Group 8 | Pending | Pending | Not performed |
 | 10 — Adjustable cooking timers | UX-019, extend and set time left on existing timers | Approved 2026-10-01 | Independent timer implementation in progress | Pending | Pending | Not performed |
 
@@ -309,12 +309,22 @@ the coordinating agent. Current food details are distinct from the frozen
 logged details approved separately below.
 
 The coordinating agent independently checked the combined diff, ran the full
-4,499-test UTC suite (159 opt-in/time-zone skips), 37 New York checks, clean
+4,500-test UTC suite (159 opt-in/time-zone skips), 38 New York checks, clean
 analysis and all 135 render checks, and inspected light/dark/3× captures.
 New regressions preceded fixes for zero-calorie logging after a serving was
 removed, unavailable recipe actions, a held action after deletion, and an Open
 semantics node merging with the meal heading. Review-sheet saves retain their
 reviewed amounts and verify recipe availability before committing.
+
+Fresh-context code review found a held Log callback could still use the source
+from an earlier frame. A behavioral regression failed before correction; logging
+now resolves availability, nutrition and name together from the current library.
+The complete coordinating-agent gates passed again after that change. Independent
+design review inspected all 48 new captures and found no new release blocker. It
+also recorded an inherited Plan display issue: an entirely unmatched recipe can
+show zero calories while its detail explains unavailable nutrition. That separate
+qualification change remains a future group. Native-device verification has not
+been performed.
 
 ## Group 9 — Trustworthy logged portions and nutrition details
 
