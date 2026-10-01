@@ -777,7 +777,7 @@ void main() {
   });
 
   group('taking your data with you (spec §7.4)', () {
-    testWidgets('the export reaches the share sheet, with real content', (
+    testWidgets('the export waits for review before the share sheet', (
       WidgetTester tester,
     ) async {
       final HearthDatabase db = HearthDatabase.forTesting(
@@ -797,7 +797,18 @@ void main() {
         fileShare: share,
       );
 
-      await tester.tap(find.text('Export my data'));
+      await tester.tap(find.text('Export food data (JSON)'));
+      await pumpFrames(tester, frames: 20);
+
+      expect(share.shared, isNull);
+      expect(find.text('Review food export'), findsOneWidget);
+      // A later local write must not silently change the reviewed file.
+      await RecipeStore(db).upsert(
+        aRecipe(id: 'recipe-after-review', title: 'Later soup'),
+        updatedAt: DateTime.utc(2026, 9, 4),
+      );
+      await tester.scrollUntilVisible(find.text('Export this device now'), 400);
+      await tester.tap(find.text('Export this device now'));
       await pumpFrames(tester, frames: 20);
 
       expect(share.shared, isNotNull);
@@ -831,10 +842,14 @@ void main() {
         fileShare: FakeFileShare(failWith: StateError('no share sheet')),
       );
 
-      await tester.tap(find.text('Export my data'));
+      await tester.tap(find.text('Export food data (JSON)'));
+      await pumpFrames(tester, frames: 20);
+      await tester.scrollUntilVisible(find.text('Export this device now'), 400);
+      await tester.tap(find.text('Export this device now'));
       await pumpFrames(tester, frames: 20);
 
-      expect(find.textContaining('no share sheet'), findsOneWidget);
+      expect(find.textContaining('no share sheet'), findsNothing);
+      expect(find.textContaining('Could not open sharing'), findsOneWidget);
     });
   });
 }
@@ -847,9 +862,10 @@ class FakeFileShare implements FileShare {
   ExportedFile? shared;
 
   @override
-  Future<void> share(ExportedFile file) async {
+  Future<FileShareOutcome> share(ExportedFile file) async {
     if (failWith case final Object error) throw error;
     shared = file;
+    return FileShareOutcome.actionSelected;
   }
 }
 

@@ -79,10 +79,11 @@ void main() {
   });
 
   test('and nothing is both swept and excused', () {
-    // A file in both lists claims coverage and pleads its absence at once.
-    // Whichever is true, one of the two entries is a lie.
+    // An overlay cannot be both swept and excused. An inline/page journey
+    // in the same source does not claim to visit its separate dialogs.
     final Set<String> swept = <String>{
-      for (final SweptSurface surface in sweptSurfaces) surface.opensFrom,
+      for (final SweptSurface surface in sweptSurfaces)
+        if (!surface.isInline) surface.opensFrom,
     };
 
     expect(

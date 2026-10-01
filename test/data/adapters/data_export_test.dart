@@ -218,6 +218,33 @@ void main() {
     expect(file.bytes, greaterThan(0));
   });
 
+  test('the file name and contents use the same captured time', () async {
+    int clockCalls = 0;
+    final DataExport midnightExport = DataExport(
+      database: db,
+      recipes: recipes,
+      foods: foods,
+      clock: () => DateTime.utc(
+        2026,
+        9,
+        3,
+        23,
+        59,
+      ).add(Duration(minutes: 2 * clockCalls++)),
+    );
+
+    final ExportedFile file = await midnightExport.build(
+      householdId: 'household-1',
+      userId: 'user-1',
+    );
+    final Map<String, Object?> json =
+        jsonDecode(file.contents) as Map<String, Object?>;
+
+    expect(json['exported_at'], '2026-09-03T23:59:00.000Z');
+    expect(file.name, 'hearth-2026-09-03.json');
+    expect(clockCalls, 1);
+  });
+
   group('what the export claims about itself (spec §7.4, R12)', () {
     test('a food it points at comes with it, global or not', () async {
       // Referential closure, and the case that breaks it: a restaurant's
@@ -477,9 +504,7 @@ void main() {
       );
     });
 
-    test('an unsent change makes the file say it may be behind', () async {
-      // "Everything Hearth holds" is a claim about the server as well as this
-      // phone, and a queue with something in it is proof it is not true yet.
+    test('a pending change is counted without claiming cloud state', () async {
       await PendingWriteStore(db).enqueue(
         entityTable: 'recipes',
         entityId: 'recipe-1',
@@ -492,7 +517,13 @@ void main() {
           (await run())['manifest']! as Map<String, Object?>;
 
       expect(manifest['complete'], isFalse);
-      expect('${manifest['note']}', contains('not been sent'));
+      expect('${manifest['note']}', contains('pending on this device'));
+      expect('${manifest['note']}', isNot(contains('server holds less')));
+      expect(
+        manifest['note'],
+        startsWith('1 change'),
+        reason: 'the pending count must be a number, not an interpolation name',
+      );
     });
 
     test('a reference it could not resolve is named, not hidden', () async {

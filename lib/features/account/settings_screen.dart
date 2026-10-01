@@ -14,6 +14,7 @@ import '../../core/build_info.dart';
 import '../../data/adapters/data_export.dart';
 import '../../data/auth/auth_gateway.dart';
 import '../../data/sync/sync_engine.dart';
+import 'export_review_screen.dart';
 import 'settings_kit.dart';
 
 /// Everything that is set rather than cooked, as an index (review §7.8).
@@ -138,7 +139,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             SettingsNavRow(
               icon: Icons.download_outlined,
               title: 'Your data',
-              value: 'Export everything',
+              value: 'Export food data (JSON)',
               onTap: () => context.push('/settings/data'),
             ),
           ],
@@ -402,7 +403,7 @@ class SyncSettingsScreen extends StatelessWidget {
       const SettingsPage(title: 'Syncing', children: <Widget>[_SyncPanel()]);
 }
 
-/// Taking everything with you.
+/// A reviewed copy of this device's food data.
 class DataSettingsScreen extends StatelessWidget {
   const DataSettingsScreen({super.key});
 
@@ -410,9 +411,9 @@ class DataSettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) => const SettingsPage(
     title: 'Your data',
     blurb:
-        'Everything Hearth holds — your recipes, foods, plans and every meal '
-        'you have logged — as one file you keep. Recipe photos are not '
-        'included.',
+        'Export the food data held on this device as a JSON file. Review '
+        'what it includes before choosing where it goes. Recipe photos '
+        'are not included.',
     children: <Widget>[_YourData()],
   );
 }
@@ -862,11 +863,7 @@ class _SyncPanel extends ConsumerWidget {
 
 // ── Your data (spec §7.4) ────────────────────────────────────────────────────
 
-/// Taking everything with you.
-///
-/// Cheap insurance and on-brand for a personal tool: the point is that Hearth
-/// can be walked away from. It sits just above Sign out, which is where a
-/// person who is thinking about leaving will already be looking.
+/// Prepares a local snapshot before anything can leave Hearth.
 class _YourData extends ConsumerStatefulWidget {
   const _YourData();
 
@@ -877,24 +874,61 @@ class _YourData extends ConsumerStatefulWidget {
 class _YourDataState extends ConsumerState<_YourData> {
   bool _busy = false;
   String? _error;
+  HearthAccount? _preparingFor;
+  bool _scopeChanged = false;
 
   Future<void> _export() async {
+    if (_busy) return;
     final HearthAccount? account = ref.read(accountProvider).value;
     if (account == null) return;
 
     setState(() {
       _busy = true;
       _error = null;
+      _scopeChanged = false;
+      _preparingFor = account;
     });
     try {
-      final ExportedFile file = await ref
+      final ExportSnapshot snapshot = await ref
           .read(dataExportProvider)
-          .build(householdId: account.householdId, userId: account.userId);
-      await ref.read(fileShareProvider).share(file);
-    } on Object catch (error) {
-      if (mounted) setState(() => _error = '$error');
+          .prepare(householdId: account.householdId, userId: account.userId);
+      if (!mounted) return;
+      // A popped route remains mounted during its exit animation. Finishing
+      // preparation in that interval must not open a review after Back.
+      if (ModalRoute.of(context)?.isCurrent == false) return;
+      // The observed account is available offline. Looking it up through
+      // the gateway here also fetches a server profile on a configured app.
+      final HearthAccount? current = ref.read(accountProvider).value;
+      if (_scopeChanged ||
+          current?.userId != account.userId ||
+          current?.householdId != account.householdId) {
+        setState(() {
+          _error =
+              'Your account or household changed. Build a new review '
+              'before exporting.';
+        });
+        return;
+      }
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => ExportReviewScreen(snapshot: snapshot),
+        ),
+      );
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _error =
+              'Could not prepare your food export. Nothing has been shared. '
+              'Try again.';
+        });
+      }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _preparingFor = null;
+        });
+      }
     }
   }
 
@@ -911,6 +945,14 @@ class _YourDataState extends ConsumerState<_YourData> {
     // the page is being looked at, and until it does the row is visibly
     // unavailable rather than quietly inert.
     final HearthAccount? account = ref.watch(accountProvider).value;
+    ref.listen(accountProvider, (_, AsyncValue<HearthAccount?> next) {
+      if (_preparingFor case final HearthAccount preparing when next.hasValue) {
+        if (next.value?.userId != preparing.userId ||
+            next.value?.householdId != preparing.householdId) {
+          _scopeChanged = true;
+        }
+      }
+    });
 
     return SettingsGroup(
       children: <Widget>[
@@ -918,8 +960,8 @@ class _YourDataState extends ConsumerState<_YourData> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             SettingsActionRow(
-              icon: Icons.ios_share,
-              title: _busy ? 'Gathering it up…' : 'Export my data',
+              icon: Icons.download_outlined,
+              title: _busy ? 'Preparing review…' : 'Export food data (JSON)',
               onTap: _busy || account == null ? null : _export,
             ),
             if (_error case final String error)

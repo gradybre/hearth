@@ -13,8 +13,11 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
 |---|---|---|---|---|---|---|
 | 1 — Daily logging | UX-039, UX-041, UX-053 | Approved 2026-09-30 | Merged in [PR #116](https://github.com/gradybre/hearth/pull/116) | 3,925 passed; analyze clean; 71 render checks and all CI passed | Passed after corrections; code candidate `9e50bd1` | Not performed |
 | 2 — Grocery clarity | UX-058, UX-060 | Approved 2026-09-30 | Merged in [PR #117](https://github.com/gradybre/hearth/pull/117) | 3,985 passed; analyze clean; 87 render checks and all CI passed | Passed after corrections; code candidate `7d2121f` | Not performed |
-| 3 — Recipe actions and nutrition | UX-001; recipe-detail scope of UX-010 | Approved 2026-09-30 | Implemented in [PR #118](https://github.com/gradybre/hearth/pull/118) | 4,089 passed in UTC plus 2 DST checks in New York; analyze clean; 99 render checks passed; CI status on PR | One finding corrected; final assessment on PR | Not performed |
-| 4 — Export preview | UX-083 | Awaiting decision | Not started | — | — | — |
+| 3 — Recipe actions and nutrition | UX-001; recipe-detail scope of UX-010 | Approved 2026-09-30 | Merged in [PR #118](https://github.com/gradybre/hearth/pull/118) | 4,089 passed in UTC plus 2 DST checks in New York; analyze clean; 99 render checks and all CI passed | Passed after one correction; final candidate `3c64406` | Not performed |
+| 4 — Export preview | UX-083 | Approved 2026-10-01 | Implemented; fresh-context review and CI pending | 4,161 passed in UTC; 21 calendar checks in New York; analysis clean; 103 render checks passed | Pending | Not performed |
+| 5 — Ongoing nutrition targets | UX-052, bounded personal carry-forward and weekly exceptions | Approved 2026-10-01 | Domain rules built; storage and editor in progress in a separate checkout; export integration sequenced behind Group 4 | Pending aggregate checks | Pending | Not performed |
+| 6 — Cooking ingredient checklist | UX-018 | Approved 2026-10-01 | Domain and cooking UI started separately; persistence queued behind Group 5's local schema | Pending | Pending | Not performed |
+| 7 — Faster grocery additions | UX-061, plain-item quantity and reviewed paste scope | Awaiting decision | Not started | — | — | — |
 
 ## Group 1 — Daily logging
 
@@ -129,10 +132,62 @@ scope within UX-010.
 
 ## Group 4 — Export preview
 
-Proposed: rename Export everything to Export food data (JSON), preview the
+Approved: rename Export everything to Export food data (JSON), preview the
 local snapshot's scope, counts, logged date range, pending changes and
 exclusions, then share that exact reviewed snapshot. Sync first refreshes the
 review before sharing; Export this device now remains available. A receipt
 states the filename and only the share outcome the platform can establish.
-Readable archives, photos and restore are separate scopes. No implementation
-is authorized until approved.
+Readable archives, photos and restore are separate scopes. No migration,
+dependency or paid AI request is required. The snapshot/data adapter and
+review/receipt UI have disjoint builder ownership; the coordinating agent
+integrates shared providers, test fixtures and documentation.
+
+The export remains version-2 JSON with additive manifest facts. Counts and
+logged meal dates are captured alongside immutable bytes in one transaction.
+The device-wide outbox count is explicitly separate from local reference
+resolution and does not certify a complete server backup. Shopping references
+now participate in that check without including another household's private
+records. Each OS handoff gets its own temporary directory so a later export
+cannot replace an earlier file that a receiving app is still reading.
+
+Regression checks proved defects before correction: literal pending-count
+text, a filename crossing midnight separately from its contents, shared-file
+overwrite, incomplete shopping reference checks, network-dependent offline
+export, raw error text, large-text receipt positioning, missing years in date
+labels, and navigation/sync cancellation boundaries. The coordinating agent
+independently ran the full suite, analysis, calendar checks and render suite.
+New review/receipt journeys also walk section by section at large text. Native
+share-sheet and installed-device verification remain unperformed.
+
+## Group 5 — Ongoing nutrition targets
+
+Approved: personal targets carry forward after an explicit reviewed Save,
+with a default-enabled “Use these targets each new week” option. Allow a
+one-week exception and a way to stop carrying targets forward after the
+current week. Existing saved targets retain their exact-week meaning until
+the user enables continuity; historical weeks remain unchanged. No body-stat
+presets, automatic coaching or trend history is included. This needs local
+and server storage, sync and export changes. Independent files may be built
+alongside Group 4; shared integration is sequenced. The first worker owns
+only the new target-schedule domain model and its tests while export work is
+active. Storage, sync, the target editor and export will follow within the
+approved group.
+
+## Group 6 — Cooking ingredient checklist
+
+Approved: tappable ingredient checks in cook mode, retained for the current
+local cook and reversible with another tap. Keep amounts and checked rows
+visible. Reset ingredients is separate from directions and timers. Checks
+remain independent of the partner, the shared recipe and shopping quantities.
+No AI request is required. A worker owns the cook-session domain model and
+cooking UI; persistence and the local schema are integrated serially after
+Group 5's schema work.
+
+## Group 7 — Faster grocery additions
+
+Proposed: optional quantity and unit on the first plain-item entry, with
+name-only entry kept quick. Paste one nonempty line per item into a review
+list with duplicate notices before adding. Leave ambiguous quantity wording
+as text for the user to correct. This scope builds on the typed recipe
+shopping quantities already delivered in Group 3. No AI request is required.
+Implementation awaits approval and an available worker.
