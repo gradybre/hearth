@@ -22,7 +22,9 @@ the review baseline; completed work must be reconciled before asking again.
   rather than mentioning it only in a progress message.
 - Approval covers the exact card, not every recommendation in its feature
   area. A requested modification needs a revised concrete proposal; a skip is
-  a recorded answer, not a deletion from the review. Silence is not approval.
+  a recorded answer, not a deletion from the review. If a modification explicitly
+  includes approval, record that amended authorization without asking again.
+  Silence is not approval.
 - Separate **decision** (unasked / awaiting answer / approved / modified /
   skipped / future-only) from **delivery** (not started / queued / building /
   review / merged). File conflicts affect delivery order, not whether the user
@@ -48,8 +50,8 @@ scope is recorded in UX_PHASE_2_PROGRESS.md. In particular:
 | Group | Review coverage | Decision | Delivery / sequence |
 |---|---|---|---|
 | 11 — Exact log/unlog Undo | UX-051 remainder | Approved 2026-10-01: “Approve Group 11” | Building in `codex/exact-log-undo`; dedicated data/UI owner |
-| 12 — Readable Today and Week | UX-087 | Awaiting answer; card re-presented after Group 11 approval | Queue shared Day/Week edits after Group 11 if both approved |
-| 13 — Readable food-data archive | UX-084 | Awaiting answer; card sent 2026-10-01 | Can run alongside Plan work; coordinator integrates shared export/provider changes |
+| 12 — Readable Today and Week | UX-087 | Approved 2026-10-01 through its decision card | Standalone layout components building in `codex/readable-plan-layout`; Day/Week integration queued behind Group 11 |
+| 13 — Readable food-data archive | UX-084 | Awaiting answer; card re-presented after Group 12 approval | Can run alongside Plan work; coordinator integrates shared export/provider changes |
 | 14 — Recipe nutrition calculation receipt | UX-015; remaining UX-010 wording | Awaiting answer; card sent 2026-10-01 | Receipt can start independently; shared editor/logging changes sequenced |
 | 15 — Repeat and customize restaurant orders | UX-029, UX-033 | Awaiting answer; card sent 2026-10-01 | Restaurant work independent; logging integration sequenced |
 | 16 — Resolve missing ingredient matches in place | UX-014; narrow UX-028 search context | Awaiting answer; card sent 2026-10-01 | Match-review work independent; food picker/editor ownership sequenced |
