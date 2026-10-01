@@ -141,6 +141,96 @@ void main() {
   });
 
   group('updates', () {
+    test('adjusting a stopped timer cannot insert it again', () async {
+      final CookTimer timer = aTimer();
+      await store.upsert(timer, recipeTitle: 'Braised short ribs');
+      await store.delete(timer.id);
+
+      expect(
+        await store.updateExisting(
+          timer.addingTime(const Duration(minutes: 1), now: t0),
+        ),
+        isFalse,
+      );
+      expect(await db.select(db.cookTimers).get(), isEmpty);
+    });
+
+    test('adjusting preserves the existing recipe and step linkage', () async {
+      final CookTimer timer = aTimer();
+      await store.upsert(timer, recipeTitle: 'Braised short ribs');
+
+      expect(
+        await store.updateExisting(
+          timer.addingTime(const Duration(minutes: 5), now: t0),
+        ),
+        isTrue,
+      );
+
+      final CookTimerRow row = (await db.select(db.cookTimers).get()).single;
+      expect(row.id, timer.id);
+      expect(row.label, timer.label);
+      expect(row.stepId, timer.stepId);
+      expect(row.stepNumber, timer.stepNumber);
+      expect(row.recipeTitle, 'Braised short ribs');
+      expect(row.durationSeconds, 15 * 60);
+    });
+
+    test('a resumed adjusted timer clears its stored pause', () async {
+      final DateTime pausedAt = t0.add(const Duration(minutes: 2));
+      final CookTimer timer = aTimer().pausedAt(pausedAt);
+      await store.upsert(timer, recipeTitle: 'Braised short ribs');
+      final CookTimer adjusted = timer.withTimeLeft(
+        const Duration(minutes: 3, seconds: 20),
+        now: pausedAt,
+      );
+      await store.updateExisting(adjusted);
+      final DateTime resumedAt = t0.add(const Duration(hours: 1));
+      await store.updateExisting(adjusted.resumedAt(resumedAt));
+
+      final CookTimerStore restarted = CookTimerStore(db);
+      final DateTime later = resumedAt.add(const Duration(minutes: 1));
+      final CookTimer restored = (await restarted.all(now: later)).single;
+      expect(restored.isPaused, isFalse);
+      expect(
+        restored.remainingAt(later),
+        const Duration(minutes: 2, seconds: 20),
+      );
+      expect(
+        (await db.select(db.cookTimers).get()).single.elapsedWhenPausedSeconds,
+        isNull,
+      );
+    });
+
+    test('an adjusted paused timer restores with the same time left', () async {
+      final CookTimer timer = aTimer(pausedAfter: const Duration(minutes: 2));
+      await store.upsert(timer);
+      await store.updateExisting(
+        timer.withTimeLeft(const Duration(seconds: 45), now: t0),
+      );
+
+      final DateTime later = t0.add(const Duration(days: 7));
+      final CookTimer restored = (await CookTimerStore(db).all(now: later))
+          .single;
+      expect(restored.isPaused, isTrue);
+      expect(restored.remainingAt(later), const Duration(seconds: 45));
+    });
+
+    test('a restarted finished timer restores from its new deadline', () async {
+      final CookTimer timer = aTimer();
+      await store.upsert(timer);
+      final DateTime restartedAt = t0.add(const Duration(hours: 1));
+      await store.updateExisting(
+        timer.addingTime(const Duration(minutes: 5), now: restartedAt),
+      );
+
+      final DateTime later = restartedAt.add(const Duration(minutes: 2));
+      final CookTimer restored = (await CookTimerStore(db).all(now: later))
+          .single;
+      expect(restored.id, timer.id);
+      expect(restored.isPaused, isFalse);
+      expect(restored.remainingAt(later), const Duration(minutes: 3));
+    });
+
     test('pausing replaces the row rather than adding one', () async {
       final CookTimer timer = aTimer();
       await store.upsert(timer);

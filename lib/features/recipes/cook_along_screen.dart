@@ -16,7 +16,7 @@ import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
 import 'cook_instruction_blocks.dart';
 import 'step_amounts.dart';
-import 'timer_bar.dart';
+import 'timer_controls.dart';
 
 /// Cooking a recipe, step by step (spec §5.2).
 ///
@@ -350,12 +350,6 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
         );
   }
 
-  Future<void> _dismissTimer(CookTimer timer) =>
-      ref.read(cookTimersProvider.notifier).dismiss(timer.id);
-
-  Future<void> _togglePause(CookTimer timer) =>
-      ref.read(cookTimersProvider.notifier).togglePause(timer);
-
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
@@ -378,9 +372,6 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
     // shared with the rest of the app and survive this screen closing.
     final List<CookTimer> timers =
         ref.watch(cookTimersProvider).value ?? const <CookTimer>[];
-    final List<CookTimer> ringing = _session
-        .copyWithTimers(timers)
-        .ringingAt(now);
     // One timer per step, so the controls can show the countdown in place
     // rather than offering to start a second one.
     final Map<String, CookTimer> timerByStep = <String, CookTimer>{
@@ -461,12 +452,6 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
               )
             : Column(
                 children: <Widget>[
-                  for (final CookTimer timer in ringing)
-                    _RingingBanner(
-                      timer: timer,
-                      now: now,
-                      onDismiss: () => _dismissTimer(timer),
-                    ),
                   if (showAllSteps) _Progress(session: _session),
                   Expanded(
                     child: showAllSteps
@@ -507,13 +492,7 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                                 : null,
                           ),
                   ),
-                  if (timers.isNotEmpty)
-                    _TimerTray(
-                      timers: timers,
-                      now: now,
-                      onPause: _togglePause,
-                      onDismiss: _dismissTimer,
-                    ),
+                  if (timers.isNotEmpty) _TimerTray(timers: timers, now: now),
                   // Back and Next mean nothing when every step is on screen.
                   if (!showAllSteps)
                     _Controls(
@@ -1205,139 +1184,89 @@ class _NavButton extends StatelessWidget {
   );
 }
 
-class _RingingBanner extends StatelessWidget {
-  const _RingingBanner({
-    required this.timer,
-    required this.now,
-    required this.onDismiss,
-  });
-
-  final CookTimer timer;
-  final DateTime now;
-  final VoidCallback onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    final Duration over = timer.overdueBy(now);
-
-    return Semantics(
-      liveRegion: true,
-      label: '${timer.label} timer is up',
-      child: Container(
-        width: double.infinity,
-        color: colors.accent,
-        padding: const EdgeInsets.all(HearthSpacing.md),
-        child: Row(
-          children: <Widget>[
-            Icon(Icons.notifications_active, color: colors.onAccent),
-            const SizedBox(width: HearthSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    '${timer.label} — time is up',
-                    style: context.text.label.copyWith(color: colors.onAccent),
-                  ),
-                  // How long ago it went off, so a cook who missed the alert
-                  // knows whether it was thirty seconds or ten minutes.
-                  if (over.inSeconds >= 30)
-                    Text(
-                      '${countdown(over)} ago',
-                      style: context.text.metadata.copyWith(
-                        color: colors.onAccent,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            TextButton(
-              onPressed: onDismiss,
-              style: TextButton.styleFrom(foregroundColor: colors.onAccent),
-              child: const Text('Dismiss'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// Every running timer at once — sauce, pasta, and oven (spec §5.2).
 class _TimerTray extends StatelessWidget {
-  const _TimerTray({
-    required this.timers,
-    required this.now,
-    required this.onPause,
-    required this.onDismiss,
-  });
+  const _TimerTray({required this.timers, required this.now});
 
   final List<CookTimer> timers;
   final DateTime now;
-  final ValueChanged<CookTimer> onPause;
-  final ValueChanged<CookTimer> onDismiss;
 
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
+    final List<CookTimer> finished = <CookTimer>[
+      for (final CookTimer timer in timers)
+        if (!timer.isPaused && timer.isDoneAt(now)) timer,
+    ];
+    final Set<String> finishedIds = <String>{
+      for (final CookTimer timer in finished) timer.id,
+    };
+    final List<CookTimer> ordered = <CookTimer>[
+      ...finished,
+      for (final CookTimer timer in timers)
+        if (!finishedIds.contains(timer.id)) timer,
+    ];
+    final bool showFinishedNotice = timers.length > 1 && finished.isNotEmpty;
     return Container(
+      key: const ValueKey<String>('cook-timer-tray'),
       constraints: const BoxConstraints(maxHeight: 160),
       decoration: BoxDecoration(
         color: colors.surfaceSunken,
         border: Border(top: BorderSide(color: colors.outline)),
       ),
-      child: ListView(
-        shrinkWrap: true,
-        padding: const EdgeInsets.symmetric(
-          horizontal: HearthSpacing.lg,
-          vertical: HearthSpacing.sm,
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          for (final CookTimer timer in timers)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: HearthSpacing.xs),
-              child: Row(
-                children: <Widget>[
-                  Icon(
-                    // Paused carries its own icon, not just a colour or a
-                    // frozen number (spec §6.3).
-                    timer.isPaused
-                        ? Icons.pause_circle_outline
-                        : Icons.timer_outlined,
-                    size: 20,
-                    color: colors.textSecondary,
-                  ),
-                  const SizedBox(width: HearthSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      timer.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.text.metadata,
+          // One compact notice stays visible even while another timer is
+          // being inspected. Its named announcement includes offscreen timers.
+          if (showFinishedNotice)
+            Semantics(
+              container: true,
+              liveRegion: true,
+              excludeSemantics: true,
+              label:
+                  '${finished.length} '
+                  '${finished.length == 1 ? 'timer has' : 'timers have'} finished. '
+                  '${finished.map((CookTimer timer) => timer.label).join('. ')}.',
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: HearthSpacing.lg,
+                  vertical: HearthSpacing.xs,
+                ),
+                child: Row(
+                  children: <Widget>[
+                    Icon(Icons.notifications_active, color: colors.accent),
+                    const SizedBox(width: HearthSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        '${finished.length} finished',
+                        key: const ValueKey<String>('cook-finished-timers'),
+                        style: context.text.metadata,
+                      ),
                     ),
-                  ),
-                  Text(
-                    countdown(timer.remainingAt(now)),
-                    style: context.text.ingredient.copyWith(fontSize: 18),
-                  ),
-                  IconButton(
-                    icon: Icon(timer.isPaused ? Icons.play_arrow : Icons.pause),
-                    tooltip: timer.isPaused ? 'Resume timer' : 'Pause timer',
-                    // Pausing something already finished does nothing; the
-                    // only thing left to do with it is stop it.
-                    onPressed: !timer.isPaused && timer.isDoneAt(now)
-                        ? null
-                        : () => onPause(timer),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    tooltip: 'Stop timer',
-                    onPressed: () => onDismiss(timer),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(
+                horizontal: HearthSpacing.lg,
+                vertical: HearthSpacing.sm,
+              ),
+              children: <Widget>[
+                for (final CookTimer timer in ordered)
+                  CookTimerCard(
+                    key: ValueKey<String>('cook-timer-${timer.id}'),
+                    timer: timer,
+                    now: now,
+                    prioritizeTime: true,
+                    finishedNoticeProvided: showFinishedNotice,
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );

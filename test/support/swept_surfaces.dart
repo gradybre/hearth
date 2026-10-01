@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/data/local/cook_session_store.dart';
+import 'package:hearth/domain/cooking/cook_session.dart';
 import 'package:hearth/features/foods/food_detail_screen.dart';
 
 import 'app_harness.dart';
@@ -174,7 +176,50 @@ class SweepTools {
 /// Everything in `lib/` that opens a sheet or a dialog is either named here
 /// or listed in [notSweptYet] with a reason. There is no third option: that
 /// is the whole point.
+Future<void> _openTimerTray(WidgetTester tester, SweepTools tools) async {
+  final ProviderContainer container = ProviderScope.containerOf(
+    tester.element(find.byType(Scaffold).last),
+  );
+  await container
+      .read(cookTimersProvider.notifier)
+      .start(
+        CookTimer(
+          id: 'sweep-timer',
+          label: 'Simmer the beans',
+          duration: const Duration(minutes: 10),
+          startedAt: DateTime.now(),
+        ),
+      );
+  await pumpFrames(tester, frames: 8);
+  await tools.reach(find.text('Simmer the beans'));
+}
+
 final List<SweptSurface> sweptSurfaces = <SweptSurface>[
+  SweptSurface(
+    name: 'adjustable cooking timers',
+    opensFrom: 'lib/features/recipes/timer_bar.dart',
+    open: _openTimerTray,
+    arrived: find.text('Timers'),
+    waypoints: <Finder>[
+      find.byKey(const ValueKey<String>('timer-add-1-sweep-timer')),
+      find.byKey(const ValueKey<String>('timer-add-5-sweep-timer')),
+      find.byKey(const ValueKey<String>('timer-set-sweep-timer')),
+    ],
+    farEnd: find.text('Done'),
+  ),
+  SweptSurface(
+    name: 'setting a timer’s remaining time',
+    opensFrom: 'lib/features/recipes/timer_controls.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await _openTimerTray(tester, tools);
+      await tools.reach(
+        find.byKey(const ValueKey<String>('timer-set-sweep-timer')),
+      );
+    },
+    arrived: find.text('Minutes'),
+    waypoints: <Finder>[find.text('Seconds'), find.text('Save time')],
+    farEnd: find.text('Cancel'),
+  ),
   for (final bool reset in <bool>[false, true])
     SweptSurface(
       name: reset
@@ -763,6 +808,4 @@ const Map<String, String> notSweptYet = <String, String>{
       'Opened from a recipe that is in the library, on its detail screen.',
   'lib/features/recipes/recipe_editor_screen.dart':
       'A discard-changes dialog, reachable only from a dirty editor.',
-  'lib/features/recipes/timer_bar.dart':
-      'The timers sheet only exists while a timer is running.',
 };

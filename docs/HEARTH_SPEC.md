@@ -220,6 +220,17 @@ belongs to the Nutrition section.
     Start over**, retaining fresh choices made after the reset.
   - Ingredients pinned/visible on screen during steps. Focused cards show matched amounts in a “For this step” panel directly below the directions: one quantity-first row per ingredient, 22-point base type, with full text scaling and wrapping. Short screens and large text keep the content and cooking actions scrollable together.
   - Embedded timers, with **multiple concurrent timers** (sauce + pasta + oven at once) — single-timer feels broken in real cooking.
+  - **Adjust an existing timer:** its cook card and the timer tray offer
+    **+1 min**, **+5 min** and **Set time left** (whole minutes and seconds).
+    Running timers continue; paused timers stay paused; extending a finished
+    timer restarts it from now. Time edits preserve timer identity and the
+    recipe/step link, are saved locally, and update the existing alert
+    schedule where supported. Repeated actions use the current stored timer;
+    a stopped timer is not recreated by an older open control. If the timer
+    saves but its platform alert fails, show that distinction and offer
+    **Retry alert**, which retries the alert without adding time again.
+    Custom timers and richer recipe-duration parsing remain separate work.
+    *(Phase 2: bounded UX-019.)*
   - **Large tap targets / tap-anywhere-to-advance** for messy-hands use; **keep-screen-awake** while in cook mode.
   - *Voice control deferred to a later phase* (large targets + keep-awake cover v1).
   - **Session snapshot:** cook-along loads a local snapshot of the recipe for the session, so a partner editing the shared recipe mid-cook can't yank it out from under you.

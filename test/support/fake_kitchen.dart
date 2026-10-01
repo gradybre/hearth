@@ -100,26 +100,60 @@ class FakeCookTimers extends CookTimersNotifier {
 
   @override
   Future<void> togglePause(CookTimer timer) async {
+    await _change(
+      timer.id,
+      (CookTimer current, DateTime now) =>
+          current.isPaused ? current.resumedAt(now) : current.pausedAt(now),
+    );
+  }
+
+  @override
+  Future<bool> addTime(String id, Duration amount) => _change(
+    id,
+    (CookTimer timer, DateTime now) => timer.addingTime(amount, now: now),
+  );
+
+  @override
+  Future<bool> setTimeLeft(String id, Duration remaining) => _change(
+    id,
+    (CookTimer timer, DateTime now) => timer.withTimeLeft(remaining, now: now),
+  );
+
+  Future<bool> _change(
+    String id,
+    CookTimer Function(CookTimer, DateTime) update,
+  ) async {
+    final CookTimer? current = _timers
+        .where((CookTimer timer) => timer.id == id)
+        .firstOrNull;
+    if (current == null) return false;
     final DateTime now = DateTime.now();
-    final CookTimer updated = timer.isPaused
-        ? timer.resumedAt(now)
-        : timer.pausedAt(now);
+    final CookTimer updated = update(current, now);
     _timers = <CookTimer>[
       for (final CookTimer existing in _timers)
-        if (existing.id == timer.id) updated else existing,
+        if (existing.id == id) updated else existing,
     ];
+    state = AsyncValue<List<CookTimer>>.data(_timers);
+    await retryAlert(id);
+    return true;
+  }
+
+  @override
+  Future<void> retryAlert(String id) async {
     final TimerAlerts alerts = ref.read(timerAlertsProvider);
-    await alerts.cancel(timer.id);
-    final DateTime? fires = updated.firesAt();
-    if (fires != null) {
+    await alerts.cancel(id);
+    final CookTimer? timer = _timers
+        .where((CookTimer timer) => timer.id == id)
+        .firstOrNull;
+    final DateTime? fires = timer?.firesAt();
+    if (timer != null && fires != null && fires.isAfter(DateTime.now())) {
       await alerts.schedule(
-        id: updated.id,
-        title: updated.label,
+        id: timer.id,
+        title: timer.label,
         body: '',
         at: fires,
       );
     }
-    state = AsyncValue<List<CookTimer>>.data(_timers);
   }
 }
 
