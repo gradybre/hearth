@@ -19,8 +19,8 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
 | 6 — Cooking ingredient checklist | UX-018 | Approved 2026-10-01 | Merged in [PR #121](https://github.com/gradybre/hearth/pull/121) | 4,339 passed in UTC; 50 checks in New York; clean analysis; 115 render checks and all final CI passed | No actionable findings after the persistence correction; reviewed code unchanged by rebase onto main | Not performed |
 | 7 — Faster grocery additions | UX-061, plain-item quantity and reviewed paste scope | Approved 2026-10-01 | Merged in [PR #122](https://github.com/gradybre/hearth/pull/122) | 4,427 passed in UTC; 35 checks in New York; clean analysis; 119 render checks and all final CI passed | No actionable findings after dismissal correction; 47 independent final checks passed | Not performed |
 | 8 — Open meals from Plan | UX-051, source navigation and separate logging control; exact log/unlog Undo excluded | Approved 2026-10-01 | Merged in [PR #123](https://github.com/gradybre/hearth/pull/123) | 4,500 UTC tests; 38 New York checks; clean analysis; 135 render checks and all final CI passed | Code correction passed on `57e0968`; 44 independent focused tests; all 48 design captures reviewed | Not performed |
-| 9 — Trustworthy logged portions | UX-040, new food-log portion evidence and frozen details; Plan-only input continuity excluded | Approved 2026-10-01 | Implemented, including Day integration; pull request verification follows | 4,583 UTC tests; 32 New York checks; clean analysis; 143 render checks | All 40 integration captures cleared; code corrections tested, final candidate review follows | Not performed |
-| 10 — Adjustable cooking timers | UX-019, extend and set time left on existing timers | Approved 2026-10-01 | Independent timer implementation in progress | Pending | Pending | Not performed |
+| 9 — Trustworthy logged portions | UX-040, new food-log portion evidence and frozen details; Plan-only input continuity excluded | Approved 2026-10-01 | Published in [PR #124](https://github.com/gradybre/hearth/pull/124) | 4,583 UTC tests; 32 New York checks; clean analysis; 143 render checks | All 40 integration captures cleared; candidate `460e85e` reviewed with 111 independent tests passing | Not performed |
+| 10 — Adjustable cooking timers | UX-019, extend and set time left on existing timers | Approved 2026-10-01 | Implemented in Cook and the app-wide timer tray; pull request verification follows | 4,572 UTC tests; 84 New York checks; clean analysis; 149 render checks | All design findings cleared; final candidate code verification follows | Not performed |
 
 ## Group 1 — Daily logging
 
@@ -374,3 +374,18 @@ where supported. This group does not add custom timers, recipe-time parsing,
 new background notification guarantees or AI. Timer implementation has disjoint
 ownership from Groups 8 and 9; shared fixtures and accessibility registration
 are integrated sequentially.
+
+The same timer controls are available in Cook and the app-wide tray. Stored
+updates are ordered, preserve timer and recipe/step identity, and cannot
+recreate a timer that was stopped. Alert failures retain the saved countdown
+and offer Retry alert without adding time again. Finished timers appear first
+in Cook, with a persistent finished count when several timers are present.
+The bounded tray keeps status and time readable at large text without hiding
+the recipe; named finished announcements include offscreen timers.
+
+Review regressions covered stale callbacks, rapid starts, alert failures,
+elapsed storage reads, multiple finished timers and clipped large-text
+readouts. A restored timer paused past its deadline gains the full extension
+while staying paused. Each correction followed a behavioral failure. No migration,
+dependency or AI change is required. Native background-alert delivery has
+not been verified; the existing platform adapter remains the boundary.

@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app/cook_timers.dart';
 import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../domain/cooking/cook_session.dart';
+import 'timer_controls.dart';
+
+export 'timer_controls.dart' show countdown, spokenDuration;
 
 /// Running cook timers, shown from anywhere in the app (spec §5.2).
 ///
@@ -154,11 +156,12 @@ class _CookTimerBarState extends ConsumerState<CookTimerBar>
   }
 }
 
-/// Every running timer, with the controls to pause or stop each.
+/// Every timer, with controls to pause, stop or change the time left.
 Future<void> showCookTimersSheet(BuildContext context) =>
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (BuildContext context) => const _CookTimersSheet(),
     );
 
@@ -192,183 +195,53 @@ class _CookTimersSheetState extends ConsumerState<_CookTimersSheet> {
     final DateTime now = DateTime.now();
     final List<CookTimer> timers =
         ref.watch(cookTimersProvider).value ?? const <CookTimer>[];
-    final CookTimersNotifier control = ref.read(cookTimersProvider.notifier);
 
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * 0.85,
-      ),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: colors.background,
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(HearthRadius.xl),
-          ),
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.85,
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(HearthRadius.xl),
         ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Padding(
+        // A modal covers the page's messenger. Keep failures and Retry alert
+        // on this surface, where the cook can see and reach them.
+        child: ScaffoldMessenger(
+          child: Scaffold(
+            backgroundColor: colors.background,
+            body: SafeArea(
+              child: ListView(
                 padding: const EdgeInsets.all(HearthSpacing.lg),
-                child: Text('Timers', style: context.text.sectionHeader),
-              ),
-              if (timers.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: HearthSpacing.lg,
-                  ),
-                  child: Text(
-                    'Nothing on.',
-                    style: context.text.body.copyWith(
-                      color: colors.textSecondary,
-                    ),
-                  ),
-                )
-              else
-                Flexible(
-                  child: ListView(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: HearthSpacing.lg,
-                    ),
-                    children: <Widget>[
-                      for (final CookTimer timer in timers)
-                        _TimerRow(
-                          timer: timer,
-                          now: now,
-                          onPause: () => control.togglePause(timer),
-                          onStop: () => control.dismiss(timer.id),
-                        ),
-                    ],
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.all(HearthSpacing.lg),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Done'),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TimerRow extends StatelessWidget {
-  const _TimerRow({
-    required this.timer,
-    required this.now,
-    required this.onPause,
-    required this.onStop,
-  });
-
-  final CookTimer timer;
-  final DateTime now;
-  final VoidCallback onPause;
-  final VoidCallback onStop;
-
-  @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    final bool done = !timer.isPaused && timer.isDoneAt(now);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
-      child: Container(
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: BorderRadius.circular(HearthRadius.md),
-          border: Border.all(
-            color: done ? colors.outlineStrong : colors.outline,
-          ),
-        ),
-        padding: const EdgeInsets.all(HearthSpacing.md),
-        child: Row(
-          children: <Widget>[
-            Icon(
-              done
-                  ? Icons.notifications_active
-                  : timer.isPaused
-                  ? Icons.pause_circle_outline
-                  : Icons.timer_outlined,
-              size: 20,
-              color: done ? colors.accent : colors.textSecondary,
-            ),
-            const SizedBox(width: HearthSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(
-                    timer.label,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.text.ingredient,
-                  ),
-                  if (timer.isPaused)
+                  Text('Timers', style: context.text.sectionHeader),
+                  const SizedBox(height: HearthSpacing.md),
+                  if (timers.isEmpty)
                     Text(
-                      'Paused',
-                      style: context.text.metadata.copyWith(
-                        color: colors.textMuted,
+                      'Nothing on.',
+                      style: context.text.body.copyWith(
+                        color: colors.textSecondary,
                       ),
                     )
-                  else if (done)
-                    Text(
-                      '${countdown(timer.overdueBy(now))} ago',
-                      style: context.text.metadata.copyWith(
-                        color: colors.textMuted,
+                  else
+                    for (final CookTimer timer in timers)
+                      CookTimerCard(timer: timer, now: now),
+                  Padding(
+                    padding: const EdgeInsets.only(top: HearthSpacing.md),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(48, 48),
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Done'),
                       ),
                     ),
+                  ),
                 ],
               ),
             ),
-            Text(
-              done ? 'Done' : countdown(timer.remainingAt(now)),
-              style: context.text.ingredient.copyWith(fontSize: 18),
-            ),
-            IconButton(
-              icon: Icon(timer.isPaused ? Icons.play_arrow : Icons.pause),
-              tooltip: timer.isPaused ? 'Resume timer' : 'Pause timer',
-              onPressed: done ? null : onPause,
-            ),
-            IconButton(
-              icon: const Icon(Icons.close),
-              tooltip: 'Stop timer',
-              onPressed: onStop,
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
-}
-
-/// A countdown. Hours are broken out once there are any: "179:57" is not a
-/// number anyone can read as most of three hours.
-String countdown(Duration d) {
-  final int hours = d.inHours;
-  final String minutes = d.inMinutes.remainder(60).toString();
-  final String seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-  if (hours == 0) return '$minutes:$seconds';
-  return '$hours:${minutes.padLeft(2, '0')}:$seconds';
-}
-
-/// The same duration for a screen reader, which should not be read "two colon
-/// fifty-nine colon fifty-seven".
-String spokenDuration(Duration d) {
-  final int hours = d.inHours;
-  final int minutes = d.inMinutes.remainder(60);
-  if (hours > 0) {
-    return minutes == 0 ? '$hours hours' : '$hours hours $minutes minutes';
-  }
-  if (minutes > 0) return '$minutes minutes';
-  return '${d.inSeconds} seconds';
 }

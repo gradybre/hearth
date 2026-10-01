@@ -75,6 +75,27 @@ class CookTimerStore {
     _db.cookTimers,
   )..where(($CookTimersTable t) => t.id.equals(id))).go();
 
+  /// Edits only an existing timer. A callback from an older screen must not
+  /// recreate a stopped timer, and the recipe label remains attached to it.
+  Future<bool> updateExisting(CookTimer timer) async {
+    final int changed =
+        await (_db.update(
+          _db.cookTimers,
+        )..where(($CookTimersTable t) => t.id.equals(timer.id))).write(
+          CookTimersCompanion(
+            label: Value<String>(timer.label),
+            durationSeconds: Value<int>(timer.duration.inSeconds),
+            startedAt: Value<DateTime>(timer.startedAt),
+            stepNumber: Value<int?>(timer.stepNumber),
+            stepId: Value<String?>(timer.stepId),
+            elapsedWhenPausedSeconds: Value<int?>(
+              timer.elapsedWhenPaused?.inSeconds,
+            ),
+          ),
+        );
+    return changed != 0;
+  }
+
   Future<void> clear() => _db.delete(_db.cookTimers).go();
 
   static CookTimer _toTimer(CookTimerRow row) => CookTimer(

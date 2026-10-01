@@ -78,6 +78,54 @@ class CookTimer {
         )
       : this;
 
+  /// Adds to what is left, keeping a running or paused timer in that state.
+  /// A finished running timer starts again from [now]. A restored timer
+  /// paused past its deadline gains the full extension without resuming.
+  /// The same timer still belongs to the same step.
+  CookTimer addingTime(Duration amount, {required DateTime now}) {
+    _requirePositive(amount);
+    if (isDoneAt(now)) {
+      return withTimeLeft(amount, now: now);
+    }
+    final Duration extended = duration + amount;
+    if (extended <= duration) {
+      throw ArgumentError.value(amount, 'amount', 'The duration is too large');
+    }
+    // Validate the date too: an unrepresentable alert deadline is not a timer.
+    startedAt.add(extended);
+    return CookTimer(
+      id: id,
+      label: label,
+      duration: extended,
+      startedAt: startedAt,
+      stepId: stepId,
+      stepNumber: stepNumber,
+      elapsedWhenPaused: elapsedWhenPaused,
+    );
+  }
+
+  /// Sets a new countdown from this moment. Paused stays paused; otherwise
+  /// the countdown is running, including when this timer had already ended.
+  CookTimer withTimeLeft(Duration remaining, {required DateTime now}) {
+    _requirePositive(remaining);
+    now.add(remaining);
+    return CookTimer(
+      id: id,
+      label: label,
+      duration: remaining,
+      startedAt: now,
+      stepId: stepId,
+      stepNumber: stepNumber,
+      elapsedWhenPaused: isPaused ? Duration.zero : null,
+    );
+  }
+
+  static void _requirePositive(Duration duration) {
+    if (duration <= Duration.zero) {
+      throw ArgumentError.value(duration, 'duration', 'Must be positive');
+    }
+  }
+
   /// When it will fire, for scheduling an alert that survives backgrounding.
   DateTime? firesAt() => isPaused ? null : startedAt.add(duration);
 
