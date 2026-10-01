@@ -551,3 +551,31 @@ before production router/editor integration. Group 15 still needs its shared
 save-variation handoff. Group 19 is building guarded handoffs from its captured
 nutrition receipt; shared Day wiring remains sequenced behind Group 17.
 Groups 20–22 remain unanswered; no work on those scopes is authorized yet.
+
+## Group 18 final validation — 2026-10-01
+
+The reviewed Walmart handoff now displays saved product identity, remaining need
+and a purchase count. Known package conversions prefill that count; unknown
+conversions require a count or Skip. Counts are trip-only, capped at 24 per
+combined product, and never mark purchases complete. Copy retains the remaining
+list and excluded items.
+
+Root reproduced and fixed the independent review findings: unlike count nouns
+cannot be converted or subtracted as though a scoop were a container, and repeated
+Skip/cap-review controls now identify their item to assistive readers. Incompatible
+on-hand amounts retain their original facts and stay visible even when the older
+list subtraction would suggest zero. List/product reads use one local transaction;
+source changes reset the review rather than continuing the old handoff.
+
+Final root gates on the combined Group 13/14/18 source passed 4,955 UTC tests,
+194 render checks and clean format/analysis. The focused screen/sheet and quantity
+evidence gates passed 116 checks; independent corrected review is clear. The
+branch was then aligned with the published Group 14 commit; only progress and
+decision documentation changed. The new 40-image gallery includes unresolved
+on-hand quantities at phone, desktop and 3× text sizes. No real retailer, clipboard,
+purchase or native screen-reader acceptance was performed.
+
+This is queued behind [Group 14 PR #130](https://github.com/gradybre/hearth/pull/130).
+Dependent PRs retain their reviewed commits and will merge in order after every
+required check passes. Neither group is described as merged here. Groups 20–22
+remain awaiting answers.
