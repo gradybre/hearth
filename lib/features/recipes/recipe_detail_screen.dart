@@ -367,7 +367,14 @@ class _ActionFeedback {
 
   bool requireCurrent() {
     if (isCurrent) return true;
-    _show('Your account or household changed. Open the recipe and try again.');
+    // SnackBarAction dismisses its bar after invoking the callback. With
+    // accessible navigation that dismissal is immediate, so wait until it
+    // finishes before presenting the explanation for this expired action.
+    Future<void>.microtask(
+      () => _show(
+        'Your account or household changed. Open the recipe and try again.',
+      ),
+    );
     return false;
   }
 

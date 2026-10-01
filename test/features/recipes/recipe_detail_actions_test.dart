@@ -63,6 +63,41 @@ Future<void> press(WidgetTester tester, String label) async {
 }
 
 void main() {
+  for (final String stage in <String>['Undo', 'Retry']) {
+    testWidgets('screen-reader $stage keeps the identity expiry explanation', (
+      WidgetTester tester,
+    ) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          FakeAccessibilityFeatures.allOn;
+      addTearDown(tester.platformDispatcher.clearAllTestValues);
+      String userId = 'local-user';
+      final RecordingPlans plans = RecordingPlans()
+        ..failures = stage == 'Retry' ? 1 : 0;
+      await openDinner(
+        tester,
+        extraOverrides: <Object>[
+          currentUserIdProvider.overrideWith((Ref ref) => userId),
+          planRepositoryProvider.overrideWithValue(plans),
+        ],
+      );
+      final ProviderContainer container = containerOf(tester);
+      await press(tester, 'Plan');
+      await press(tester, 'Add to my plan');
+      userId = 'different-user';
+      container.invalidate(currentUserIdProvider);
+      await pumpFrames(tester);
+      await press(tester, stage);
+
+      expect(plans.additions, hasLength(1));
+      expect(plans.removed, isEmpty);
+      expect(
+        find.textContaining('account or household changed').hitTestable(),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final String stage in <String>['review', 'Undo', 'Retry']) {
     testWidgets('Plan $stage expires when identity changes', (
       WidgetTester tester,

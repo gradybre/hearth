@@ -13,7 +13,7 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
 |---|---|---|---|---|---|---|
 | 1 — Daily logging | UX-039, UX-041, UX-053 | Approved 2026-09-30 | Merged in [PR #116](https://github.com/gradybre/hearth/pull/116) | 3,925 passed; analyze clean; 71 render checks and all CI passed | Passed after corrections; code candidate `9e50bd1` | Not performed |
 | 2 — Grocery clarity | UX-058, UX-060 | Approved 2026-09-30 | Merged in [PR #117](https://github.com/gradybre/hearth/pull/117) | 3,985 passed; analyze clean; 87 render checks and all CI passed | Passed after corrections; code candidate `7d2121f` | Not performed |
-| 3 — Recipe actions and nutrition | UX-001; recipe-detail scope of UX-010 | Approved 2026-09-30 | Implemented; review and CI pending | 4,089 passed; analyze clean; 99 render checks passed | Pending | Not performed |
+| 3 — Recipe actions and nutrition | UX-001; recipe-detail scope of UX-010 | Approved 2026-09-30 | Implemented in [PR #118](https://github.com/gradybre/hearth/pull/118) | 4,091 passed; analyze clean; 99 render checks passed; CI status on PR | One finding corrected; final assessment on PR | Not performed |
 | 4 — Export preview | UX-083 | Awaiting decision | Not started | — | — | — |
 
 ## Group 1 — Daily logging
@@ -102,10 +102,17 @@ below the full-width message so Undo, Retry and View list remain readable at
 3× text. The desktop date review is constrained to a compact dialog while
 the phone version remains scrollable.
 
-The coordinating agent independently ran formatting, analysis, all 4,089
+The coordinating agent independently ran formatting, analysis, all 4,091
 tests (121 opt-in skips), and 99 render checks, and inspected the changed code
-and rendered light, dark, desktop and enlarged-text fixtures. Fresh-context
-review and CI remain pending; native-device verification is unperformed.
+and rendered light, dark, desktop and enlarged-text fixtures after the
+corrections. Native-device verification is unperformed.
+
+Fresh-context review found that the account-change explanation could be
+dismissed immediately after Undo or Retry with accessible navigation enabled.
+The write guard already prevented the expired action; deferring its feedback
+until the old snackbar finishes dismissal keeps the explanation visible.
+Both regressions failed before the correction and passed after it. Final
+review and CI status are recorded on [PR #118](https://github.com/gradybre/hearth/pull/118).
 
 The nutrition portion of this group is limited to recipe detail; wording
 parity in the editor, cook completion and log confirmation remains later
