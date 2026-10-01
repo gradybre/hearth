@@ -520,3 +520,34 @@ item-specific spoken-label gaps. Corrections are in progress. Group 19 handed
 off its snapshot-only projection and screen with 30 focused tests and 25 render
 scenarios; Day integration follows Group 17. None of Groups 13–19 is described
 as merged at this checkpoint. Groups 20–22 still await user answers.
+
+## Group 13 merged; Group 14 final validation — 2026-10-01
+
+Group 13 merged through [PR #129](https://github.com/gradybre/hearth/pull/129)
+as `7a29de623afbc8a38c0ed5c66d79b026e6e0367c`. Every CI check passed on
+independently reviewed head `a4ec2aff1759c8856b9d0a4dd8fed7effc9a1131`;
+the merged tree is exactly `60d68678925c36da3300d97c347fb2944b3fc83f`.
+Final root validation passed 4,862 UTC tests, 60 New York checks and 182
+render checks. Source and visual reviews are clear; native sharing has not
+been manually exercised.
+
+Group 14's corrected candidate has been combined with the merged archive
+without changing its tested tree. Root final validation passed 4,910 UTC tests,
+45 New York checks and 190 render checks; format and analysis are clean.
+Fresh source and final design reviews are clear. The receipt retains food-source
+qualifiers, displays a truthful calculation multiplier and disables correction
+when no usable frozen nutrition basis exists. Publication and exact published-head
+review follow; this checkpoint does not claim Group 14 merged.
+
+Group 17's independent source/design review is clear; its corrected original-base
+suite passed 4,831 tests. Group 18's count-noun and item-specific spoken-label
+corrections passed 116 focused checks and independent review. The two changes are
+now in combined-tree validation with Groups 13–14 so shared screens and test
+journeys are checked together before release.
+
+Group 16's builder handed off 117 focused/render checks and 44 captures. Review
+identified a camera-layout limitation and duplicate-wording ambiguity for correction
+before production router/editor integration. Group 15 still needs its shared
+save-variation handoff. Group 19 is building guarded handoffs from its captured
+nutrition receipt; shared Day wiring remains sequenced behind Group 17.
+Groups 20–22 remain unanswered; no work on those scopes is authorized yet.
