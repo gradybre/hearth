@@ -15,8 +15,8 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
 | 2 — Grocery clarity | UX-058, UX-060 | Approved 2026-09-30 | Merged in [PR #117](https://github.com/gradybre/hearth/pull/117) | 3,985 passed; analyze clean; 87 render checks and all CI passed | Passed after corrections; code candidate `7d2121f` | Not performed |
 | 3 — Recipe actions and nutrition | UX-001; recipe-detail scope of UX-010 | Approved 2026-09-30 | Merged in [PR #118](https://github.com/gradybre/hearth/pull/118) | 4,089 passed in UTC plus 2 DST checks in New York; analyze clean; 99 render checks and all CI passed | Passed after one correction; final candidate `3c64406` | Not performed |
 | 4 — Export preview | UX-083 | Approved 2026-10-01 | Merged in [PR #119](https://github.com/gradybre/hearth/pull/119) | 4,161 passed in UTC; 21 calendar checks in New York; analysis clean; 103 render checks and all CI passed | No actionable findings; candidate `27d9eff` | Not performed |
-| 5 — Ongoing nutrition targets | UX-052, bounded personal carry-forward and weekly exceptions | Approved 2026-10-01 | [PR #120](https://github.com/gradybre/hearth/pull/120) ready; awaiting required merge decision | 4,259 passed in UTC; 72 checks in New York; clean analysis; 111 render checks and all CI passed | No actionable findings; candidate `cf3bdd8`; 133 independent checks passed | Not performed |
-| 6 — Cooking ingredient checklist | UX-018 | Approved 2026-10-01 | [PR #121](https://github.com/gradybre/hearth/pull/121); queued behind Group 5 for merge | 4,339 passed in UTC; 50 checks in New York; clean analysis; 115 render checks passed | Overlapping-visit finding corrected; final confirmation and CI tracked on the PR | Not performed |
+| 5 — Ongoing nutrition targets | UX-052, bounded personal carry-forward and weekly exceptions | Approved 2026-10-01 | Merged in [PR #120](https://github.com/gradybre/hearth/pull/120) after Brendan's merge approval | 4,259 passed in UTC; 72 checks in New York; clean analysis; 111 render checks and all CI passed | No actionable findings; candidate `cf3bdd8`; 133 independent checks passed | Not performed |
+| 6 — Cooking ingredient checklist | UX-018 | Approved 2026-10-01 | Implemented in [PR #121](https://github.com/gradybre/hearth/pull/121) | 4,339 passed in UTC; 50 checks in New York; clean analysis; 115 render checks passed; final CI tracked on the PR | No actionable findings after the persistence correction; reviewed code unchanged by rebase onto main | Not performed |
 | 7 — Faster grocery additions | UX-061, plain-item quantity and reviewed paste scope | Awaiting decision | Not started | — | — | — |
 
 ## Group 1 — Daily logging
@@ -198,6 +198,9 @@ field; under the repository policy this group requires Brendan's merge
 decision after review and green CI. There is no unresolved implementation
 deviation from the approved scope.
 
+Brendan approved the merge on 2026-10-01; PR #120 merged as `d1f5899` with the
+declaration retained. All checks passed on the approved candidate `cf3bdd8`.
+
 ## Group 6 — Cooking ingredient checklist
 
 Approved: tappable ingredient checks in cook mode, retained for the current
@@ -236,6 +239,11 @@ A failed reset has a specific Retry Start over action; its regression failed
 before the correction. Both recovery states participate in the accessibility
 sweeps, with additional dark and 3× captures. No deliberate guard mutations were
 used for this group.
+
+The correction passed fresh-context review with 158 independent checks. After
+Group 5 merged, the two cooking commits were rebased onto main; a whole-tree
+comparison proved the result identical to reviewed candidate `3f703f6` before
+this progress-record update. Final CI and merge status are recorded on PR #121.
 
 ## Group 7 — Faster grocery additions
 
