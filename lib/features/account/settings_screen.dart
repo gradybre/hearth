@@ -15,6 +15,7 @@ import '../../data/adapters/data_export.dart';
 import '../../data/auth/auth_gateway.dart';
 import '../../data/sync/sync_engine.dart';
 import 'export_review_screen.dart';
+import 'food_archive_screen.dart';
 import 'settings_kit.dart';
 
 /// Everything that is set rather than cooked, as an index (review §7.8).
@@ -139,7 +140,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             SettingsNavRow(
               icon: Icons.download_outlined,
               title: 'Your data',
-              value: 'Export food data (JSON)',
+              value: 'JSON or readable archive',
               onTap: () => context.push('/settings/data'),
             ),
           ],
@@ -411,9 +412,9 @@ class DataSettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) => const SettingsPage(
     title: 'Your data',
     blurb:
-        'Export the food data held on this device as a JSON file. Review '
-        'what it includes before choosing where it goes. Recipe photos '
-        'are not included.',
+        'Take a copy of the food data held on this device. Choose a JSON '
+        'file or a readable archive with optional recipe photos. Review '
+        'what it includes before choosing where it goes.',
     children: <Widget>[_YourData()],
   );
 }
@@ -877,6 +878,17 @@ class _YourDataState extends ConsumerState<_YourData> {
   HearthAccount? _preparingFor;
   bool _scopeChanged = false;
 
+  void _openArchive() {
+    if (_busy) return;
+    final HearthAccount? account = ref.read(accountProvider).value;
+    if (account == null) return;
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => FoodArchiveScreen(account: account),
+      ),
+    );
+  }
+
   Future<void> _export() async {
     if (_busy) return;
     final HearthAccount? account = ref.read(accountProvider).value;
@@ -956,12 +968,19 @@ class _YourDataState extends ConsumerState<_YourData> {
 
     return SettingsGroup(
       children: <Widget>[
+        SettingsActionRow(
+          icon: Icons.folder_zip_outlined,
+          title: 'Readable food archive',
+          subtitle: 'JSON, spreadsheets, recipes and optional photos',
+          onTap: _busy || account == null ? null : _openArchive,
+        ),
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             SettingsActionRow(
               icon: Icons.download_outlined,
               title: _busy ? 'Preparing review…' : 'Export food data (JSON)',
+              subtitle: 'Original JSON; recipe photos are not included.',
               onTap: _busy || account == null ? null : _export,
             ),
             if (_error case final String error)

@@ -322,6 +322,59 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     farEnd: find.text('Export this device now'),
   ),
   SweptSurface(
+    name: 'the readable food archive options',
+    opensFrom: 'lib/features/account/settings_screen.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.reach(find.byTooltip('Settings').last);
+      await tools.reach(find.text('Your data'));
+      await tools.reach(find.text('Readable food archive'));
+    },
+    arrived: find.text('Readable food archive'),
+    waypoints: <Finder>[find.text('Include recipe photos')],
+    farEnd: find.text('Prepare archive'),
+  ),
+  SweptSurface(
+    name: 'the readable food archive review with unavailable photos',
+    opensFrom: 'lib/features/account/food_archive_screen.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.reach(find.byTooltip('Settings').last);
+      await tools.reach(find.text('Your data'));
+      await tools.reach(find.text('Readable food archive'));
+      await tools.reach(find.text('Include recipe photos'));
+      await tools.reach(find.text('Prepare archive'));
+    },
+    arrived: find.text('Review food archive'),
+    waypoints: <Finder>[
+      find.text('Inside the ZIP'),
+      find.text('1 included · 1 unavailable'),
+      find.text('Whose data and what is left out'),
+      find.text('This device at capture'),
+    ],
+    farEnd: find.text('Export reviewed archive'),
+  ),
+  SweptSurface(
+    name: 'the readable food archive receipt',
+    opensFrom: 'lib/features/account/food_archive_screen.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.reach(find.byTooltip('Settings').last);
+      await tools.reach(find.text('Your data'));
+      await tools.reach(find.text('Readable food archive'));
+      await tools.reach(find.text('Prepare archive'));
+      // The harness replaces both preparation and sharing with synthetic fakes.
+      // At 3× the review is several screens long. Read through its sections
+      // rather than exhausting the bounded one-drag search for the last button.
+      await tools.bring(find.text('Inside the ZIP'));
+      await tools.bring(find.text('Whose data and what is left out'));
+      await tools.bring(find.text('This device at capture'));
+      await tools.reach(find.text('Export reviewed archive'));
+    },
+    arrived: find.text('Archive export receipt'),
+    farEnd: find.text('Done'),
+  ),
+  SweptSurface(
     name: 'the food data export receipt',
     opensFrom: 'lib/features/account/export_review_screen.dart',
     isInline: true,

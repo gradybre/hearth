@@ -472,4 +472,51 @@ The coordinating agent read the full diff and independently passed formatting,
 clean analysis, all 4,777 UTC tests (201 opt-in/time-zone skips), 85 New York
 checks and all 177 render checks. The final fixture-only correction did not
 change production or render code. Native-device and live screen-reader
-acceptance have not been performed. Pull request delivery and CI are pending.
+acceptance have not been performed. [PR #128](https://github.com/gradybre/hearth/pull/128)
+merged on 2026-10-01 as `c4a5a76`. All CI checks passed on `adae6c4`; the merged
+tree is identical to that reviewed candidate.
+
+## Groups 13–16 — Approved implementation queue
+
+The user approved all four on 2026-10-01: “Approve those 4.” The exact accepted
+scopes are recorded in UX_PHASE_2_APPROVALS.md. Group 13's archive/data lane,
+Group 14's nutrition-receipt lane and Group 15's restaurant-usuals lane started
+in separate worktrees from `c4a5a76`. The coordinating agent owns archive UI
+and shared integration. Group 16 is approved and queued behind overlapping
+editor/capture ownership and agent availability. The user subsequently approved
+Groups 17, 18 and 19 through their separate decision cards. Groups 17 and 18
+started in separate worktrees from `c4a5a76` as builder slots became available;
+19's independent projection and screen also started from `c4a5a76`, with Day
+entry points sequenced separately. Group 13's implementation is in integrated validation and
+Group 14's receipt builder has finished, with shared logging integration under
+coordinator validation. Groups 20–22 have actual decision cards and text
+overviews; their answers remain pending.
+
+Group 13's first independent source review identified missing planned serving
+identity in the readable projection and cancellation waiting on a stalled photo.
+Behavioral regressions reproduced both; corrected focused checks pass. The full
+suite also caught three test-journey/fixture issues and a removed JSON photo
+warning, addressed before the next gate. Group 14's first full run exposed
+stale chip-label finders in 12 accessibility sweeps; those retain their selection
+assertions while locating the new wrapping labels. Neither group is released
+yet. Group 15's builder handed off 70 focused checks and four render scenes;
+editor/router save-variation integration remains queued behind Group 14.
+
+Group 13's corrected source review is clear; independent final UTC validation
+passed 4,862 tests and the New York gate passed 60. The final complete visual
+gate is running. Group 14's full pre-review suite passed 4,822 tests and its
+render gate passed 185; review then found missing AI provenance, a snapped
+calculation multiplier and unavailable history described as saved nutrition.
+Behavioral regressions reproduced these; the corrected focused gate passes 38.
+Those production changes require final release validation before publication.
+
+Group 16 now has an independent builder for match review and capture context;
+its editor/router return integration remains coordinator-owned. Group 17's
+builder handed off 115 focused tests and 24 captures, and the integrated Week
+journeys passed 51 filtered checks; full validation and fresh review are in
+progress. Group 18's integrated checks passed 32; the full run exposed one old
+button-copy assertion, and fresh review identified count-noun evidence and
+item-specific spoken-label gaps. Corrections are in progress. Group 19 handed
+off its snapshot-only projection and screen with 30 focused tests and 25 render
+scenarios; Day integration follows Group 17. None of Groups 13–19 is described
+as merged at this checkpoint. Groups 20–22 still await user answers.

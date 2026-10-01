@@ -28,6 +28,30 @@ class ExportedFile {
   int get bytes => utf8.encode(contents).length;
 }
 
+/// Photo identity captured with the export, rather than looked up by title
+/// when the archive later reads bytes. A local file can be newer than the
+/// recipe's remote reference while its upload is pending.
+@immutable
+class ExportPhotoReference {
+  const ExportPhotoReference({
+    required this.householdId,
+    required this.recipeId,
+    required this.recipeTitle,
+    this.remotePath,
+    this.localFileName,
+    this.localRemotePath,
+    this.localUpdatedAt,
+  });
+
+  final String householdId;
+  final String recipeId;
+  final String recipeTitle;
+  final String? remotePath;
+  final String? localFileName;
+  final String? localRemotePath;
+  final DateTime? localUpdatedAt;
+}
+
 /// A single local database read, ready to review and then share unchanged.
 @immutable
 class ExportSnapshot {
@@ -42,9 +66,21 @@ class ExportSnapshot {
     required this.pendingChanges,
     required List<String> exclusions,
     required List<String> missingReferences,
+    Map<String, bool> entryDeletionStates = const <String, bool>{},
+    Map<String, String?> entryServingOptionIds = const <String, String?>{},
+    List<ExportPhotoReference> photoReferences = const <ExportPhotoReference>[],
   }) : counts = Map<String, int>.unmodifiable(counts),
        exclusions = List<String>.unmodifiable(exclusions),
-       missingReferences = List<String>.unmodifiable(missingReferences);
+       missingReferences = List<String>.unmodifiable(missingReferences),
+       entryDeletionStates = Map<String, bool>.unmodifiable(
+         entryDeletionStates,
+       ),
+       entryServingOptionIds = Map<String, String?>.unmodifiable(
+         entryServingOptionIds,
+       ),
+       photoReferences = List<ExportPhotoReference>.unmodifiable(
+         photoReferences,
+       );
 
   final ExportedFile file;
   final String householdId;
@@ -66,6 +102,17 @@ class ExportSnapshot {
   final int pendingChanges;
   final List<String> exclusions;
   final List<String> missingReferences;
+
+  /// Alongside-file evidence for readable archives. The v2 JSON is unchanged.
+  /// This cache removes plan-entry tombstones, so locally present rows are
+  /// active at capture; that does not assert a newer cloud deletion is absent.
+  /// Absence in this map means not recorded, never an assumption of active.
+  final Map<String, bool> entryDeletionStates;
+
+  /// The stored serving reference travels alongside the unchanged JSON.
+  /// A present null means first serving; an absent key means not captured.
+  final Map<String, String?> entryServingOptionIds;
+  final List<ExportPhotoReference> photoReferences;
 
   bool get localReferencesComplete => missingReferences.isEmpty;
 }
@@ -163,6 +210,24 @@ class DataExport {
       householdId: householdId,
       includeDeleted: true,
     );
+    final Set<String> recipeIds = recipes.map((Recipe r) => r.id).toSet();
+    final Map<String, RecipePhotoRow> photoRows = <String, RecipePhotoRow>{
+      for (final RecipePhotoRow row in await _db.select(_db.recipePhotos).get())
+        if (recipeIds.contains(row.recipeId)) row.recipeId: row,
+    };
+    final List<ExportPhotoReference> photoReferences = <ExportPhotoReference>[
+      for (final Recipe recipe in recipes)
+        if (recipe.photoUrl != null || photoRows[recipe.id]?.fileName != null)
+          ExportPhotoReference(
+            householdId: householdId,
+            recipeId: recipe.id,
+            recipeTitle: recipe.title,
+            remotePath: recipe.photoUrl,
+            localFileName: photoRows[recipe.id]?.fileName,
+            localRemotePath: photoRows[recipe.id]?.remotePath,
+            localUpdatedAt: photoRows[recipe.id]?.updatedAt,
+          ),
+    ];
     // What the household owns. What it merely points at is fetched further
     // down, by name, once there is a list of names — reading the whole global
     // catalogue to keep six rows out of it would be loading somebody else's
@@ -537,6 +602,14 @@ class DataExport {
       pendingChanges: unsent,
       exclusions: exclusions,
       missingReferences: missing,
+      entryDeletionStates: <String, bool>{
+        for (final MealPlanEntryRow entry in entries) entry.id: false,
+      },
+      entryServingOptionIds: <String, String?>{
+        for (final MealPlanEntryRow entry in entries)
+          entry.id: entry.servingOptionId,
+      },
+      photoReferences: photoReferences,
     );
   }
 
