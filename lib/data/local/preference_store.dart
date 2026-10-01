@@ -24,6 +24,10 @@ class PreferenceStore {
   /// it to a partner would rearrange their day for no reason they could see.
   static const String daySummaryExpanded = 'plan.day_summary_expanded';
 
+  /// Meals or nutrition within Week. This does not change the app's default
+  /// Day destination and is never shared with another device or household.
+  static const String weekContentView = 'plan.week_content_view';
+
   /// Which screen the app opens on — see `LaunchTarget`. Device-local for the
   /// same reason as the theme: where your app opens is not a household
   /// decision.

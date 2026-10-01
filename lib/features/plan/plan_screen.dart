@@ -9,6 +9,7 @@ import '../../app/widgets/reading_column.dart';
 import 'day_screen.dart';
 import 'plan_view_control.dart';
 import 'week_screen.dart';
+import 'week_view_preference.dart';
 
 /// The Plan section: a day view and a week summary (spec §5.6).
 ///
@@ -22,6 +23,9 @@ class PlanScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final HearthColors colors = context.colors;
     final PlanView view = ref.watch(planViewProvider);
+    final WeekViewPreferenceState? weekPreference = view == PlanView.week
+        ? ref.watch(weekViewPreferenceProvider)
+        : null;
     final double gutter = MediaQuery.sizeOf(context).width >= 840
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
@@ -46,13 +50,19 @@ class PlanScreen extends ConsumerWidget {
                   value: view,
                   onChanged: (PlanView selection) =>
                       ref.read(planViewProvider.notifier).show(selection),
+                  weekContent: weekPreference?.view,
+                  onWeekContentChanged: weekPreference == null
+                      ? null
+                      : (WeekContentView selection) => ref
+                            .read(weekViewPreferenceProvider.notifier)
+                            .choose(selection),
                 ),
               ),
             ),
             Expanded(
               child: view == PlanView.day
                   ? const DayScreen()
-                  : const WeekScreen(),
+                  : WeekScreen(showViewControl: !compact),
             ),
           ],
         ),

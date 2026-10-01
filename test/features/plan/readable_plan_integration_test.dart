@@ -17,6 +17,7 @@ import 'package:hearth/features/plan/week_screen.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/fixtures.dart';
+import '../../support/swept_surfaces.dart';
 
 // Historical-year and Today labels have their own coverage. This fixture
 // checks the ordinary current-year layout with Wednesday's stable amounts.
@@ -327,20 +328,9 @@ Rect _viewport(WidgetTester tester, PlanView view) => tester.getRect(
 );
 
 Future<void> _switchView(WidgetTester tester, PlanView view) async {
-  final Finder segments = find.byType(SegmentedButton<PlanView>);
-  if (segments.evaluate().isNotEmpty) {
-    await tester.tap(
-      find.descendant(
-        of: segments,
-        matching: find.text(view == PlanView.day ? 'Day' : 'Week'),
-      ),
-    );
-  } else {
-    await tester.tap(find.byTooltip('Change plan view'));
-    await pumpFrames(tester, frames: 12);
-    // CheckedPopupMenuItem owns the target; its text ignores pointers.
-    await tester.tap(find.byKey(ValueKey<String>('plan-view-${view.name}')));
-  }
+  final SweepTools tools = SweepTools(tester);
+  await tools.planView(view == PlanView.day ? 'Day' : 'Week');
+  if (view == PlanView.week) await tools.weekContent('Nutrition');
   await pumpFrames(tester, frames: 16);
   expect(_container(tester).read(planViewProvider), view);
 }

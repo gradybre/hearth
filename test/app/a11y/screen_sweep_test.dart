@@ -257,6 +257,7 @@ void main() {
           );
           await pumpFrames(tester);
           await SweepTools(tester).planView('Week');
+          await SweepTools(tester).weekContent('Nutrition');
           await pumpFrames(tester, frames: 10);
           expect(
             tester.takeException(),

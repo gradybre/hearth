@@ -205,6 +205,16 @@ List<Object> galleryOverrides(Scene scene) => <Object>[
 /// only what is near the viewport — so a food below the fold is not merely
 /// off-screen, it is absent from the tree and no finder can see it.
 Future<void> pressLabel(WidgetTester tester, String label) async {
+  if ((label == 'Meals' || label == 'Nutrition') &&
+      find
+          .byKey(const ValueKey<String>('week-content-control'))
+          .evaluate()
+          .isNotEmpty &&
+      find.byType(AlertDialog).evaluate().isEmpty &&
+      find.byType(BottomSheet).evaluate().isEmpty) {
+    await SweepTools(tester).weekContent(label);
+    return;
+  }
   if ((label == 'Day' || label == 'Week') &&
       find
           .byKey(const ValueKey<String>('plan-view-control'))
@@ -1678,25 +1688,29 @@ const List<Scene> scenes = <Scene>[
   ),
   // Week, which the review calls a day selector rather than a comparison
   // (§7.2): "comparing seven days takes repeated selection and scrolling".
-  Scene(name: 'week', target: LaunchTarget.today, taps: <String>['Week']),
+  Scene(
+    name: 'week',
+    target: LaunchTarget.today,
+    taps: <String>['Week', 'Nutrition'],
+  ),
   Scene(
     name: 'week-dark',
     target: LaunchTarget.today,
     brightness: Brightness.dark,
-    taps: <String>['Week'],
+    taps: <String>['Week', 'Nutrition'],
   ),
   Scene(
     name: 'week-large-text',
     target: LaunchTarget.today,
     size: Size(320, 568),
     textScale: 2.0,
-    taps: <String>['Week'],
+    taps: <String>['Week', 'Nutrition'],
   ),
   Scene(
     name: 'week-desktop',
     target: LaunchTarget.today,
     size: Size(1280, 900),
-    taps: <String>['Week'],
+    taps: <String>['Week', 'Nutrition'],
   ),
   // Settings, which the review calls "a long expanded page [that] exposes
   // every option at once" (§7.8). One viewport is all a frame can hold, so

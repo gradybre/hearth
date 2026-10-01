@@ -67,8 +67,8 @@ scope is recorded in UX_PHASE_2_PROGRESS.md. In particular:
 | 14 — Recipe nutrition calculation receipt | UX-015; remaining UX-010 wording | Approved 2026-10-01: “Approve those 4” | PR #130 open; 4,910 UTC tests, 45 New York checks and 190 render checks pass; final published review and CI running |
 | 15 — Repeat and customize restaurant orders | UX-029, UX-033 | Approved 2026-10-01: “Approve those 4” | Restaurant builder complete; shared editor/router handoff follows Group 14 |
 | 16 — Resolve missing ingredient matches in place | UX-014; narrow UX-028 search context | Approved 2026-10-01: “Approve those 4” | Builder complete; review found camera-layout and duplicate-wording corrections; shared editor/router integration sequenced |
-| 17 — Meals across the week | UX-045 | Approved 2026-10-01 through its decision card | Independent review clear and 4,831 tests pass before combining preceding groups; combined validation running |
-| 18 — Reviewed Walmart package counts | UX-065 | Approved 2026-10-01 through its decision card | Corrected review clear; combined gates pass 4,955 UTC tests and 194 render checks; publishing behind Group 14 |
+| 17 — Meals across the week | UX-045 | Approved 2026-10-01 through its decision card | Independent review clear; combined gates pass 5,009 UTC tests, 37 New York checks and 200 render checks; publishing behind Groups 14/18 |
+| 18 — Reviewed Walmart package counts | UX-065 | Approved 2026-10-01 through its decision card | PR #131 open behind Group 14; 4,955 UTC tests and 194 render checks pass; final published review and CI pending |
 | 19 — Daily nutrient contributors | UX-056 | Approved 2026-10-01 through its decision card | Projection/screen complete; guarded details/editor handoff being built; shared Day entry points follow Group 17 |
 | 20 — Preserve planned amounts | UX-040 remainder | Awaiting answer; card and text overview sent 2026-10-01 | Storage/sync/export and logging integration sequenced |
 | 21 — Capture while logging | UX-042 | Awaiting answer; card and text overview sent 2026-10-01 | Shares food-return plumbing with Group 16 |

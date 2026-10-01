@@ -6,6 +6,7 @@ import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/nutrient_coverage.dart';
+import 'package:hearth/domain/planning/week.dart';
 import 'package:hearth/domain/shopping/shopping_line.dart';
 import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
@@ -125,6 +126,10 @@ void main() {
             )
           : breakfast(),
     ],
+    weekEntries: <DateTime, List<MealPlanEntry>>{
+      for (final DateTime day in weekOf(dayKey(DateTime.now())))
+        day: <MealPlanEntry>[breakfast()],
+    },
     targets: const MacroTargets(
       kcal: 2200,
       proteinG: 170,
