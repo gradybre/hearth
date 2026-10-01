@@ -214,6 +214,10 @@ belongs to the Nutrition section.
     If saved progress cannot be read, the cook and ingredient sheet explain
     that fresh checks are not saved yet and offer Retry. Retry merges those
     choices with the saved cook; a failed read never silently erases it.
+    Quickly leaving and reopening the same cook waits for the earlier visit's
+    buffered checks before restoring, while new taps remain available.
+    If Start over cannot be saved, explain the unsaved reset and offer **Retry
+    Start over**, retaining fresh choices made after the reset.
   - Ingredients pinned/visible on screen during steps. Focused cards show matched amounts in a “For this step” panel directly below the directions: one quantity-first row per ingredient, 22-point base type, with full text scaling and wrapping. Short screens and large text keep the content and cooking actions scrollable together.
   - Embedded timers, with **multiple concurrent timers** (sauce + pasta + oven at once) — single-timer feels broken in real cooking.
   - **Large tap targets / tap-anywhere-to-advance** for messy-hands use; **keep-screen-awake** while in cook mode.

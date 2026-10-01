@@ -148,6 +148,7 @@ void main() {
     bool signedIn = false,
     bool ongoingTargets = false,
     ThermostatGateway? thermostat,
+    List<Object> extraOverrides = const <Object>[],
   }) => pumpHearthApp(
     tester,
     size: size,
@@ -188,6 +189,7 @@ void main() {
     // cook-together page hides the code and its copy button, and three of the
     // most control-dense things in Settings were unreachable by any sweep.
     extraOverrides: <Object>[
+      ...extraOverrides,
       if (signedIn)
         authGatewayProvider.overrideWithValue(
           FakeAuthGateway(signedIn: FakeAuthGateway.anAccount),
@@ -315,6 +317,7 @@ void main() {
             tester,
             brightness,
             ongoingTargets: surface.withOngoingTargets,
+            extraOverrides: surface.createOverrides?.call() ?? const <Object>[],
           );
           await pumpFrames(tester);
 

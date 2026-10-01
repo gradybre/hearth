@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -31,6 +32,93 @@ void main() {
     checkedIngredientIds: checkedIngredients,
     now: at ?? t0,
   );
+
+  group('overlapping visits', () {
+    test('a later restore reads only after the earlier merged save', () async {
+      await save(checkedIngredients: const <String>{});
+      final Completer<void> readFinished = Completer<void>();
+      final Completer<void> allowSave = Completer<void>();
+      final List<String> operations = <String>[];
+      final Future<void> first = store.runInOrder('ribs', () async {
+        await store.read('ribs', now: t0);
+        operations.add('old SELECT');
+        readFinished.complete();
+        await allowSave.future;
+        await save(checkedIngredients: <String>{'oil'});
+        operations.add('old UPSERT');
+      });
+      await readFinished.future;
+      StoredCookProgress? restored;
+      final Future<void> second = store.runInOrder('ribs', () async {
+        restored = await store.read('ribs', now: t0);
+        operations.add('new SELECT');
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(operations, <String>['old SELECT']);
+
+      allowSave.complete();
+      await Future.wait(<Future<void>>[first, second]);
+      expect(operations, <String>['old SELECT', 'old UPSERT', 'new SELECT']);
+      expect(restored!.checkedIngredientIds, <String>{'oil'});
+    });
+
+    test('a waiting recipe does not hold up a different recipe', () async {
+      await save(recipeId: 'curry', checkedIngredients: <String>{'garlic'});
+      final Completer<void> allowRibs = Completer<void>();
+      final Future<void> ribs = store.runInOrder(
+        'ribs',
+        () => allowRibs.future,
+      );
+      StoredCookProgress? curry;
+      await store.runInOrder('curry', () async {
+        curry = await store.read('curry', now: t0);
+      });
+      expect(allowRibs.isCompleted, isFalse);
+      expect(curry!.checkedIngredientIds, <String>{'garlic'});
+      allowRibs.complete();
+      await ribs;
+    });
+
+    test(
+      'a failed operation releases the next visit and later retries',
+      () async {
+        await save(checkedIngredients: <String>{'oil'});
+        final Completer<void> failRead = Completer<void>();
+        final Future<void> first = store.runInOrder('ribs', () async {
+          await failRead.future;
+          throw StateError('test cook read failure');
+        });
+        final Future<void> failed = expectLater(first, throwsStateError);
+        StoredCookProgress? restored;
+        final Future<void> second = store.runInOrder('ribs', () async {
+          restored = await store.read('ribs', now: t0);
+        });
+        failRead.complete();
+        await Future.wait(<Future<void>>[failed, second]);
+        expect(restored!.checkedIngredientIds, <String>{'oil'});
+
+        await store.runInOrder(
+          'ribs',
+          () => save(checkedIngredients: <String>{'oil', 'garlic'}),
+        );
+        expect(
+          (await store.read('ribs', now: t0))!.checkedIngredientIds,
+          <String>{'oil', 'garlic'},
+        );
+      },
+    );
+
+    test('stale-row cleanup completes inside an ordered restore', () async {
+      await save(checkedIngredients: <String>{'oil'});
+      await store.runInOrder('ribs', () async {
+        expect(
+          await store.read('ribs', now: t0.add(const Duration(hours: 25))),
+          isNull,
+        );
+      });
+      expect(await store.read('ribs', now: t0), isNull);
+    });
+  });
 
   group('a cook keeps its place', () {
     test('the step you were on and what you ticked both come back', () async {

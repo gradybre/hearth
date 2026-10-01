@@ -98,14 +98,53 @@ class DelayedCookSessionStore extends FakeCookSessionStore {
   final Completer<StoredCookProgress?> restored =
       Completer<StoredCookProgress?>();
   bool _firstRead = true;
+  int reads = 0;
 
   @override
   Future<StoredCookProgress?> read(String recipeId, {required DateTime now}) {
+    reads++;
     if (_firstRead) {
       _firstRead = false;
       return restored.future;
     }
     return super.read(recipeId, now: now);
+  }
+}
+
+class DelayedReadAndSaveCookSessionStore extends DelayedCookSessionStore {
+  DelayedReadAndSaveCookSessionStore(super.saved);
+
+  final Completer<void> firstSave = Completer<void>();
+  int saveCalls = 0;
+
+  @override
+  Future<void> save({
+    required String recipeId,
+    required int currentStep,
+    required Set<String> checkedStepIds,
+    required DateTime now,
+    Set<String> checkedIngredientIds = const <String>{},
+  }) async {
+    if (saveCalls++ == 0) await firstSave.future;
+    await super.save(
+      recipeId: recipeId,
+      currentStep: currentStep,
+      checkedStepIds: checkedStepIds,
+      checkedIngredientIds: checkedIngredientIds,
+      now: now,
+    );
+  }
+}
+
+class FailingClearCookSessionStore extends FakeCookSessionStore {
+  FailingClearCookSessionStore(super.saved);
+
+  int clearCalls = 0;
+
+  @override
+  Future<void> clear(String recipeId) async {
+    if (clearCalls++ == 0) throw StateError('test cook clear failure');
+    await super.clear(recipeId);
   }
 }
 
@@ -592,12 +631,266 @@ void main() {
     });
   });
 
+  group('overlapping visits', () {
+    const StoredCookProgress saved = StoredCookProgress(
+      currentStep: 0,
+      checkedStepIds: <String>{},
+    );
+
+    testWidgets(
+      'reopening before the old read returns keeps both visits checks',
+      (WidgetTester tester) async {
+        final Recipe recipe = checklistRecipe();
+        final DelayedCookSessionStore sessions = DelayedCookSessionStore(saved);
+        await pumpChecklist(tester, recipe: recipe, sessions: sessions);
+        await openIngredients(tester);
+        await tester.tap(find.text('olive oil'));
+        await tester.pump();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+
+        // B opens while A still has its old SELECT and unsaved oil check.
+        await pumpChecklist(tester, recipe: recipe, sessions: sessions);
+        await openIngredients(tester);
+        sessions.restored.complete(saved);
+        await tester.pumpAndSettle();
+
+        // A's UPSERT is now complete. B must not replace it with its older row.
+        await tester.tap(find.text('garlic'));
+        await tester.pump();
+        expect(
+          (await sessions.read(
+            recipe.id,
+            now: DateTime.now(),
+          ))!.checkedIngredientIds,
+          <String>{'oil', 'garlic'},
+        );
+        expect(find.text('2 of 2 checked'), findsOneWidget);
+      },
+    );
+
+    testWidgets('a reopened visit also waits for the old buffered save', (
+      WidgetTester tester,
+    ) async {
+      final Recipe recipe = checklistRecipe();
+      final DelayedReadAndSaveCookSessionStore sessions =
+          DelayedReadAndSaveCookSessionStore(saved);
+      await pumpChecklist(tester, recipe: recipe, sessions: sessions);
+      await openIngredients(tester);
+      await tester.tap(find.text('olive oil'));
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+
+      await pumpChecklist(tester, recipe: recipe, sessions: sessions);
+      await openIngredients(tester);
+      sessions.restored.complete(saved);
+      await tester.pumpAndSettle();
+      expect(sessions.saveCalls, 1);
+      expect(sessions.reads, 1, reason: 'B cannot read ahead of A’s UPSERT');
+
+      // B stays usable while A flushes; its own fresh check will be merged.
+      await tester.tap(find.text('garlic'));
+      await tester.pump();
+      sessions.firstSave.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('2 of 2 checked'), findsOneWidget);
+      expect(
+        (await sessions.read(
+          recipe.id,
+          now: DateTime.now(),
+        ))!.checkedIngredientIds,
+        <String>{'oil', 'garlic'},
+      );
+    });
+
+    testWidgets('taps during a buffered save are flushed before reopening', (
+      WidgetTester tester,
+    ) async {
+      final Recipe recipe = checklistRecipe();
+      final DelayedReadAndSaveCookSessionStore sessions =
+          DelayedReadAndSaveCookSessionStore(saved);
+      await pumpChecklist(tester, recipe: recipe, sessions: sessions);
+      await openIngredients(tester);
+      await tester.tap(find.text('olive oil'));
+      await tester.pump();
+      sessions.restored.complete(saved);
+      await tester.pumpAndSettle();
+      expect(sessions.saveCalls, 1);
+
+      // A can keep cooking while its first merged save is still pending.
+      await tester.tap(find.text('garlic'));
+      await tester.pump();
+      expect(find.text('2 of 2 checked'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      await pumpChecklist(tester, recipe: recipe, sessions: sessions);
+      await openIngredients(tester);
+      sessions.firstSave.complete();
+      await tester.pumpAndSettle();
+
+      expect(
+        (await sessions.read(
+          recipe.id,
+          now: DateTime.now(),
+        ))!.checkedIngredientIds,
+        <String>{'oil', 'garlic'},
+      );
+      expect(find.text('2 of 2 checked'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    for (final bool checkAfterReset in <bool>[false, true]) {
+      testWidgets(
+        'Start over during a buffered save keeps ${checkAfterReset ? 'fresh checks' : 'the reset'}',
+        (WidgetTester tester) async {
+          final Recipe recipe = checklistRecipe();
+          final DelayedReadAndSaveCookSessionStore sessions =
+              DelayedReadAndSaveCookSessionStore(saved);
+          final FakeTimerAlerts alerts = await pumpChecklist(
+            tester,
+            recipe: recipe,
+            sessions: sessions,
+          );
+          await tester.tap(find.text('Start 10 min timer'));
+          await tester.pump();
+          await openIngredients(tester);
+          await tester.tap(find.text('olive oil'));
+          await tester.pump();
+          sessions.restored.complete(saved);
+          await tester.pumpAndSettle();
+          expect(sessions.saveCalls, 1);
+
+          await closeIngredients(tester);
+          await tester.tap(find.byTooltip('Start over'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.widgetWithText(FilledButton, 'Start over'));
+          await tester.pumpAndSettle();
+          expect(sessions.clears, 0, reason: 'the old save is still pending');
+          expect(
+            alerts.cancelAlls,
+            1,
+            reason: 'timers stop before storage waits',
+          );
+          expect(find.byTooltip('Pause timer'), findsNothing);
+          await openIngredients(tester);
+          expect(find.text('0 of 2 checked'), findsOneWidget);
+          if (checkAfterReset) {
+            await tester.tap(find.text('garlic'));
+            await tester.pump();
+          }
+
+          // The reset and any fresh choices also finish after this visit leaves.
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump();
+          await pumpChecklist(tester, recipe: recipe, sessions: sessions);
+          await openIngredients(tester);
+          sessions.firstSave.complete();
+          await tester.pumpAndSettle();
+          final StoredCookProgress? result = await sessions.read(
+            recipe.id,
+            now: DateTime.now(),
+          );
+          if (checkAfterReset) {
+            expect(result!.checkedIngredientIds, <String>{'garlic'});
+            expect(find.text('1 of 2 checked'), findsOneWidget);
+          } else {
+            expect(result, isNull);
+            expect(find.text('0 of 2 checked'), findsOneWidget);
+          }
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+
+    testWidgets('a failed old read releases a reopened visit', (
+      WidgetTester tester,
+    ) async {
+      const StoredCookProgress existing = StoredCookProgress(
+        currentStep: 0,
+        checkedStepIds: <String>{},
+        checkedIngredientIds: <String>{'oil'},
+      );
+      final Recipe recipe = checklistRecipe();
+      final DelayedCookSessionStore sessions = DelayedCookSessionStore(
+        existing,
+      );
+      await pumpChecklist(tester, recipe: recipe, sessions: sessions);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      await pumpChecklist(tester, recipe: recipe, sessions: sessions);
+      await openIngredients(tester);
+      sessions.restored.completeError(StateError('test cook read failure'));
+      await tester.pumpAndSettle();
+
+      expect(sessions.reads, 2);
+      expect(find.text('1 of 2 checked'), findsOneWidget);
+      expect(checklistRetry(), findsNothing);
+      await tester.tap(find.text('garlic'));
+      await tester.pump();
+      expect(
+        (await sessions.read(
+          recipe.id,
+          now: DateTime.now(),
+        ))!.checkedIngredientIds,
+        <String>{'oil', 'garlic'},
+      );
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   group('failed restoration', () {
     const StoredCookProgress saved = StoredCookProgress(
       currentStep: 0,
       checkedStepIds: <String>{},
       checkedIngredientIds: <String>{'garlic'},
     );
+
+    testWidgets('a failed Start over retries without losing fresh choices', (
+      WidgetTester tester,
+    ) async {
+      final FailingClearCookSessionStore sessions =
+          FailingClearCookSessionStore(saved);
+      await pumpChecklist(tester, sessions: sessions);
+      await tester.tap(find.byTooltip('Start over'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Start over'));
+      await tester.pumpAndSettle();
+      await openIngredients(tester);
+      expect(find.text('0 of 2 checked'), findsOneWidget);
+      final Finder retry = find.descendant(
+        of: find.byKey(const ValueKey<String>('cook-ingredient-checklist')),
+        matching: find.widgetWithText(OutlinedButton, 'Retry Start over'),
+      );
+      expect(retry, findsOneWidget);
+
+      await tester.tap(find.text('olive oil'));
+      await tester.pump();
+      expect(sessions.saves, 0);
+      expect(
+        (await sessions.read(
+          'unused-by-fake',
+          now: DateTime.now(),
+        ))!.checkedIngredientIds,
+        <String>{'garlic'},
+      );
+      await tester.ensureVisible(retry);
+      await tester.tap(retry);
+      await tester.pumpAndSettle();
+
+      expect(sessions.clearCalls, 2);
+      expect(sessions.saves, 1);
+      expect(retry, findsNothing);
+      expect(find.text('1 of 2 checked'), findsOneWidget);
+      expect(
+        (await sessions.read(
+          'unused-by-fake',
+          now: DateTime.now(),
+        ))!.checkedIngredientIds,
+        <String>{'oil'},
+      );
+      expect(tester.takeException(), isNull);
+    });
 
     testWidgets('a one-shot read failure can retry and save fresh checks', (
       WidgetTester tester,

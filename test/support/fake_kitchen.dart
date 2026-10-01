@@ -146,7 +146,9 @@ class FakeCookStepView extends CookStepViewNotifier {
 ///
 /// Widget tests run under fake async and cannot drive sqlite; the real store is
 /// covered in cook_session_store_test.dart.
-class FakeCookSessionStore implements CookSessionStore {
+class FakeCookSessionStore
+    with CookSessionOrdering
+    implements CookSessionStore {
   FakeCookSessionStore([StoredCookProgress? saved]) : _saved = saved;
 
   StoredCookProgress? _saved;

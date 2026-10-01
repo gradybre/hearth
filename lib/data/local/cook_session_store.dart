@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'hearth_database.dart';
@@ -16,12 +17,43 @@ class StoredCookProgress {
   final Set<String> checkedIngredientIds;
 }
 
+/// Orders progress operations across visits that share the same local store.
+///
+/// An opening read and the save of choices made while it was pending form one
+/// operation. A reopened cook must wait for both before reading its baseline.
+/// Separate recipes can proceed independently, and a failed operation releases
+/// the next visit so a retry does not leave the recipe locked.
+mixin CookSessionOrdering {
+  final Map<String, Future<void>> _pendingProgress = <String, Future<void>>{};
+
+  Future<void> runInOrder(
+    String recipeId,
+    Future<void> Function() operation,
+  ) async {
+    final Future<void>? previous = _pendingProgress[recipeId];
+    final Completer<void> release = Completer<void>();
+    final Future<void> finished = release.future;
+    _pendingProgress[recipeId] = finished;
+    try {
+      if (previous != null) await previous;
+      await operation();
+    } finally {
+      // This completion never carries the operation's error: its caller gets
+      // that error, while later operations must still be allowed to run.
+      release.complete();
+      if (identical(_pendingProgress[recipeId], finished)) {
+        unawaited(_pendingProgress.remove(recipeId));
+      }
+    }
+  }
+}
+
 /// Keeps a cook's place across launches (spec §5.2).
 ///
 /// Backing out to check the planner and coming back should not lose an hour of
 /// ticked steps — the list is a record of what you have already done at the
 /// stove, and it cannot be reconstructed from anywhere else.
-class CookSessionStore {
+class CookSessionStore with CookSessionOrdering {
   CookSessionStore(this._db);
 
   /// A session older than this is a new cook, not a resumed one.

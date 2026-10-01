@@ -49,7 +49,10 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
   // skipping restoration would lose untouched checks from the previous visit.
   bool _restoring = true;
   bool _editedWhileRestoring = false;
+  int _progressEditRevision = 0;
   bool _ignoreSavedProgress = false;
+  bool _resetPending = false;
+  bool _resetInFlight = false;
   bool _ingredientsResetWhileRestoring = false;
   int? _stepChosenWhileRestoring;
   final Map<String, bool> _stepChecksWhileRestoring = <String, bool>{};
@@ -114,52 +117,65 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
       _setProgressRead(_CookProgressRead.retrying);
     }
     final Recipe snapshot = _session.recipe;
-    final StoredCookProgress? saved;
     try {
-      saved = await _sessions.read(snapshot.id, now: DateTime.now());
+      await _sessions.runInOrder(snapshot.id, () async {
+        if (_ignoreSavedProgress) return;
+        final StoredCookProgress? saved = await _sessions.read(
+          snapshot.id,
+          now: DateTime.now(),
+        );
+        if (_ignoreSavedProgress) return;
+        if (saved != null) {
+          _publishSession(
+            CookSession(
+              recipe: snapshot,
+              // Clamped: the recipe may have been edited since, and a step
+              // index past the end would leave nothing to show.
+              currentStep: (_stepChosenWhileRestoring ?? saved.currentStep)
+                  .clamp(
+                    0,
+                    snapshot.allSteps.isEmpty
+                        ? 0
+                        : snapshot.allSteps.length - 1,
+                  ),
+              // Checks for steps that no longer exist would count towards
+              // "done" invisibly, so only restore IDs in this snapshot.
+              checkedStepIds: <String>{
+                for (final RecipeStep step in snapshot.allSteps)
+                  if (_stepChecksWhileRestoring[step.id] ??
+                      saved.checkedStepIds.contains(step.id))
+                    step.id,
+              },
+              checkedIngredientIds: <String>{
+                for (final RecipeIngredient ingredient
+                    in snapshot.allIngredients)
+                  if (_ingredientChecksWhileRestoring[ingredient.id] ??
+                      (!_ingredientsResetWhileRestoring &&
+                          saved.checkedIngredientIds.contains(ingredient.id)))
+                    ingredient.id,
+              },
+              timers: _session.timers,
+            ),
+          );
+        }
+        // Keep this recipe's queue until every choice made during the read or
+        // a slow save has reached storage, even if this visit has closed.
+        while (_editedWhileRestoring && !_ignoreSavedProgress) {
+          final int revision = _progressEditRevision;
+          await _save(_session);
+          if (revision == _progressEditRevision) break;
+        }
+        if (_ignoreSavedProgress) return;
+        _restoring = false;
+        _setProgressRead(_CookProgressRead.ready);
+      });
     } catch (_) {
-      // A failed read is not an empty session. Keep collecting choices until
-      // a retry can merge them with progress we have not seen yet.
+      // A failed read or flush is not an empty session. Keep collecting
+      // choices until a retry can merge them with unseen saved progress.
       if (!_ignoreSavedProgress) _setProgressRead(_CookProgressRead.failed);
-      return;
     } finally {
       _readInFlight = false;
     }
-    _restoring = false;
-    if (_ignoreSavedProgress) return;
-    _setProgressRead(_CookProgressRead.ready);
-    if (saved != null) {
-      _publishSession(
-        CookSession(
-          recipe: snapshot,
-          // Clamped: the recipe may have been edited since, and a step index
-          // past the end would leave the screen with nothing to show.
-          currentStep: (_stepChosenWhileRestoring ?? saved.currentStep).clamp(
-            0,
-            snapshot.allSteps.isEmpty ? 0 : snapshot.allSteps.length - 1,
-          ),
-          // Ticks for steps that no longer exist are dropped for the same
-          // reason — they would count towards "done" invisibly.
-          checkedStepIds: <String>{
-            for (final RecipeStep step in snapshot.allSteps)
-              if (_stepChecksWhileRestoring[step.id] ??
-                  saved.checkedStepIds.contains(step.id))
-                step.id,
-          },
-          checkedIngredientIds: <String>{
-            for (final RecipeIngredient ingredient in snapshot.allIngredients)
-              if (_ingredientChecksWhileRestoring[ingredient.id] ??
-                  (!_ingredientsResetWhileRestoring &&
-                      saved.checkedIngredientIds.contains(ingredient.id)))
-                ingredient.id,
-          },
-          timers: _session.timers,
-        ),
-      );
-    }
-    // Writes made before this read would replace checks we have not seen yet.
-    // Save the merged result even if the cook left while the read was pending.
-    if (_editedWhileRestoring) _save(_session);
   }
 
   void _setProgressRead(_CookProgressRead state) {
@@ -169,8 +185,13 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
   }
 
   Widget? get _restoreFeedback => switch (_progressRead.value) {
-    _CookProgressRead.failed => _CookRestoreFeedback(onRetry: _restore),
-    _CookProgressRead.retrying => const _CookRestoreFeedback(),
+    _CookProgressRead.failed => _CookRestoreFeedback(
+      onRetry: _resetPending ? _persistReset : _restore,
+      resetPending: _resetPending,
+    ),
+    _CookProgressRead.retrying => _CookRestoreFeedback(
+      resetPending: _resetPending,
+    ),
     _ => null,
   };
 
@@ -179,6 +200,7 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
   void _update(CookSession session) {
     if (_restoring) {
       _editedWhileRestoring = true;
+      _progressEditRevision++;
       if (session.currentStep != _session.currentStep) {
         _stepChosenWhileRestoring = session.currentStep;
       }
@@ -194,7 +216,9 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
       );
     }
     _publishSession(session);
-    if (!_restoring) _save(session);
+    if (!_restoring) {
+      unawaited(_sessions.runInOrder(session.recipe.id, () => _save(session)));
+    }
   }
 
   static void _rememberChecks(
@@ -216,15 +240,13 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
     _sessionChanges.value = session;
   }
 
-  void _save(CookSession session) {
-    _sessions.save(
-      recipeId: session.recipe.id,
-      currentStep: session.currentStep,
-      checkedStepIds: session.checkedStepIds,
-      checkedIngredientIds: session.checkedIngredientIds,
-      now: DateTime.now(),
-    );
-  }
+  Future<void> _save(CookSession session) => _sessions.save(
+    recipeId: session.recipe.id,
+    currentStep: session.currentStep,
+    checkedStepIds: session.checkedStepIds,
+    checkedIngredientIds: session.checkedIngredientIds,
+    now: DateTime.now(),
+  );
 
   void _resetIngredients() {
     if (_restoring) _ingredientsResetWhileRestoring = true;
@@ -235,12 +257,46 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
   Future<void> _reset() async {
     // Invalidate the read before either asynchronous clear can yield.
     _ignoreSavedProgress = true;
-    _restoring = false;
-    await _sessions.clear(_session.recipe.id);
-    await ref.read(cookTimersProvider.notifier).dismissAll();
-    if (!mounted) return;
+    _restoring = true;
+    _resetPending = true;
+    // A second Start over while a save is pending must flush its empty state
+    // too, rather than letting that earlier save bring checks back.
+    _editedWhileRestoring = _resetInFlight;
+    _progressEditRevision++;
+    final Future<void> dismissTimers = ref
+        .read(cookTimersProvider.notifier)
+        .dismissAll();
+    // Reset the screen and timers immediately. Keep new choices here until
+    // clear and their save succeed, so a failed reset can be retried safely.
     _setProgressRead(_CookProgressRead.ready);
     _publishSession(CookSession(recipe: _session.recipe));
+    await Future.wait(<Future<void>>[_persistReset(), dismissTimers]);
+  }
+
+  Future<void> _persistReset() async {
+    if (_resetInFlight || !_resetPending) return;
+    _resetInFlight = true;
+    if (_progressRead.value == _CookProgressRead.failed) {
+      _setProgressRead(_CookProgressRead.retrying);
+    }
+    final String recipeId = _session.recipe.id;
+    try {
+      await _sessions.runInOrder(recipeId, () async {
+        await _sessions.clear(recipeId);
+        while (_editedWhileRestoring) {
+          final int revision = _progressEditRevision;
+          await _save(_session);
+          if (revision == _progressEditRevision) break;
+        }
+        _resetPending = false;
+        _restoring = false;
+        _setProgressRead(_CookProgressRead.ready);
+      });
+    } catch (_) {
+      _setProgressRead(_CookProgressRead.failed);
+    } finally {
+      _resetInFlight = false;
+    }
   }
 
   Future<void> _confirmReset() async {
@@ -1291,9 +1347,10 @@ class _TimerTray extends StatelessWidget {
 /// Recovery stays in the content's scroll area so large text cannot squeeze
 /// the directions or ingredient rows off a small screen.
 class _CookRestoreFeedback extends StatelessWidget {
-  const _CookRestoreFeedback({this.onRetry});
+  const _CookRestoreFeedback({this.onRetry, this.resetPending = false});
 
   final VoidCallback? onRetry;
+  final bool resetPending;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -1311,7 +1368,9 @@ class _CookRestoreFeedback extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             Text(
-              'Saved progress couldn’t load. Your changes aren’t saved yet.',
+              resetPending
+                  ? 'Start over couldn’t be saved. Your changes aren’t saved yet.'
+                  : 'Saved progress couldn’t load. Your changes aren’t saved yet.',
               style: context.text.body,
             ),
             const SizedBox(height: HearthSpacing.sm),
@@ -1322,7 +1381,11 @@ class _CookRestoreFeedback extends StatelessWidget {
                 padding: const EdgeInsets.all(HearthSpacing.md),
               ),
               child: Text(
-                onRetry == null ? 'Retrying…' : 'Retry saved progress',
+                onRetry == null
+                    ? 'Retrying…'
+                    : resetPending
+                    ? 'Retry Start over'
+                    : 'Retry saved progress',
               ),
             ),
           ],

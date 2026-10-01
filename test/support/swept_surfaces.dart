@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/app/providers.dart';
+import 'package:hearth/data/local/cook_session_store.dart';
 
 import 'app_harness.dart';
+import 'fake_kitchen.dart';
 
 /// Everything the app can put in front of you that a sweep has to visit.
 ///
@@ -45,6 +48,7 @@ class SweptSurface {
     this.waypoints = const <Finder>[],
     this.isInline = false,
     this.withOngoingTargets = false,
+    this.createOverrides,
   });
 
   /// What it is, in the words the test failure will use.
@@ -59,6 +63,9 @@ class SweptSurface {
 
   /// Exercises the ongoing editor's distinct scope and stop controls.
   final bool withOngoingTargets;
+
+  /// A fresh synthetic failure for each walk, without sharing mutable fakes.
+  final List<Object> Function()? createOverrides;
 
   /// How to get there from a freshly opened app.
   final Future<void> Function(WidgetTester tester, SweepTools tools) open;
@@ -162,6 +169,35 @@ class SweepTools {
 /// or listed in [notSweptYet] with a reason. There is no third option: that
 /// is the whole point.
 final List<SweptSurface> sweptSurfaces = <SweptSurface>[
+  for (final bool reset in <bool>[false, true])
+    SweptSurface(
+      name: reset
+          ? 'retrying a cooking reset'
+          : 'retrying saved cooking progress',
+      opensFrom: 'lib/features/recipes/cook_along_screen.dart',
+      isInline: true,
+      createOverrides: () => <Object>[
+        cookSessionStoreProvider.overrideWithValue(
+          _InterruptedCookProgress(reset: reset),
+        ),
+      ],
+      open: (WidgetTester tester, SweepTools tools) async {
+        await tools.tab('Recipes');
+        await tools.reach(find.text('Slow chilli with all the trimmings'));
+        await tools.reach(find.text('Cook'));
+        if (reset) {
+          await tools.reach(find.text('Mark done'));
+          await tools.reach(find.byTooltip('Start over'));
+          await tools.reach(find.widgetWithText(FilledButton, 'Start over'));
+        }
+        await tools.reach(find.byTooltip('Ingredients'));
+        await tools.bring(
+          find.text(reset ? 'Retry Start over' : 'Retry saved progress'),
+        );
+      },
+      arrived: find.text(reset ? 'Retry Start over' : 'Retry saved progress'),
+      farEnd: find.text('Reset ingredients'),
+    ),
   SweptSurface(
     name: 'the cooking ingredient checklist',
     opensFrom: 'lib/features/recipes/cook_along_screen.dart',
@@ -506,6 +542,33 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     farEnd: find.text('Enter it by hand'),
   ),
 ];
+
+class _InterruptedCookProgress extends FakeCookSessionStore {
+  _InterruptedCookProgress({required this.reset});
+
+  final bool reset;
+  bool _failed = false;
+
+  @override
+  Future<StoredCookProgress?> read(String recipeId, {required DateTime now}) {
+    if (!reset && !_failed) {
+      _failed = true;
+      return Future<StoredCookProgress?>.error(
+        StateError('Synthetic interrupted cook read'),
+      );
+    }
+    return super.read(recipeId, now: now);
+  }
+
+  @override
+  Future<void> clear(String recipeId) {
+    if (reset && !_failed) {
+      _failed = true;
+      return Future<void>.error(StateError('Synthetic interrupted cook reset'));
+    }
+    return super.clear(recipeId);
+  }
+}
 
 /// Surfaces that open a sheet or a dialog and are **not** swept yet.
 ///
