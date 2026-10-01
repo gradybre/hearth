@@ -165,11 +165,13 @@ class FakeCookSessionStore implements CookSessionStore {
     required int currentStep,
     required Set<String> checkedStepIds,
     required DateTime now,
+    Set<String> checkedIngredientIds = const <String>{},
   }) async {
     saves++;
     _saved = StoredCookProgress(
       currentStep: currentStep,
       checkedStepIds: checkedStepIds,
+      checkedIngredientIds: checkedIngredientIds,
     );
   }
 

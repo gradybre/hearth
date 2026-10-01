@@ -52,7 +52,7 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 30;
+  int get schemaVersion => 31;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -297,6 +297,15 @@ class HearthDatabase extends _$HearthDatabase {
         // now succeed. The old number counted passes since a failure; the new
         // one counts tries.
         await customStatement('UPDATE pending_writes SET attempts = 0');
+      }
+      // Added after the older create-table steps so even an early install
+      // has cook_sessions before this column is considered.
+      if (from < 31) {
+        await _addColumnIfMissing(
+          m,
+          cookSessions,
+          cookSessions.checkedIngredientIds,
+        );
       }
     },
     beforeOpen: (OpeningDetails details) async {

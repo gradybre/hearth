@@ -2,15 +2,18 @@ import 'dart:convert';
 
 import 'hearth_database.dart';
 
-/// Where you had got to in a recipe: the step you were on, and what is ticked.
+/// Local progress for one cook: direction position and the separate direction
+/// and ingredient checks. It is never shared with a household partner.
 class StoredCookProgress {
   const StoredCookProgress({
     required this.currentStep,
     required this.checkedStepIds,
+    this.checkedIngredientIds = const <String>{},
   });
 
   final int currentStep;
   final Set<String> checkedStepIds;
+  final Set<String> checkedIngredientIds;
 }
 
 /// Keeps a cook's place across launches (spec §5.2).
@@ -52,6 +55,11 @@ class CookSessionStore {
             in jsonDecode(row.checkedStepIds) as List<Object?>)
           id as String,
       },
+      checkedIngredientIds: <String>{
+        for (final Object? id
+            in jsonDecode(row.checkedIngredientIds) as List<Object?>)
+          id as String,
+      },
     );
   }
 
@@ -60,6 +68,7 @@ class CookSessionStore {
     required int currentStep,
     required Set<String> checkedStepIds,
     required DateTime now,
+    Set<String> checkedIngredientIds = const <String>{},
   }) => _db
       .into(_db.cookSessions)
       .insertOnConflictUpdate(
@@ -67,6 +76,7 @@ class CookSessionStore {
           recipeId: recipeId,
           currentStep: currentStep,
           checkedStepIds: jsonEncode(checkedStepIds.toList()),
+          checkedIngredientIds: jsonEncode(checkedIngredientIds.toList()),
           updatedAt: now,
         ),
       );

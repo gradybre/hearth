@@ -1,6 +1,7 @@
 import 'package:drift_dev/api/migrations_native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/core/build_info.dart';
+import 'package:hearth/data/local/cook_session_store.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/data/local/plan_store.dart';
 import 'package:hearth/domain/planning/target_schedule.dart';
@@ -81,6 +82,30 @@ void main() {
 
     final List<RecipeRow> kept = await db.select(db.recipes).get();
     expect(kept.single.title, 'Weeknight chilli');
+  });
+
+  test('v30 keeps saved directions and starts ingredients unchecked', () async {
+    final SchemaVerifier verifier = SchemaVerifier(GeneratedHelper());
+    final InitializedSchema old = await verifier.schemaAt(30);
+    final DateTime now = DateTime.utc(2026, 10, 1, 18);
+    old.rawDatabase.execute(
+      'INSERT INTO cook_sessions (recipe_id, current_step, checked_step_ids, updated_at) '
+      'VALUES (?, ?, ?, ?)',
+      <Object?>[
+        'dinner',
+        2,
+        '["step-1", "step-2"]',
+        now.millisecondsSinceEpoch ~/ 1000,
+      ],
+    );
+    final HearthDatabase db = HearthDatabase.forTesting(old.newConnection());
+    addTearDown(db.close);
+    await verifier.migrateAndValidate(db, current);
+    final StoredCookProgress saved = (await CookSessionStore(db)
+        .read('dinner', now: now))!;
+    expect(saved.currentStep, 2);
+    expect(saved.checkedStepIds, <String>{'step-1', 'step-2'});
+    expect(saved.checkedIngredientIds, isEmpty);
   });
 
   test(

@@ -163,6 +163,41 @@ class SweepTools {
 /// is the whole point.
 final List<SweptSurface> sweptSurfaces = <SweptSurface>[
   SweptSurface(
+    name: 'the cooking ingredient checklist',
+    opensFrom: 'lib/features/recipes/cook_along_screen.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Recipes');
+      await tools.reach(find.text('Slow chilli with all the trimmings'));
+      await tools.reach(find.text('Cook'));
+      await tools.reach(find.byTooltip('Ingredients'));
+      final Finder row = find.byWidgetPredicate(
+        (Widget widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>).value.startsWith(
+              'cook-ingredient-',
+            ) &&
+            (widget.key! as ValueKey<String>).value !=
+                'cook-ingredient-checklist',
+      );
+      await tools.reach(row.first);
+    },
+    arrived: find.text('Prepared / added'),
+    farEnd: find.text('Reset ingredients'),
+  ),
+  SweptSurface(
+    name: 'starting the whole cook over',
+    opensFrom: 'lib/features/recipes/cook_along_screen.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Recipes');
+      await tools.reach(find.text('Slow chilli with all the trimmings'));
+      await tools.reach(find.text('Cook'));
+      await tools.reach(find.text('Mark done'));
+      await tools.reach(find.byTooltip('Start over'));
+    },
+    arrived: find.text('Start this recipe over?'),
+    farEnd: find.text('Start over'),
+  ),
+  SweptSurface(
     name: 'the food data export review',
     opensFrom: 'lib/features/account/settings_screen.dart',
     isInline: true,
@@ -522,9 +557,6 @@ const Map<String, String> notSweptYet = <String, String>{
       'Saving and applying a week both need a week with something in it.',
   'lib/features/recipes/collections_sheet.dart':
       'Opened from a recipe that is in the library, on its detail screen.',
-  'lib/features/recipes/cook_along_screen.dart':
-      'A finish dialog at the end of a cook-along, which needs a recipe with '
-      'steps and a cook actually started.',
   'lib/features/recipes/recipe_editor_screen.dart':
       'A discard-changes dialog, reachable only from a dirty editor.',
   'lib/features/recipes/timer_bar.dart':

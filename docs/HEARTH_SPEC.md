@@ -201,6 +201,19 @@ belongs to the Nutrition section.
 - **Cook-along walkthrough (Claude-style, all features):**
   - Step-by-step cards, one step in focus. Focused directions use a top-aligned reading column (maximum 560 logical pixels), a single compact step-progress label, and left-aligned 24-point text in spaced reading blocks. Existing paragraph breaks are respected; clear sentence boundaries may become display breaks, with conservative protection for quantities and abbreviations. Wording, punctuation, order, stored steps and timer behavior remain unchanged. The progress label scrolls with the directions, and accessibility text scaling is unrestricted.
   - Checkable steps.
+  - **Ingredient checklist:** the full Ingredients sheet has large tappable
+    rows that keep quantities and section headings visible. Checks show a
+    check icon and **Prepared / added**; tapping again undoes one. **Reset
+    ingredients** clears only ingredient checks, leaving directions and timers
+    intact. Progress belongs to this device's current cook and resumes for up
+    to 24 hours after its last change. Stable ingredient IDs are filtered to
+    the recipe snapshot on restore; late restoration preserves fresh taps.
+    **Start over** separately clears all checks and timers. Checks never alter
+    the shared recipe, partner's progress, pantry or shopping quantities.
+    The per-step amount panels remain read-only. *(Phase 2: UX-018.)*
+    If saved progress cannot be read, the cook and ingredient sheet explain
+    that fresh checks are not saved yet and offer Retry. Retry merges those
+    choices with the saved cook; a failed read never silently erases it.
   - Ingredients pinned/visible on screen during steps. Focused cards show matched amounts in a “For this step” panel directly below the directions: one quantity-first row per ingredient, 22-point base type, with full text scaling and wrapping. Short screens and large text keep the content and cooking actions scrollable together.
   - Embedded timers, with **multiple concurrent timers** (sauce + pasta + oven at once) — single-timer feels broken in real cooking.
   - **Large tap targets / tap-anywhere-to-advance** for messy-hands use; **keep-screen-awake** while in cook mode.
