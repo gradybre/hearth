@@ -392,3 +392,37 @@ readouts. A restored timer paused past its deadline gains the full extension
 while staying paused. Each correction followed a behavioral failure. No migration,
 dependency or AI change is required. Native background-alert delivery has
 not been verified; the existing platform adapter remains the boundary.
+
+## Group 11 — Exact Undo for one-tap logging
+
+Approved: keep the existing Day row's one-tap Log/Unlog check, then offer Undo.
+Restore the previous state with its saved portion, name, seven nutrients,
+coverage, approximation qualifier, entered amount and original recording time.
+A later edit, move or deletion makes the old action stale; Undo explains that
+without overwriting newer work. New-entry logging, portion-correction Undo and
+durable history are separate scopes. No AI, dependency or persistent schema
+change is required.
+
+The repository retains an in-memory action receipt with the exact prior row.
+Connection-local SQLite revision tracking observes content changes from all
+local writers, including sync, and catches edits changed back within the same
+clock tick. A routine server confirmation with a later timestamp or equivalent
+JSON encoding leaves Undo available. Unknown snapshot fields are preserved;
+ambiguous duplicate JSON members are handled conservatively. This tracking
+disappears with the connection and adds nothing to exported user records.
+
+Feedback survives leaving the Day screen, expires with the account/household
+session, and retains a safe Retry after a failed transaction. Ordinary Undo
+uses the shared six-second window; assistive navigation and Retry retain their
+action until used or dismissed. Rebuilt rows share an in-flight claim so a
+second tap cannot replace the first tap's Undo. Other meals remain tappable.
+
+Behavioral failures preceded fixes for null snapshot restoration, closed
+connections, an unqualified restored timestamp, immediate identity changes,
+rebuilt-row double taps, normal sync confirmations, and ambiguous JSON member
+reordering. Retained taps after sync deletion were also checked; that suspected
+issue did not reproduce and needed no product fix. The coordinating agent read
+the full diff and independently passed formatting, clean analysis, all 4,716
+UTC tests (189 opt-in/time-zone skips), 87 New York checks and all 165 gallery
+render checks, including the new light, dark, desktop and 3× Undo captures.
+Native-device validation has not been performed.

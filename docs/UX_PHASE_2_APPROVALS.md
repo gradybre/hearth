@@ -49,8 +49,8 @@ scope is recorded in UX_PHASE_2_PROGRESS.md. In particular:
 
 | Group | Review coverage | Decision | Delivery / sequence |
 |---|---|---|---|
-| 11 — Exact log/unlog Undo | UX-051 remainder | Approved 2026-10-01: “Approve Group 11” | Building in `codex/exact-log-undo`; dedicated data/UI owner |
-| 12 — Readable Today and Week | UX-087 | Approved 2026-10-01 through its decision card | Standalone layout components building in `codex/readable-plan-layout`; Day/Week integration queued behind Group 11 |
+| 11 — Exact log/unlog Undo | UX-051 remainder | Approved 2026-10-01: “Approve Group 11” | Built in `codex/exact-log-undo`; independent review and full validation underway |
+| 12 — Readable Today and Week | UX-087 | Approved 2026-10-01 through its decision card | Standalone components passed review and 47 independent checks; real-screen baseline regressions prepared; Day/Week integration queued behind Group 11 |
 | 13 — Readable food-data archive | UX-084 | Awaiting answer; card re-presented after Group 12 approval | Can run alongside Plan work; coordinator integrates shared export/provider changes |
 | 14 — Recipe nutrition calculation receipt | UX-015; remaining UX-010 wording | Awaiting answer; card sent 2026-10-01 | Receipt can start independently; shared editor/logging changes sequenced |
 | 15 — Repeat and customize restaurant orders | UX-029, UX-033 | Awaiting answer; card sent 2026-10-01 | Restaurant work independent; logging integration sequenced |

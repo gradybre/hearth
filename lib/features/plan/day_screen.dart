@@ -18,6 +18,7 @@ import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/planning/day_format.dart';
 import '../../domain/planning/day_progress.dart';
+import '../../domain/planning/log_state_change.dart';
 import '../../domain/planning/logged_portion.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
@@ -30,6 +31,7 @@ import '../recipes/cook_along_screen.dart';
 import 'day_picker_sheet.dart';
 import 'entry_resolver.dart';
 import 'log_sheet.dart';
+import 'log_state_feedback.dart';
 import 'logged_details_sheet.dart';
 import 'macro_targets_sheet.dart';
 
@@ -657,17 +659,19 @@ class _EntryRow extends ConsumerWidget {
   /// Logging recomputes from the library rather than trusting anything stored
   /// on the row: repeating a meal should record what that food is now, and
   /// the snapshot is taken at this moment (§4).
-  Future<void> _toggleLogged(BuildContext context, WidgetRef ref) async {
+  Future<LogStateChange?> _toggleLogged(LogStateFeedback feedback) async {
     // A row callback can outlive the frame that supplied its label and
     // nutrition. Resolve from the current library before creating history.
     final Map<String, Recipe> recipes = <String, Recipe>{
       for (final Recipe current
-          in ref.read(recipeLibraryProvider).value ?? const <Recipe>[])
+          in feedback.container.read(recipeLibraryProvider).value ??
+              const <Recipe>[])
         if (!current.isDeleted) current.id: current,
     };
     final Map<String, Food> foods = <String, Food>{
       for (final Food current
-          in ref.read(foodLibraryProvider).value ?? const <Food>[])
+          in feedback.container.read(foodLibraryProvider).value ??
+              const <Food>[])
         if (!current.isDeleted) current.id: current,
     };
     final ResolvedEntry current = EntryResolver.resolve(
@@ -680,19 +684,21 @@ class _EntryRow extends ConsumerWidget {
       PlanRefType.food => foods.containsKey(entry.entry.refId),
     };
     if (!entry.entry.isLogged && (current.isUncostable || !available)) {
-      _say(
-        context,
+      throw LogStateUnavailable(
         available
             ? 'This planned serving is no longer available. Open the food '
                   'to see its current servings.'
             : 'This ${entry.entry.refType.name} is no longer in your library '
                   'and cannot be logged.',
       );
-      return;
     }
-    final PlanRepository plans = ref.read(planRepositoryProvider);
+    final PlanRepository plans = feedback.repository;
     if (entry.entry.isLogged) {
-      await plans.unlogEntry(entry.entry.id);
+      return plans.changeLogState(
+        expected: entry.entry,
+        logged: false,
+        scope: feedback.scope,
+      );
     } else {
       final Food? currentFood = entry.entry.refType == PlanRefType.food
           ? foods[entry.entry.refId]
@@ -723,8 +729,10 @@ class _EntryRow extends ConsumerWidget {
                 currentFood?.activePackageServing?.id ==
                     entry.entry.servingOptionId &&
                 (currentFood?.packageNutrition?.isApproximate ?? false);
-      await plans.logEntry(
-        entry.entry.id,
+      return plans.changeLogState(
+        expected: entry.entry,
+        logged: true,
+        scope: feedback.scope,
         liveMacros: current.perServing,
         // Beside the macros, from the same resolve. Reading coverage back off
         // `perServing` answers "complete" for a partial recipe, because a
@@ -737,8 +745,6 @@ class _EntryRow extends ConsumerWidget {
         usesApproximatePackage: approximate,
       );
     }
-    ref.invalidate(dayEntriesProvider);
-    ref.invalidate(recentLogsProvider);
   }
 
   Future<void> _remove(WidgetRef ref) async {
@@ -939,6 +945,10 @@ class _EntryRow extends ConsumerWidget {
     final HearthColors colors = context.colors;
     final HearthTextStyles text = context.text;
     final bool logged = entry.entry.isLogged;
+    final LogStateFeedback feedback = LogStateFeedback(
+      context,
+      entryId: entry.entry.id,
+    );
     final bool reflow = A11y.scaleOf(context) > A11y.reflowThreshold;
     final bool showCook =
         !logged &&
@@ -995,7 +1005,8 @@ class _EntryRow extends ConsumerWidget {
                               : Icons.radio_button_unchecked,
                           color: logged ? colors.accent : colors.textMuted,
                         ),
-                        onPressed: () => _toggleLogged(context, ref),
+                        onPressed: () =>
+                            feedback.run(() => _toggleLogged(feedback)),
                       ),
                     ),
                     Expanded(
