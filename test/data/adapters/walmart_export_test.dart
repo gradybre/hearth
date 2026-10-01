@@ -343,8 +343,8 @@ Anywhere
           lineFor('food-b', Quantity.of(1, Units.pound)),
         ],
         foods: <String, Food>{
-          'food-a': product('111111111'),
-          'food-b': product('222222222'),
+          'food-a': product('111111111', pack: Quantity.of(1, Units.pound)),
+          'food-b': product('222222222', pack: Quantity.of(1, Units.pound)),
         },
       );
 
@@ -397,10 +397,8 @@ Anywhere
       },
     );
 
-    test('a pack Hearth cannot divide by leaves the quantity at one', () async {
-      // A pack size in a different kind from the need — millilitres against
-      // pounds. Asking for the conversion would throw; the cart asks for one
-      // instead, which is what it did before any pack size existed.
+    test('a pack Hearth cannot divide by requires a reviewed count', () async {
+      // An incompatible pack is not evidence for one retail product.
       final List<ShoppingExportItem> items = exportableLines(
         <ShoppingLine>[lineFor('food-a', Quantity.of(3, Units.pound))],
         foods: <String, Food>{
@@ -411,9 +409,13 @@ Anywhere
         },
       );
 
+      expect(items.single.quantity, isNull);
+      expect(WalmartExport.cartLinkFor(items), isNull);
       expect(
-        WalmartExport.cartLinkFor(items)!.queryParameters['items'],
-        '111111111',
+        WalmartExport.cartLinkFor(<ShoppingExportItem>[
+          items.single.withCartQuantity(3),
+        ])!.queryParameters['items'],
+        '111111111_3',
       );
     });
 
@@ -465,7 +467,9 @@ Anywhere
           lineFor('food-a', Quantity.of(1, Units.pound)),
           lineFor('food-b', Quantity.of(1, Units.pound)),
         ],
-        foods: <String, Food>{'food-a': product('111111111')},
+        foods: <String, Food>{
+          'food-a': product('111111111', pack: Quantity.of(1, Units.pound)),
+        },
       );
 
       expect(
@@ -506,7 +510,9 @@ Anywhere
       final ShoppingExportResult with_ = await const WalmartExport().export(
         exportableLines(
           <ShoppingLine>[lineFor('food-a', Quantity.of(1, Units.pound))],
-          foods: <String, Food>{'food-a': product('111111111')},
+          foods: <String, Food>{
+            'food-a': product('111111111', pack: Quantity.of(1, Units.pound)),
+          },
         ),
       );
       expect(with_.kind, ShoppingExportKind.cart);

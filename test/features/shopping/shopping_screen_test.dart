@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/widgets/swipe_to_delete.dart';
+import 'package:hearth/data/auth/local_auth_gateway.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
@@ -222,10 +223,8 @@ void main() {
   testWidgets('the export says what it can do before you press it', (
     WidgetTester tester,
   ) async {
-    // A button named after a shop that opens a search page rather than
-    // filling a basket should say so before it is pressed. (It says Hearth
-    // lacks the product codes — not that Walmart lacks a cart URL, which was
-    // wrong: walmart.io/docs/atc/v1/add-to-cart is open to anyone.)
+    // A line without a saved product must explain its exclusion before
+    // any handoff. Copy and search remain available without guessing a match.
     await openShopping(tester, entries: <MealPlanEntry>[tonight()]);
     await build(tester);
 
@@ -235,7 +234,21 @@ void main() {
     await pumpFrames(tester, frames: 10);
 
     expect(find.text('Copy the list'), findsOneWidget);
-    expect(find.textContaining('does not know'), findsOneWidget);
+    expect(
+      find.text(
+        'Left out: no saved Walmart product. Copy or search for this item.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Review at Walmart'),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(find.text('Search Walmart'), findsOneWidget);
     expect(find.textContaining('1 item still to buy'), findsOneWidget);
   });
 
@@ -259,7 +272,7 @@ void main() {
   group('filling a basket (spec §5.7)', () {
     Food beefAt(String? itemId, {Quantity? pack}) => Food(
       id: 'f-beef',
-      householdId: 'household-1',
+      householdId: LocalAuthGateway.account.householdId,
       name: 'Ground beef',
       source: FoodSource.manual,
       servingOptions: const <ServingOption>[],
@@ -304,26 +317,40 @@ void main() {
       await pumpFrames(tester, frames: 10);
     }
 
-    testWidgets('the basket is offered once a product is saved', (
-      WidgetTester tester,
-    ) async {
-      await openExport(tester, <Food>[beefAt('10450479')]);
+    testWidgets(
+      'a saved product needs a reviewed count when its pack is unknown',
+      (WidgetTester tester) async {
+        await openExport(tester, <Food>[beefAt('10450479')]);
 
-      expect(find.textContaining('Fill a Walmart basket'), findsOneWidget);
-      expect(
-        find.textContaining('Everything left has a saved product'),
-        findsOneWidget,
-      );
-    });
+        expect(
+          find.text('Package conversion is unknown. Choose a count or Skip.'),
+          findsOneWidget,
+        );
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Review at Walmart'),
+              )
+              .onPressed,
+          isNull,
+        );
+      },
+    );
 
     testWidgets('and not offered when nothing has one', (
       WidgetTester tester,
     ) async {
-      // Most foods will never carry a product code, and a button that can
-      // only fail is worse than no button.
+      // Copy and search stay available, with the excluded product explained.
       await openExport(tester, <Food>[beefAt(null)]);
 
-      expect(find.textContaining('Fill a Walmart basket'), findsNothing);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Review at Walmart'),
+            )
+            .onPressed,
+        isNull,
+      );
       expect(find.text('Copy the list'), findsOneWidget);
     });
 

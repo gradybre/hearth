@@ -1,6 +1,8 @@
 import '../../domain/format/food_quantity_format.dart';
+import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/shopping/cart_quantity.dart';
+import '../../domain/shopping/cart_review.dart';
 import '../../domain/shopping/pack_display.dart';
 import '../../domain/shopping/shopping_line.dart';
 import '../../domain/shopping/shopping_list_builder.dart';
@@ -15,9 +17,8 @@ import 'shopping_export.dart';
 /// take a name: it wants Walmart item ids, and resolving "ground beef" to one
 /// needs the catalog API, which *is* partner-gated.
 ///
-/// So v1 is a search link per item and the list as text, until a food can
-/// carry an item id of its own. The interface is what lets that, or
-/// Instacart's cart API, replace this without the screen changing.
+/// Saved product identities and reviewed package counts can form a basket
+/// link. Unknown conversions stay out until the shopper supplies a count.
 ///
 /// **Nothing here sends anything.** It builds links and text and hands them
 /// back; opening or copying is a separate, deliberate tap (rule 4).
@@ -45,13 +46,21 @@ class WalmartExport implements ShoppingExportAdapter {
   /// on the homepage — so a link carrying a name it invented would cost the
   /// whole trip, not just that line.
   static Uri? cartLinkFor(List<ShoppingExportItem> items) {
+    final Map<String, int> totals = CartReviewCounts.combine(
+      <({String productId, int count})>[
+        for (final ShoppingExportItem item in items)
+          if (item.canChooseCartQuantity &&
+              _validProductId(item.productId) &&
+              item.quantity != null &&
+              item.quantity! >= 1 &&
+              item.quantity! <= CartQuantity.cap)
+            (productId: item.productId!, count: item.quantity!),
+      ],
+    );
+    if (totals.values.any((int count) => count > CartQuantity.cap)) return null;
     final List<String> named = <String>[
-      for (final ShoppingExportItem item in items)
-        if (!item.hasUnquantified && item.productId != null)
-          // A bare id already means one, so the suffix is noise on most lines.
-          item.quantity <= 1
-              ? item.productId!
-              : '${item.productId}_${item.quantity}',
+      for (final MapEntry<String, int> item in totals.entries)
+        item.value == 1 ? item.key : '${item.key}_${item.value}',
     ];
     if (named.isEmpty) return null;
     return Uri.parse(_cart)
@@ -149,9 +158,12 @@ List<ShoppingExportItem> exportableLines(
           // A covered measured part cannot prove that an unmeasured ask is
           // also covered. It remains on the Remaining list and must travel
           // with the copy/search export until explicitly checked off.
-          if (line.hasUnquantified || !resolved.isChecked)
+          if (line.hasUnquantified ||
+              CartQuantity.hasUnresolvedCountRemainder(resolved.line) ||
+              !resolved.isChecked)
             if (_amount(resolved, food) case final _Amount amount)
               ShoppingExportItem(
+                lineKey: line.key,
                 name: line.name,
                 quantityLabel: line.hasUnquantified
                     ? amount.label == null
@@ -160,17 +172,44 @@ List<ShoppingExportItem> exportableLines(
                     : amount.label,
                 shortfall: amount.shortfall,
                 storeTag: line.storeTag,
-                productId: food?.walmartItemId,
+                productId: _validProductId(food?.walmartItemId)
+                    ? food!.walmartItemId
+                    : null,
+                productName: food?.name,
+                productBrand: food?.brand,
+                needLabel:
+                    CartQuantity.hasUnresolvedCountRemainder(resolved.line) ||
+                        resolved.toBuy == null
+                    ? amount.label
+                    : QuantityFormat.formatAsAuthored(resolved.toBuy!),
+                packLabel: resolved.pack == null
+                    ? null
+                    : QuantityFormat.formatAsAuthored(resolved.pack!),
                 hasUnquantified: line.hasUnquantified,
-                quantity: CartQuantity.forLine(
+                hasUnresolvedAmount:
+                    CartQuantity.hasUnresolvedCountRemainder(resolved.line) ||
+                    resolved.toBuy == null ||
+                    !resolved.toBuy!.canonicalAmount.isFinite,
+                quantity: CartQuantity.forReview(
                   line: resolved.line,
                   pack: resolved.pack,
-                ),
+                )?.count,
+                wasCapped:
+                    CartQuantity.forReview(
+                      line: resolved.line,
+                      pack: resolved.pack,
+                    )?.wasCapped ??
+                    false,
               ),
 ];
 
-Food? _food(ShoppingLine line, Map<String, Food> foods) =>
-    line.foodId == null ? null : foods[line.foodId];
+Food? _food(ShoppingLine line, Map<String, Food> foods) {
+  final Food? food = line.foodId == null ? null : foods[line.foodId];
+  return food?.isDeleted == true ? null : food;
+}
+
+bool _validProductId(String? id) =>
+    id != null && RegExp(r'^\d{3,20}$').hasMatch(id);
 
 typedef _Amount = ({String? label, String? shortfall});
 
@@ -182,9 +221,23 @@ typedef _Amount = ({String? label, String? shortfall});
 _Amount _amount(ResolvedShoppingLine resolved, Food? food) {
   final ShoppingLine line = resolved.line;
   final Quantity? pack = resolved.pack;
+  if (CartQuantity.hasUnresolvedCountRemainder(line)) {
+    final Quantity need = line.wanted ?? line.planned.single;
+    return (
+      label:
+          '${QuantityFormat.formatAsAuthored(need)} needed; '
+          '${QuantityFormat.formatAsAuthored(line.onHand!)} at home; remaining amount unknown',
+      shortfall: null,
+    );
+  }
   // Packs first, where the thing comes in them. "4 lb" of a sauce sold in
   // 24-ounce jars is arithmetically perfect and useless at the shelf.
-  final String? packed = PackDisplay.forLine(line: line, pack: pack);
+  final String? packed =
+      pack != null &&
+          line.toBuy != null &&
+          !CartQuantity.sameCountUnit(pack, line.toBuy!)
+      ? null
+      : PackDisplay.forLine(line: line, pack: pack);
   if (packed != null) {
     return (
       label: packed,

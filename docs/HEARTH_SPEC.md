@@ -624,7 +624,12 @@ belongs to the Nutrition section.
 - Build from the plan, still: the planned recipes/foods over **an adjustable date range**, defaulting to today through the next seven days. Not a calendar week: shopping on a Friday covers the weekend and the week after, and never lines up with one. Already-logged entries are excluded — something eaten was already bought. Demoted in v1.2 to one of the two ways in, behind Manage list.
 - **Aggregation:** two-stage. First, each recipe's sections are flattened to a single per-recipe ingredient total (duplicates across sections summed). Then duplicate ingredients across all the week's recipes combine into one line item. Optional/to-taste ingredients are excluded.
 - **Mixed-unit aggregation:** when the same ingredient appears in different units across recipes (2 tbsp + 50 g butter), convert to one sensible unit **when density is known**; otherwise list both quantities under a single line item.
-- **Units — recipe vs. purchase:** v1 aggregates and displays in **recipe units** (e.g., "3 tbsp olive oil"); the store hand-off communicates *what the week needs*, not a mapping to purchase sizes (e.g., "one 500 ml bottle"). Purchase-size mapping is a later refinement.
+- **Units — recipe vs. purchase:** the list aggregates and displays the
+  requested recipe units (e.g., "3 tbsp olive oil"). The Walmart review may
+  translate a measured remaining need into packages only when a saved food
+  already supplies a product ID, package size and the conversion evidence.
+  Product discovery and live catalog matching remain deferred. *(Phase 2:
+  UX-065, Group 18.)*
 - **Manual items:** arbitrary non-recipe items can be added to the list (paper towels, coffee) via `is_manual`.
 - **Plain items may have an amount from the first entry.** A name alone stays
   sufficient; an optional quantity and known unit records the ask without a
@@ -668,7 +673,35 @@ belongs to the Nutrition section.
 - **Pantry:** per line, how much you already have — 2 lb needed against 1 lb in the freezer buys 1 lb. An explicit whole-line check-off records Bought; known on-hand coverage is shown separately as At home. Still **not a maintained inventory** — on-hand belongs to a list, not to a fridge, and does not carry to the next list, because Hearth cannot see what you ate this week and a stale "you have 1 lb" is worse than asking again. *(Quantity-level subtraction was deferred in v0.8 and lifted at Brendan's request during phase 4; bought versus on-hand presentation clarified in Phase 2.)*
 - **Grouping:** list groups by store; within a store, by the order you put the items in (see Ordering). Aisle/category grouping was considered and declined — an aisle guessed from a food's name is wrong often and correctable never.
 - **Big user-review touchpoint:** the list is fully editable before any export — add/remove, adjust quantities, check off on-hand items.
-- **Walmart export (realistic v1):** *Amended v1.1 — the original text said Walmart has no public consumer cart API, which is not what the adapter found.* Walmart **does** publish an open add-to-cart URL (`/sc/cart/addToCart?items=`), available without partner onboarding. What it will not accept is a name: it wants Walmart **item ids**, and resolving "ground beef" to one needs the catalog API, which *is* partner-gated. So v1 export is a search link per item plus the list as text, until a food can carry an item id of its own — at which point the cart URL becomes reachable without a screen change. Built behind a swappable adapter interface so that, or Instacart's cart API, can replace it. **Nothing is ever sent by the adapter**: it builds links and text, and opening or copying is a separate deliberate tap (rule 4).
+- **Walmart export:** the swappable adapter builds a cart link from saved
+  Walmart product IDs, a search link for the first remaining item, and the
+  complete remaining list as text. It never discovers a product from its name
+  or contacts a retailer by itself. Opening or copying requires a deliberate
+  tap after review (rule 4).
+- **Review package counts before leaving Hearth.** Each eligible row shows
+  the saved product, remaining need and package count, such as **Need 600 g →
+  2 × 400 g packs**. A known conversion supplies an editable starting count;
+  an unknown conversion requires an explicit whole count or **Skip**. Counts
+  and skips apply only to this trip, leaving saved foods and list quantities
+  unchanged. An unmeasured or unresolved ask remains excluded, as does a line
+  without a saved product. Each exclusion states why. *(Phase 2: UX-065.)*
+  Different count nouns, such as scoops and containers, never establish a
+  package conversion. Incompatible on-hand counts leave the remainder unknown;
+  retain the stated need and amount at home in review/copy, excluding that row
+  from the basket until resolved.
+- **A quantity limit must be visible.** Counts range from 1–24, combined by
+  product ID across rows. A calculated count above 24 is marked as limited and
+  requires acknowledgment; duplicate-product rows whose combined count exceeds
+  24 require correction or Skip before continuing. **Review at Walmart** names
+  the handoff. Stock, prices and substitutions are confirmed there; opening a
+  link never checks anything off in Hearth. **Copy the list** retains every
+  remaining item, including skipped or excluded rows.
+- **The review belongs to the current list and account.** Capture list and
+  saved food facts together. Before and after preparing the adapter result,
+  recheck relevant quantities, product/package definitions and account scope.
+  If they changed, show the refreshed review, clear trip-specific choices and
+  require another deliberate tap. Leaving the review or changing account
+  expires pending handoffs. This does not claim live prices or stock checks.
 
 - **Walmart links from screenshots.** The food editor can read a complete visible Walmart product URL from either nutrition/package photo in the same request, or from a separate screenshot selected beside the Walmart field. Only an unambiguous readable URL can fill a blank field. Existing values are retained; a different proposed link requires an explicit replacement action. The user reviews the editable field before Save; nothing opens or sends to Walmart automatically.
 - **Transcription, not product matching.** A package name, UPC, cropped URL or uncertain item number never becomes a guessed Walmart listing. Server and client validate the Walmart host/product path, discard tracking parameters and retain the canonical product ID. A screenshot without nutrition data can supply only a link without changing nutrition/package facts. Images are transient, and the same authentication, size caps and monthly AI ceiling apply. Failed reads retain manual entry.
@@ -1199,7 +1232,7 @@ These share the household model and slot into the pillar navigation without a da
 - Whether to add **water/weight/exercise** tracking later (currently out of scope — food only).
 - Auth: add social login later, or keep email/password.
 - **Partial-serving log UX** — portion stepper approach to be refined against a live draft (Brendan to guide).
-- **Explicitly deferred (out of scope for v1):** micronutrients beyond the 4 macros and the three minor nutrients below; sugar tracking; water / weight / exercise logging; recipe ratings & reviews; purchase-size mapping for shopping; voice control in cook-along; "cook from what I have" generation; whole-week AI plan generation; goal presets from body stats; leftovers/batch draw-down tracking; sub-recipes (a recipe used as an ingredient in another); recipe step/gallery photos; starter/seed recipes.
+- **Explicitly deferred (out of scope for v1):** micronutrients beyond the 4 macros and the three minor nutrients below; sugar tracking; water / weight / exercise logging; recipe ratings & reviews; shopping product discovery and live catalog matching (saved-package review is approved in §5.7); voice control in cook-along; "cook from what I have" generation; whole-week AI plan generation; goal presets from body stats; leftovers/batch draw-down tracking; sub-recipes (a recipe used as an ingredient in another); recipe step/gallery photos; starter/seed recipes.
 
 ---
 

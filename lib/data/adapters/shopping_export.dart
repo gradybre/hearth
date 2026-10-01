@@ -1,5 +1,26 @@
 import 'package:meta/meta.dart';
 
+import '../../domain/models/food.dart';
+import '../../domain/shopping/cart_review.dart';
+import '../../domain/shopping/shopping_line.dart';
+
+/// A captured local source for the review. Callers supply a fresh source
+/// before a handoff and return null if it is unavailable or no longer theirs.
+/// Collections and the comparison evidence are captured at construction.
+@immutable
+class ShoppingExportSource {
+  ShoppingExportSource({
+    required List<ShoppingLine> lines,
+    Map<String, Food> foods = const <String, Food>{},
+  }) : lines = List<ShoppingLine>.unmodifiable(lines),
+       foods = Map<String, Food>.unmodifiable(foods),
+       fingerprint = CartReviewEvidence.capture(lines, foods);
+
+  final List<ShoppingLine> lines;
+  final Map<String, Food> foods;
+  final String fingerprint;
+}
+
 /// One line as it will be handed to a store.
 @immutable
 class ShoppingExportItem {
@@ -9,8 +30,15 @@ class ShoppingExportItem {
     this.shortfall,
     this.storeTag,
     this.productId,
-    this.quantity = 1,
+    this.quantity,
     this.hasUnquantified = false,
+    this.lineKey,
+    this.productName,
+    this.productBrand,
+    this.needLabel,
+    this.packLabel,
+    this.wasCapped = false,
+    this.hasUnresolvedAmount = false,
   });
 
   final String name;
@@ -39,9 +67,40 @@ class ShoppingExportItem {
   /// but do not present a cart count as covering the complete need.
   final bool hasUnquantified;
 
-  /// How many of that product to ask for. Meaningless without [productId]
-  /// or while [hasUnquantified] is true.
-  final int quantity;
+  /// A known pack count or an explicit trip-only choice. Null means that no
+  /// conversion is known, or the shopper chose to skip this product.
+  final int? quantity;
+
+  final String? lineKey;
+  final String? productName;
+  final String? productBrand;
+  final String? needLabel;
+  final String? packLabel;
+  final bool wasCapped;
+
+  /// No single complete, measured need is available. Unlike an unknown pack
+  /// conversion, this remains excluded until the shopping amount is resolved.
+  final bool hasUnresolvedAmount;
+
+  bool get canChooseCartQuantity =>
+      productId != null && !hasUnquantified && !hasUnresolvedAmount;
+
+  ShoppingExportItem withCartQuantity(int? count) => ShoppingExportItem(
+    name: name,
+    quantityLabel: quantityLabel,
+    shortfall: shortfall,
+    storeTag: storeTag,
+    productId: productId,
+    quantity: count,
+    hasUnquantified: hasUnquantified,
+    lineKey: lineKey,
+    productName: productName,
+    productBrand: productBrand,
+    needLabel: needLabel,
+    packLabel: packLabel,
+    wasCapped: wasCapped,
+    hasUnresolvedAmount: hasUnresolvedAmount,
+  );
 }
 
 /// What an export produced, for the UI to act on.
@@ -72,16 +131,13 @@ enum ShoppingExportKind { deepLink, clipboard, cart }
 
 /// A store hand-off, behind an interface (CLAUDE.md rule 7).
 ///
-/// v1 is deep links plus copy (spec §5.7) — not because a cart hand-off is
-/// impossible, but because every one of them is keyed by a product id Hearth
-/// does not hold yet. Keeping this an interface is what lets a real cart
-/// hand-off slot in later without touching the UI.
+/// Builds copy, searches and a basket link from saved product identities and
+/// reviewed purchase counts. Implementations do not launch external actions.
 ///
 /// **Nothing here may send anything anywhere on its own.** The list is fully
 /// editable first and the export is a deliberate, reviewed hand-off, never a
 /// silent one (spec §5.7, CLAUDE.md rule 4).
 ///
-/// No implementations yet: shopping is Phase 4.
 abstract interface class ShoppingExportAdapter {
   /// Shown on the export button.
   String get displayName;

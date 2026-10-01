@@ -121,6 +121,19 @@ class ShoppingRepository {
   Future<ShoppingListSnapshot?> current() =>
       _store.current(householdId: _householdId);
 
+  /// The list and the food definitions used to review its purchase counts.
+  /// A remote/local write cannot split this into old needs and new packages.
+  Future<({ShoppingListSnapshot? list, Map<String, Food> foods})>
+  reviewSnapshot() => _db.transaction(() async {
+    final ShoppingListSnapshot? list = await current();
+    final List<Food> foods = await FoodStore(_db)
+        .all(householdId: _householdId);
+    return (
+      list: list,
+      foods: <String, Food>{for (final Food food in foods) food.id: food},
+    );
+  });
+
   Stream<void> watchChanges() => _store.watchChanges();
 
   /// Commits reviewed plain items against the household list as it stands.
