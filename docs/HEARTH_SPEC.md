@@ -174,6 +174,24 @@ belongs to the Nutrition section.
   total, while the per-serving basis stays the same. Partial coverage,
   unknown nutrients and approximate package evidence remain explicit in
   either view. *(Phase 2: recipe-detail scope of UX-010.)*
+- **Show the calculation behind recipe nutrition.** The labelled Nutrition
+  control and a partial-coverage notice open a read-only receipt: authored and
+  displayed ingredient amount, matched food, the exact serving row/multiplier
+  used by the calculator, contribution, and why a line was excluded or could
+  not be counted. Unknown nutrients stay unknown and approximate package
+  evidence stays qualified. Scaled amounts and the selected Per serving /
+  Whole dish basis are explicit. The editor uses the same summary for its
+  current draft; no receipt changes a match or writes a log. *(Phase 2: UX-015.)*
+  Ingredient source labels retain AI-estimate provenance. Calculation multipliers
+  use non-snapping numbers; shortened decimals explicitly say about.
+- **Use the same basis words at portion review.** A current recipe shows Per
+  serving, Whole dish with its yield, and Your portion as entered. Partial
+  totals are marked known and approximate package counts remain qualified.
+  A historical recipe correction shows only its saved portion nutrition,
+  without importing today's yield or whole-dish facts. If that saved basis is
+  unavailable, explain it and disable portion correction instead of substituting
+  current nutrition. *(Phase 2: remaining
+  recipe wording in UX-010.)*
 - **Act on the recipe being read.** Cook, Plan and Shop are reachable from
   recipe detail, with controls that wrap or scroll at enlarged text. Plan
   opens a personal review defaulting to the local opening day, Dinner and

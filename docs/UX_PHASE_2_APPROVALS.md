@@ -34,7 +34,7 @@ the review baseline; completed work must be reconciled before asking again.
 
 ## Already decided and delivered
 
-Groups 1–12 are approved and merged. Do not ask for them again. Their bounded
+Groups 1–13 are approved and merged. Do not ask for them again. Their bounded
 scope is recorded in UX_PHASE_2_PROGRESS.md. In particular:
 
 - Group 9: [PR #124](https://github.com/gradybre/hearth/pull/124), merged
@@ -52,6 +52,10 @@ scope is recorded in UX_PHASE_2_PROGRESS.md. In particular:
   2026-10-01 as `c4a5a76`; all CI passed on reviewed candidate `adae6c4`,
   and the merged tree matches it exactly. Independent root checks passed:
   4,777 UTC tests, 85 New York checks and 177 render checks.
+- Group 13: [PR #129](https://github.com/gradybre/hearth/pull/129), merged
+  2026-10-01 as `7a29de6`; all CI passed on reviewed candidate `a4ec2af`,
+  and the merged tree matches it exactly. Independent root checks passed:
+  4,862 UTC tests, 60 New York checks and 182 render checks.
 
 ## Presented decisions
 
@@ -59,13 +63,13 @@ scope is recorded in UX_PHASE_2_PROGRESS.md. In particular:
 |---|---|---|---|
 | 11 — Exact log/unlog Undo | UX-051 remainder | Approved 2026-10-01: “Approve Group 11” | Merged as `a0f1026` through PR #127; independent reviews clear and all CI green |
 | 12 — Readable Today and Week | UX-087 | Approved 2026-10-01 through its decision card | Merged as `c4a5a76` through PR #128; independent reviews clear and all CI green |
-| 13 — Readable food-data archive | UX-084 | Approved 2026-10-01: “Approve those 4” for Groups 13–16 | Corrected source review clear; 4,862 UTC tests and 60 New York checks pass; final visual gate in progress |
-| 14 — Recipe nutrition calculation receipt | UX-015; remaining UX-010 wording | Approved 2026-10-01: “Approve those 4” | Independent review corrections pass focused checks; final integration validation in progress |
+| 13 — Readable food-data archive | UX-084 | Approved 2026-10-01: “Approve those 4” for Groups 13–16 | Merged as `7a29de6` through PR #129; independent reviews clear and all CI green |
+| 14 — Recipe nutrition calculation receipt | UX-015; remaining UX-010 wording | Approved 2026-10-01: “Approve those 4” | Corrected source/design reviews clear; final combined checks pass 4,910 UTC tests, 45 New York checks and 190 render checks; publication follows |
 | 15 — Repeat and customize restaurant orders | UX-029, UX-033 | Approved 2026-10-01: “Approve those 4” | Restaurant builder complete; shared editor/router handoff follows Group 14 |
-| 16 — Resolve missing ingredient matches in place | UX-014; narrow UX-028 search context | Approved 2026-10-01: “Approve those 4” | Subagent building match review and capture context; shared editor/router integration sequenced |
-| 17 — Meals across the week | UX-045 | Approved 2026-10-01 through its decision card | Builder complete; shared journeys pass; full validation and independent review in progress |
-| 18 — Reviewed Walmart package counts | UX-065 | Approved 2026-10-01 through its decision card | Builder complete; coordinator reproducing review findings for count units and spoken labels |
-| 19 — Daily nutrient contributors | UX-056 | Approved 2026-10-01 through its decision card | Projection/screen builder complete; shared Day entry points follow Group 17 |
+| 16 — Resolve missing ingredient matches in place | UX-014; narrow UX-028 search context | Approved 2026-10-01: “Approve those 4” | Builder complete; review found camera-layout and duplicate-wording corrections; shared editor/router integration sequenced |
+| 17 — Meals across the week | UX-045 | Approved 2026-10-01 through its decision card | Independent review clear and 4,831 tests pass before combining preceding groups; combined validation running |
+| 18 — Reviewed Walmart package counts | UX-065 | Approved 2026-10-01 through its decision card | Review corrections clear; 116 focused checks pass; combined full validation running |
+| 19 — Daily nutrient contributors | UX-056 | Approved 2026-10-01 through its decision card | Projection/screen complete; guarded details/editor handoff being built; shared Day entry points follow Group 17 |
 | 20 — Preserve planned amounts | UX-040 remainder | Awaiting answer; card and text overview sent 2026-10-01 | Storage/sync/export and logging integration sequenced |
 | 21 — Capture while logging | UX-042 | Awaiting answer; card and text overview sent 2026-10-01 | Shares food-return plumbing with Group 16 |
 | 22 — Preview saved weeks | UX-047 additive preview | Awaiting answer; card and text overview sent 2026-10-01 | Queues with planned amount and Plan repository work |

@@ -292,6 +292,23 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     farEnd: find.text('Reset ingredients'),
   ),
   SweptSurface(
+    name: 'the recipe nutrition calculation receipt',
+    opensFrom: 'lib/features/recipes/recipe_nutrition_receipt.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Recipes');
+      await tools.reach(find.text('Slow chilli with all the trimmings'));
+      await tools.reach(
+        find.byKey(const ValueKey<String>('recipe-nutrition-receipt')),
+      );
+    },
+    arrived: find.text('Nutrition details'),
+    waypoints: <Finder>[
+      find.byKey(const ValueKey<String>('receipt-ingredient-0')),
+    ],
+    farEnd: find.byKey(const ValueKey<String>('receipt-back')),
+  ),
+  SweptSurface(
     name: 'starting the whole cook over',
     opensFrom: 'lib/features/recipes/cook_along_screen.dart',
     open: (WidgetTester tester, SweepTools tools) async {
@@ -726,12 +743,11 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
       await tools.reach(find.text('Slow chilli with all the trimmings'));
       await tools.bring(find.text('Per serving'));
     },
-    arrived: find.byWidgetPredicate(
-      (Widget widget) =>
-          widget is ChoiceChip &&
-          widget.selected &&
-          widget.label is Text &&
-          (widget.label as Text).data == 'Per serving',
+    arrived: find.ancestor(
+      of: find.text('Per serving'),
+      matching: find.byWidgetPredicate(
+        (Widget widget) => widget is ChoiceChip && widget.selected,
+      ),
     ),
     farEnd: find.text('Directions'),
   ),
@@ -744,12 +760,11 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
       await tools.reach(find.text('Slow chilli with all the trimmings'));
       await tools.reach(find.text('Whole dish'));
     },
-    arrived: find.byWidgetPredicate(
-      (Widget widget) =>
-          widget is ChoiceChip &&
-          widget.selected &&
-          widget.label is Text &&
-          (widget.label as Text).data == 'Whole dish',
+    arrived: find.ancestor(
+      of: find.text('Whole dish'),
+      matching: find.byWidgetPredicate(
+        (Widget widget) => widget is ChoiceChip && widget.selected,
+      ),
     ),
     farEnd: find.text('Directions'),
   ),

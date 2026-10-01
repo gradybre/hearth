@@ -14,10 +14,8 @@ import '../../data/repositories/shopping_repository.dart';
 import '../../domain/format/food_quantity_format.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
-import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/planning/meal_plan.dart';
-import '../../domain/planning/nutrient_coverage.dart';
 import '../../domain/recipes/ingredient_consolidator.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/recipes/recipe_scaler.dart';
@@ -25,9 +23,9 @@ import '../../domain/units/quantity.dart';
 import '../shopping/add_to_list_sheet.dart';
 import 'collections_sheet.dart';
 import 'cook_along_screen.dart';
-import 'macro_stats_row.dart';
 import 'recipe_draft.dart';
 import 'recipe_icon.dart';
+import 'recipe_nutrition_receipt.dart';
 import 'recipe_photo.dart';
 import 'recipe_plan_sheet.dart';
 import 'scale_control.dart';
@@ -690,10 +688,12 @@ class _RecipeBodyState extends State<_RecipeBody> {
           ],
           if (recipe.allIngredients.isNotEmpty) ...<Widget>[
             const SizedBox(height: HearthSpacing.lg),
-            _RecipeNutrition(
+            RecipeNutritionSummary(
               recipe: recipe,
               macros: macros,
               wholeDish: _wholeDish,
+              authoredRecipe: original,
+              foods: widget.foods,
               onChanged: (bool value) => setState(() => _wholeDish = value),
             ),
           ],
@@ -815,128 +815,6 @@ class _RecipeBodyState extends State<_RecipeBody> {
 }
 
 String _number(double value) => QuantityFormat.count(value);
-
-class _RecipeNutrition extends StatelessWidget {
-  const _RecipeNutrition({
-    required this.recipe,
-    required this.macros,
-    required this.wholeDish,
-    required this.onChanged,
-  });
-
-  final Recipe recipe;
-  final RecipeMacros macros;
-  final bool wholeDish;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final bool validYield = recipe.servings.isFinite && recipe.servings > 0;
-    final Macros shown = wholeDish ? macros.total : macros.perServing;
-    final int resolved = macros.ingredients
-        .where((IngredientMacros i) => i.isResolved)
-        .length;
-    final int counted = macros.ingredients
-        .where((IngredientMacros i) => i.isResolved || i.isDataGap)
-        .length;
-    final bool canShowNumbers = resolved > 0 && (wholeDish || validYield);
-    final String yield = validYield
-        ? '${_number(recipe.servings)} ${recipe.servings == 1 ? 'serving' : 'servings'}'
-        : 'Recipe yield needs a positive number of servings';
-    final String qualification = macros.isIncomplete ? ' known' : '';
-    final String approximation = macros.usesApproximatePackageNutrition
-        ? 'about '
-        : '';
-    final String basis = validYield && resolved > 0
-        ? '$yield · $approximation${macros.perServing.kcal.round()} kcal each$qualification · '
-              '$approximation${macros.total.kcal.round()} kcal whole dish$qualification'
-        : yield;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text('Nutrition', style: context.text.sectionHeader),
-        const SizedBox(height: HearthSpacing.sm),
-        Wrap(
-          spacing: HearthSpacing.sm,
-          runSpacing: HearthSpacing.xs,
-          children: <Widget>[
-            ChoiceChip(
-              label: const Text('Per serving'),
-              selected: !wholeDish,
-              onSelected: (_) => onChanged(false),
-            ),
-            ChoiceChip(
-              label: const Text('Whole dish'),
-              selected: wholeDish,
-              onSelected: (_) => onChanged(true),
-            ),
-          ],
-        ),
-        const SizedBox(height: HearthSpacing.sm),
-        Text(
-          basis,
-          style: context.text.metadata.copyWith(
-            color: context.colors.textMuted,
-          ),
-        ),
-        const SizedBox(height: HearthSpacing.sm),
-        if (canShowNumbers) ...<Widget>[
-          if (macros.isIncomplete)
-            Text(
-              'Known nutrition · $resolved of $counted ingredients counted',
-              style: context.text.metadata,
-            ),
-          if (MediaQuery.textScalerOf(context).scale(14) <= 21)
-            MacroStatsRow(macros: shown)
-          else
-            for (final (String label, double value) in <(String, double)>[
-              ('kcal', shown.kcal),
-              ('g protein', shown.proteinG),
-              ('g carbs', shown.carbG),
-              ('g fat', shown.fatG),
-            ])
-              Text('${value.round()} $label', style: context.text.ingredient),
-          if (shown.knowsAnyMinor) ...<Widget>[
-            const SizedBox(height: HearthSpacing.sm),
-            MinorNutrientsLine(
-              macros: shown,
-              partialFor: (MinorNutrient nutrient) =>
-                  macros.partialNoteFor(nutrient) ??
-                  (macros.coverage.of(nutrient) == MinorCoverage.partial
-                      ? 'Some ingredients are not counted'
-                      : null),
-            ),
-          ],
-        ] else
-          Text(
-            !wholeDish && !validYield
-                ? 'Set a recipe yield to see nutrition per serving.'
-                : counted == 0
-                ? 'No nutrition-counting ingredients.'
-                : 'Nutrition not available yet',
-            style: context.text.body,
-          ),
-        if (macros.usesApproximatePackageNutrition) ...<Widget>[
-          const SizedBox(height: HearthSpacing.xs),
-          Text(
-            'Uses approximate package servings',
-            style: context.text.metadata,
-          ),
-        ],
-        if (macros.incompleteReason case final String reason) ...<Widget>[
-          const SizedBox(height: HearthSpacing.sm),
-          Text(
-            reason,
-            style: context.text.metadata.copyWith(
-              color: context.colors.textMuted,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
 
 /// How the ingredients are being read: as the recipe groups them, or summed.
 class _IngredientView extends StatelessWidget {
