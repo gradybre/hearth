@@ -16,8 +16,9 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
 | 3 — Recipe actions and nutrition | UX-001; recipe-detail scope of UX-010 | Approved 2026-09-30 | Merged in [PR #118](https://github.com/gradybre/hearth/pull/118) | 4,089 passed in UTC plus 2 DST checks in New York; analyze clean; 99 render checks and all CI passed | Passed after one correction; final candidate `3c64406` | Not performed |
 | 4 — Export preview | UX-083 | Approved 2026-10-01 | Merged in [PR #119](https://github.com/gradybre/hearth/pull/119) | 4,161 passed in UTC; 21 calendar checks in New York; analysis clean; 103 render checks and all CI passed | No actionable findings; candidate `27d9eff` | Not performed |
 | 5 — Ongoing nutrition targets | UX-052, bounded personal carry-forward and weekly exceptions | Approved 2026-10-01 | Merged in [PR #120](https://github.com/gradybre/hearth/pull/120) after Brendan's merge approval | 4,259 passed in UTC; 72 checks in New York; clean analysis; 111 render checks and all CI passed | No actionable findings; candidate `cf3bdd8`; 133 independent checks passed | Not performed |
-| 6 — Cooking ingredient checklist | UX-018 | Approved 2026-10-01 | Implemented in [PR #121](https://github.com/gradybre/hearth/pull/121) | 4,339 passed in UTC; 50 checks in New York; clean analysis; 115 render checks passed; final CI tracked on the PR | No actionable findings after the persistence correction; reviewed code unchanged by rebase onto main | Not performed |
-| 7 — Faster grocery additions | UX-061, plain-item quantity and reviewed paste scope | Awaiting decision | Not started | — | — | — |
+| 6 — Cooking ingredient checklist | UX-018 | Approved 2026-10-01 | Merged in [PR #121](https://github.com/gradybre/hearth/pull/121) | 4,339 passed in UTC; 50 checks in New York; clean analysis; 115 render checks and all final CI passed | No actionable findings after the persistence correction; reviewed code unchanged by rebase onto main | Not performed |
+| 7 — Faster grocery additions | UX-061, plain-item quantity and reviewed paste scope | Approved 2026-10-01 | Entry/review UI and transactional batch saving integrated | 4,417 passed in UTC; 35 checks in New York; clean analysis; 119 render checks passed | Final candidate review and CI recorded in the group PR | Not performed |
+| 8 — Open meals from Plan | UX-051, source navigation and separate logging control; exact log/unlog Undo excluded | Awaiting decision | Read-only preparation complete | — | — | — |
 
 ## Group 1 — Daily logging
 
@@ -243,13 +244,49 @@ used for this group.
 The correction passed fresh-context review with 158 independent checks. After
 Group 5 merged, the two cooking commits were rebased onto main; a whole-tree
 comparison proved the result identical to reviewed candidate `3f703f6` before
-this progress-record update. Final CI and merge status are recorded on PR #121.
+this progress-record update. All final checks passed on `90cc2ef`; PR #121
+merged as `08a8da9` on 2026-10-01.
 
 ## Group 7 — Faster grocery additions
 
-Proposed: optional quantity and unit on the first plain-item entry, with
-name-only entry kept quick. Paste one nonempty line per item into a review
-list with duplicate notices before adding. Leave ambiguous quantity wording
-as text for the user to correct. This scope builds on the typed recipe
-shopping quantities already delivered in Group 3. No AI request is required.
-Implementation awaits approval and an available worker.
+Approved: optional quantity and unit on the first plain-item entry, with
+name-only entry kept quick. Paste one nonempty line per item into an editable
+review, with rename, removal and optional quantity controls. Flag exact
+normalized-name duplicates within the batch and against the existing list;
+skip them when saving and report the added/skipped counts. Preserve ambiguous
+wording for the user to correct without AI parsing. Save against the latest
+local household list without replacing existing amounts or check-offs, and
+retain the draft after a recoverable failure. This scope builds on the typed
+recipe shopping quantities already delivered in Group 3. No migration,
+dependency or AI request is required. Two builders own the entry/review UI
+and the domain/repository behavior separately; shared fixtures, specification
+and validation stay with the coordinating agent.
+
+One transaction reads the current list, validates the whole batch, skips
+existing/repeated names, and saves accepted rows with their sync work. No-op
+batches create no records or queue churn. Tests cover explicit fractions,
+unknown amounts, food-backed duplicates, simultaneous commits, rollback,
+household isolation and preservation through plan rebuilds. The UI keeps its
+review open while saving, retains edits after failure, blocks repeated taps,
+and expires held drafts after an account or household change. Addition
+feedback preserves an existing Clear/Delete Undo. Failing regressions preceded
+fixes for the lost draft, no-op display order and confirmation replacing Undo.
+A separate visibility check reproduces clipped confirmation text at 3×;
+the concise added/skipped count now fits the shopping viewport.
+Light, dark, desktop and enlarged-text captures cover the new entry/review
+surfaces; keyboard and 3× tests exercise both themes. Native-device validation
+has not been performed. The coordinating agent independently ran formatting,
+clean analysis, all 4,417 UTC tests (143 opt-in/time-zone skips), 35 calendar
+and repository checks in New York, and all 119 render checks. Review and CI
+results are recorded on the group PR.
+
+## Group 8 — Open meals from Plan
+
+Proposed: tap a meal's name to open its recipe or a read-only food summary,
+with a separate large check retaining one-tap logging. Planned cooked recipes
+get a Cook action using the saved recipe yield, separate from the person's
+planned portion. Opening, cooking and returning leave the log unchanged.
+Unavailable sources have an explanation, and restaurant meals receive no
+Cook action. Exact Undo for logging/unlogging requires its own data safeguards
+and remains a separate scope. No AI request is proposed. Implementation awaits
+approval; any cooking destination changes follow Group 6's completed review.

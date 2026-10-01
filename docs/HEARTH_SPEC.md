@@ -518,6 +518,27 @@ belongs to the Nutrition section.
 - **Mixed-unit aggregation:** when the same ingredient appears in different units across recipes (2 tbsp + 50 g butter), convert to one sensible unit **when density is known**; otherwise list both quantities under a single line item.
 - **Units — recipe vs. purchase:** v1 aggregates and displays in **recipe units** (e.g., "3 tbsp olive oil"); the store hand-off communicates *what the week needs*, not a mapping to purchase sizes (e.g., "one 500 ml bottle"). Purchase-size mapping is a later refinement.
 - **Manual items:** arbitrary non-recipe items can be added to the list (paper towels, coffee) via `is_manual`.
+- **Plain items may have an amount from the first entry.** A name alone stays
+  sufficient; an optional quantity and known unit records the ask without a
+  second amount-editing visit. Decimal and fractional amounts are accepted,
+  but an entered amount must be finite and greater than zero. Units describe
+  the requested amount; they do not infer package contents or conversions.
+  *(Phase 2: UX-061.)*
+- **Paste a list, then review it.** Each nonempty line becomes one editable
+  item. The review allows names, optional amounts and removals before adding
+  the batch. Wording stays as entered apart from surrounding whitespace:
+  ambiguous numbers and bullets are not silently interpreted, and no AI
+  request is made. Exact normalized-name duplicates within the review or
+  already on the list are identified and skipped, including existing matched
+  foods with the same displayed name. Renaming resolves a duplicate; saving
+  never replaces an existing line's quantity, check-off or on-hand decision.
+  *(Phase 2: UX-061.)*
+- **An addition uses the latest local household list when saved.** Validate
+  the whole batch before changing anything, then save accepted items and their
+  sync work together. Report how many were added and skipped. A recoverable
+  save failure retains the reviewed draft for Retry; a changed account or
+  household requires a fresh review. This is local transaction safety and
+  does not claim to resolve the separate cross-device conflict work in UX-059.
 - **Seasonings are excluded by default.** Spices and salt are bought on their own rhythm, not per recipe; the existing `ingredient_match` "no match needed" rules already identify them. A toggle includes them for the shop where you do need them.
 - **Quantities are editable on the list without touching the recipe.** 1.5 lb of beef becomes 2 lb because that is how beef is sold. An edited line is marked as edited and keeps showing what the recipes called for, so a later rebuild changing the total is visible rather than silent.
 - **Needed minus Have equals Buy.** The amount editor labels a total-needed

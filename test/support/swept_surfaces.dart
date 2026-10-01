@@ -97,15 +97,16 @@ class SweepTools {
 
   /// The last vertical scroll view that accepts a person's drag.
   ///
-  /// Every text field contains a horizontal one of its own for its editable,
-  /// so "the last scrollable" on a sheet full of fields is a text box, and
-  /// dragging that goes nowhere. The shopping list's reorderable store groups
+  /// Text fields contain an editable scrollable of their own, vertical for
+  /// multiline input, so "the last scrollable" on a sheet full of fields is
+  /// a text box and dragging that goes nowhere. The shopping list's store groups
   /// also contain Scrollables, but those have scrolling disabled: the outer
   /// list owns the gesture, and an inner group's center can be off screen.
   static Finder get verticalScroller => find
       .byWidgetPredicate(
         (Widget widget) =>
             widget is Scrollable &&
+            widget.restorationId != 'editable' &&
             widget.physics?.allowUserScrolling != false &&
             (widget.axisDirection == AxisDirection.down ||
                 widget.axisDirection == AxisDirection.up),
@@ -401,6 +402,77 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     // together taller than the sheet is allowed to be, so the results are
     // off the bottom unless the sheet scrolls as one thing.
     farEnd: find.text('Slow chilli with all the trimmings'),
+  ),
+  SweptSurface(
+    name: 'an optional amount before adding a plain shopping item',
+    opensFrom: 'lib/features/shopping/add_to_list_sheet.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Shopping');
+      await tools.reach(find.text('Add item'));
+      await tester.enterText(
+        await tools.bring(find.byKey(const Key('manual-item-name'))),
+        'Coffee',
+      );
+      await pumpFrames(tester, frames: 4);
+      await tools.reach(find.byKey(const Key('manual-item-add-amount')));
+      await tester.enterText(
+        await tools.bring(find.byKey(const Key('manual-item-amount'))),
+        '1/2',
+      );
+      await pumpFrames(tester, frames: 4);
+    },
+    arrived: find.byKey(const Key('manual-item-amount')),
+    waypoints: <Finder>[find.byKey(const Key('manual-item-unit'))],
+    farEnd: find.byKey(const Key('manual-item-add')),
+  ),
+  SweptSurface(
+    name: 'pasting shopping items before review',
+    opensFrom: 'lib/features/shopping/paste_items_sheet.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Shopping');
+      await tools.reach(find.text('Add item'));
+      await tools.reach(find.byKey(const Key('paste-items-open')));
+      await tester.enterText(
+        await tools.bring(find.byKey(const Key('paste-items-input'))),
+        'Ground beef\nEggs\nEggs\nCoffee 500g',
+      );
+      // Read the enabled button after its disabled-to-enabled transition.
+      await pumpFrames(tester, frames: 20);
+    },
+    arrived: find.byKey(const Key('paste-items-input')),
+    farEnd: find.byKey(const Key('paste-items-review')),
+  ),
+  SweptSurface(
+    name: 'reviewing pasted shopping items and their amounts',
+    opensFrom: 'lib/features/shopping/paste_items_sheet.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Shopping');
+      await tools.reach(find.text('Add item'));
+      await tools.reach(find.byKey(const Key('paste-items-open')));
+      await tester.enterText(
+        await tools.bring(find.byKey(const Key('paste-items-input'))),
+        'Ground beef\nEggs\nEggs\nCoffee 500g',
+      );
+      await pumpFrames(tester, frames: 4);
+      await tools.reach(find.byKey(const Key('paste-items-review')));
+      await tools.bring(find.text('Already on the list · will skip'));
+      expect(find.text('Already on the list · will skip'), findsOneWidget);
+      await tools.reach(find.byKey(const Key('paste-add-amount-1')));
+      await tester.enterText(
+        await tools.bring(find.byKey(const Key('paste-1-amount'))),
+        '12',
+      );
+      await pumpFrames(tester, frames: 4);
+    },
+    arrived: find.byKey(const Key('paste-1-amount')),
+    waypoints: <Finder>[
+      find.byKey(const Key('paste-1-unit')),
+      find.text('Repeated in this paste · will skip'),
+      find.byKey(const Key('paste-name-3')),
+    ],
+    farEnd: find.byKey(const Key('paste-items-save')),
   ),
   SweptSurface(
     name: 'choosing something to log',

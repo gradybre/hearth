@@ -6,8 +6,14 @@ import '../../app/theme/hearth_theme.dart';
 import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
+import '../../domain/parsing/amount_parser.dart';
 import '../../domain/recipes/ingredient_consolidator.dart';
+import '../../domain/shopping/manual_addition.dart';
+import '../../domain/shopping/shopping_line.dart';
 import '../../domain/text/text_normaliser.dart';
+import '../../domain/units/quantity.dart';
+import '../../domain/units/unit.dart';
+import 'paste_items_sheet.dart';
 
 /// What somebody asked to put on the shopping list (spec §5.7).
 @immutable
@@ -33,9 +39,17 @@ final class FoodAddition extends ListAddition {
 
 /// Something the library has never heard of — coffee, paper towels.
 final class PlainAddition extends ListAddition {
-  const PlainAddition(this.name);
+  const PlainAddition(this.name, {this.quantity});
 
   final String name;
+  final Quantity? quantity;
+}
+
+/// Several plain items, explicitly reviewed before saving.
+final class PlainBatchAddition extends ListAddition {
+  const PlainBatchAddition(this.items);
+
+  final List<ManualListItem> items;
 }
 
 /// Putting something on the shopping list.
@@ -48,12 +62,20 @@ final class PlainAddition extends ListAddition {
 /// they are one act — "I need the stuff for chilli", "I need yoghurt", "I need
 /// coffee" — and splitting them across a search sheet and a name dialog made
 /// the app's data model the user's problem.
+///
+/// [onCommit] keeps a draft open until saving succeeds. Without it, the sheet
+/// returns the selection as before, including the seeded recipe review.
+/// [unavailableReason] prevents a held draft from crossing account boundaries.
+/// [currentLines] is only a duplicate preview; saving rechecks the live list.
 Future<ListAddition?> showAddToListSheet(
   BuildContext context, {
   required List<Recipe> recipes,
   required List<Food> foods,
   Recipe? recipe,
   double? servings,
+  List<ShoppingLine> currentLines = const <ShoppingLine>[],
+  Future<void> Function(ListAddition addition)? onCommit,
+  String? Function()? unavailableReason,
 }) => showModalBottomSheet<ListAddition>(
   context: context,
   backgroundColor: context.colors.background,
@@ -61,6 +83,7 @@ Future<ListAddition?> showAddToListSheet(
   // Capped like every other sheet here, so a tall one at large text scrolls
   // rather than overflowing, and tapping above still dismisses.
   constraints: BoxConstraints(
+    maxWidth: 560,
     maxHeight: MediaQuery.sizeOf(context).height * 0.85,
   ),
   builder: (BuildContext sheet) => _AddToListSheet(
@@ -68,6 +91,9 @@ Future<ListAddition?> showAddToListSheet(
     foods: foods,
     recipe: recipe,
     servings: servings,
+    currentLines: currentLines,
+    onCommit: onCommit,
+    unavailableReason: unavailableReason,
   ),
 );
 
@@ -100,12 +126,18 @@ class _AddToListSheet extends StatefulWidget {
     required this.foods,
     this.recipe,
     this.servings,
+    required this.currentLines,
+    this.onCommit,
+    this.unavailableReason,
   });
 
   final List<Recipe> recipes;
   final List<Food> foods;
   final Recipe? recipe;
   final double? servings;
+  final List<ShoppingLine> currentLines;
+  final Future<void> Function(ListAddition addition)? onCommit;
+  final String? Function()? unavailableReason;
 
   @override
   State<_AddToListSheet> createState() => _AddToListSheetState();
@@ -113,6 +145,13 @@ class _AddToListSheet extends StatefulWidget {
 
 class _AddToListSheetState extends State<_AddToListSheet> {
   final TextEditingController _search = TextEditingController();
+  final TextEditingController _manualAmount = TextEditingController();
+  Unit _manualUnit = Units.item;
+  bool _showAmount = false;
+  bool _saving = false;
+  bool _openingPaste = false;
+  bool _expired = false;
+  String? _error;
 
   Recipe? _recipe;
   Food? _food;
@@ -136,7 +175,8 @@ class _AddToListSheetState extends State<_AddToListSheet> {
   @override
   void initState() {
     super.initState();
-    _search.addListener(() => setState(() {}));
+    _search.addListener(_changed);
+    _manualAmount.addListener(_changed);
     _recipe = widget.recipe;
     final double initial = widget.servings ?? widget.recipe?.servings ?? 1;
     _servings = initial.isFinite && initial > 0
@@ -144,9 +184,12 @@ class _AddToListSheetState extends State<_AddToListSheet> {
         : 1;
   }
 
+  void _changed() => setState(() {});
+
   @override
   void dispose() {
     _search.dispose();
+    _manualAmount.dispose();
     super.dispose();
   }
 
@@ -204,9 +247,11 @@ class _AddToListSheetState extends State<_AddToListSheet> {
   }
 
   void _choose({Recipe? recipe, Food? food}) {
+    if (_saving || _expired) return;
     setState(() {
       _recipe = recipe;
       _food = food;
+      _error = null;
       // A recipe is usually wanted at the yield it was written for; a food is
       // usually wanted one at a time. Clamped like every other path that sets
       // this, because a recipe saved with a yield of zero would otherwise seed
@@ -220,6 +265,80 @@ class _AddToListSheetState extends State<_AddToListSheet> {
   void _step(double next) =>
       setState(() => _servings = next.clamp(_minimum, _maximum));
 
+  Future<void> _submit(ListAddition addition) async {
+    if (_saving || _expired) return;
+    final String? unavailable = widget.unavailableReason?.call();
+    if (unavailable != null) {
+      setState(() {
+        _error = unavailable;
+        _expired = true;
+      });
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.onCommit?.call(addition);
+      if (!mounted) return;
+      if (widget.unavailableReason?.call() != null) {
+        throw const ShoppingAdditionExpired();
+      }
+      Navigator.of(context).pop(addition);
+    } on ShoppingAdditionExpired {
+      if (!mounted) return;
+      setState(() {
+        _expired = true;
+        _error = ShoppingAdditionExpired.message;
+      });
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Could not add this item. Your choices are kept. Try again.';
+      });
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _addPlain() async {
+    final String name = _search.text.trim();
+    if (name.isEmpty ||
+        manualItemAmountError(_manualAmount.text, _manualUnit) != null) {
+      return;
+    }
+    await _submit(
+      PlainAddition(
+        name,
+        quantity: _manualAmount.text.trim().isEmpty
+            ? null
+            : Quantity.of(parseAmount(_manualAmount.text)!, _manualUnit),
+      ),
+    );
+  }
+
+  Future<void> _paste() async {
+    if (_saving || _openingPaste || _expired) return;
+    _openingPaste = true;
+    FocusScope.of(context).unfocus();
+    try {
+      final List<ManualListItem>? items = await showPasteItemsSheet(
+        context,
+        currentLines: widget.currentLines,
+        unavailableReason: widget.unavailableReason,
+        onCommit: widget.onCommit == null
+            ? null
+            : (List<ManualListItem> items) =>
+                  widget.onCommit!(PlainBatchAddition(items)),
+      );
+      if (!mounted || items == null) return;
+      Navigator.of(context).pop(PlainBatchAddition(items));
+    } finally {
+      _openingPaste = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
@@ -231,125 +350,196 @@ class _AddToListSheetState extends State<_AddToListSheet> {
         ? null
         : recipeShoppingIssue(_recipe!, servings: _servings);
 
-    return SafeArea(
-      top: false,
-      // One scroll view over the whole sheet, heading and search field
-      // included, rather than a fixed header above a scrolling list. At three
-      // times the text on a 320-point phone the heading, the explanation and
-      // the field are taller than the sheet is allowed to be, and a header
-      // that cannot scroll has nowhere to put the overflow (spec §6.3).
-      child: ListView(
-        shrinkWrap: true,
-        padding: EdgeInsets.fromLTRB(
-          HearthSpacing.lg,
-          HearthSpacing.lg,
-          HearthSpacing.lg,
-          HearthSpacing.lg + MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        children: <Widget>[
-          // A question rather than "Add to the list", which is what the
-          // button at the end of the sheet says. A heading and an action
-          // wearing the same words read as the same control to anybody
-          // skimming, and as two of it to a screen reader.
-          Text(
-            _seeded ? 'Add ingredients' : 'What do you need?',
-            style: context.text.sectionHeader,
+    return PopScope(
+      canPop: !_saving,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
           ),
-          const SizedBox(height: HearthSpacing.sm),
-          Text(
-            _seeded
-                ? 'For our household shopping list. Ingredients are added '
-                      'to whatever is already there.'
-                : 'A recipe puts its ingredients on, added up with whatever '
-                      'is already there.',
-            style: context.text.metadata.copyWith(color: colors.textMuted),
-          ),
-          const SizedBox(height: HearthSpacing.md),
-          if (!_seeded) ...<Widget>[
-            TextField(
-              controller: _search,
-              autofocus: true,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'A recipe, a food, or anything else',
-                hintText: 'Chilli, yoghurt, paper towels…',
+          // One scroll view over the whole sheet, heading and search field
+          // included, rather than a fixed header above a scrolling list. At three
+          // times the text on a 320-point phone the heading, the explanation and
+          // the field are taller than the sheet is allowed to be, and a header
+          // that cannot scroll has nowhere to put the overflow (spec §6.3).
+          child: ListView(
+            key: const ValueKey<String>('add-to-list-scroll'),
+            shrinkWrap: true,
+            padding: const EdgeInsets.all(HearthSpacing.lg),
+            children: <Widget>[
+              // A question rather than "Add to the list", which is what the
+              // button at the end of the sheet says. A heading and an action
+              // wearing the same words read as the same control to anybody
+              // skimming, and as two of it to a screen reader.
+              Text(
+                _seeded ? 'Add ingredients' : 'What do you need?',
+                style: context.text.sectionHeader,
               ),
-            ),
-            const SizedBox(height: HearthSpacing.md),
-          ],
-          if (chosen)
-            _Chosen(
-              name: _recipe?.title ?? _food!.name,
-              amount: _amount(_servings),
-              spokenAmount: _spoken(_servings),
-              spokenMore: _spoken((_servings + 0.5).clamp(_minimum, _maximum)),
-              spokenFewer: _servings > _minimum
-                  ? _spoken((_servings - 0.5).clamp(_minimum, _maximum))
-                  : null,
-              // Half a serving is the smallest ask that means anything, and
-              // zero would put a whole recipe on the list — the repository
-              // refuses it outright.
-              onFewer: _servings > _minimum
-                  ? () => _step(_servings - 0.5)
-                  : null,
-              onMore: () => _step(_servings + 0.5),
-              onClear: _seeded ? null : () => _choose(),
-              issue: issue,
-              onAdd: issue != null
-                  ? null
-                  : () => Navigator.of(context).pop(
-                      _recipe != null
-                          ? RecipeAddition(
-                              recipe: _recipe!,
-                              servings: _servings,
-                            )
-                          : FoodAddition(food: _food!, servings: _servings),
-                    ),
-            )
-          else ...<Widget>[
-            for (final Recipe recipe in recipes)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.menu_book_outlined),
-                title: Text(recipe.title),
-                // Said in words, not by the icon alone (spec §6.3): a recipe
-                // and a food do very different things to the list.
-                subtitle: Text('Recipe · ${_servingsWord(recipe.servings)}'),
-                onTap: () => _choose(recipe: recipe),
+              const SizedBox(height: HearthSpacing.sm),
+              Text(
+                _seeded
+                    ? 'For our household shopping list. Ingredients are added '
+                          'to whatever is already there.'
+                    : 'Add anything you need. Recipes add their ingredients to '
+                          'whatever is already there.',
+                style: context.text.metadata.copyWith(color: colors.textMuted),
               ),
-            for (final Food food in foods)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.egg_outlined),
-                title: Text(food.name),
-                subtitle: const Text('Food'),
-                onTap: () => _choose(food: food),
-              ),
-            // Always offered, not only when nothing matched: a shopping list
-            // is mostly things no recipe asked for, and "paper towels" would
-            // otherwise be unreachable the moment some food happened to
-            // contain the word.
-            if (typed.isNotEmpty)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.add),
-                title: Text('Add "$typed" as an item'),
-                subtitle: Text(
-                  recipes.isEmpty && foods.isEmpty
-                      ? 'Nothing in the library matches'
-                      : 'Straight onto the list, with no amount',
+              const SizedBox(height: HearthSpacing.md),
+              if (!_seeded) ...<Widget>[
+                TextField(
+                  key: const ValueKey<String>('manual-item-name'),
+                  controller: _search,
+                  enabled: !_saving && !_expired,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    labelText: 'A recipe, a food, or anything else',
+                    hintText: 'Chilli, yoghurt, paper towels…',
+                  ),
                 ),
-                onTap: () => Navigator.of(context).pop(PlainAddition(typed)),
-              ),
-          ],
-          if (_seeded) ...<Widget>[
-            const SizedBox(height: HearthSpacing.sm),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-          ],
-        ],
+                const SizedBox(height: HearthSpacing.md),
+              ],
+              if (chosen)
+                _Chosen(
+                  name: _recipe?.title ?? _food!.name,
+                  amount: _amount(_servings),
+                  spokenAmount: _spoken(_servings),
+                  spokenMore: _spoken(
+                    (_servings + 0.5).clamp(_minimum, _maximum),
+                  ),
+                  spokenFewer: _servings > _minimum
+                      ? _spoken((_servings - 0.5).clamp(_minimum, _maximum))
+                      : null,
+                  // Half a serving is the smallest ask that means anything, and
+                  // zero would put a whole recipe on the list — the repository
+                  // refuses it outright.
+                  onFewer: !_saving && !_expired && _servings > _minimum
+                      ? () => _step(_servings - 0.5)
+                      : null,
+                  onMore: _saving || _expired
+                      ? null
+                      : () => _step(_servings + 0.5),
+                  onClear: _seeded || _saving || _expired
+                      ? null
+                      : () => _choose(),
+                  issue: issue,
+                  onAdd: issue != null || _saving || _expired
+                      ? null
+                      : () => _submit(
+                          _recipe != null
+                              ? RecipeAddition(
+                                  recipe: _recipe!,
+                                  servings: _servings,
+                                )
+                              : FoodAddition(food: _food!, servings: _servings),
+                        ),
+                  addLabel: _saving
+                      ? 'Adding…'
+                      : _error != null && !_expired
+                      ? 'Retry'
+                      : 'Add to the list',
+                )
+              else ...<Widget>[
+                for (final Recipe recipe in recipes)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.menu_book_outlined),
+                    title: Text(recipe.title),
+                    // Said in words, not by the icon alone (spec §6.3): a recipe
+                    // and a food do very different things to the list.
+                    subtitle: Text(
+                      'Recipe · ${_servingsWord(recipe.servings)}',
+                    ),
+                    onTap: () => _choose(recipe: recipe),
+                  ),
+                for (final Food food in foods)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.egg_outlined),
+                    title: Text(food.name),
+                    subtitle: const Text('Food'),
+                    onTap: () => _choose(food: food),
+                  ),
+                // A name-only item is still one tap. An amount is optional here,
+                // before saving, so adding coffee need not visit a second editor.
+                if (typed.isNotEmpty) ...<Widget>[
+                  if (_showAmount) ...<Widget>[
+                    ManualItemAmountFields(
+                      controller: _manualAmount,
+                      unit: _manualUnit,
+                      keyPrefix: 'manual-item',
+                      enabled: !_saving && !_expired,
+                      onUnitChanged: (Unit unit) =>
+                          setState(() => _manualUnit = unit),
+                    ),
+                    const SizedBox(height: HearthSpacing.sm),
+                  ],
+                  ListTile(
+                    key: const ValueKey<String>('manual-item-add'),
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.add),
+                    title: Text(
+                      _saving
+                          ? 'Adding…'
+                          : _error != null && !_expired
+                          ? 'Retry'
+                          : 'Add "$typed" as an item',
+                    ),
+                    subtitle: Text(
+                      _manualAmount.text.trim().isEmpty
+                          ? 'No amount needed'
+                          : 'With the amount above',
+                    ),
+                    onTap:
+                        _saving ||
+                            _expired ||
+                            manualItemAmountError(
+                                  _manualAmount.text,
+                                  _manualUnit,
+                                ) !=
+                                null
+                        ? null
+                        : _addPlain,
+                  ),
+                  if (!_showAmount)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        key: const ValueKey<String>('manual-item-add-amount'),
+                        onPressed: _saving || _expired
+                            ? null
+                            : () => setState(() => _showAmount = true),
+                        icon: const Icon(Icons.straighten),
+                        label: const Text('Add amount'),
+                      ),
+                    ),
+                ],
+                const SizedBox(height: HearthSpacing.sm),
+                OutlinedButton.icon(
+                  key: const ValueKey<String>('paste-items-open'),
+                  onPressed: _saving || _expired ? null : _paste,
+                  icon: const Icon(Icons.playlist_add),
+                  label: const Text('Paste items'),
+                ),
+              ],
+              if (_error != null) ...<Widget>[
+                const SizedBox(height: HearthSpacing.md),
+                Semantics(
+                  liveRegion: true,
+                  child: Text(_error!, style: context.text.body),
+                ),
+              ],
+              if (_seeded || _error != null) ...<Widget>[
+                const SizedBox(height: HearthSpacing.sm),
+                TextButton(
+                  onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -374,6 +564,7 @@ class _Chosen extends StatelessWidget {
     required this.onClear,
     required this.onAdd,
     this.issue,
+    this.addLabel = 'Add to the list',
   });
 
   final String name;
@@ -389,10 +580,11 @@ class _Chosen extends StatelessWidget {
   final String? spokenFewer;
 
   final VoidCallback? onFewer;
-  final VoidCallback onMore;
+  final VoidCallback? onMore;
   final VoidCallback? onClear;
   final VoidCallback? onAdd;
   final String? issue;
+  final String addLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -469,10 +661,7 @@ class _Chosen extends StatelessWidget {
         // type instead of clipping its own label (spec §6.3).
         ConstrainedBox(
           constraints: const BoxConstraints(minHeight: HearthTouch.minTarget),
-          child: FilledButton(
-            onPressed: onAdd,
-            child: const Text('Add to the list'),
-          ),
+          child: FilledButton(onPressed: onAdd, child: Text(addLabel)),
         ),
       ],
     );
