@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/a11y/accessibility.dart';
 import '../../app/providers.dart';
@@ -21,6 +22,8 @@ import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
 import '../../domain/planning/target_schedule.dart';
 import '../../domain/planning/week.dart';
+import '../foods/food_detail_screen.dart';
+import '../recipes/cook_along_screen.dart';
 import 'day_picker_sheet.dart';
 import 'entry_resolver.dart';
 import 'log_sheet.dart';
@@ -52,12 +55,12 @@ class DayScreen extends ConsumerWidget {
     final Map<String, Recipe> recipes = <String, Recipe>{
       for (final Recipe r
           in ref.watch(recipeLibraryProvider).value ?? const <Recipe>[])
-        r.id: r,
+        if (!r.isDeleted) r.id: r,
     };
     final Map<String, Food> foods = <String, Food>{
       for (final Food f
           in ref.watch(foodLibraryProvider).value ?? const <Food>[])
-        f.id: f,
+        if (!f.isDeleted) f.id: f,
     };
 
     final double gutter = MediaQuery.sizeOf(context).width >= 840
@@ -102,6 +105,8 @@ class DayScreen extends ConsumerWidget {
                   slot: slot,
                   entries: EntryResolver.inSlot(resolved, slot),
                   date: date,
+                  recipes: recipes,
+                  foods: foods,
                 ),
                 const SizedBox(height: HearthSpacing.lg),
               ],
@@ -495,11 +500,15 @@ class _SlotSection extends ConsumerWidget {
     required this.slot,
     required this.entries,
     required this.date,
+    required this.recipes,
+    required this.foods,
   });
 
   final MealSlot slot;
   final List<ResolvedEntry> entries;
   final DateTime date;
+  final Map<String, Recipe> recipes;
+  final Map<String, Food> foods;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -539,36 +548,123 @@ class _SlotSection extends ConsumerWidget {
           )
         else
           for (final ResolvedEntry entry in entries)
-            _EntryRow(entry: entry, date: date),
+            _EntryRow(
+              entry: entry,
+              date: date,
+              recipe: recipes[entry.entry.refId],
+              food: foods[entry.entry.refId],
+            ),
       ],
     );
   }
 }
 
-/// One thing on the plate, and the three things you can do with it.
+/// Opening a meal and recording eating are separate actions (UX-051).
 ///
-/// The gestures are the whole point of the day view: confirming a meal is the
-/// thing you do most, so it is the plainest gesture there is.
-///
-///  * **Tap** logs it, or takes the log back. One tap either way — a meal
-///    confirmed by mistake should cost exactly what confirming it cost.
-///  * **Swipe** removes it, with the undo every other list in the app offers.
-///  * **Long press** opens the rest: the portion, and a second way to remove.
-///
-/// Editing the portion used to be what a tap did, which put the commonest
-/// action behind a sheet and a second tap.
+/// The leading check keeps logging one tap. The body opens the current
+/// source, while Cook starts the full saved recipe, never the personal
+/// portion on this row. Swipe and the visible options keep their own jobs.
 class _EntryRow extends ConsumerWidget {
-  const _EntryRow({required this.entry, required this.date});
+  const _EntryRow({
+    required this.entry,
+    required this.date,
+    required this.recipe,
+    required this.food,
+  });
 
   final ResolvedEntry entry;
   final DateTime date;
+  final Recipe? recipe;
+  final Food? food;
+
+  bool get _sourceAvailable => switch (entry.entry.refType) {
+    PlanRefType.recipe => recipe != null && !recipe!.isDeleted,
+    PlanRefType.food => food != null && !food!.isDeleted,
+  };
+
+  /// A missing serving makes nutrition uncostable, not the food unavailable.
+  /// Logged names still belong to the snapshot, even when its source changed.
+  String get _label {
+    final String? frozen = entry.entry.macroSnapshot?.label;
+    if (entry.entry.isLogged && frozen != null && frozen.isNotEmpty) {
+      return frozen;
+    }
+    return switch (entry.entry.refType) {
+      PlanRefType.recipe => recipe?.title ?? entry.label,
+      PlanRefType.food => food?.name ?? entry.label,
+    };
+  }
+
+  String get _sourceKind => switch (entry.entry.refType) {
+    PlanRefType.recipe =>
+      recipe?.isEatenOut ?? false ? 'Restaurant meal' : 'Recipe',
+    PlanRefType.food => 'Food',
+  };
+
+  void _openSource(BuildContext context) {
+    switch (entry.entry.refType) {
+      case PlanRefType.recipe:
+        context.push('/recipe/${entry.entry.refId}');
+      case PlanRefType.food:
+        Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (BuildContext context) => FoodDetailScreen(
+              foodId: entry.entry.refId,
+              servingOptionId: entry.entry.servingOptionId,
+            ),
+          ),
+        );
+    }
+  }
+
+  void _cook(BuildContext context, WidgetRef ref) {
+    // Read again at the tap so a removed or reclassified source cannot enter
+    // cook-along through a stale row. The recipe itself is the cook snapshot.
+    Recipe? saved;
+    for (final Recipe current
+        in ref.read(recipeLibraryProvider).value ?? const <Recipe>[]) {
+      if (current.id == entry.entry.refId && !current.isDeleted) {
+        saved = current;
+        break;
+      }
+    }
+    if (saved == null) {
+      _say(context, 'This recipe is no longer in your library.');
+      return;
+    }
+    if (saved.isEatenOut) {
+      _say(context, 'Restaurant meals do not have a cook-along.');
+      return;
+    }
+    if (saved.allSteps.isEmpty) {
+      _say(context, 'This recipe has no directions to cook along with yet.');
+      return;
+    }
+    final Recipe snapshot = saved;
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) => CookAlongScreen(recipe: snapshot),
+      ),
+    );
+  }
 
   /// Confirms this entry as eaten, or puts it back to planned.
   ///
   /// Logging recomputes from the library rather than trusting anything stored
   /// on the row: repeating a meal should record what that food is now, and
   /// the snapshot is taken at this moment (§4).
-  Future<void> _toggleLogged(WidgetRef ref) async {
+  Future<void> _toggleLogged(BuildContext context, WidgetRef ref) async {
+    if (!entry.entry.isLogged && (entry.isUncostable || !_sourceAvailable)) {
+      _say(
+        context,
+        _sourceAvailable
+            ? 'This planned serving is no longer available. Open the food '
+                  'to see its current servings.'
+            : 'This ${entry.entry.refType.name} is no longer in your library '
+                  'and cannot be logged.',
+      );
+      return;
+    }
     final PlanRepository plans = ref.read(planRepositoryProvider);
     if (entry.entry.isLogged) {
       await plans.unlogEntry(entry.entry.id);
@@ -582,7 +678,7 @@ class _EntryRow extends ConsumerWidget {
         // and this is the commonest gesture in the app to freeze that on
         // (spec §5.6).
         liveCoverage: entry.liveCoverage,
-        label: entry.label,
+        label: _label,
       );
     }
     ref.invalidate(dayEntriesProvider);
@@ -628,7 +724,7 @@ class _EntryRow extends ConsumerWidget {
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.all(HearthSpacing.lg),
-              child: Text(entry.label, style: context.text.sectionHeader),
+              child: Text(_label, style: context.text.sectionHeader),
             ),
             ListTile(
               leading: Icon(Icons.tune, color: context.colors.textSecondary),
@@ -707,7 +803,7 @@ class _EntryRow extends ConsumerWidget {
   Future<void> _move(BuildContext context, WidgetRef ref) async {
     final MealDestination? to = await showMealDestination(
       context,
-      title: 'Move ${entry.label}',
+      title: 'Move $_label',
       actionLabel: 'Move it',
       slot: entry.entry.slot,
     );
@@ -724,7 +820,7 @@ class _EntryRow extends ConsumerWidget {
   Future<void> _planAgain(BuildContext context, WidgetRef ref) async {
     final MealDestination? to = await showMealDestination(
       context,
-      title: 'Plan ${entry.label} again',
+      title: 'Plan $_label again',
       actionLabel: 'Plan it',
       slot: entry.entry.slot,
     );
@@ -755,17 +851,33 @@ class _EntryRow extends ConsumerWidget {
     final HearthColors colors = context.colors;
     final HearthTextStyles text = context.text;
     final bool logged = entry.entry.isLogged;
+    final bool reflow = A11y.scaleOf(context) > A11y.reflowThreshold;
+    final bool showCook =
+        !logged &&
+        entry.entry.refType == PlanRefType.recipe &&
+        _sourceAvailable &&
+        !recipe!.isEatenOut;
+    final String calories = entry.isUncostable
+        ? 'Nutrition unavailable'
+        : '${entry.contribution.kcal.round()} kcal';
+
+    Widget options() => IconButton(
+      icon: const Icon(Icons.more_vert, size: 20),
+      // Keep the established tooltip, with its own semantics outside Open.
+      tooltip: 'Edit $_label',
+      constraints: const BoxConstraints(
+        minWidth: HearthTouch.minTarget,
+        minHeight: HearthTouch.minTarget,
+      ),
+      onPressed: () => _showOptions(context, ref),
+    );
 
     return Padding(
       padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
       child: SwipeToDelete(
-        name: entry.label,
+        name: _label,
         onDelete: () => _remove(ref),
         onRestore: () => _restore(ref),
-        // The row's own semantics cover the part that logs; the button beside
-        // it has its own. It sits outside them deliberately — the row
-        // excludes its descendants, so a button placed inside would be
-        // invisible to a screen reader, which is the opposite of the point.
         child: Material(
           color: colors.surface,
           borderRadius: BorderRadius.circular(HearthRadius.md),
@@ -774,93 +886,138 @@ class _EntryRow extends ConsumerWidget {
               borderRadius: BorderRadius.circular(HearthRadius.md),
               border: Border.all(color: colors.outline),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                Expanded(
-                  child: Semantics(
-                    button: true,
-                    label:
-                        '${entry.label}. ${_detail(entry, logged)}. '
-                        '${logged ? 'Tap to unlog' : 'Tap to log'}.',
-                    onTap: () => _toggleLogged(ref),
-                    // Kept as a shortcut, not as the only way in (U06).
-                    onLongPress: () => _showOptions(context, ref),
-                    excludeSemantics: true,
-                    child: InkWell(
-                      onTap: () => _toggleLogged(ref),
-                      onLongPress: () => _showOptions(context, ref),
-                      // Rounded on the left, where the card is, and square on
-                      // the right, where the button begins. A full radius
-                      // here clipped the ink to this box's own corners, so
-                      // pressing the row drew two rounded edges in the middle
-                      // of it and nothing under the calories or the button.
-                      borderRadius: const BorderRadius.horizontal(
-                        left: Radius.circular(HearthRadius.md),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Padding(
+                      padding: const EdgeInsets.only(top: HearthSpacing.xs),
+                      child: IconButton(
+                        key: ValueKey<String>('meal-log-${entry.entry.id}'),
+                        tooltip: '${logged ? 'Unlog' : 'Log'} $_label',
+                        constraints: const BoxConstraints(
+                          minWidth: HearthTouch.kitchenTarget,
+                          minHeight: HearthTouch.kitchenTarget,
+                        ),
+                        icon: Icon(
+                          logged
+                              ? Icons.check_circle
+                              : Icons.radio_button_unchecked,
+                          color: logged ? colors.accent : colors.textMuted,
+                        ),
+                        onPressed: () => _toggleLogged(context, ref),
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(HearthSpacing.md),
-                        child: Row(
-                          children: <Widget>[
-                            // Logged versus planned is carried by an icon and a word,
-                            // not by colour alone (spec §6.3).
-                            Icon(
-                              logged
-                                  ? Icons.check_circle
-                                  : Icons.radio_button_unchecked,
-                              size: 20,
-                              color: logged ? colors.accent : colors.textMuted,
+                    ),
+                    Expanded(
+                      child: Semantics(
+                        key: ValueKey<String>('meal-open-${entry.entry.id}'),
+                        container: true,
+                        button: true,
+                        label:
+                            'Open ${_sourceKind.toLowerCase()} $_label. '
+                            '$_detail. $calories.',
+                        hint: 'Shows current library details',
+                        onTap: () => _openSource(context),
+                        onLongPress: () => _showOptions(context, ref),
+                        excludeSemantics: true,
+                        child: InkWell(
+                          onTap: () => _openSource(context),
+                          onLongPress: () => _showOptions(context, ref),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              minHeight: HearthTouch.kitchenTarget,
                             ),
-                            const SizedBox(width: HearthSpacing.md),
-                            Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: HearthSpacing.xs,
+                                vertical: HearthSpacing.md,
+                              ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: <Widget>[
-                                  Text(entry.label, style: text.ingredient),
+                                  Text(_label, style: text.ingredient),
                                   const SizedBox(height: HearthSpacing.xxs),
-                                  Text(
-                                    _detail(entry, logged),
-                                    style: text.metadata.copyWith(
-                                      color: colors.textMuted,
-                                    ),
+                                  Wrap(
+                                    spacing: HearthSpacing.sm,
+                                    runSpacing: HearthSpacing.xxs,
+                                    children: <Widget>[
+                                      Text(
+                                        _detail,
+                                        style: text.metadata.copyWith(
+                                          color: colors.textMuted,
+                                        ),
+                                      ),
+                                      Text(
+                                        calories,
+                                        style: text.metadata.copyWith(
+                                          color: colors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
                             ),
-                            Text(
-                              '${entry.contribution.kcal.round()}',
-                              style: text.ingredient.copyWith(
-                                color: colors.textSecondary,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                    if (!reflow)
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          top: HearthSpacing.xs,
+                          right: HearthSpacing.xs,
+                        ),
+                        child: options(),
+                      ),
+                  ],
                 ),
-                // Visible, because a long press is not an affordance: nothing
-                // on the row said the portion could be changed, so the way to
-                // change it was something you either knew or did not (U06).
-                Padding(
-                  padding: const EdgeInsets.only(right: HearthSpacing.xs),
-                  child: IconButton(
-                    icon: const Icon(Icons.more_vert, size: 20),
-                    // The tooltip alone, as every other icon button here
-                    // does. It is not merely a hover hint: iOS appends it to
-                    // the accessibility label and Android sets it as the
-                    // tooltip text, so both read it — and setting a matching
-                    // `semanticLabel` as well had VoiceOver say the name
-                    // twice.
-                    tooltip: 'Edit ${entry.label}',
-                    // Material's default is 40, which is under the floor a
-                    // thumb needs (§6.3). Stated rather than inherited.
-                    constraints: const BoxConstraints(
-                      minWidth: HearthTouch.minTarget,
-                      minHeight: HearthTouch.minTarget,
+                // Cook is below the meal, so enlarged text never has to fit
+                // four actions across one row. Options reflows here too.
+                if (showCook || reflow)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      HearthSpacing.md,
+                      0,
+                      HearthSpacing.md,
+                      HearthSpacing.xs,
                     ),
-                    onPressed: () => _showOptions(context, ref),
+                    child: Wrap(
+                      spacing: HearthSpacing.md,
+                      runSpacing: HearthSpacing.xs,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: <Widget>[
+                        if (showCook) ...<Widget>[
+                          TextButton.icon(
+                            key: ValueKey<String>(
+                              'meal-cook-${entry.entry.id}',
+                            ),
+                            onPressed: () => _cook(context, ref),
+                            style: TextButton.styleFrom(
+                              minimumSize: const Size(
+                                HearthTouch.minTarget,
+                                HearthTouch.minTarget,
+                              ),
+                            ),
+                            icon: const Icon(Icons.soup_kitchen_outlined),
+                            label: Text(
+                              'Cook',
+                              semanticsLabel: 'Cook $_label, full recipe',
+                            ),
+                          ),
+                          Text(
+                            'Full recipe · ${_portion(recipe!.servings)}',
+                            style: text.metadata.copyWith(
+                              color: colors.textMuted,
+                            ),
+                          ),
+                        ],
+                        if (reflow) options(),
+                      ],
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -869,11 +1026,13 @@ class _EntryRow extends ConsumerWidget {
     );
   }
 
-  static String _detail(ResolvedEntry entry, bool logged) {
+  String get _detail {
     final String portion = _portion(entry.entry.servings);
-    if (entry.isUncostable) return 'planned · no longer in your library';
-    if (logged) return 'logged · $portion · tap to undo';
-    return 'planned · $portion · tap to log';
+    final String status = entry.entry.isLogged ? 'logged' : 'planned';
+    final String detail = '$_sourceKind · $status · $portion';
+    if (!_sourceAvailable) return '$detail · source no longer in your library';
+    if (entry.isUncostable) return '$detail · serving no longer available';
+    return detail;
   }
 
   static String _portion(double servings) {

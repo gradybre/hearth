@@ -7,6 +7,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
+import '../../app/widgets/centred_message.dart';
 import '../../app/widgets/undo_snackbar.dart';
 import '../../data/repositories/plan_repository.dart';
 import '../../data/repositories/shopping_repository.dart';
@@ -27,7 +28,6 @@ import 'cook_along_screen.dart';
 import 'macro_stats_row.dart';
 import 'recipe_draft.dart';
 import 'recipe_icon.dart';
-import 'recipe_library_screen.dart';
 import 'recipe_photo.dart';
 import 'recipe_plan_sheet.dart';
 import 'scale_control.dart';
@@ -65,6 +65,10 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
     final String recipeId = widget.recipeId;
     final HearthColors colors = context.colors;
     final AsyncValue<Recipe?> recipe = ref.watch(recipeByIdProvider(recipeId));
+    final Recipe? available = _availableFrom(recipe);
+    final bool isFavorite =
+        (ref.watch(favoriteRecipeIdsProvider).value ?? const <String>{})
+            .contains(recipeId);
     final Map<String, Food> foods = <String, Food>{
       for (final Food food
           in ref.watch(foodLibraryProvider).value ?? const <Food>[])
@@ -90,37 +94,66 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
         surfaceTintColor: Colors.transparent,
         title: const SizedBox.shrink(),
         actions: <Widget>[
-          FavoriteButton(recipeId: recipeId),
-          IconButton(
-            icon: const Icon(Icons.menu_book_outlined),
-            tooltip: 'Cookbooks',
-            onPressed: () => showCollectionsSheet(context, recipeId: recipeId),
-          ),
-          // "My usual bowl, but no rice" is a different meal, not an edit.
-          // Opens the copy unsaved, so the rename and the change happen
-          // before anything is written (spec §5.2).
-          if (recipe.value case final Recipe original)
+          if (available != null) ...<Widget>[
+            IconButton(
+              icon: Icon(
+                isFavorite ? Icons.favorite : Icons.favorite_border,
+                color: isFavorite ? colors.accent : colors.textMuted,
+              ),
+              tooltip: isFavorite
+                  ? 'Remove from favourites'
+                  : 'Add to favourites',
+              onPressed: () {
+                if (_currentRecipe == null) return;
+                ref.read(collectionRepositoryProvider).toggleFavorite(recipeId);
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.menu_book_outlined),
+              tooltip: 'Cookbooks',
+              onPressed: () {
+                if (_currentRecipe == null) return;
+                showCollectionsSheet(context, recipeId: recipeId);
+              },
+            ),
+            // "My usual bowl, but no rice" is a different meal, not an edit.
+            // Opens the copy unsaved, so the rename and the change happen
+            // before anything is written (spec §5.2).
             IconButton(
               icon: const Icon(Icons.content_copy_outlined),
               tooltip: 'Duplicate this recipe',
-              onPressed: () => context.push(
-                '/recipe/new',
-                extra: RecipeDraft.fromRecipe(original).asCopy(),
-              ),
+              onPressed: () {
+                final Recipe? current = _currentRecipe;
+                if (current == null) return;
+                context.push(
+                  '/recipe/new',
+                  extra: RecipeDraft.fromRecipe(current).asCopy(),
+                );
+              },
             ),
-          TextButton(
-            onPressed: () => context.push('/recipe/$recipeId/edit'),
-            child: const Text('Edit'),
-          ),
-          const SizedBox(width: HearthSpacing.sm),
+            TextButton(
+              onPressed: () {
+                if (_currentRecipe != null) {
+                  context.push('/recipe/$recipeId/edit');
+                }
+              },
+              child: const Text('Edit'),
+            ),
+            const SizedBox(width: HearthSpacing.sm),
+          ],
         ],
       ),
       body: recipe.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (Object error, StackTrace stack) =>
-            Center(child: Text('Could not open that recipe.\n$error')),
-        data: (Recipe? loaded) => loaded == null
-            ? const Center(child: Text('That recipe no longer exists.'))
+        skipLoadingOnRefresh: false,
+        loading: () => const Center(
+          child: CircularProgressIndicator(semanticsLabel: 'Loading recipe'),
+        ),
+        error: (Object error, StackTrace stack) => _RecipeUnavailable(
+          failed: true,
+          onRetry: () => ref.invalidate(recipeByIdProvider(recipeId)),
+        ),
+        data: (Recipe? loaded) => loaded == null || loaded.isDeleted
+            ? const _RecipeUnavailable()
             : _RecipeBody(
                 recipe: loaded,
                 foods: foods,
@@ -135,23 +168,34 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          if (!actionsInBody)
-            if (recipe.value case final Recipe original)
-              ColoredBox(
-                color: colors.surface,
-                child: SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.all(HearthSpacing.sm),
-                    child: actions(original),
-                  ),
+          if (!actionsInBody && available != null)
+            ColoredBox(
+              color: colors.surface,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(HearthSpacing.sm),
+                  child: actions(available),
                 ),
               ),
+            ),
           const CookTimerBar(),
         ],
       ),
     );
   }
+
+  static Recipe? _availableFrom(AsyncValue<Recipe?> value) {
+    if (value.isLoading || value.hasError) return null;
+    final Recipe? loaded = value.value;
+    return loaded == null || loaded.isDeleted ? null : loaded;
+  }
+
+  /// A callback can outlive the frame that supplied it. Recheck the current
+  /// record before opening any action from a now-unavailable recipe.
+  Recipe? get _currentRecipe => mounted
+      ? _availableFrom(ref.read(recipeByIdProvider(widget.recipeId)))
+      : null;
 
   /// The recipe as the reader has it, scaled or not.
   ///
@@ -170,7 +214,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
   }
 
   void _cook(Recipe original) {
-    if (_actionBusy || original.isEatenOut) return;
+    if (_actionBusy || original.isEatenOut || _currentRecipe == null) return;
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         // A scaled value snapshot: changes on another device cannot change
@@ -202,7 +246,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
   }
 
   Future<void> _plan(Recipe original) async {
-    if (_actionBusy) return;
+    if (_actionBusy || _currentRecipe == null) return;
     final PlanRepository plans = ref.read(planRepositoryProvider);
     final _ActionFeedback feedback = _ActionFeedback(context);
     await _runAction(() async {
@@ -224,6 +268,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
   ) async {
     if (!feedback.requireCurrent()) return;
     try {
+      if (!await feedback.requireAvailableRecipe(original.id)) return;
       final MealPlanEntry added = await plans.add(
         date: selection.date,
         slot: selection.slot,
@@ -278,7 +323,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
   });
 
   Future<void> _shop(Recipe original, Map<String, Food> foods) async {
-    if (_actionBusy || original.isEatenOut) return;
+    if (_actionBusy || original.isEatenOut || _currentRecipe == null) return;
     final ShoppingRepository shopping = ref.read(shoppingRepositoryProvider);
     final _ActionFeedback feedback = _ActionFeedback(context);
     await _runAction(() async {
@@ -311,6 +356,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
       return;
     }
     try {
+      if (!await feedback.requireAvailableRecipe(addition.recipe.id)) return;
       await shopping.addRecipe(
         recipe: addition.recipe,
         servings: addition.servings,
@@ -378,6 +424,19 @@ class _ActionFeedback {
     return false;
   }
 
+  /// Review sheets and their Retry can outlive a library update or this route.
+  /// Check availability without replacing the recipe/yield the person reviewed.
+  Future<bool> requireAvailableRecipe(String recipeId) async {
+    if (!requireCurrent()) return false;
+    final Recipe? current = await container.read(
+      recipeByIdProvider(recipeId).future,
+    );
+    if (!requireCurrent()) return false;
+    if (current != null && !current.isDeleted) return true;
+    show('This recipe is no longer available. Nothing was added.');
+    return false;
+  }
+
   void refreshPlan() {
     if (!isCurrent) return;
     container.invalidate(dayEntriesProvider);
@@ -411,6 +470,48 @@ class _ActionFeedback {
         ),
       );
   }
+}
+
+class _RecipeUnavailable extends StatelessWidget {
+  const _RecipeUnavailable({this.failed = false, this.onRetry});
+
+  final bool failed;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    top: false,
+    child: CentredMessage(
+      children: <Widget>[
+        Semantics(
+          header: true,
+          child: Text(
+            failed ? 'Could not open this recipe' : 'Recipe unavailable',
+            style: context.text.sectionHeader,
+            textAlign: TextAlign.center,
+          ),
+        ),
+        const SizedBox(height: HearthSpacing.sm),
+        Text(
+          failed
+              ? 'Try loading it again.'
+              : 'This recipe is no longer available in the library. '
+                    'Your plan and saved logs have not changed.',
+          style: context.text.body,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: HearthSpacing.lg),
+        if (onRetry != null) ...<Widget>[
+          FilledButton(onPressed: onRetry, child: const Text('Retry')),
+          const SizedBox(height: HearthSpacing.sm),
+        ],
+        OutlinedButton(
+          onPressed: () => Navigator.of(context).maybePop(),
+          child: const Text('Go back'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _RecipeActions extends StatelessWidget {

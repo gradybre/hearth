@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/domain/models/food.dart';
@@ -9,11 +10,7 @@ import 'package:hearth/domain/units/unit.dart';
 import '../../support/app_harness.dart';
 import '../../support/fixtures.dart';
 
-/// The three gestures on a day's entries (spec §5.6).
-///
-/// Confirming a meal is the thing you do most, so it is the plainest gesture
-/// there is. Editing the portion used to be what a tap did, which put the
-/// commonest action behind a sheet and a second tap.
+/// The separate logging control, long press and swipe on a day's entries.
 Food yogurt() => aFood(
   'Greek yogurt',
   id: 'food-yogurt',
@@ -64,12 +61,12 @@ Future<MealPlanEntryRow?> entryRow(HearthDatabase db) async {
 }
 
 void main() {
-  group('tap', () {
+  group('leading check', () {
     testWidgets('logs a planned entry', (WidgetTester tester) async {
       final HearthDatabase db = await openDay(tester);
-      expect(find.textContaining('tap to log'), findsOneWidget);
+      expect(find.byTooltip('Log Greek yogurt'), findsOneWidget);
 
-      await tester.tap(find.text('Greek yogurt'));
+      await tester.tap(find.byKey(const ValueKey<String>('meal-log-entry-1')));
       await pumpFrames(tester, frames: 12);
 
       final MealPlanEntryRow row = (await entryRow(db))!;
@@ -84,9 +81,9 @@ void main() {
       // A meal confirmed by mistake should cost exactly what confirming it
       // cost.
       final HearthDatabase db = await openDay(tester, logged: true);
-      expect(find.textContaining('tap to undo'), findsOneWidget);
+      expect(find.byTooltip('Unlog Greek yogurt'), findsOneWidget);
 
-      await tester.tap(find.text('Greek yogurt'));
+      await tester.tap(find.byKey(const ValueKey<String>('meal-log-entry-1')));
       await pumpFrames(tester, frames: 12);
 
       final MealPlanEntryRow row = (await entryRow(db))!;
@@ -99,7 +96,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await openDay(tester);
-      await tester.tap(find.text('Greek yogurt'));
+      await tester.tap(find.byKey(const ValueKey<String>('meal-log-entry-1')));
       await pumpFrames(tester, frames: 12);
 
       expect(find.text('Portion'), findsNothing);

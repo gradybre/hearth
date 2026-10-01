@@ -17,8 +17,10 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
 | 4 — Export preview | UX-083 | Approved 2026-10-01 | Merged in [PR #119](https://github.com/gradybre/hearth/pull/119) | 4,161 passed in UTC; 21 calendar checks in New York; analysis clean; 103 render checks and all CI passed | No actionable findings; candidate `27d9eff` | Not performed |
 | 5 — Ongoing nutrition targets | UX-052, bounded personal carry-forward and weekly exceptions | Approved 2026-10-01 | Merged in [PR #120](https://github.com/gradybre/hearth/pull/120) after Brendan's merge approval | 4,259 passed in UTC; 72 checks in New York; clean analysis; 111 render checks and all CI passed | No actionable findings; candidate `cf3bdd8`; 133 independent checks passed | Not performed |
 | 6 — Cooking ingredient checklist | UX-018 | Approved 2026-10-01 | Merged in [PR #121](https://github.com/gradybre/hearth/pull/121) | 4,339 passed in UTC; 50 checks in New York; clean analysis; 115 render checks and all final CI passed | No actionable findings after the persistence correction; reviewed code unchanged by rebase onto main | Not performed |
-| 7 — Faster grocery additions | UX-061, plain-item quantity and reviewed paste scope | Approved 2026-10-01 | Implemented in [PR #122](https://github.com/gradybre/hearth/pull/122) | 4,427 passed in UTC; 35 checks in New York; clean analysis; 119 render checks passed | No actionable findings after dismissal correction; final CI recorded in the group PR | Not performed |
-| 8 — Open meals from Plan | UX-051, source navigation and separate logging control; exact log/unlog Undo excluded | Awaiting decision | Read-only preparation complete | — | — | — |
+| 7 — Faster grocery additions | UX-061, plain-item quantity and reviewed paste scope | Approved 2026-10-01 | Merged in [PR #122](https://github.com/gradybre/hearth/pull/122) | 4,427 passed in UTC; 35 checks in New York; clean analysis; 119 render checks and all final CI passed | No actionable findings after dismissal correction; 47 independent final checks passed | Not performed |
+| 8 — Open meals from Plan | UX-051, source navigation and separate logging control; exact log/unlog Undo excluded | Approved 2026-10-01 | Implemented; shipping review pending | 4,499 UTC tests; 37 New York checks; clean analysis; 135 render checks | Pending | Not performed |
+| 9 — Trustworthy logged portions | UX-040, new food-log portion evidence and frozen details; Plan-only input continuity excluded | Approved 2026-10-01 | Data work in parallel; shared Plan integration follows Group 8 | Pending | Pending | Not performed |
+| 10 — Adjustable cooking timers | UX-019, extend and set time left on existing timers | Approved 2026-10-01 | Independent timer implementation in progress | Pending | Pending | Not performed |
 
 ## Group 1 — Daily logging
 
@@ -293,11 +295,51 @@ no actionable issues across the 40 phone, dark, desktop and 3× captures.
 
 ## Group 8 — Open meals from Plan
 
-Proposed: tap a meal's name to open its recipe or a read-only food summary,
+Approved: tap a meal's name to open its recipe or a read-only food summary,
 with a separate large check retaining one-tap logging. Planned cooked recipes
 get a Cook action using the saved recipe yield, separate from the person's
 planned portion. Opening, cooking and returning leave the log unchanged.
 Unavailable sources have an explanation, and restaurant meals receive no
 Cook action. Exact Undo for logging/unlogging requires its own data safeguards
-and remains a separate scope. No AI request is proposed. Implementation awaits
-approval; any cooking destination changes follow Group 6's completed review.
+and remains a separate scope. No AI request, migration or dependency is needed.
+The Plan owner handles row gestures and source navigation; the destination
+owner builds a read-only current-food summary and unavailable-recipe handling.
+Shared accessibility, gallery, specification and integration changes stay with
+the coordinating agent. Current food details are distinct from the frozen
+logged details approved separately below.
+
+The coordinating agent independently checked the combined diff, ran the full
+4,499-test UTC suite (159 opt-in/time-zone skips), 37 New York checks, clean
+analysis and all 135 render checks, and inspected light/dark/3× captures.
+New regressions preceded fixes for zero-calorie logging after a serving was
+removed, unavailable recipe actions, a held action after deletion, and an Open
+semantics node merging with the meal heading. Review-sheet saves retain their
+reviewed amounts and verify recipe availability before committing.
+
+## Group 9 — Trustworthy logged portions and nutrition details
+
+Approved: new food logs remember the parsed amount and unit or named serving
+the person entered. View logged details shows the frozen name, portion and
+nutrition. Corrections use the original serving and conversion evidence even
+after a shared food changes. Older logs retain their saved servings with an
+honest explanation that the original amount was not recorded; their corrections
+use those frozen servings. Log again keeps its existing current-food nutrition
+and stored-serving-count behavior. Preserving an amount entered earlier through
+Plan only until a later log remains a separately scoped planning change.
+
+The data work uses optional versioned snapshot evidence, with safe fallback for
+unsupported or stale metadata and preservation through storage, sync and export.
+No AI request or database migration is planned. Domain/data work can proceed
+alongside Group 8; logging and standalone details follow its agreed API, while
+shared Day rows and source navigation wait for Group 8's ownership to finish.
+
+## Group 10 — Adjustable cooking timers
+
+Approved: existing timers gain +1 min, +5 min and Set time left. Running
+timers keep running; paused timers stay paused; adding time to a finished
+timer restarts it from now. Updates retain the timer's identity and recipe/step
+linkage, survive local restoration, and reschedule the existing alert adapter
+where supported. This group does not add custom timers, recipe-time parsing,
+new background notification guarantees or AI. Timer implementation has disjoint
+ownership from Groups 8 and 9; shared fixtures and accessibility registration
+are integrated sequentially.

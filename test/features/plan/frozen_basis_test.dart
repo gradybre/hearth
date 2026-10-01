@@ -189,10 +189,9 @@ void main() {
     await tester.tap(find.text('Plan').last);
     await pumpFrames(tester, frames: 12);
 
-    // The row shows what the food is called *now*, which is right for a food
-    // that still exists — it is the same food. What must not move is what the
-    // meal recorded.
-    await tester.longPress(find.text('Skyr').last);
+    // The row keeps the logged name. Opening it leads to current food facts;
+    // correcting its portion must still preserve the meal's frozen record.
+    await tester.longPress(find.text('Greek yoghurt').last);
     await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Edit portion'));
     await pumpFrames(tester, frames: 12);
