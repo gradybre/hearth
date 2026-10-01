@@ -320,7 +320,7 @@ void main() {
     );
     await _day(tester);
     expect(find.text('Nothing logged yet'), findsNothing);
-    expect(find.text('0 kcal'), findsOneWidget);
+    expect(find.text('0 kcal'), findsNWidgets(2));
   });
 
   testWidgets('no-target partial totals stay qualified in both views', (
@@ -363,7 +363,7 @@ void main() {
       entries: <MealPlanEntry>[_entry(logged: true)],
     );
     await _day(tester);
-    expect(find.text('400 kcal'), findsNWidgets(2));
+    expect(find.text('400 kcal'), findsNWidgets(3));
     expect(find.text('Protein 20g'), findsOneWidget);
     expect(find.text('Fibre 4g'), findsOneWidget);
     expect(find.text('Sodium —'), findsOneWidget);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/data/local/cook_session_store.dart';
+import 'package:hearth/features/foods/food_detail_screen.dart';
 
 import 'app_harness.dart';
 import 'fake_kitchen.dart';
@@ -488,8 +489,7 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     opensFrom: 'lib/features/plan/day_screen.dart',
     open: (WidgetTester tester, SweepTools tools) async {
       await tools.tab('Plan');
-      // Behind a long press, not a tap: tapping the row toggles it logged and
-      // leaves the day screen exactly where it was.
+      // Long press keeps the options shortcut; tapping now opens the source.
       final Finder meal = await tools.bring(
         find.text('Slow chilli with all the trimmings'),
       );
@@ -498,6 +498,46 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     },
     arrived: find.text('Edit portion'),
   ),
+  for (final String state in <String>[
+    'current',
+    'removed serving',
+    'unavailable',
+    'lookup error',
+  ])
+    SweptSurface(
+      name: 'read-only food details: $state',
+      opensFrom: 'lib/features/foods/food_detail_screen.dart',
+      isInline: true,
+      createOverrides: state == 'lookup error'
+          ? () => <Object>[
+              foodByIdProvider('f-yoghurt').overrideWith(
+                (ref) async => throw StateError('Synthetic lookup failure'),
+              ),
+            ]
+          : null,
+      open: (WidgetTester tester, SweepTools tools) async {
+        // The Plan navigation contract has dedicated interaction coverage.
+        // Reuse the sweep's food fixture to walk every detail branch itself.
+        Navigator.of(tester.element(find.byType(Scaffold).last)).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => FoodDetailScreen(
+              foodId: state == 'unavailable' ? 'missing-food' : 'f-yoghurt',
+              servingOptionId: state == 'removed serving' ? 'removed' : null,
+            ),
+          ),
+        );
+        await pumpFrames(tester, frames: 20);
+      },
+      arrived: find.text(switch (state) {
+        'unavailable' => 'Food unavailable',
+        'lookup error' => 'Could not open this food',
+        _ => 'Current default serving',
+      }),
+      waypoints: state == 'current' || state == 'removed serving'
+          ? <Finder>[find.text('Calories'), find.text('Cholesterol')]
+          : <Finder>[],
+      farEnd: find.text('Go back'),
+    ),
   SweptSurface(
     // Not a sheet: a branch inside the day's summary card. The guard cannot
     // find this one by reading the source, which is exactly why the list is

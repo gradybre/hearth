@@ -284,6 +284,21 @@ belongs to the Nutrition section.
   without requiring keyboard Done first, including assignment across several
   days. Focusing or saving an untouched rounded display does not change the
   stored portion or its nutrition basis.
+- **Open a meal without saying it was eaten.** Tapping a meal's name or
+  content opens its recipe or a read-only summary of the current food. A
+  separate large, labelled check keeps log/unlog to one tap. Opening a source,
+  starting Cook and returning leave the plan, personal portion and frozen log
+  unchanged. Planned cooked recipes with directions offer **Cook** using the
+  recipe's full saved yield; the person's planned portion is not a batch size.
+  Recipe detail retains its existing explicit scaling control. Restaurant
+  meals and foods do not get a direct Cook action. *(Phase 2: UX-051.)*
+  Missing or deleted sources receive an explanation rather than active source
+  actions. A food whose selected serving was removed can still open its current
+  details, with that missing basis explained; it is not silently re-costed or
+  logged as zero. Current food details are read-only for both household and
+  global foods and do not claim to show a past log's frozen nutrition. Existing
+  More/long-press actions and swipe-delete Undo remain available. Exact Undo
+  for logging or unlogging remains a separate change.
 - **Changing a portion is visible, not a gesture you have to know.** Each
   meal row carries a way in to Edit portion and Remove. Long press stays as a
   shortcut for those who know it, and one tap still logs and unlogs — but a

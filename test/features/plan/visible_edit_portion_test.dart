@@ -137,10 +137,10 @@ void main() {
     expect(find.text('Edit portion'), findsOneWidget);
   });
 
-  testWidgets('and a plain tap still logs the meal', (
+  testWidgets('and one tap on the leading check still logs the meal', (
     WidgetTester tester,
   ) async {
-    // The row's own job, and the half of U06 that says a visible button must
+    // The check's own job, and the half of U06 that says a visible button must
     // not cost you one-tap logging. Asserted against the row in the database:
     // "the options sheet did not open" was true of a tap that did nothing at
     // all, and stayed green with one-tap logging deleted outright.
@@ -151,13 +151,13 @@ void main() {
       isFalse,
     );
 
-    await tester.tap(find.text('Greek yoghurt').last);
+    await tester.tap(find.byKey(const ValueKey<String>('meal-log-e-yog')));
     await pumpFrames(tester, frames: 20);
 
     expect(
       (await db.select(db.mealPlanEntries).get()).single.isLogged,
       isTrue,
-      reason: 'tapping the row no longer logs the meal',
+      reason: 'the leading check no longer logs the meal in one tap',
     );
   });
 
