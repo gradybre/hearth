@@ -366,6 +366,36 @@ belongs to the Nutrition section.
   `/plan/2026-09-07` would open on the seventh for ever. Choices already
   stored keep their meaning, and anything unrecognised still opens on the home
   screen.
+- **New food logs retain the amount that was entered.** A versioned optional
+  receipt inside `macro_snapshot` stores the parsed number, raw unit or named
+  serving, normalized serving count, and frozen conversion and nutrition-serving
+  definition. A row can say **125 g · logged**; **View logged details** presents
+  the frozen name, amount, seven nutrients, stored coverage, approximation
+  qualifier and recording time. Current library details are a separate action.
+  Missing or deleted foods do not prevent reading or correcting saved history.
+  Numeric precision is retained; literal spelling and trailing zeros are not.
+  *(Phase 2: UX-040.)*
+  - An open planned-food editor keeps an entered amount when the food updates,
+    resolving nutrition and the saved receipt from one current definition.
+    Pending keyboard input retains its original unit. If that unit, food or
+    selected serving disappears, the editor asks for a valid portion instead
+    of saving a guessed conversion or zero-nutrition replacement.
+  - Corrections use only the saved conversion and nutrition basis. Switching
+    a 125 g log to ounces or to its original named serving does not consult a
+    changed food, serving size, density or package relationship. Moving a log
+    changes its diary placement, not the snapshot's original recording time.
+  - Older food logs show their saved serving count and explain that the
+    original entered amount was not recorded. They do not acquire gram/ounce
+    conversions from today's food or device preferences. Recipe portions remain
+    servings-based. Unsupported or malformed metadata stays opaque and travels
+    through save, sync and JSON export; stale metadata cannot mislabel a changed
+    count or become valid again accidentally after a later correction.
+  - **Log again** is a new log using the current food and the stored serving
+    count, with a newly captured named-serving basis. It never copies a prior
+    raw amount while repricing it against a changed serving. One-tap logging of
+    a planned food similarly records its current selected named serving.
+    Preserving raw input from an earlier **Plan only** save until that later log
+    requires separate planned-portion storage and is outside this group.
 - **A portion correction is costed on the basis the meal was logged on.** The
   snapshot holds the total and the portion it was for, so one serving's worth
   is the one divided by the other — never what the food says today. This is

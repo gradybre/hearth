@@ -15,6 +15,7 @@ import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/nutrient_coverage.dart';
 import 'package:hearth/domain/planning/week.dart';
 import 'package:hearth/domain/shopping/shopping_line.dart';
 import 'package:hearth/domain/units/quantity.dart';
@@ -147,6 +148,7 @@ void main() {
     LaunchTarget? launchTarget,
     bool signedIn = false,
     bool ongoingTargets = false,
+    bool loggedMeal = false,
     ThermostatGateway? thermostat,
     List<Object> extraOverrides = const <Object>[],
   }) => pumpHearthApp(
@@ -166,7 +168,21 @@ void main() {
         storeTag: 'Costco',
       ),
     ],
-    entries: <MealPlanEntry>[breakfast()],
+    entries: <MealPlanEntry>[
+      loggedMeal
+          ? breakfast().log(
+              liveMacros: const Macros(
+                kcal: 400,
+                proteinG: 30,
+                carbG: 40,
+                fatG: 10,
+              ),
+              at: DateTime.utc(2026, 6, 1, 8),
+              coverage: const NutrientCoverage.notRecorded(),
+              label: _recipeTitle,
+            )
+          : breakfast(),
+    ],
     // A week with meals in it. An empty one is seven rows of nothing, which
     // is not the screen anybody has to read in the dark.
     weekEntries: <DateTime, List<MealPlanEntry>>{
@@ -317,6 +333,7 @@ void main() {
             tester,
             brightness,
             ongoingTargets: surface.withOngoingTargets,
+            loggedMeal: surface.withLoggedMeal,
             extraOverrides: surface.createOverrides?.call() ?? const <Object>[],
           );
           await pumpFrames(tester);

@@ -2,6 +2,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../domain/models/macros.dart';
 import '../../domain/planning/day_progress.dart';
+import '../../domain/planning/logged_portion.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
 import '../../domain/planning/recent_log.dart';
@@ -98,6 +99,8 @@ class PlanRepository {
     NutrientCoverage? liveCoverage,
     bool usesApproximatePackage = false,
     double? portion,
+    String? label,
+    LoggedPortion? loggedPortion,
   }) => add(
     date: date,
     slot: slot,
@@ -110,11 +113,14 @@ class PlanRepository {
     servingOptionId: recent.servingOptionId,
     loggedCoverage: liveCoverage,
     usesApproximatePackage: usesApproximatePackage,
+    // The caller may supply a newly captured current basis. The recent log
+    // itself carries no historical amount evidence into this new meal.
+    loggedPortion: loggedPortion,
     // Macros are recomputed from the current library rather than copied from
     // the old snapshot: repeating a meal should record what that food is
     // today, not what it was when first logged.
     loggedMacros: liveMacros,
-    label: recent.label,
+    label: label ?? recent.label,
   );
 
   Future<MacroTargets?> targetsFor(DateTime date) =>
@@ -148,6 +154,7 @@ class PlanRepository {
     // count (spec R10, R12). Frozen with them, never inferred afterwards.
     bool usesApproximatePackage = false,
     String? label,
+    LoggedPortion? loggedPortion,
   }) async {
     assert(
       loggedCoverage != null ||
@@ -190,6 +197,7 @@ class PlanRepository {
           // see `log`'s note on why the default was the bug (spec §5.6).
           coverage: loggedCoverage ?? NutrientCoverage.ofOne(loggedMacros),
           usesApproximatePackage: usesApproximatePackage,
+          loggedPortion: loggedPortion,
         );
       }
 
@@ -219,6 +227,7 @@ class PlanRepository {
     // Optional here, unlike coverage: null means 'whatever was frozen'. A
     // correction to the portion is not a statement about the basis.
     bool? usesApproximatePackage,
+    LoggedPortion? loggedPortion,
   }) async {
     final DateTime now = _now();
 
@@ -226,13 +235,9 @@ class PlanRepository {
       final MealPlanEntry? existing = await _store.entryById(entryId);
       if (existing == null) return null;
 
-      // A correction keeps the moment it was eaten. `log` stamps both
-      // `loggedAt` and the snapshot's `capturedAt` with the time it is
-      // called, which is right for a meal being logged and wrong for one
-      // being corrected: it would move a June meal to today, promote it above
-      // today's meals in the recents list — which orders by exactly this —
-      // and have the export say it was eaten in September. `restore` goes out
-      // of its way to preserve this; correcting a portion has to as well.
+      // A correction keeps both the diary timestamp and the original
+      // snapshot capture time. They can differ after Move; `log` preserves
+      // each independently so correcting cannot re-date frozen history.
       // A portion typed in a unit only the package relationship can answer
       // counts a different row from the one the entry named, and the two have
       // to move together. Anything else preserves the reference, and a meal
@@ -250,6 +255,7 @@ class PlanRepository {
         portion: portion,
         coverage: liveCoverage,
         usesApproximatePackage: usesApproximatePackage,
+        loggedPortion: loggedPortion,
       );
       await _store.upsertEntry(logged, updatedAt: now);
       await _queueEntry(logged, now);

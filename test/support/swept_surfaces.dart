@@ -49,6 +49,7 @@ class SweptSurface {
     this.waypoints = const <Finder>[],
     this.isInline = false,
     this.withOngoingTargets = false,
+    this.withLoggedMeal = false,
     this.createOverrides,
   });
 
@@ -64,6 +65,9 @@ class SweptSurface {
 
   /// Exercises the ongoing editor's distinct scope and stop controls.
   final bool withOngoingTargets;
+
+  /// History surfaces need a saved snapshot, not the plan fixture.
+  final bool withLoggedMeal;
 
   /// A fresh synthetic failure for each walk, without sharing mutable fakes.
   final List<Object> Function()? createOverrides;
@@ -483,6 +487,31 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
       await tools.reach(find.byTooltip('Add to breakfast'));
     },
     arrived: find.text('Add to this meal'),
+  ),
+  SweptSurface(
+    name: 'frozen logged nutrition and its actions',
+    opensFrom: 'lib/features/plan/logged_details_sheet.dart',
+    withLoggedMeal: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Plan');
+      await tools.reach(
+        find.byTooltip('Edit Slow chilli with all the trimmings'),
+      );
+      await tools.reach(find.text('View logged details'));
+    },
+    arrived: find.text('Logged details'),
+    waypoints: <Finder>[
+      find.textContaining('Calories:'),
+      find.textContaining('Protein:'),
+      find.textContaining('Carbohydrate:'),
+      find.textContaining('Fat:'),
+      find.textContaining('Fibre:'),
+      find.textContaining('Sodium:'),
+      find.textContaining('Cholesterol:'),
+      find.text('Edit portion'),
+      find.text('View current recipe'),
+    ],
+    farEnd: find.text('Close'),
   ),
   SweptSurface(
     name: "a meal's own options",

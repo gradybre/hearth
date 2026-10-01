@@ -6,8 +6,10 @@ import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
+import 'package:hearth/domain/planning/logged_portion.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/nutrient_coverage.dart';
+import 'package:hearth/domain/planning/portion_unit.dart';
 import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
@@ -329,6 +331,12 @@ void main() {
           at: DateTime.utc(2026, 9, 7, 8),
           label: 'Greek yoghurt',
           coverage: NutrientCoverage.ofOne(eaten),
+          loggedPortion: LoggedPortion.tryCapture(
+            amount: 170 / Units.ounce.toCanonical,
+            unit: const PortionUnit.raw(Units.ounce),
+            servings: 1,
+            standard: yoghurt().defaultServing,
+          ),
         ),
       ],
       targets: targets,
@@ -343,7 +351,7 @@ void main() {
       await pumpFrames(tester, frames: 16);
     }
 
-    // Corrected in ounces, which is how this one was typed.
+    // Ounces are recorded in the snapshot, independent of device preferences.
     await openTheEntry();
     await tester.tap(find.widgetWithText(ChoiceChip, 'oz'));
     await pumpFrames(tester, frames: 8);

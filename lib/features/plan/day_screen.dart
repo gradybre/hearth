@@ -18,15 +18,19 @@ import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/planning/day_format.dart';
 import '../../domain/planning/day_progress.dart';
+import '../../domain/planning/logged_portion.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
+import '../../domain/planning/portion_unit.dart';
 import '../../domain/planning/target_schedule.dart';
 import '../../domain/planning/week.dart';
+import '../../domain/recipes/macro_calculator.dart';
 import '../foods/food_detail_screen.dart';
 import '../recipes/cook_along_screen.dart';
 import 'day_picker_sheet.dart';
 import 'entry_resolver.dart';
 import 'log_sheet.dart';
+import 'logged_details_sheet.dart';
 import 'macro_targets_sheet.dart';
 
 /// The day view: plan and track in one place (spec §5.6).
@@ -690,6 +694,35 @@ class _EntryRow extends ConsumerWidget {
     if (entry.entry.isLogged) {
       await plans.unlogEntry(entry.entry.id);
     } else {
+      final Food? currentFood = entry.entry.refType == PlanRefType.food
+          ? foods[entry.entry.refId]
+          : null;
+      final Recipe? currentRecipe = entry.entry.refType == PlanRefType.recipe
+          ? recipes[entry.entry.refId]
+          : null;
+      final ServingOption? serving = currentFood == null
+          ? null
+          : EntryResolver.servingForEntry(
+              currentFood,
+              entry.entry.servingOptionId,
+            );
+      // Plan-only entries retain a serving count, not the raw input from
+      // their earlier review. Record what this tap can establish now.
+      final LoggedPortion? portion = LoggedPortion.tryCapture(
+        amount: entry.entry.servings,
+        unit: serving == null ? null : PortionUnit.serving(serving),
+        servings: entry.entry.servings,
+        standard: serving,
+      );
+      final bool approximate = currentRecipe != null
+          ? MacroCalculator.forRecipe(
+              currentRecipe,
+              foods: foods,
+            ).usesApproximatePackageNutrition
+          : entry.entry.servingOptionId != null &&
+                currentFood?.activePackageServing?.id ==
+                    entry.entry.servingOptionId &&
+                (currentFood?.packageNutrition?.isApproximate ?? false);
       await plans.logEntry(
         entry.entry.id,
         liveMacros: current.perServing,
@@ -700,6 +733,8 @@ class _EntryRow extends ConsumerWidget {
         // (spec §5.6).
         liveCoverage: current.liveCoverage,
         label: current.label,
+        loggedPortion: portion,
+        usesApproximatePackage: approximate,
       );
     }
     ref.invalidate(dayEntriesProvider);
@@ -747,6 +782,16 @@ class _EntryRow extends ConsumerWidget {
               padding: const EdgeInsets.all(HearthSpacing.lg),
               child: Text(_label, style: context.text.sectionHeader),
             ),
+            if (entry.entry.isLogged)
+              ListTile(
+                leading: Icon(
+                  Icons.receipt_long_outlined,
+                  color: context.colors.textSecondary,
+                ),
+                title: Text('View logged details', style: context.text.body),
+                onTap: () =>
+                    Navigator.of(context).pop(_EntryAction.loggedDetails),
+              ),
             ListTile(
               leading: Icon(Icons.tune, color: context.colors.textSecondary),
               title: Text('Edit portion', style: context.text.body),
@@ -804,6 +849,8 @@ class _EntryRow extends ConsumerWidget {
     if (choice == null || !context.mounted) return;
 
     switch (choice) {
+      case _EntryAction.loggedDetails:
+        await _showLoggedDetails(context);
       case _EntryAction.editPortion:
         await showLogSheet(
           context,
@@ -817,6 +864,26 @@ class _EntryRow extends ConsumerWidget {
         await _planAgain(context, ref);
       case _EntryAction.remove:
         await _remove(ref);
+    }
+  }
+
+  Future<void> _showLoggedDetails(BuildContext context) async {
+    final LoggedDetailsAction? action = await showLoggedDetailsSheet(
+      context,
+      entry: entry.entry,
+      sourceAvailable: _sourceAvailable,
+    );
+    if (action == null || !context.mounted) return;
+    switch (action) {
+      case LoggedDetailsAction.editPortion:
+        await showLogSheet(
+          context,
+          date: date,
+          slot: entry.entry.slot,
+          existing: entry,
+        );
+      case LoggedDetailsAction.viewCurrent:
+        _openSource(context);
     }
   }
 
@@ -1048,7 +1115,12 @@ class _EntryRow extends ConsumerWidget {
   }
 
   String get _detail {
-    final String portion = _portion(entry.entry.servings);
+    final MacroSnapshot? snapshot = entry.entry.isLogged
+        ? entry.entry.macroSnapshot
+        : null;
+    final String portion = snapshot == null
+        ? _portion(entry.entry.servings)
+        : loggedPortionLabel(snapshot);
     final String status = entry.entry.isLogged ? 'logged' : 'planned';
     final String detail = '$_sourceKind · $status · $portion';
     if (!_sourceAvailable) return '$detail · source no longer in your library';
@@ -1065,7 +1137,7 @@ class _EntryRow extends ConsumerWidget {
 }
 
 /// What a long press offers.
-enum _EntryAction { editPortion, move, planAgain, remove }
+enum _EntryAction { loggedDetails, editPortion, move, planAgain, remove }
 
 class _Card extends StatelessWidget {
   const _Card({required this.child, this.onTap});

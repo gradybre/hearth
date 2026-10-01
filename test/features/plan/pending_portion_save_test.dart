@@ -8,8 +8,10 @@ import 'package:hearth/data/mappers/plan_mapper.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/package_nutrition.dart';
+import 'package:hearth/domain/planning/logged_portion.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/nutrient_coverage.dart';
+import 'package:hearth/domain/planning/portion_unit.dart';
 import 'package:hearth/domain/planning/recent_log.dart';
 import 'package:hearth/domain/planning/week.dart';
 import 'package:hearth/domain/units/quantity.dart';
@@ -64,6 +66,12 @@ void main() {
         label: 'Corn',
         coverage: NutrientCoverage.ofOne(const Macros(kcal: 100)),
         usesApproximatePackage: true,
+        loggedPortion: LoggedPortion.tryCapture(
+          amount: 30,
+          unit: const PortionUnit.raw(Units.ounce),
+          servings: 6,
+          standard: food.servingOptions[1],
+        ),
       );
 
   for (final ({String action, bool raw}) scenario
@@ -122,6 +130,9 @@ void main() {
         expect(find.widgetWithText(FilledButton, action), findsOneWidget);
         if (raw) {
           await tester.tap(find.widgetWithText(ChoiceChip, 'oz'));
+          await pumpFrames(tester);
+        } else if (correction) {
+          await tester.tap(find.widgetWithText(ChoiceChip, 'Label cup'));
           await pumpFrames(tester);
         }
         await tester.enterText(find.byType(TextField).last, raw ? '20' : '4');
@@ -199,6 +210,12 @@ void main() {
               label: 'Corn',
               coverage: NutrientCoverage.ofOne(const Macros(kcal: 100)),
               usesApproximatePackage: true,
+              loggedPortion: LoggedPortion.tryCapture(
+                amount: 6.037 * 5,
+                unit: const PortionUnit.raw(Units.ounce),
+                servings: 6.037,
+                standard: food.servingOptions[1],
+              ),
             );
         final db = await pumpHearthApp(
           tester,

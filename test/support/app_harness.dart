@@ -103,6 +103,7 @@ Future<HearthDatabase> pumpHearthApp(
   List<Recipe> recipes = const <Recipe>[],
   Stream<List<Recipe>>? recipeStream,
   List<Food> foods = const <Food>[],
+  Stream<List<Food>>? foodStream,
   List<MealPlanEntry> entries = const <MealPlanEntry>[],
   List<RecentLog> recentLogs = const <RecentLog>[],
 
@@ -351,7 +352,7 @@ Future<HearthDatabase> pumpHearthApp(
           (Ref ref) => recipeStream ?? Stream<List<Recipe>>.value(recipes),
         ),
         foodLibraryProvider.overrideWith(
-          (Ref ref) => Stream<List<Food>>.value(foods),
+          (Ref ref) => foodStream ?? Stream<List<Food>>.value(foods),
         ),
         // Same reasoning as the libraries: fake async cannot drive sqlite, so
         // the planner's day is fed directly.

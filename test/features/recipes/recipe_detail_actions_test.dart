@@ -12,6 +12,7 @@ import 'package:hearth/data/repositories/shopping_repository.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
+import 'package:hearth/domain/planning/logged_portion.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/nutrient_coverage.dart';
 import 'package:hearth/domain/planning/week.dart';
@@ -581,6 +582,7 @@ class RecordingPlans extends Mock implements PlanRepository {
     String? servingOptionId,
     Macros? loggedMacros,
     NutrientCoverage? loggedCoverage,
+    LoggedPortion? loggedPortion,
     bool usesApproximatePackage = false,
     String? label,
   }) async {
