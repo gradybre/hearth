@@ -4,6 +4,9 @@ Tracks approvals and implementation from [HEARTH_UX_REVIEW.md](../HEARTH_UX_REVI
 The review is an assessment of its stated baseline; this file records subsequent work.
 The earlier [UX review progress](UX_REVIEW_PROGRESS.md) covers a separate review.
 
+Upcoming decisions and the approval-card workflow are tracked in
+[UX_PHASE_2_APPROVALS.md](UX_PHASE_2_APPROVALS.md).
+
 Groups are approved individually. An approval authorizes that group's described
 scope, not every recommendation linked to the same feature area. Builders own
 disjoint files; shared providers, specifications and test fixtures are integrated
@@ -19,8 +22,8 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
 | 6 — Cooking ingredient checklist | UX-018 | Approved 2026-10-01 | Merged in [PR #121](https://github.com/gradybre/hearth/pull/121) | 4,339 passed in UTC; 50 checks in New York; clean analysis; 115 render checks and all final CI passed | No actionable findings after the persistence correction; reviewed code unchanged by rebase onto main | Not performed |
 | 7 — Faster grocery additions | UX-061, plain-item quantity and reviewed paste scope | Approved 2026-10-01 | Merged in [PR #122](https://github.com/gradybre/hearth/pull/122) | 4,427 passed in UTC; 35 checks in New York; clean analysis; 119 render checks and all final CI passed | No actionable findings after dismissal correction; 47 independent final checks passed | Not performed |
 | 8 — Open meals from Plan | UX-051, source navigation and separate logging control; exact log/unlog Undo excluded | Approved 2026-10-01 | Merged in [PR #123](https://github.com/gradybre/hearth/pull/123) | 4,500 UTC tests; 38 New York checks; clean analysis; 135 render checks and all final CI passed | Code correction passed on `57e0968`; 44 independent focused tests; all 48 design captures reviewed | Not performed |
-| 9 — Trustworthy logged portions | UX-040, new food-log portion evidence and frozen details; Plan-only input continuity excluded | Approved 2026-10-01 | Published in [PR #124](https://github.com/gradybre/hearth/pull/124) | 4,583 UTC tests; 32 New York checks; clean analysis; 143 render checks | All 40 integration captures cleared; candidate `460e85e` reviewed with 111 independent tests passing | Not performed |
-| 10 — Adjustable cooking timers | UX-019, extend and set time left on existing timers | Approved 2026-10-01 | Implemented in Cook and the app-wide timer tray; pull request verification follows | 4,572 UTC tests; 84 New York checks; clean analysis; 149 render checks | All design findings cleared; final candidate code verification follows | Not performed |
+| 9 — Trustworthy logged portions | UX-040, new food-log portion evidence and frozen details; Plan-only input continuity excluded | Approved 2026-10-01 | Merged in [PR #124](https://github.com/gradybre/hearth/pull/124) as `57cd417` | 4,583 UTC tests; 32 New York checks; clean analysis; 143 render checks and all final CI passed | All 40 integration captures cleared; candidate `460e85e` reviewed with 111 independent tests passing | Not performed |
+| 10 — Adjustable cooking timers | UX-019, extend and set time left on existing timers | Approved 2026-10-01 | Merged in [PR #125](https://github.com/gradybre/hearth/pull/125) as `f478498` | Combined candidate: 4,655 UTC tests; 116 New York checks; clean analysis; 157 render checks and all final CI passed | All design findings cleared; candidate `af6843e` reviewed with 185 independent tests passing | Not performed |
 
 ## Group 1 — Daily logging
 
