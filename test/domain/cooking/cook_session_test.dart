@@ -210,4 +210,123 @@ void main() {
       expect(session.steps, hasLength(3));
     });
   });
+
+  group('ingredient checklist', () {
+    test('checking uses ingredient identity, not the matching food', () {
+      final Recipe recipe = aRecipe(
+        ingredients: <RecipeIngredient>[
+          anIngredient('olive oil', id: 'sauce-oil', foodId: 'oil'),
+          anIngredient('olive oil', id: 'bread-oil', foodId: 'oil'),
+        ],
+      );
+      final CookSession before = CookSession(recipe: recipe);
+      final RecipeIngredient sauceOil = recipe.allIngredients.first;
+      final RecipeIngredient breadOil = recipe.allIngredients.last;
+
+      final CookSession checked = before.toggleIngredient(sauceOil);
+      expect(checked.isIngredientChecked(sauceOil), isTrue);
+      expect(checked.isIngredientChecked(breadOil), isFalse);
+      expect(checked.checkedIngredientCount, 1);
+      expect(checked.checkedIngredientIds, <String>{'sauce-oil'});
+      expect(before.checkedIngredientIds, isEmpty);
+
+      final CookSession undone = checked.toggleIngredient(sauceOil);
+      expect(undone.isIngredientChecked(sauceOil), isFalse);
+      expect(undone.checkedIngredientCount, 0);
+      expect(checked.isIngredientChecked(sauceOil), isTrue);
+    });
+
+    test('each cook has an independent checklist for the same recipe', () {
+      final Recipe recipe = aRecipe(
+        ingredients: <RecipeIngredient>[anIngredient('salt')],
+      );
+      final CookSession first = CookSession(recipe: recipe)
+          .toggleIngredient(recipe.allIngredients.single);
+      final CookSession partner = CookSession(recipe: recipe);
+
+      expect(first.checkedIngredientCount, 1);
+      expect(partner.checkedIngredientIds, isEmpty);
+      expect(recipe.allIngredients.single.name, 'salt');
+    });
+
+    test('resetting ingredients leaves steps, timers and snapshot alone', () {
+      final Recipe recipe = aRecipe(
+        ingredients: <RecipeIngredient>[anIngredient('salt')],
+        steps: <RecipeStep>[
+          aStep('Warm the oven.', stepNumber: 1),
+          aStep('Bake.', stepNumber: 2),
+        ],
+      );
+      final CookTimer timer = aTimer();
+      final CookSession before = CookSession(recipe: recipe)
+          .check(recipe.allSteps.first)
+          .addTimer(timer)
+          .toggleIngredient(recipe.allIngredients.single);
+
+      final CookSession after = before.resetIngredients();
+      expect(after.checkedIngredientIds, isEmpty);
+      expect(after.currentStep, 1);
+      expect(after.checkedStepIds, before.checkedStepIds);
+      expect(after.timers, <CookTimer>[timer]);
+      expect(after.recipe, same(recipe));
+      expect(before.checkedIngredientCount, 1);
+    });
+
+    test('direction and timer changes preserve ingredient progress', () {
+      final Recipe recipe = aRecipe(
+        ingredients: <RecipeIngredient>[anIngredient('salt')],
+        steps: <RecipeStep>[
+          aStep('Warm the oven.', stepNumber: 1),
+          aStep('Bake.', stepNumber: 2),
+        ],
+      );
+      final RecipeIngredient salt = recipe.allIngredients.single;
+      final CookSession before = CookSession(recipe: recipe)
+          .toggleIngredient(salt);
+      final CookTimer timer = aTimer();
+
+      final CookSession after = before
+          .next()
+          .previous()
+          .goTo(1)
+          .check(recipe.allSteps.first, advance: false)
+          .uncheck(recipe.allSteps.first)
+          .toggle(recipe.allSteps.last, advance: false)
+          .addTimer(timer)
+          .replaceTimer(timer.pausedAt(t0))
+          .removeTimer(timer.id)
+          .copyWithTimers(<CookTimer>[timer]);
+
+      expect(after.checkedIngredientIds, <String>{salt.id});
+      expect(after.checkedIngredientCount, 1);
+      expect(after.recipe, same(recipe));
+    });
+
+    test('checking all ingredients never completes the directions', () {
+      final Recipe recipe = aRecipe(
+        ingredients: <RecipeIngredient>[anIngredient('salt')],
+        steps: <RecipeStep>[aStep('Mix.')],
+      );
+      final CookSession session = CookSession(recipe: recipe)
+          .toggleIngredient(recipe.allIngredients.single);
+
+      expect(session.checkedIngredientCount, 1);
+      expect(session.checkedCount, 0);
+      expect(session.currentStep, 0);
+      expect(session.isComplete, isFalse);
+    });
+
+    test('restored ids only count ingredients in this snapshot', () {
+      final Recipe recipe = aRecipe(
+        ingredients: <RecipeIngredient>[anIngredient('salt', id: 'salt')],
+      );
+      final CookSession session = CookSession(
+        recipe: recipe,
+        checkedIngredientIds: const <String>{'salt', 'removed-ingredient'},
+      );
+
+      expect(session.checkedIngredientCount, 1);
+      expect(session.isIngredientChecked(recipe.allIngredients.single), isTrue);
+    });
+  });
 }

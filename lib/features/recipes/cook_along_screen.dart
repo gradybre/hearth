@@ -35,8 +35,28 @@ class CookAlongScreen extends ConsumerStatefulWidget {
   ConsumerState<CookAlongScreen> createState() => _CookAlongScreenState();
 }
 
+enum _CookProgressRead { loading, failed, retrying, ready }
+
 class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
   late CookSession _session = CookSession(recipe: widget.recipe);
+  late final ValueNotifier<CookSession> _sessionChanges;
+  final ValueNotifier<_CookProgressRead> _progressRead =
+      ValueNotifier<_CookProgressRead>(_CookProgressRead.loading);
+  bool _readInFlight = false;
+
+  // A cook can start tapping before the local read finishes. Remember the
+  // choices they actually made, then apply those over the saved state. Merely
+  // skipping restoration would lose untouched checks from the previous visit.
+  bool _restoring = true;
+  bool _editedWhileRestoring = false;
+  int _progressEditRevision = 0;
+  bool _ignoreSavedProgress = false;
+  bool _resetPending = false;
+  bool _resetInFlight = false;
+  bool _ingredientsResetWhileRestoring = false;
+  int? _stepChosenWhileRestoring;
+  final Map<String, bool> _stepChecksWhileRestoring = <String, bool>{};
+  final Map<String, bool> _ingredientChecksWhileRestoring = <String, bool>{};
 
   /// The recipe's sections by id, so a step can look up the ingredients of
   /// its own section — and only its own. Two teaspoons in the sauce and two
@@ -62,6 +82,7 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
     _screen = ref.read(screenKeeperProvider);
     _alerts = ref.read(timerAlertsProvider);
     _sessions = ref.read(cookSessionStoreProvider);
+    _sessionChanges = ValueNotifier<CookSession>(_session);
     _screen.keepAwake();
     _restore();
     // One second is enough to move a countdown; the remaining time itself is
@@ -72,6 +93,8 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
   @override
   void dispose() {
     _tick?.cancel();
+    _sessionChanges.dispose();
+    _progressRead.dispose();
     // The screen is handed back however cook mode closes, including a back
     // gesture — a phone left awake in a pocket is a flat battery by evening.
     //
@@ -88,48 +111,192 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
   /// cannot be reconstructed from anywhere else, so losing it to a stray back
   /// gesture would mean guessing at what you had already done.
   Future<void> _restore() async {
-    final StoredCookProgress? saved = await _sessions.read(
-      widget.recipe.id,
-      now: DateTime.now(),
-    );
-    if (saved == null || !mounted) return;
-    setState(() {
-      _session = CookSession(
-        recipe: widget.recipe,
-        // Clamped: the recipe may have been edited since, and a step index
-        // past the end would leave the screen with nothing to show.
-        currentStep: saved.currentStep.clamp(
-          0,
-          _session.steps.isEmpty ? 0 : _session.steps.length - 1,
-        ),
-        // Ticks for steps that no longer exist are dropped for the same
-        // reason — they would count towards "done" invisibly.
-        checkedStepIds: <String>{
-          for (final RecipeStep step in _session.steps)
-            if (saved.checkedStepIds.contains(step.id)) step.id,
-        },
-      );
-    });
+    if (_readInFlight || !_restoring) return;
+    _readInFlight = true;
+    if (_progressRead.value == _CookProgressRead.failed) {
+      _setProgressRead(_CookProgressRead.retrying);
+    }
+    final Recipe snapshot = _session.recipe;
+    try {
+      await _sessions.runInOrder(snapshot.id, () async {
+        if (_ignoreSavedProgress) return;
+        final StoredCookProgress? saved = await _sessions.read(
+          snapshot.id,
+          now: DateTime.now(),
+        );
+        if (_ignoreSavedProgress) return;
+        if (saved != null) {
+          _publishSession(
+            CookSession(
+              recipe: snapshot,
+              // Clamped: the recipe may have been edited since, and a step
+              // index past the end would leave nothing to show.
+              currentStep: (_stepChosenWhileRestoring ?? saved.currentStep)
+                  .clamp(
+                    0,
+                    snapshot.allSteps.isEmpty
+                        ? 0
+                        : snapshot.allSteps.length - 1,
+                  ),
+              // Checks for steps that no longer exist would count towards
+              // "done" invisibly, so only restore IDs in this snapshot.
+              checkedStepIds: <String>{
+                for (final RecipeStep step in snapshot.allSteps)
+                  if (_stepChecksWhileRestoring[step.id] ??
+                      saved.checkedStepIds.contains(step.id))
+                    step.id,
+              },
+              checkedIngredientIds: <String>{
+                for (final RecipeIngredient ingredient
+                    in snapshot.allIngredients)
+                  if (_ingredientChecksWhileRestoring[ingredient.id] ??
+                      (!_ingredientsResetWhileRestoring &&
+                          saved.checkedIngredientIds.contains(ingredient.id)))
+                    ingredient.id,
+              },
+              timers: _session.timers,
+            ),
+          );
+        }
+        // Keep this recipe's queue until every choice made during the read or
+        // a slow save has reached storage, even if this visit has closed.
+        while (_editedWhileRestoring && !_ignoreSavedProgress) {
+          final int revision = _progressEditRevision;
+          await _save(_session);
+          if (revision == _progressEditRevision) break;
+        }
+        if (_ignoreSavedProgress) return;
+        _restoring = false;
+        _setProgressRead(_CookProgressRead.ready);
+      });
+    } catch (_) {
+      // A failed read or flush is not an empty session. Keep collecting
+      // choices until a retry can merge them with unseen saved progress.
+      if (!_ignoreSavedProgress) _setProgressRead(_CookProgressRead.failed);
+    } finally {
+      _readInFlight = false;
+    }
   }
 
-  /// Every change to where you are is written through immediately: the moment
-  /// worth saving is the one just before the phone is put down.
+  void _setProgressRead(_CookProgressRead state) {
+    if (!mounted || _progressRead.value == state) return;
+    setState(() {});
+    _progressRead.value = state;
+  }
+
+  Widget? get _restoreFeedback => switch (_progressRead.value) {
+    _CookProgressRead.failed => _CookRestoreFeedback(
+      onRetry: _resetPending ? _persistReset : _restore,
+      resetPending: _resetPending,
+    ),
+    _CookProgressRead.retrying => _CookRestoreFeedback(
+      resetPending: _resetPending,
+    ),
+    _ => null,
+  };
+
+  /// Changes write through as soon as the opening read has resolved. Earlier
+  /// taps are held for that read so they cannot erase unseen saved progress.
   void _update(CookSession session) {
-    setState(() => _session = session);
-    _sessions.save(
-      recipeId: widget.recipe.id,
-      currentStep: session.currentStep,
-      checkedStepIds: session.checkedStepIds,
-      now: DateTime.now(),
-    );
+    if (_restoring) {
+      _editedWhileRestoring = true;
+      _progressEditRevision++;
+      if (session.currentStep != _session.currentStep) {
+        _stepChosenWhileRestoring = session.currentStep;
+      }
+      _rememberChecks(
+        _session.checkedStepIds,
+        session.checkedStepIds,
+        _stepChecksWhileRestoring,
+      );
+      _rememberChecks(
+        _session.checkedIngredientIds,
+        session.checkedIngredientIds,
+        _ingredientChecksWhileRestoring,
+      );
+    }
+    _publishSession(session);
+    if (!_restoring) {
+      unawaited(_sessions.runInOrder(session.recipe.id, () => _save(session)));
+    }
+  }
+
+  static void _rememberChecks(
+    Set<String> before,
+    Set<String> after,
+    Map<String, bool> choices,
+  ) {
+    for (final String id in <String>{...before, ...after}) {
+      if (before.contains(id) != after.contains(id)) {
+        choices[id] = after.contains(id);
+      }
+    }
+  }
+
+  void _publishSession(CookSession session) {
+    _session = session;
+    if (!mounted) return;
+    setState(() {});
+    _sessionChanges.value = session;
+  }
+
+  Future<void> _save(CookSession session) => _sessions.save(
+    recipeId: session.recipe.id,
+    currentStep: session.currentStep,
+    checkedStepIds: session.checkedStepIds,
+    checkedIngredientIds: session.checkedIngredientIds,
+    now: DateTime.now(),
+  );
+
+  void _resetIngredients() {
+    if (_restoring) _ingredientsResetWhileRestoring = true;
+    _update(_session.resetIngredients());
   }
 
   /// Back to the top, with nothing ticked and nothing cooking.
   Future<void> _reset() async {
-    await _sessions.clear(widget.recipe.id);
-    await ref.read(cookTimersProvider.notifier).dismissAll();
-    if (!mounted) return;
-    setState(() => _session = CookSession(recipe: widget.recipe));
+    // Invalidate the read before either asynchronous clear can yield.
+    _ignoreSavedProgress = true;
+    _restoring = true;
+    _resetPending = true;
+    // A second Start over while a save is pending must flush its empty state
+    // too, rather than letting that earlier save bring checks back.
+    _editedWhileRestoring = _resetInFlight;
+    _progressEditRevision++;
+    final Future<void> dismissTimers = ref
+        .read(cookTimersProvider.notifier)
+        .dismissAll();
+    // Reset the screen and timers immediately. Keep new choices here until
+    // clear and their save succeed, so a failed reset can be retried safely.
+    _setProgressRead(_CookProgressRead.ready);
+    _publishSession(CookSession(recipe: _session.recipe));
+    await Future.wait(<Future<void>>[_persistReset(), dismissTimers]);
+  }
+
+  Future<void> _persistReset() async {
+    if (_resetInFlight || !_resetPending) return;
+    _resetInFlight = true;
+    if (_progressRead.value == _CookProgressRead.failed) {
+      _setProgressRead(_CookProgressRead.retrying);
+    }
+    final String recipeId = _session.recipe.id;
+    try {
+      await _sessions.runInOrder(recipeId, () async {
+        await _sessions.clear(recipeId);
+        while (_editedWhileRestoring) {
+          final int revision = _progressEditRevision;
+          await _save(_session);
+          if (revision == _progressEditRevision) break;
+        }
+        _resetPending = false;
+        _restoring = false;
+        _setProgressRead(_CookProgressRead.ready);
+      });
+    } catch (_) {
+      _setProgressRead(_CookProgressRead.failed);
+    } finally {
+      _resetInFlight = false;
+    }
   }
 
   Future<void> _confirmReset() async {
@@ -141,7 +308,8 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
             scrollable: true,
             title: const Text('Start this recipe over?'),
             content: const Text(
-              'Clears every tick and stops all running timers.',
+              'Clears all ingredient and direction checks and stops all '
+              'running timers.',
             ),
             actions: <Widget>[
               TextButton(
@@ -191,6 +359,7 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
+    final Widget? restoreFeedback = _restoreFeedback;
     // Two different jobs: the card is for cooking, the list is for scanning
     // ahead and seeing what is left. Remembered across launches — a cook who
     // wants the whole list should not have to say so every time.
@@ -237,6 +406,7 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
             // pop a confirmation and then do nothing is just a trap.
             onPressed:
                 _session.checkedCount == 0 &&
+                    _session.checkedIngredientCount == 0 &&
                     _session.currentStep == 0 &&
                     (ref.watch(cookTimersProvider).value ?? const <CookTimer>[])
                         .isEmpty
@@ -274,9 +444,19 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
       body: SafeArea(
         child: step == null
             ? Center(
-                child: Text(
-                  'This recipe has no steps to cook along with.',
-                  style: context.text.body,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(HearthSpacing.lg),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      ?restoreFeedback,
+                      Text(
+                        'This recipe has no steps to cook along with.',
+                        style: context.text.body,
+                      ),
+                    ],
+                  ),
                 ),
               )
             : Column(
@@ -296,6 +476,7 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                             sections: _sectionsById,
                             timerByStep: timerByStep,
                             foods: foods,
+                            restoreFeedback: restoreFeedback,
                             // Anywhere on the row ticks the step off. Nothing
                             // in the list navigates: the toggle above is the
                             // only way between the two views, so a tap here
@@ -305,9 +486,12 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
                             onStartTimer: _startTimer,
                           )
                         : _StepCard(
-                            progress: _Progress(
-                              session: _session,
-                              focused: true,
+                            progress: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: <Widget>[
+                                ?restoreFeedback,
+                                _Progress(session: _session, focused: true),
+                              ],
                             ),
                             step: step,
                             section: _sectionsById[step.sectionId],
@@ -347,17 +531,36 @@ class _CookAlongScreenState extends ConsumerState<CookAlongScreen> {
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (BuildContext context) => _IngredientSheet(
-      // From the snapshot, not the library — mid-cook is the wrong moment to
-      // find out the list has changed underneath you.
-      recipe: _session.recipe,
-      foods: <String, Food>{
-        for (final Food food
-            in _session.recipe.allIngredients.any((i) => i.foodId != null)
-                ? ref.read(foodLibraryProvider).value ?? const <Food>[]
-                : const <Food>[])
-          food.id: food,
-      },
+    builder: (BuildContext context) => ValueListenableBuilder<_CookProgressRead>(
+      valueListenable: _progressRead,
+      builder: (BuildContext context, _CookProgressRead state, Widget? child) =>
+          ValueListenableBuilder<CookSession>(
+            valueListenable: _sessionChanges,
+            builder:
+                (
+                  BuildContext context,
+                  CookSession session,
+                  Widget? child,
+                ) => _IngredientSheet(
+                  // From the snapshot, not the library — mid-cook is the wrong
+                  // moment to find out the list has changed underneath you.
+                  session: session,
+                  onToggle: (RecipeIngredient ingredient) =>
+                      _update(_session.toggleIngredient(ingredient)),
+                  onReset: _resetIngredients,
+                  restoreFeedback: _restoreFeedback,
+                  foods: <String, Food>{
+                    for (final Food food
+                        in _session.recipe.allIngredients.any(
+                              (i) => i.foodId != null,
+                            )
+                            ? ref.read(foodLibraryProvider).value ??
+                                  const <Food>[]
+                            : const <Food>[])
+                      food.id: food,
+                  },
+                ),
+          ),
     ),
   );
 
@@ -443,6 +646,7 @@ class _StepList extends StatelessWidget {
     required this.onCheck,
     required this.onStartTimer,
     this.foods,
+    this.restoreFeedback,
   });
 
   final CookSession session;
@@ -462,6 +666,7 @@ class _StepList extends StatelessWidget {
   /// screen, so the matched-food display preference (spec R1–R8) is resolved
   /// without a per-row lookup.
   final Map<String, Food>? foods;
+  final Widget? restoreFeedback;
 
   @override
   Widget build(BuildContext context) {
@@ -473,20 +678,23 @@ class _StepList extends StatelessWidget {
         HearthSpacing.lg,
         HearthSpacing.lg,
       ),
-      itemCount: steps.length,
-      itemBuilder: (BuildContext context, int index) => _StepListRow(
-        step: steps[index],
-        section: sections[steps[index].sectionId],
-        recipe: recipe,
-        isChecked: session.isChecked(steps[index]),
-        isCurrent: index == session.currentStep,
-        isTimerRunning: timerByStep.containsKey(steps[index].id),
-        onCheck: () => onCheck(steps[index]),
-        onStartTimer: steps[index].hasTimer
-            ? () => onStartTimer(steps[index])
-            : null,
-        foods: foods,
-      ),
+      itemCount: steps.length + (restoreFeedback == null ? 0 : 1),
+      itemBuilder: (BuildContext context, int index) {
+        if (restoreFeedback != null && index == 0) return restoreFeedback!;
+        final int stepIndex = index - (restoreFeedback == null ? 0 : 1);
+        final RecipeStep step = steps[stepIndex];
+        return _StepListRow(
+          step: step,
+          section: sections[step.sectionId],
+          recipe: recipe,
+          isChecked: session.isChecked(step),
+          isCurrent: stepIndex == session.currentStep,
+          isTimerRunning: timerByStep.containsKey(step.id),
+          onCheck: () => onCheck(step),
+          onStartTimer: step.hasTimer ? () => onStartTimer(step) : null,
+          foods: foods,
+        );
+      },
     );
   }
 }
@@ -666,7 +874,7 @@ class _TimerChip extends StatelessWidget {
                 children: <Widget>[
                   Icon(Icons.timer_outlined, size: 18, color: colors.accent),
                   const SizedBox(width: HearthSpacing.sm),
-                  Text(label, style: context.text.label),
+                  Flexible(child: Text(label, style: context.text.label)),
                 ],
               ),
             ),
@@ -1136,11 +1344,71 @@ class _TimerTray extends StatelessWidget {
   }
 }
 
+/// Recovery stays in the content's scroll area so large text cannot squeeze
+/// the directions or ingredient rows off a small screen.
+class _CookRestoreFeedback extends StatelessWidget {
+  const _CookRestoreFeedback({this.onRetry, this.resetPending = false});
+
+  final VoidCallback? onRetry;
+  final bool resetPending;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: HearthSpacing.lg),
+    child: Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.all(HearthSpacing.md),
+        decoration: BoxDecoration(
+          color: context.colors.surfaceSunken,
+          border: Border.all(color: context.colors.outline),
+          borderRadius: BorderRadius.circular(HearthRadius.md),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Text(
+              resetPending
+                  ? 'Start over couldn’t be saved. Your changes aren’t saved yet.'
+                  : 'Saved progress couldn’t load. Your changes aren’t saved yet.',
+              style: context.text.body,
+            ),
+            const SizedBox(height: HearthSpacing.sm),
+            OutlinedButton(
+              onPressed: onRetry,
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(HearthTouch.kitchenTarget),
+                padding: const EdgeInsets.all(HearthSpacing.md),
+              ),
+              child: Text(
+                onRetry == null
+                    ? 'Retrying…'
+                    : resetPending
+                    ? 'Retry Start over'
+                    : 'Retry saved progress',
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 /// The ingredients, on demand and pinned over the step (spec §5.2).
 class _IngredientSheet extends StatelessWidget {
-  const _IngredientSheet({required this.recipe, this.foods});
+  const _IngredientSheet({
+    required this.session,
+    required this.onToggle,
+    required this.onReset,
+    this.foods,
+    this.restoreFeedback,
+  });
 
-  final Recipe recipe;
+  final CookSession session;
+  final ValueChanged<RecipeIngredient> onToggle;
+  final VoidCallback onReset;
+  final Widget? restoreFeedback;
 
   /// The household's food library, keyed by id — see [_StepList.foods].
   final Map<String, Food>? foods;
@@ -1148,6 +1416,8 @@ class _IngredientSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
+    final Recipe recipe = session.recipe;
+    final List<RecipeIngredient> ingredients = recipe.allIngredients;
     return ConstrainedBox(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.85,
@@ -1160,72 +1430,203 @@ class _IngredientSheet extends StatelessWidget {
           ),
         ),
         child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.all(HearthSpacing.lg),
-                child: Text('Ingredients', style: context.text.sectionHeader),
-              ),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: HearthSpacing.lg,
+          // The heading and actions scroll with the list. Fixed chrome alone
+          // can fill a small phone at 3x text, leaving no space for a row.
+          child: SingleChildScrollView(
+            key: const ValueKey<String>('cook-ingredient-checklist'),
+            padding: const EdgeInsets.all(HearthSpacing.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Text('Ingredients', style: context.text.sectionHeader),
+                const SizedBox(height: HearthSpacing.sm),
+                ?restoreFeedback,
+                if (ingredients.isEmpty)
+                  Text(
+                    'This recipe has no ingredients listed.',
+                    style: context.text.body,
+                  )
+                else ...<Widget>[
+                  Text(
+                    'Tap ingredients as you prepare or add them.',
+                    style: context.text.body,
                   ),
-                  children: <Widget>[
-                    for (final RecipeIngredient ingredient
-                        in recipe.allIngredients)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: HearthSpacing.sm,
+                  const SizedBox(height: HearthSpacing.xs),
+                  Text(
+                    'For this cook, on this device.',
+                    style: context.text.metadata,
+                  ),
+                  const SizedBox(height: HearthSpacing.sm),
+                  Text(
+                    '${session.checkedIngredientCount} of '
+                    '${ingredients.length} checked',
+                    style: context.text.label,
+                  ),
+                  const SizedBox(height: HearthSpacing.lg),
+                  for (final RecipeSection section in recipe.orderedSections)
+                    if (section.ingredients.isNotEmpty) ...<Widget>[
+                      if (recipe.isGrouped)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: HearthSpacing.sm,
+                          ),
+                          child: Text(
+                            section.name,
+                            style: context.text.sectionHeader,
+                          ),
                         ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            SizedBox(
-                              width: 110,
-                              child: Text(
-                                ingredient.quantity == null
-                                    ? ''
-                                    : FoodQuantityFormat.format(
-                                        ingredient.quantity!,
-                                        rawSources: [ingredient.rawText ?? ''],
-                                        food: ingredient.foodId == null
-                                            ? null
-                                            : foods?[ingredient.foodId],
-                                      ),
-                                style: context.text.ingredient.copyWith(
-                                  fontSize: 18,
-                                ),
-                              ),
+                      for (final RecipeIngredient ingredient in ingredients)
+                        if (ingredient.sectionId == section.id)
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: HearthSpacing.sm,
                             ),
-                            Expanded(
-                              child: Text(
-                                ingredient.name,
-                                style: context.text.ingredient.copyWith(
-                                  fontSize: 18,
-                                ),
-                              ),
+                            child: _IngredientCheckRow(
+                              ingredient: ingredient,
+                              food: foods?[ingredient.foodId],
+                              checked: session.isIngredientChecked(ingredient),
+                              onToggle: () => onToggle(ingredient),
                             ),
-                          ],
-                        ),
+                          ),
+                    ],
+                  const SizedBox(height: HearthSpacing.sm),
+                  OutlinedButton.icon(
+                    onPressed: session.checkedIngredientCount == 0
+                        ? null
+                        : onReset,
+                    icon: const Icon(Icons.restart_alt),
+                    label: const Text('Reset ingredients'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(
+                        HearthTouch.kitchenTarget,
                       ),
-                  ],
+                      padding: const EdgeInsets.all(HearthSpacing.md),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: HearthSpacing.md),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size.fromHeight(
+                      HearthTouch.kitchenTarget,
+                    ),
+                    padding: const EdgeInsets.all(HearthSpacing.md),
+                  ),
+                  child: const Text('Back to cooking'),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(HearthSpacing.lg),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Back to cooking'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _IngredientCheckRow extends StatelessWidget {
+  const _IngredientCheckRow({
+    required this.ingredient,
+    required this.checked,
+    required this.onToggle,
+    this.food,
+  });
+
+  final RecipeIngredient ingredient;
+  final Food? food;
+  final bool checked;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final String? quantity = ingredient.quantity == null
+        ? null
+        : FoodQuantityFormat.format(
+            ingredient.quantity!,
+            rawSources: <String>[ingredient.rawText ?? ''],
+            food: food,
+          );
+    final String details = <String>[
+      if (ingredient.prepNote?.isNotEmpty ?? false) ingredient.prepNote!,
+      if (ingredient.isOptional) 'optional',
+    ].join(' · ');
+    final TextStyle ingredientStyle = context.text.ingredient.copyWith(
+      fontSize: 22,
+      height: 1.4,
+      color: checked ? colors.textSecondary : colors.textPrimary,
+    );
+
+    return Semantics(
+      key: ValueKey<String>('cook-ingredient-${ingredient.id}'),
+      checked: checked,
+      label: <String>[
+        ?quantity,
+        ingredient.name,
+        if (details.isNotEmpty) details,
+      ].join(' '),
+      hint: checked
+          ? 'Tap to mark not yet prepared or added.'
+          : 'Tap to mark prepared or added.',
+      onTap: onToggle,
+      excludeSemantics: true,
+      child: Material(
+        color: checked ? colors.surfaceSunken : colors.surface,
+        borderRadius: BorderRadius.circular(HearthRadius.md),
+        child: InkWell(
+          onTap: onToggle,
+          excludeFromSemantics: true,
+          borderRadius: BorderRadius.circular(HearthRadius.md),
+          child: Container(
+            constraints: const BoxConstraints(
+              minHeight: HearthTouch.kitchenTarget,
+            ),
+            padding: const EdgeInsets.all(HearthSpacing.md),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(HearthRadius.md),
+              border: Border.all(color: colors.outline),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Icon(
+                  checked ? Icons.check_circle : Icons.radio_button_unchecked,
+                  color: checked ? colors.accent : colors.textSecondary,
+                  size: 28,
+                ),
+                const SizedBox(width: HearthSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      // A wrapping quantity/name pair keeps both readable at
+                      // kitchen sizes without reserving a fixed amount column.
+                      Wrap(
+                        spacing: HearthSpacing.sm,
+                        children: <Widget>[
+                          if (quantity != null)
+                            Text(quantity, style: ingredientStyle),
+                          Text(ingredient.name, style: ingredientStyle),
+                        ],
+                      ),
+                      if (details.isNotEmpty)
+                        Text(details, style: context.text.metadata),
+                      if (checked)
+                        Padding(
+                          padding: const EdgeInsets.only(top: HearthSpacing.xs),
+                          child: Text(
+                            'Prepared / added',
+                            style: context.text.label.copyWith(
+                              color: colors.textSecondary,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

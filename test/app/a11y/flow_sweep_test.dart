@@ -91,6 +91,7 @@ void main() {
     required Size size,
     required double scale,
     bool ongoingTargets = false,
+    List<Object> extraOverrides = const <Object>[],
   }) => pumpHearthApp(
     tester,
     size: size,
@@ -116,6 +117,7 @@ void main() {
     ),
     textScale: scale,
     targetsAreOngoing: ongoingTargets,
+    extraOverrides: extraOverrides,
   );
 
   // The sizes the screen sweep uses, at the two scales that matter: ordinary,
@@ -139,6 +141,7 @@ void main() {
             size: device.size,
             scale: scale,
             ongoingTargets: surface.withOngoingTargets,
+            extraOverrides: surface.createOverrides?.call() ?? const <Object>[],
           );
           final SweepTools tools = SweepTools(tester);
 

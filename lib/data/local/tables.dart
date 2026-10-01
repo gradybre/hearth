@@ -726,6 +726,11 @@ class CookSessions extends Table {
 
   /// The ids of the steps ticked off, as a JSON array.
   TextColumn get checkedStepIds => text().withDefault(const Constant('[]'))();
+
+  /// Ingredient checks belong to this device's current cook, separately
+  /// from directions and timers. Existing cooks start with none checked.
+  TextColumn get checkedIngredientIds =>
+      text().withDefault(const Constant('[]'))();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override

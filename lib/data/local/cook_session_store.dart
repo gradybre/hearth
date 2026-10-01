@@ -1,16 +1,51 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'hearth_database.dart';
 
-/// Where you had got to in a recipe: the step you were on, and what is ticked.
+/// Local progress for one cook: direction position and the separate direction
+/// and ingredient checks. It is never shared with a household partner.
 class StoredCookProgress {
   const StoredCookProgress({
     required this.currentStep,
     required this.checkedStepIds,
+    this.checkedIngredientIds = const <String>{},
   });
 
   final int currentStep;
   final Set<String> checkedStepIds;
+  final Set<String> checkedIngredientIds;
+}
+
+/// Orders progress operations across visits that share the same local store.
+///
+/// An opening read and the save of choices made while it was pending form one
+/// operation. A reopened cook must wait for both before reading its baseline.
+/// Separate recipes can proceed independently, and a failed operation releases
+/// the next visit so a retry does not leave the recipe locked.
+mixin CookSessionOrdering {
+  final Map<String, Future<void>> _pendingProgress = <String, Future<void>>{};
+
+  Future<void> runInOrder(
+    String recipeId,
+    Future<void> Function() operation,
+  ) async {
+    final Future<void>? previous = _pendingProgress[recipeId];
+    final Completer<void> release = Completer<void>();
+    final Future<void> finished = release.future;
+    _pendingProgress[recipeId] = finished;
+    try {
+      if (previous != null) await previous;
+      await operation();
+    } finally {
+      // This completion never carries the operation's error: its caller gets
+      // that error, while later operations must still be allowed to run.
+      release.complete();
+      if (identical(_pendingProgress[recipeId], finished)) {
+        unawaited(_pendingProgress.remove(recipeId));
+      }
+    }
+  }
 }
 
 /// Keeps a cook's place across launches (spec §5.2).
@@ -18,7 +53,7 @@ class StoredCookProgress {
 /// Backing out to check the planner and coming back should not lose an hour of
 /// ticked steps — the list is a record of what you have already done at the
 /// stove, and it cannot be reconstructed from anywhere else.
-class CookSessionStore {
+class CookSessionStore with CookSessionOrdering {
   CookSessionStore(this._db);
 
   /// A session older than this is a new cook, not a resumed one.
@@ -52,6 +87,11 @@ class CookSessionStore {
             in jsonDecode(row.checkedStepIds) as List<Object?>)
           id as String,
       },
+      checkedIngredientIds: <String>{
+        for (final Object? id
+            in jsonDecode(row.checkedIngredientIds) as List<Object?>)
+          id as String,
+      },
     );
   }
 
@@ -60,6 +100,7 @@ class CookSessionStore {
     required int currentStep,
     required Set<String> checkedStepIds,
     required DateTime now,
+    Set<String> checkedIngredientIds = const <String>{},
   }) => _db
       .into(_db.cookSessions)
       .insertOnConflictUpdate(
@@ -67,6 +108,7 @@ class CookSessionStore {
           recipeId: recipeId,
           currentStep: currentStep,
           checkedStepIds: jsonEncode(checkedStepIds.toList()),
+          checkedIngredientIds: jsonEncode(checkedIngredientIds.toList()),
           updatedAt: now,
         ),
       );

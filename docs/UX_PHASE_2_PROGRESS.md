@@ -15,8 +15,8 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
 | 2 — Grocery clarity | UX-058, UX-060 | Approved 2026-09-30 | Merged in [PR #117](https://github.com/gradybre/hearth/pull/117) | 3,985 passed; analyze clean; 87 render checks and all CI passed | Passed after corrections; code candidate `7d2121f` | Not performed |
 | 3 — Recipe actions and nutrition | UX-001; recipe-detail scope of UX-010 | Approved 2026-09-30 | Merged in [PR #118](https://github.com/gradybre/hearth/pull/118) | 4,089 passed in UTC plus 2 DST checks in New York; analyze clean; 99 render checks and all CI passed | Passed after one correction; final candidate `3c64406` | Not performed |
 | 4 — Export preview | UX-083 | Approved 2026-10-01 | Merged in [PR #119](https://github.com/gradybre/hearth/pull/119) | 4,161 passed in UTC; 21 calendar checks in New York; analysis clean; 103 render checks and all CI passed | No actionable findings; candidate `27d9eff` | Not performed |
-| 5 — Ongoing nutrition targets | UX-052, bounded personal carry-forward and weekly exceptions | Approved 2026-10-01 | Domain, private storage/sync, editor and export integrated; hosted migration applied | 4,259 passed in UTC; 72 calendar/repository/migration checks in New York; clean analysis; 111 render checks passed | Pending | Not performed |
-| 6 — Cooking ingredient checklist | UX-018 | Approved 2026-10-01 | Domain and cooking UI started separately; persistence queued behind Group 5's local schema | Pending | Pending | Not performed |
+| 5 — Ongoing nutrition targets | UX-052, bounded personal carry-forward and weekly exceptions | Approved 2026-10-01 | Merged in [PR #120](https://github.com/gradybre/hearth/pull/120) after Brendan's merge approval | 4,259 passed in UTC; 72 checks in New York; clean analysis; 111 render checks and all CI passed | No actionable findings; candidate `cf3bdd8`; 133 independent checks passed | Not performed |
+| 6 — Cooking ingredient checklist | UX-018 | Approved 2026-10-01 | Implemented in [PR #121](https://github.com/gradybre/hearth/pull/121) | 4,339 passed in UTC; 50 checks in New York; clean analysis; 115 render checks passed; final CI tracked on the PR | No actionable findings after the persistence correction; reviewed code unchanged by rebase onto main | Not performed |
 | 7 — Faster grocery additions | UX-061, plain-item quantity and reviewed paste scope | Awaiting decision | Not started | — | — | — |
 
 ## Group 1 — Daily logging
@@ -198,6 +198,9 @@ field; under the repository policy this group requires Brendan's merge
 decision after review and green CI. There is no unresolved implementation
 deviation from the approved scope.
 
+Brendan approved the merge on 2026-10-01; PR #120 merged as `d1f5899` with the
+declaration retained. All checks passed on the approved candidate `cf3bdd8`.
+
 ## Group 6 — Cooking ingredient checklist
 
 Approved: tappable ingredient checks in cook mode, retained for the current
@@ -207,6 +210,40 @@ remain independent of the partner, the shared recipe and shopping quantities.
 No AI request is required. A worker owns the cook-session domain model and
 cooking UI; persistence and the local schema are integrated serially after
 Group 5's schema work.
+
+Ingredient rows now retain quantities, section headings and a visible
+**Prepared / added** state. Another tap undoes a check. A separate reset leaves
+directions and timers intact; **Start over** explicitly clears the whole cook.
+Checks remain device-local, keyed by stable ingredient IDs, and retain the
+existing 24-hour cook expiry. Schema 31 adds an empty-default ingredient field
+without altering saved direction progress. No server migration or AI call is
+needed. Delayed restoration preserves fresh choices and updates a checklist
+that is already open. Regression tests cover reopen/relaunch, expiry, reset,
+undo, stale ingredient IDs and interruptions. The shared accessibility sweeps
+now include the ingredient checklist and whole-cook reset confirmation, and
+the cooking gallery captures checked rows and reset controls in every size.
+A failed read is not treated as an empty cook: a scrollable explanation and
+Retry preserve unseen saved progress and retain new choices in memory until
+they can be merged safely. Tests proved failed reads, repeated failures and
+disposed retry boundaries before correction. The same 3× recovery walk exposed
+an existing all-steps timer label overflow; wrapping its label fixes the layout
+without changing timer behavior. Native-device verification remains unperformed.
+
+Fresh-context review identified a race when leaving and reopening the same cook
+before the earlier visit had finished restoring and saving. Failing regressions
+also exposed taps lost during a delayed save and old checks returning after
+Start over. Shared per-recipe ordering now completes the earlier merge and save
+before the next visit reads, while new taps stay responsive. Start over stops
+timers immediately, preserves fresh choices and can complete after navigation.
+A failed reset has a specific Retry Start over action; its regression failed
+before the correction. Both recovery states participate in the accessibility
+sweeps, with additional dark and 3× captures. No deliberate guard mutations were
+used for this group.
+
+The correction passed fresh-context review with 158 independent checks. After
+Group 5 merged, the two cooking commits were rebased onto main; a whole-tree
+comparison proved the result identical to reviewed candidate `3f703f6` before
+this progress-record update. Final CI and merge status are recorded on PR #121.
 
 ## Group 7 — Faster grocery additions
 

@@ -104,6 +104,7 @@ class CookSession {
     required this.recipe,
     this.currentStep = 0,
     this.checkedStepIds = const <String>{},
+    this.checkedIngredientIds = const <String>{},
     this.timers = const <CookTimer>[],
   });
 
@@ -112,6 +113,11 @@ class CookSession {
 
   final int currentStep;
   final Set<String> checkedStepIds;
+
+  /// Prepared or added ingredients for this local cook, keyed by the recipe
+  /// ingredient id. Two rows using the same food still need separate checks.
+  /// This is progress only; it never changes pantry or shopping quantities.
+  final Set<String> checkedIngredientIds;
   final List<CookTimer> timers;
 
   List<RecipeStep> get steps => recipe.allSteps;
@@ -165,6 +171,23 @@ class CookSession {
   CookSession toggle(RecipeStep step, {bool advance = true}) =>
       isChecked(step) ? uncheck(step) : check(step, advance: advance);
 
+  bool isIngredientChecked(RecipeIngredient ingredient) =>
+      checkedIngredientIds.contains(ingredient.id);
+
+  int get checkedIngredientCount =>
+      recipe.allIngredients.where(isIngredientChecked).length;
+
+  /// A second tap undoes the check without moving the direction or touching
+  /// any timer. Ingredient preparation and direction completion are separate.
+  CookSession toggleIngredient(RecipeIngredient ingredient) => _copy(
+    checkedIngredientIds: isIngredientChecked(ingredient)
+        ? (<String>{...checkedIngredientIds}..remove(ingredient.id))
+        : <String>{...checkedIngredientIds, ingredient.id},
+  );
+
+  CookSession resetIngredients() =>
+      _copy(checkedIngredientIds: const <String>{});
+
   /// Timers run side by side — sauce, pasta, and oven at once (spec §5.2).
   CookSession addTimer(CookTimer timer) =>
       _copy(timers: <CookTimer>[...timers, timer]);
@@ -203,11 +226,13 @@ class CookSession {
   CookSession _copy({
     int? currentStep,
     Set<String>? checkedStepIds,
+    Set<String>? checkedIngredientIds,
     List<CookTimer>? timers,
   }) => CookSession(
     recipe: recipe,
     currentStep: currentStep ?? this.currentStep,
     checkedStepIds: checkedStepIds ?? this.checkedStepIds,
+    checkedIngredientIds: checkedIngredientIds ?? this.checkedIngredientIds,
     timers: timers ?? this.timers,
   );
 }

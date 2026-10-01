@@ -6,13 +6,41 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/app/theme/hearth_theme.dart';
+import 'package:hearth/data/local/cook_session_store.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/units/unit.dart';
 import 'package:hearth/features/recipes/cook_along_screen.dart';
 
 import '../support/fake_kitchen.dart';
 import '../support/fixtures.dart';
+import '../support/swept_surfaces.dart';
 import 'gallery.dart';
+
+class _UnreadCookProgress extends FakeCookSessionStore {
+  @override
+  Future<StoredCookProgress?> read(
+    String recipeId, {
+    required DateTime now,
+  }) async => throw StateError('Synthetic interrupted local read');
+}
+
+class _UnclearedCookProgress extends FakeCookSessionStore {
+  _UnclearedCookProgress()
+    : super(
+        const StoredCookProgress(currentStep: 1, checkedStepIds: <String>{}),
+      );
+
+  bool _failNextClear = true;
+
+  @override
+  Future<void> clear(String recipeId) async {
+    if (_failNextClear) {
+      _failNextClear = false;
+      throw StateError('Synthetic interrupted local reset');
+    }
+    await super.clear(recipeId);
+  }
+}
 
 // Synthetic food only. Captures the actual Flutter screen with bundled fonts.
 Recipe cookPreviewRecipe({bool long = false}) => aRecipe(
@@ -61,6 +89,14 @@ void main() {
     Scene(name: 'cook-small-3x', size: Size(320, 568), textScale: 3),
     Scene(name: 'cook-desktop', size: Size(1280, 800)),
     Scene(name: 'cook-long'),
+    Scene(name: 'cook-retry-small-3x', size: Size(320, 568), textScale: 3),
+    Scene(name: 'cook-retry-dark', brightness: Brightness.dark),
+    Scene(
+      name: 'cook-reset-retry-small-3x',
+      size: Size(320, 568),
+      textScale: 3,
+    ),
+    Scene(name: 'cook-reset-retry-dark', brightness: Brightness.dark),
   ];
   for (final Scene scene in captures) {
     testWidgets('cook render: ${scene.name}', (WidgetTester tester) async {
@@ -68,13 +104,20 @@ void main() {
       tester.view.physicalSize = scene.size;
       addTearDown(tester.view.reset);
       final Recipe recipe = cookPreviewRecipe(long: scene.name == 'cook-long');
+      final bool resetRetry = scene.name.contains('reset-retry');
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             screenKeeperProvider.overrideWithValue(FakeScreenKeeper()),
             timerAlertsProvider.overrideWithValue(FakeTimerAlerts()),
             cookTimersProvider.overrideWith(FakeCookTimers.new),
-            cookSessionStoreProvider.overrideWithValue(FakeCookSessionStore()),
+            cookSessionStoreProvider.overrideWithValue(
+              resetRetry
+                  ? _UnclearedCookProgress()
+                  : scene.name.contains('retry')
+                  ? _UnreadCookProgress()
+                  : FakeCookSessionStore(),
+            ),
             cookShowAllStepsProvider.overrideWith(
               () => FakeCookStepView(false),
             ),
@@ -102,6 +145,12 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
       expect(tester.takeException(), isNull);
+      final SweepTools tools = SweepTools(tester);
+      if (resetRetry) {
+        await tools.reach(find.byTooltip('Start over'));
+        await tools.reach(find.widgetWithText(FilledButton, 'Start over'));
+        expect(tester.takeException(), isNull);
+      }
       await writeScene(tester, scene);
       if (scene.textScale > 1 || scene.name == 'cook-long') {
         final Finder scroll = find.byType(SingleChildScrollView).first;
@@ -115,6 +164,33 @@ void main() {
         await tester.pump();
         await writeScene(tester, Scene(name: '${scene.name}-scrolled'));
       }
+      await tester.tap(find.byTooltip('Ingredients'));
+      await tester.pump(const Duration(milliseconds: 400));
+      final Finder retry = find.text(
+        resetRetry ? 'Retry Start over' : 'Retry saved progress',
+      );
+      if (scene.name.contains('retry')) {
+        await tools.bring(retry);
+        await writeScene(tester, Scene(name: '${scene.name}-checklist-retry'));
+      }
+      final Finder firstIngredient = find.byKey(
+        ValueKey<String>('cook-ingredient-${recipe.allIngredients.first.id}'),
+      );
+      await tools.reach(firstIngredient);
+      expect(find.text('Prepared / added'), findsOneWidget);
+      await writeScene(tester, Scene(name: '${scene.name}-checklist-checked'));
+      await tools.bring(find.text('Reset ingredients'));
+      await writeScene(tester, Scene(name: '${scene.name}-checklist-controls'));
+      await tools.reach(find.text('Reset ingredients'));
+      expect(
+        find.text('0 of ${recipe.allIngredients.length} checked'),
+        findsOneWidget,
+      );
+      if (resetRetry) {
+        await tools.reach(retry);
+        expect(retry, findsNothing);
+      }
+      expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
     }, skip: !renderingGallery);

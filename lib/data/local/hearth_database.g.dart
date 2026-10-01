@@ -10252,6 +10252,18 @@ class $CookSessionsTable extends CookSessions
     requiredDuringInsert: false,
     defaultValue: const Constant('[]'),
   );
+  static const VerificationMeta _checkedIngredientIdsMeta =
+      const VerificationMeta('checkedIngredientIds');
+  @override
+  late final GeneratedColumn<String> checkedIngredientIds =
+      GeneratedColumn<String>(
+        'checked_ingredient_ids',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('[]'),
+      );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -10268,6 +10280,7 @@ class $CookSessionsTable extends CookSessions
     recipeId,
     currentStep,
     checkedStepIds,
+    checkedIngredientIds,
     updatedAt,
   ];
   @override
@@ -10308,6 +10321,15 @@ class $CookSessionsTable extends CookSessions
         ),
       );
     }
+    if (data.containsKey('checked_ingredient_ids')) {
+      context.handle(
+        _checkedIngredientIdsMeta,
+        checkedIngredientIds.isAcceptableOrUnknown(
+          data['checked_ingredient_ids']!,
+          _checkedIngredientIdsMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -10337,6 +10359,10 @@ class $CookSessionsTable extends CookSessions
         DriftSqlType.string,
         data['${effectivePrefix}checked_step_ids'],
       )!,
+      checkedIngredientIds: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}checked_ingredient_ids'],
+      )!,
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -10356,11 +10382,16 @@ class CookSessionRow extends DataClass implements Insertable<CookSessionRow> {
 
   /// The ids of the steps ticked off, as a JSON array.
   final String checkedStepIds;
+
+  /// Ingredient checks belong to this device's current cook, separately
+  /// from directions and timers. Existing cooks start with none checked.
+  final String checkedIngredientIds;
   final DateTime updatedAt;
   const CookSessionRow({
     required this.recipeId,
     required this.currentStep,
     required this.checkedStepIds,
+    required this.checkedIngredientIds,
     required this.updatedAt,
   });
   @override
@@ -10369,6 +10400,7 @@ class CookSessionRow extends DataClass implements Insertable<CookSessionRow> {
     map['recipe_id'] = Variable<String>(recipeId);
     map['current_step'] = Variable<int>(currentStep);
     map['checked_step_ids'] = Variable<String>(checkedStepIds);
+    map['checked_ingredient_ids'] = Variable<String>(checkedIngredientIds);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -10378,6 +10410,7 @@ class CookSessionRow extends DataClass implements Insertable<CookSessionRow> {
       recipeId: Value(recipeId),
       currentStep: Value(currentStep),
       checkedStepIds: Value(checkedStepIds),
+      checkedIngredientIds: Value(checkedIngredientIds),
       updatedAt: Value(updatedAt),
     );
   }
@@ -10391,6 +10424,9 @@ class CookSessionRow extends DataClass implements Insertable<CookSessionRow> {
       recipeId: serializer.fromJson<String>(json['recipeId']),
       currentStep: serializer.fromJson<int>(json['currentStep']),
       checkedStepIds: serializer.fromJson<String>(json['checkedStepIds']),
+      checkedIngredientIds: serializer.fromJson<String>(
+        json['checkedIngredientIds'],
+      ),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -10401,6 +10437,7 @@ class CookSessionRow extends DataClass implements Insertable<CookSessionRow> {
       'recipeId': serializer.toJson<String>(recipeId),
       'currentStep': serializer.toJson<int>(currentStep),
       'checkedStepIds': serializer.toJson<String>(checkedStepIds),
+      'checkedIngredientIds': serializer.toJson<String>(checkedIngredientIds),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -10409,11 +10446,13 @@ class CookSessionRow extends DataClass implements Insertable<CookSessionRow> {
     String? recipeId,
     int? currentStep,
     String? checkedStepIds,
+    String? checkedIngredientIds,
     DateTime? updatedAt,
   }) => CookSessionRow(
     recipeId: recipeId ?? this.recipeId,
     currentStep: currentStep ?? this.currentStep,
     checkedStepIds: checkedStepIds ?? this.checkedStepIds,
+    checkedIngredientIds: checkedIngredientIds ?? this.checkedIngredientIds,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   CookSessionRow copyWithCompanion(CookSessionsCompanion data) {
@@ -10425,6 +10464,9 @@ class CookSessionRow extends DataClass implements Insertable<CookSessionRow> {
       checkedStepIds: data.checkedStepIds.present
           ? data.checkedStepIds.value
           : this.checkedStepIds,
+      checkedIngredientIds: data.checkedIngredientIds.present
+          ? data.checkedIngredientIds.value
+          : this.checkedIngredientIds,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -10435,14 +10477,20 @@ class CookSessionRow extends DataClass implements Insertable<CookSessionRow> {
           ..write('recipeId: $recipeId, ')
           ..write('currentStep: $currentStep, ')
           ..write('checkedStepIds: $checkedStepIds, ')
+          ..write('checkedIngredientIds: $checkedIngredientIds, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(recipeId, currentStep, checkedStepIds, updatedAt);
+  int get hashCode => Object.hash(
+    recipeId,
+    currentStep,
+    checkedStepIds,
+    checkedIngredientIds,
+    updatedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -10450,6 +10498,7 @@ class CookSessionRow extends DataClass implements Insertable<CookSessionRow> {
           other.recipeId == this.recipeId &&
           other.currentStep == this.currentStep &&
           other.checkedStepIds == this.checkedStepIds &&
+          other.checkedIngredientIds == this.checkedIngredientIds &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -10457,12 +10506,14 @@ class CookSessionsCompanion extends UpdateCompanion<CookSessionRow> {
   final Value<String> recipeId;
   final Value<int> currentStep;
   final Value<String> checkedStepIds;
+  final Value<String> checkedIngredientIds;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const CookSessionsCompanion({
     this.recipeId = const Value.absent(),
     this.currentStep = const Value.absent(),
     this.checkedStepIds = const Value.absent(),
+    this.checkedIngredientIds = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -10470,6 +10521,7 @@ class CookSessionsCompanion extends UpdateCompanion<CookSessionRow> {
     required String recipeId,
     this.currentStep = const Value.absent(),
     this.checkedStepIds = const Value.absent(),
+    this.checkedIngredientIds = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : recipeId = Value(recipeId),
@@ -10478,6 +10530,7 @@ class CookSessionsCompanion extends UpdateCompanion<CookSessionRow> {
     Expression<String>? recipeId,
     Expression<int>? currentStep,
     Expression<String>? checkedStepIds,
+    Expression<String>? checkedIngredientIds,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -10485,6 +10538,8 @@ class CookSessionsCompanion extends UpdateCompanion<CookSessionRow> {
       if (recipeId != null) 'recipe_id': recipeId,
       if (currentStep != null) 'current_step': currentStep,
       if (checkedStepIds != null) 'checked_step_ids': checkedStepIds,
+      if (checkedIngredientIds != null)
+        'checked_ingredient_ids': checkedIngredientIds,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -10494,6 +10549,7 @@ class CookSessionsCompanion extends UpdateCompanion<CookSessionRow> {
     Value<String>? recipeId,
     Value<int>? currentStep,
     Value<String>? checkedStepIds,
+    Value<String>? checkedIngredientIds,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -10501,6 +10557,7 @@ class CookSessionsCompanion extends UpdateCompanion<CookSessionRow> {
       recipeId: recipeId ?? this.recipeId,
       currentStep: currentStep ?? this.currentStep,
       checkedStepIds: checkedStepIds ?? this.checkedStepIds,
+      checkedIngredientIds: checkedIngredientIds ?? this.checkedIngredientIds,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -10518,6 +10575,11 @@ class CookSessionsCompanion extends UpdateCompanion<CookSessionRow> {
     if (checkedStepIds.present) {
       map['checked_step_ids'] = Variable<String>(checkedStepIds.value);
     }
+    if (checkedIngredientIds.present) {
+      map['checked_ingredient_ids'] = Variable<String>(
+        checkedIngredientIds.value,
+      );
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -10533,6 +10595,7 @@ class CookSessionsCompanion extends UpdateCompanion<CookSessionRow> {
           ..write('recipeId: $recipeId, ')
           ..write('currentStep: $currentStep, ')
           ..write('checkedStepIds: $checkedStepIds, ')
+          ..write('checkedIngredientIds: $checkedIngredientIds, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -21567,6 +21630,7 @@ typedef $$CookSessionsTableCreateCompanionBuilder =
       required String recipeId,
       Value<int> currentStep,
       Value<String> checkedStepIds,
+      Value<String> checkedIngredientIds,
       required DateTime updatedAt,
       Value<int> rowid,
     });
@@ -21575,6 +21639,7 @@ typedef $$CookSessionsTableUpdateCompanionBuilder =
       Value<String> recipeId,
       Value<int> currentStep,
       Value<String> checkedStepIds,
+      Value<String> checkedIngredientIds,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -21600,6 +21665,11 @@ class $$CookSessionsTableFilterComposer
 
   ColumnFilters<String> get checkedStepIds => $composableBuilder(
     column: $table.checkedStepIds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get checkedIngredientIds => $composableBuilder(
+    column: $table.checkedIngredientIds,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -21633,6 +21703,11 @@ class $$CookSessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get checkedIngredientIds => $composableBuilder(
+    column: $table.checkedIngredientIds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -21658,6 +21733,11 @@ class $$CookSessionsTableAnnotationComposer
 
   GeneratedColumn<String> get checkedStepIds => $composableBuilder(
     column: $table.checkedStepIds,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get checkedIngredientIds => $composableBuilder(
+    column: $table.checkedIngredientIds,
     builder: (column) => column,
   );
 
@@ -21703,12 +21783,14 @@ class $$CookSessionsTableTableManager
                 Value<String> recipeId = const Value.absent(),
                 Value<int> currentStep = const Value.absent(),
                 Value<String> checkedStepIds = const Value.absent(),
+                Value<String> checkedIngredientIds = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CookSessionsCompanion(
                 recipeId: recipeId,
                 currentStep: currentStep,
                 checkedStepIds: checkedStepIds,
+                checkedIngredientIds: checkedIngredientIds,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -21717,12 +21799,14 @@ class $$CookSessionsTableTableManager
                 required String recipeId,
                 Value<int> currentStep = const Value.absent(),
                 Value<String> checkedStepIds = const Value.absent(),
+                Value<String> checkedIngredientIds = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => CookSessionsCompanion.insert(
                 recipeId: recipeId,
                 currentStep: currentStep,
                 checkedStepIds: checkedStepIds,
+                checkedIngredientIds: checkedIngredientIds,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
