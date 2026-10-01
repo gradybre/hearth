@@ -11,7 +11,10 @@ import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/text/text_normaliser.dart';
 import 'external_food_results.dart';
+import 'food_draft.dart';
 import 'food_search_controller.dart';
+import 'ingredient_food_capture.dart';
+import 'read_label_sheet.dart';
 
 /// Picks a food for an ingredient line (spec §5.3's match review, in its
 /// Phase 1 manual form).
@@ -23,6 +26,10 @@ Future<String?> showFoodPicker(
   BuildContext context, {
   required String ingredientName,
   String? currentFoodId,
+  String? authoredLine,
+  IngredientFoodCapture? capture,
+  bool rememberOnChoose = true,
+  bool offerUnmatch = true,
   List<Food> defaults = const <Food>[],
   bool offerSeasoning = true,
   bool offerModifiers = false,
@@ -30,12 +37,23 @@ Future<String?> showFoodPicker(
   context: context,
   isScrollControlled: true,
   backgroundColor: Colors.transparent,
-  builder: (BuildContext context) => _FoodPickerSheet(
-    ingredientName: ingredientName,
-    currentFoodId: currentFoodId,
-    defaults: defaults,
-    offerSeasoning: offerSeasoning,
-    offerModifiers: offerModifiers,
+  builder: (BuildContext context) => IngredientFoodCaptureScope(
+    capture:
+        capture ??
+        IngredientFoodCapture(
+          ingredientName: ingredientName,
+          authoredLine: authoredLine ?? ingredientName,
+        ),
+    child: _FoodPickerSheet(
+      ingredientName: ingredientName,
+      authoredLine: authoredLine,
+      rememberOnChoose: rememberOnChoose,
+      offerUnmatch: offerUnmatch,
+      currentFoodId: currentFoodId,
+      defaults: defaults,
+      offerSeasoning: offerSeasoning,
+      offerModifiers: offerModifiers,
+    ),
   ),
 );
 
@@ -49,6 +67,9 @@ class _FoodPickerSheet extends ConsumerStatefulWidget {
   const _FoodPickerSheet({
     required this.ingredientName,
     this.currentFoodId,
+    this.authoredLine,
+    this.rememberOnChoose = true,
+    this.offerUnmatch = true,
     this.defaults = const <Food>[],
     this.offerModifiers = false,
     this.offerSeasoning = true,
@@ -56,6 +77,9 @@ class _FoodPickerSheet extends ConsumerStatefulWidget {
 
   final String ingredientName;
   final String? currentFoodId;
+  final String? authoredLine;
+  final bool rememberOnChoose;
+  final bool offerUnmatch;
 
   /// Whether marking this line as a seasoning could actually change anything.
   ///
@@ -92,9 +116,15 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
     text: widget.ingredientName,
   );
 
+  bool _capturing = false;
+  late final String _household;
+  late final String _user;
+
   @override
   void initState() {
     super.initState();
+    _household = ref.read(currentHouseholdIdProvider);
+    _user = ref.read(currentUserIdProvider);
     // The sheet opens pre-filled with the ingredient's own name, so the
     // outward search should run on it too — the common reason a food is
     // missing locally is that nobody has added it yet.
@@ -114,7 +144,12 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
   /// Hands a food — scanned or searched for — straight back as this line's
   /// match.
   void _useScanned(String foodId) {
-    if (!mounted) return;
+    if (!mounted ||
+        ref.read(currentHouseholdIdProvider) != _household ||
+        ref.read(currentUserIdProvider) != _user ||
+        !(ModalRoute.of(context)?.isCurrent ?? false)) {
+      return;
+    }
     Navigator.of(context).pop(foodId);
   }
 
@@ -128,7 +163,35 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
   /// match itself is untouched — editing changes what the food *is*, not
   /// which food the line points at, so there is nothing to hand back here.
   Future<void> _editFood(String foodId) async {
-    await context.push<void>('/food/$foodId');
+    await context.push<void>(
+      '/food/$foodId',
+      extra: IngredientFoodCaptureScope.routeExtra(context),
+    );
+  }
+
+  Future<void> _createFood({required bool readLabel}) async {
+    setState(() => _capturing = true);
+    try {
+      var draft = FoodDraft.blank().copyWith(name: widget.ingredientName);
+      if (readLabel) {
+        final reading = await showReadLabelSheet(context);
+        if (!mounted || reading == null) return;
+        draft = draft.withLabel(reading);
+      }
+      if (!mounted ||
+          ref.read(currentHouseholdIdProvider) != _household ||
+          ref.read(currentUserIdProvider) != _user ||
+          !(ModalRoute.of(context)?.isCurrent ?? false)) {
+        return;
+      }
+      final saved = await context.push<String>(
+        '/food/new',
+        extra: IngredientFoodCaptureScope.routeExtra(context, draft: draft),
+      );
+      if (saved != null) _useScanned(saved);
+    } finally {
+      if (mounted) setState(() => _capturing = false);
+    }
   }
 
   /// The library, filtered and ranked by how well each food answers the
@@ -188,215 +251,172 @@ class _FoodPickerSheetState extends ConsumerState<_FoodPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    final AsyncValue<List<Food>> library = ref.watch(foodLibraryProvider);
-
+    final colors = context.colors;
+    final library = ref.watch(foodLibraryProvider);
     return DraggableScrollableSheet(
-      initialChildSize: 0.75,
+      initialChildSize: 0.85,
       minChildSize: 0.4,
       maxChildSize: 0.95,
       expand: false,
-      builder: (BuildContext context, ScrollController controller) =>
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: colors.background,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(HearthRadius.xl),
-              ),
-            ),
-            child: Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.viewInsetsOf(context).bottom,
-              ),
-              child: Column(
-                children: <Widget>[
-                  Padding(
-                    padding: const EdgeInsets.all(HearthSpacing.lg),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Row(
-                          children: <Widget>[
-                            Expanded(
-                              child: Text(
-                                'Match "${widget.ingredientName}"',
-                                style: context.text.sectionHeader,
-                              ),
-                            ),
-                            if (widget.currentFoodId != null)
-                              TextButton(
-                                onPressed: () =>
-                                    Navigator.of(context)
-                                        .pop(clearFoodSentinel),
-                                child: const Text('Unmatch'),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: HearthSpacing.xxs),
-                        // Makes an existing mechanic visible rather than
-                        // adding a new one: picking a food here already
-                        // writes to `ingredient_match` and auto-applies next
-                        // time this exact wording turns up (spec §5.3) — the
-                        // one thing missing was saying so.
-                        Text(
-                          'Picking a food remembers it as the default for '
-                          "this ingredient's wording next time.",
-                          style: context.text.metadata.copyWith(
-                            color: colors.textMuted,
-                          ),
-                        ),
-                        const SizedBox(height: HearthSpacing.sm),
-                        // Salt has nothing to match and never will. Offered
-                        // here because here is where the line is nagging, and
-                        // it is remembered, so the next recipe starts quiet.
-                        // An offer, and it has to look like one. Styled as an
-                        // accent text button it was the same grass icon in the
-                        // same colour as the badge a *marked* line wears, so
-                        // opening the sheet on an apple read as Hearth
-                        // claiming the apple was a seasoning.
-                        if (widget.offerSeasoning) ...<Widget>[
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: OutlinedButton.icon(
-                              onPressed: () =>
-                                  Navigator.of(context)
-                                      .pop(noMatchNeededSentinel),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: colors.textSecondary,
-                                side: BorderSide(color: colors.outline),
-                              ),
-                              icon: const Icon(Icons.grass_outlined, size: 18),
-                              label: const Text('Mark as a seasoning instead'),
-                            ),
-                          ),
-                          const SizedBox(height: HearthSpacing.sm),
-                        ],
-                        Row(
-                          children: <Widget>[
-                            Expanded(
-                              child: TextField(
-                                controller: _search,
-                                autofocus: false,
-                                onChanged: (String value) {
-                                  ref
-                                      .read(foodSearchProvider.notifier)
-                                      .search(value);
-                                  setState(() {});
-                                },
-                                style: context.text.body,
-                                decoration: InputDecoration(
-                                  hintText: 'Search your foods',
-                                  prefixIcon: Icon(
-                                    Icons.search,
-                                    color: colors.textMuted,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: HearthSpacing.sm),
-                            // In-recipe capture (spec §5.5): the packet is
-                            // usually in your hand while you write the recipe,
-                            // and scanning it beats leaving for the Foods tab,
-                            // adding it there, and coming back to match it.
-                            _ScanButton(onScanned: _useScanned),
-                          ],
-                        ),
-                      ],
-                    ),
+      builder: (context, controller) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.background,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(HearthRadius.xl),
+          ),
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: ListView(
+            key: const Key('ingredient-food-picker-scroll'),
+            controller: controller,
+            padding: const EdgeInsets.all(HearthSpacing.lg),
+            children: [
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    MediaQuery.textScalerOf(context).scale(14) > 20 &&
+                            widget.authoredLine != null
+                        ? 'Match'
+                        : 'Match "${widget.ingredientName}"',
+                    style: context.text.sectionHeader,
                   ),
-                  Expanded(
-                    child: library.when(
-                      loading: () =>
-                          const Center(child: CircularProgressIndicator()),
-                      error: (Object e, StackTrace s) =>
-                          Center(child: Text('Could not read foods.\n$e')),
-                      data: (List<Food> all) {
-                        // A modifier is a deduction, never a thing to pick —
-                        // except on the recipe whose builder attached one.
-                        final List<Food> foods = widget.offerModifiers
-                            ? <Food>[
-                                for (final Food food in all)
-                                  if (!food.isDeleted) food,
-                              ]
-                            : eatableFoods(all);
-                        final List<Food> visible = _rank(foods);
-                        if (visible.isEmpty) {
-                          return ListView(
-                            controller: controller,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: HearthSpacing.lg,
-                            ),
-                            children: <Widget>[
-                              _NoFoods(
-                                hasAny: foods.isNotEmpty,
-                                ingredientName: widget.ingredientName,
-                                onScanned: _useScanned,
-                              ),
-                              ExternalFoodResults(
-                                query: _search.text,
-                                onSaved: _useScanned,
-                              ),
-                            ],
-                          );
-                        }
-                        final Set<String> defaultIds = <String>{
-                          for (final Food food in widget.defaults) food.id,
-                        };
-                        return ListView(
-                          controller: controller,
-                          padding: const EdgeInsets.fromLTRB(
-                            HearthSpacing.lg,
-                            0,
-                            HearthSpacing.lg,
-                            HearthSpacing.xl,
-                          ),
-                          children: <Widget>[
-                            if (widget.defaults.isNotEmpty) ...<Widget>[
-                              _GroupLabel(
-                                text:
-                                    'Your defaults for '
-                                    '"${widget.ingredientName}"',
-                              ),
-                              for (final Food food
-                                  in widget.defaults) ...<Widget>[
-                                _FoodOption(
-                                  food: food,
-                                  selected: food.id == widget.currentFoodId,
-                                  onEdit: food.id == widget.currentFoodId
-                                      ? () => _editFood(food.id)
-                                      : null,
-                                ),
-                                const SizedBox(height: HearthSpacing.sm),
-                              ],
-                              const _GroupLabel(text: 'Everything else'),
-                            ],
-                            for (final Food food in visible)
-                              if (!defaultIds.contains(food.id)) ...<Widget>[
-                                _FoodOption(
-                                  food: food,
-                                  selected: food.id == widget.currentFoodId,
-                                  onEdit: food.id == widget.currentFoodId
-                                      ? () => _editFood(food.id)
-                                      : null,
-                                ),
-                                const SizedBox(height: HearthSpacing.sm),
-                              ],
-                            // A food found out there is saved first, then used
-                            // as this line's match — same review as any other
-                            // route into the library (CLAUDE.md rule 4).
-                            ExternalFoodResults(
-                              query: _search.text,
-                              onSaved: _useScanned,
-                            ),
-                          ],
-                        );
-                      },
+                  if (widget.offerUnmatch && widget.currentFoodId != null)
+                    TextButton(
+                      onPressed: () =>
+                          Navigator.of(context).pop(clearFoodSentinel),
+                      child: const Text('Unmatch'),
                     ),
+                ],
+              ),
+              if (widget.authoredLine != null) ...[
+                const SizedBox(height: HearthSpacing.sm),
+                IngredientFoodBanner(
+                  capture: IngredientFoodCaptureScope.of(context)!,
+                ),
+              ],
+              const SizedBox(height: HearthSpacing.sm),
+              Text(
+                widget.rememberOnChoose
+                    ? 'Picking a food remembers it as the default for this ingredient\'s wording next time.'
+                    : 'Choose a food for this review. Remembering this wording for the household is a separate choice.',
+                style: context.text.metadata.copyWith(color: colors.textMuted),
+              ),
+              if (widget.offerSeasoning) ...[
+                const SizedBox(height: HearthSpacing.sm),
+                OutlinedButton.icon(
+                  onPressed: () =>
+                      Navigator.of(context).pop(noMatchNeededSentinel),
+                  icon: const Icon(Icons.grass_outlined, size: 18),
+                  label: const Text(
+                    'Mark as a seasoning instead',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
+              const SizedBox(height: HearthSpacing.md),
+              TextField(
+                controller: _search,
+                onChanged: (value) {
+                  ref.read(foodSearchProvider.notifier).search(value);
+                  setState(() {});
+                },
+                style: context.text.body,
+                decoration: InputDecoration(
+                  hintText: 'Search your foods',
+                  prefixIcon: Icon(Icons.search, color: colors.textMuted),
+                ),
+              ),
+              const SizedBox(height: HearthSpacing.sm),
+              Wrap(
+                spacing: HearthSpacing.sm,
+                runSpacing: HearthSpacing.sm,
+                children: [
+                  _ScanButton(onScanned: _useScanned),
+                  if (canReadLabels(ref))
+                    TextButton.icon(
+                      key: const Key('ingredient-picker-label'),
+                      onPressed: _capturing
+                          ? null
+                          : () => _createFood(readLabel: true),
+                      icon: const Icon(Icons.document_scanner_outlined),
+                      label: const Text('Read label'),
+                    ),
+                  TextButton.icon(
+                    key: const Key('ingredient-picker-manual'),
+                    onPressed: _capturing
+                        ? null
+                        : () => _createFood(readLabel: false),
+                    icon: const Icon(Icons.edit_note),
+                    label: const Text('Enter nutrition'),
                   ),
                 ],
               ),
-            ),
+              const SizedBox(height: HearthSpacing.md),
+              library.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, stack) =>
+                    const Text('Could not read foods. Try again.'),
+                data: (all) {
+                  final foods = widget.offerModifiers
+                      ? all.where((food) => !food.isDeleted).toList()
+                      : eatableFoods(all);
+                  final visible = _rank(foods);
+                  final defaultIds = widget.defaults
+                      .map((food) => food.id)
+                      .toSet();
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (visible.isEmpty)
+                        _NoFoods(
+                          hasAny: foods.isNotEmpty,
+                          ingredientName: widget.ingredientName,
+                          onScanned: _useScanned,
+                        ),
+                      if (widget.defaults.isNotEmpty) ...[
+                        _GroupLabel(
+                          text: 'Your defaults for "${widget.ingredientName}"',
+                        ),
+                        for (final food in widget.defaults) ...[
+                          _FoodOption(
+                            food: food,
+                            selected: food.id == widget.currentFoodId,
+                            onEdit: food.id == widget.currentFoodId
+                                ? () => _editFood(food.id)
+                                : null,
+                          ),
+                          const SizedBox(height: HearthSpacing.sm),
+                        ],
+                        const _GroupLabel(text: 'Everything else'),
+                      ],
+                      for (final food in visible)
+                        if (!defaultIds.contains(food.id)) ...[
+                          _FoodOption(
+                            food: food,
+                            selected: food.id == widget.currentFoodId,
+                            onEdit: food.id == widget.currentFoodId
+                                ? () => _editFood(food.id)
+                                : null,
+                          ),
+                          const SizedBox(height: HearthSpacing.sm),
+                        ],
+                      ExternalFoodResults(
+                        query: _search.text,
+                        onSaved: _useScanned,
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
           ),
+        ),
+      ),
     );
   }
 }
@@ -513,8 +533,11 @@ class _ScanButton extends StatelessWidget {
   final ValueChanged<String> onScanned;
 
   Future<void> _scan(BuildContext context) async {
-    final String? foodId = await context.push<String>('/food/scan?pick=1');
-    if (foodId != null) onScanned(foodId);
+    final String? foodId = await context.push<String>(
+      '/food/scan?pick=1',
+      extra: IngredientFoodCaptureScope.routeExtra(context),
+    );
+    if (context.mounted && foodId != null) onScanned(foodId);
   }
 
   @override
@@ -572,8 +595,9 @@ class _NoFoods extends StatelessWidget {
             onPressed: () async {
               final String? foodId = await context.push<String>(
                 '/food/scan?pick=1',
+                extra: IngredientFoodCaptureScope.routeExtra(context),
               );
-              if (foodId != null) onScanned(foodId);
+              if (context.mounted && foodId != null) onScanned(foodId);
             },
             icon: const Icon(Icons.qr_code_scanner),
             label: const Text('Scan a barcode'),

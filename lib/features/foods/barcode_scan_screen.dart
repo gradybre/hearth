@@ -20,6 +20,7 @@ import 'barcode_lookup_controller.dart';
 import 'external_food_results.dart';
 import 'food_draft.dart';
 import 'food_search_controller.dart';
+import 'ingredient_food_capture.dart';
 import 'read_label_sheet.dart';
 
 /// Scanning a barcode to add or log a food (spec §5.5).
@@ -82,6 +83,7 @@ class _BarcodeScanScreenState extends ConsumerState<BarcodeScanScreen> {
     }
     if (_cameraIsPossible) {
       _camera = MobileScannerController(
+        autoStart: false,
         detectionSpeed: DetectionSpeed.noDuplicates,
         // Retail product symbologies only: a QR code on a menu is not food,
         // and narrowing what the detector accepts makes it settle faster on a
@@ -93,6 +95,7 @@ class _BarcodeScanScreenState extends ConsumerState<BarcodeScanScreen> {
           BarcodeFormat.upcE,
         ],
       );
+      _startCameraAfterFrame();
     } else {
       _typing = true;
     }
@@ -144,7 +147,10 @@ class _BarcodeScanScreenState extends ConsumerState<BarcodeScanScreen> {
 
     final String? saved = await context.push<String>(
       '/food/new',
-      extra: FoodDraft.blank().withLabel(reading),
+      extra: IngredientFoodCaptureScope.routeExtra(
+        context,
+        draft: FoodDraft.blank().withLabel(reading),
+      ),
     );
     if (!mounted) return;
     if (widget.pickFood && saved != null) {
@@ -169,6 +175,23 @@ class _BarcodeScanScreenState extends ConsumerState<BarcodeScanScreen> {
       await _camera?.start();
     } on Object {
       // Same: the preview coming back is a nicety, not the flow.
+    }
+  }
+
+  // The preview is mounted in a LayoutBuilder. Starting its controller there
+  // notifies the already-built toolbar during layout; wait for the frame.
+  void _startCameraAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_typing) unawaited(_resumeCamera());
+    });
+  }
+
+  void _setTyping(bool typing) {
+    setState(() => _typing = typing);
+    if (typing) {
+      unawaited(_pauseCamera());
+    } else {
+      _startCameraAfterFrame();
     }
   }
 
@@ -199,47 +222,129 @@ class _BarcodeScanScreenState extends ConsumerState<BarcodeScanScreen> {
                 _typing ? Icons.photo_camera_outlined : Icons.keyboard,
               ),
               tooltip: _typing ? 'Use the camera' : 'Type the number',
-              onPressed: () => setState(() => _typing = !_typing),
+              onPressed: () => _setTyping(!_typing),
             ),
         ],
       ),
       body: SafeArea(
-        child: Column(
-          children: <Widget>[
-            Expanded(
-              child: _typing || _camera == null
-                  ? _TypeItIn(
-                      controller: _typed,
-                      onSubmit: _submitTyped,
-                      cameraAvailable: _cameraIsPossible,
-                      onReadLabel: canReadLabels(ref)
-                          ? _readLabelWithNoBarcode
-                          : null,
-                    )
-                  : _CameraView(
+        child: _typing || _camera == null
+            ? ListView(
+                key: const Key('ingredient-barcode-scroll'),
+                children: [
+                  if (IngredientFoodCaptureScope.of(context)
+                      case final capture?)
+                    Padding(
+                      padding: const EdgeInsets.all(HearthSpacing.md),
+                      child: IngredientFoodBanner(capture: capture),
+                    ),
+                  _TypeItIn(
+                    controller: _typed,
+                    onSubmit: _submitTyped,
+                    cameraAvailable: _cameraIsPossible,
+                    onReadLabel: canReadLabels(ref)
+                        ? _readLabelWithNoBarcode
+                        : null,
+                  ),
+                  _resultPanel(state),
+                ],
+              )
+            : IngredientFoodCaptureScope.of(context) != null
+            ? _ingredientCamera(state)
+            : Column(
+                children: [
+                  Expanded(
+                    child: _CameraView(
                       controller: _camera!,
                       onDetect: _onDetect,
-                      onTypeInstead: () => setState(() => _typing = true),
+                      onTypeInstead: () => _setTyping(true),
                       onReadLabel: canReadLabels(ref)
                           ? _readLabelWithNoBarcode
                           : null,
                     ),
-            ),
-            _ResultPanel(
-              state: state,
-              pickFood: widget.pickFood,
-              onRetry: () => ref.read(barcodeLookupProvider.notifier).retry(),
-              onClear: () {
-                _lastDetected = null;
-                _typed.clear();
-                ref.read(barcodeLookupProvider.notifier).reset();
-              },
-            ),
-          ],
-        ),
+                  ),
+                  Flexible(
+                    child: SingleChildScrollView(child: _resultPanel(state)),
+                  ),
+                ],
+              ),
       ),
     );
   }
+
+  Widget _ingredientCamera(BarcodeLookupState state) => SingleChildScrollView(
+    key: const Key('ingredient-camera-scroll'),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(HearthSpacing.md),
+          child: IngredientFoodBanner(
+            capture: IngredientFoodCaptureScope.of(context)!,
+          ),
+        ),
+        SizedBox(
+          height: math.min(MediaQuery.sizeOf(context).width * 0.75, 300),
+          child: _CameraView(
+            controller: _camera!,
+            onDetect: _onDetect,
+            onTypeInstead: () => _setTyping(true),
+            showInstructions: false,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(HearthSpacing.md),
+          child: ValueListenableBuilder<MobileScannerState>(
+            valueListenable: _camera!,
+            builder: (context, cameraState, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  cameraState.error == null
+                      ? 'Line up the barcode inside the frame'
+                      : 'The camera is not available. You can type the number instead.',
+                  style: context.text.body,
+                ),
+                const SizedBox(height: HearthSpacing.sm),
+                OutlinedButton.icon(
+                  key: const Key('ingredient-camera-type'),
+                  onPressed: () => _setTyping(true),
+                  icon: const Icon(Icons.keyboard),
+                  label: const Text(
+                    'Type the number',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                if (canReadLabels(ref)) ...[
+                  const SizedBox(height: HearthSpacing.sm),
+                  OutlinedButton.icon(
+                    key: const Key('ingredient-camera-label'),
+                    onPressed: _readLabelWithNoBarcode,
+                    icon: const Icon(Icons.document_scanner_outlined),
+                    label: const Text(
+                      'No barcode? Read the label',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        _resultPanel(state),
+      ],
+    ),
+  );
+
+  Widget _resultPanel(BarcodeLookupState state) => _ResultPanel(
+    state: state,
+    pickFood: widget.pickFood,
+    onRetry: () => ref.read(barcodeLookupProvider.notifier).retry(),
+    onClear: () {
+      _lastDetected = null;
+      _typed.clear();
+      ref.read(barcodeLookupProvider.notifier).reset();
+    },
+  );
 }
 
 /// The always-available way in.
@@ -285,7 +390,7 @@ class _TypeItIn extends StatelessWidget {
               TextField(
                 controller: controller,
                 keyboardType: TextInputType.number,
-                autofocus: true,
+                autofocus: IngredientFoodCaptureScope.of(context) == null,
                 onSubmitted: (_) => onSubmit(),
                 style: context.text.body,
                 decoration: InputDecoration(
@@ -301,7 +406,7 @@ class _TypeItIn extends StatelessWidget {
               ),
               const SizedBox(height: HearthSpacing.md),
               SizedBox(
-                height: HearthTouch.minTarget,
+                width: double.infinity,
                 child: FilledButton(
                   onPressed: onSubmit,
                   child: const Text('Look it up'),
@@ -313,7 +418,7 @@ class _TypeItIn extends StatelessWidget {
               if (onReadLabel case final VoidCallback read) ...<Widget>[
                 const SizedBox(height: HearthSpacing.md),
                 SizedBox(
-                  height: HearthTouch.minTarget,
+                  width: double.infinity,
                   child: TextButton.icon(
                     onPressed: read,
                     icon: const Icon(Icons.document_scanner_outlined),
@@ -343,8 +448,10 @@ class _CameraView extends StatelessWidget {
     required this.onDetect,
     required this.onTypeInstead,
     this.onReadLabel,
+    this.showInstructions = true,
   });
 
+  final bool showInstructions;
   final MobileScannerController controller;
   final void Function(BarcodeCapture) onDetect;
   final VoidCallback onTypeInstead;
@@ -368,10 +475,16 @@ class _CameraView extends StatelessWidget {
                 // where autofocus struggles most; letting a tap re-focus
                 // costs nothing.
                 tapToFocus: true,
-                errorBuilder: (
-                  BuildContext context,
-                  MobileScannerException error,
-                ) => _CameraUnavailable(onTypeInstead: onTypeInstead),
+                errorBuilder:
+                    (BuildContext context, MobileScannerException error) =>
+                        showInstructions
+                        ? _CameraUnavailable(onTypeInstead: onTypeInstead)
+                        : const Center(
+                            child: Icon(
+                              Icons.videocam_off_outlined,
+                              semanticLabel: 'Camera unavailable',
+                            ),
+                          ),
                 overlayBuilder: (BuildContext context, BoxConstraints _) =>
                     _Viewfinder(frame: frame),
               ),
@@ -383,15 +496,16 @@ class _CameraView extends StatelessWidget {
             // perfectly and can never be pressed. It has to sit above the
             // scanner instead, where taps reach it and everything it does not
             // cover still falls through to tap-to-focus.
-            Positioned(
-              left: 0,
-              right: 0,
-              top: frame.bottom + HearthSpacing.lg,
-              child: _BelowTheFrame(
-                controller: controller,
-                onReadLabel: onReadLabel,
+            if (showInstructions)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: frame.bottom + HearthSpacing.lg,
+                child: _BelowTheFrame(
+                  controller: controller,
+                  onReadLabel: onReadLabel,
+                ),
               ),
-            ),
           ],
         );
       },
@@ -721,7 +835,10 @@ class _ResultPanel extends ConsumerWidget {
 
     final String? saved = await context.push<String>(
       '/food/new',
-      extra: FoodDraft.forBarcode(barcode).withLabel(reading),
+      extra: IngredientFoodCaptureScope.routeExtra(
+        context,
+        draft: FoodDraft.forBarcode(barcode).withLabel(reading),
+      ),
     );
     if (!context.mounted) return;
     if (pickFood && saved != null) {
@@ -736,7 +853,10 @@ class _ResultPanel extends ConsumerWidget {
     // food that comes out of a miss is found by the next scan (spec §5.5).
     final String? saved = await context.push<String>(
       '/food/new',
-      extra: FoodDraft.forBarcode(barcode),
+      extra: IngredientFoodCaptureScope.routeExtra(
+        context,
+        draft: FoodDraft.forBarcode(barcode),
+      ),
     );
     if (!context.mounted) return;
     // A miss during ingredient matching still ends in a match: the food the
@@ -788,8 +908,11 @@ class _ProduceState extends ConsumerState<_Produce> {
   Future<void> _addByHand() async {
     final String? saved = await context.push<String>(
       '/food/new',
-      extra: FoodDraft.forBarcode(widget.produce.code)
-          .copyWith(name: widget.produce.label),
+      extra: IngredientFoodCaptureScope.routeExtra(
+        context,
+        draft: FoodDraft.forBarcode(widget.produce.code)
+            .copyWith(name: widget.produce.label),
+      ),
     );
     if (!mounted) return;
     if (widget.pickFood && saved != null) {
@@ -933,9 +1056,17 @@ class _Found extends ConsumerWidget {
                 ],
               ),
             ),
-            _SourceBadge(source: match.source, fromLibrary: match.fromLibrary),
+            if (MediaQuery.textScalerOf(context).scale(14) <= 20)
+              _SourceBadge(
+                source: match.source,
+                fromLibrary: match.fromLibrary,
+              ),
           ],
         ),
+        if (MediaQuery.textScalerOf(context).scale(14) > 20) ...[
+          const SizedBox(height: HearthSpacing.sm),
+          _SourceBadge(source: match.source, fromLibrary: match.fromLibrary),
+        ],
         if (first != null) ...<Widget>[
           const SizedBox(height: HearthSpacing.sm),
           Text(
@@ -976,7 +1107,7 @@ class _Found extends ConsumerWidget {
         if (_labelWouldHelp && canReadLabels(ref)) ...<Widget>[
           SizedBox(
             width: double.infinity,
-            height: HearthTouch.minTarget,
+
             child: OutlinedButton.icon(
               onPressed: () => _readLabel(context),
               icon: const Icon(Icons.document_scanner_outlined),
@@ -985,23 +1116,15 @@ class _Found extends ConsumerWidget {
           ),
           const SizedBox(height: HearthSpacing.sm),
         ],
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: SizedBox(
-                height: HearthTouch.minTarget,
-                child: FilledButton(
-                  onPressed: () => _primaryAction(context),
-                  child: Text(_primaryLabel),
-                ),
-              ),
-            ),
-            const SizedBox(width: HearthSpacing.sm),
-            TextButton(
-              onPressed: onDiscard,
-              child: Text(match.fromLibrary && !pickFood ? 'Done' : 'Discard'),
-            ),
-          ],
+        _CaptureActions(
+          primary: FilledButton(
+            onPressed: () => _primaryAction(context),
+            child: Text(_primaryLabel, textAlign: TextAlign.center),
+          ),
+          secondary: TextButton(
+            onPressed: onDiscard,
+            child: Text(match.fromLibrary && !pickFood ? 'Done' : 'Discard'),
+          ),
         ),
       ],
     );
@@ -1037,7 +1160,10 @@ class _Found extends ConsumerWidget {
   }
 
   Future<void> _open(BuildContext context) async {
-    await context.push<void>('/food/${match.food.id}');
+    await context.push<void>(
+      '/food/${match.food.id}',
+      extra: IngredientFoodCaptureScope.routeExtra(context),
+    );
     onReviewed();
   }
 
@@ -1057,7 +1183,10 @@ class _Found extends ConsumerWidget {
     final FoodDraft draft = FoodDraft.fromLookup(match.food);
     final String? saved = await context.push<String>(
       '/food/new',
-      extra: reading == null ? draft : draft.withLabel(reading),
+      extra: IngredientFoodCaptureScope.routeExtra(
+        context,
+        draft: reading == null ? draft : draft.withLabel(reading),
+      ),
     );
     if (!context.mounted) return;
     if (pickFood && saved != null) {
@@ -1160,7 +1289,7 @@ class _Message extends StatelessWidget {
         if (leadingLabel != null) ...<Widget>[
           SizedBox(
             width: double.infinity,
-            height: HearthTouch.minTarget,
+
             child: FilledButton.icon(
               onPressed: onLeading,
               icon: Icon(leadingIcon, size: 18),
@@ -1169,29 +1298,47 @@ class _Message extends StatelessWidget {
           ),
           const SizedBox(height: HearthSpacing.sm),
         ],
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: SizedBox(
-                height: HearthTouch.minTarget,
-                child: leadingLabel == null
-                    ? FilledButton(
-                        onPressed: onAction,
-                        child: Text(actionLabel),
-                      )
-                    : OutlinedButton(
-                        onPressed: onAction,
-                        child: Text(actionLabel),
-                      ),
-              ),
-            ),
-            if (secondaryLabel != null) ...<Widget>[
-              const SizedBox(width: HearthSpacing.sm),
-              TextButton(onPressed: onSecondary, child: Text(secondaryLabel!)),
-            ],
-          ],
+        _CaptureActions(
+          primary: leadingLabel == null
+              ? FilledButton(
+                  onPressed: onAction,
+                  child: Text(actionLabel, textAlign: TextAlign.center),
+                )
+              : OutlinedButton(
+                  onPressed: onAction,
+                  child: Text(actionLabel, textAlign: TextAlign.center),
+                ),
+          secondary: secondaryLabel == null
+              ? null
+              : TextButton(
+                  onPressed: onSecondary,
+                  child: Text(secondaryLabel!, textAlign: TextAlign.center),
+                ),
         ),
       ],
     );
   }
+}
+
+class _CaptureActions extends StatelessWidget {
+  const _CaptureActions({required this.primary, this.secondary});
+  final Widget primary;
+  final Widget? secondary;
+
+  @override
+  Widget build(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(14) > 20
+      ? Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [primary, ?secondary],
+        )
+      : Row(
+          children: [
+            Expanded(child: primary),
+            if (secondary != null) ...[
+              const SizedBox(width: HearthSpacing.sm),
+              secondary!,
+            ],
+          ],
+        );
 }

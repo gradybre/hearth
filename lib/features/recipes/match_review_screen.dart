@@ -1,9 +1,11 @@
+import 'dart:collection';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
-import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../data/adapters/recipe_ai.dart';
@@ -16,38 +18,44 @@ import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/units/quantity.dart';
 import '../../domain/units/unit.dart';
 import '../foods/food_draft.dart';
+import '../foods/food_picker.dart';
+import '../foods/ingredient_food_capture.dart';
+import '../foods/read_label_sheet.dart';
 import 'match_review_controller.dart';
 
-/// Reviews what the nutrition sources made of a recipe's ingredients
-/// (spec §5.3's match review screen).
-///
-/// The workhorse: each row says which food was chosen, where it came from,
-/// which serving was used and what that works out to — because a match the
-/// user cannot check is a macro they cannot trust. Nothing is written until
-/// the whole list has been seen and applied (CLAUDE.md rule 4).
-///
-/// Returns the accepted matches, keyed by ingredient name.
-Future<Map<String, String>?> showMatchReview(
+/// Recipe matches returned together, plus explicit household remembering.
+/// This remains a Map for existing callers; callers that persist remembered
+/// wording must use [rememberIngredientNames], never all of [keys].
+class ReviewedIngredientMatches extends UnmodifiableMapView<String, String> {
+  ReviewedIngredientMatches(
+    Map<String, String> matches, {
+    Set<String> rememberIngredientNames = const {},
+  }) : rememberIngredientNames = Set.unmodifiable(rememberIngredientNames),
+       super(Map<String, String>.of(matches));
+
+  final Set<String> rememberIngredientNames;
+}
+
+Future<ReviewedIngredientMatches?> showMatchReview(
   BuildContext context, {
   required List<ParsedIngredient> ingredients,
   List<AiEstimate> estimates = const <AiEstimate>[],
-}) => Navigator.of(context).push<Map<String, String>>(
-  MaterialPageRoute<Map<String, String>>(
-    builder: (BuildContext context) =>
-        _MatchReviewScreen(ingredients: ingredients, estimates: estimates),
+}) => Navigator.of(context).push<ReviewedIngredientMatches>(
+  MaterialPageRoute<ReviewedIngredientMatches>(
+    builder: (context) => ProviderScope(
+      overrides: [matchReviewProvider.overrideWith(MatchReviewController.new)],
+      child: _MatchReviewScreen(ingredients: ingredients, estimates: estimates),
+    ),
   ),
 );
 
 class _MatchReviewScreen extends ConsumerStatefulWidget {
   const _MatchReviewScreen({
     required this.ingredients,
-    this.estimates = const <AiEstimate>[],
+    required this.estimates,
   });
 
   final List<ParsedIngredient> ingredients;
-
-  /// The model's own numbers, for lines the real chain cannot match
-  /// (spec §5.4).
   final List<AiEstimate> estimates;
 
   @override
@@ -56,10 +64,32 @@ class _MatchReviewScreen extends ConsumerStatefulWidget {
 
 class _MatchReviewScreenState extends ConsumerState<_MatchReviewScreen> {
   bool _applying = false;
+  int? _resolving;
+  int? _focusIndex;
+  String? _error;
+  late final String _household;
+  late final String _user;
+  final Map<int, GlobalKey> _rowKeys = {};
+
+  // Stable IDs across a partial library save and retry. Recipe matches still
+  // return in one result only after the entire reviewed selection is ready.
+  final Map<String, Food> _prepared = {};
+  final Set<String> _saved = {};
+
+  bool get _sameAccount =>
+      mounted &&
+      ref.read(currentHouseholdIdProvider) == _household &&
+      ref.read(currentUserIdProvider) == _user;
+  bool get _canDeliver =>
+      _sameAccount && (ModalRoute.of(context)?.isCurrent ?? false);
+  bool get _busy => _applying || _resolving != null;
 
   @override
   void initState() {
     super.initState();
+    // Capture identity before the first async lookup, not when it returns.
+    _household = ref.read(currentHouseholdIdProvider);
+    _user = ref.read(currentUserIdProvider);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         ref
@@ -69,47 +99,166 @@ class _MatchReviewScreenState extends ConsumerState<_MatchReviewScreen> {
     });
   }
 
-  /// Saves every accepted food into the library, then hands the matches back.
-  ///
-  /// The foods are saved here rather than earlier because until this moment
-  /// they were only proposals. Each arrives through [FoodDraft.fromLookup], so
-  /// it gets ids of this library's own and loses the source's spurious
-  /// precision, exactly as a scanned food does.
-  Future<void> _apply(MatchReviewReady ready) async {
-    setState(() => _applying = true);
+  Future<void> _advance(int index) async {
+    final state = ref.read(matchReviewProvider);
+    if (state is! MatchReviewReady) return;
+    final next = state.nextUnresolvedAfter(index);
+    setState(() => _focusIndex = next);
+    if (next == null) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || !_canDeliver) return;
+    final target = _rowKeys[next]?.currentContext;
+    if (target == null || !target.mounted) return;
+    await Scrollable.ensureVisible(
+      target,
+      alignment: 0,
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 220),
+    );
+  }
+
+  Future<void> _resolve(int index, _Resolution action) async {
+    final ready = ref.read(matchReviewProvider);
+    if (ready is! MatchReviewReady || _busy || !_canDeliver) return;
+    final row = ready.rows[index];
+    final capture = IngredientFoodCapture(
+      ingredientName: row.ingredient.name,
+      authoredLine: row.authoredLine,
+      recipeLineCount: row.lineCount,
+    );
+    final repository = ref.read(foodRepositoryProvider);
+    setState(() {
+      _resolving = index;
+      _error = null;
+    });
     try {
-      final Map<String, String> matches = <String, String>{};
-      for (final IngredientMatchRow row in ready.accepted) {
-        final Food food = row.food != null
-            ? FoodDraft.fromLookup(row.food!).toFood()
-            : _foodFromEstimate(row);
-        await ref.read(foodRepositoryProvider).save(food);
-        matches[row.ingredient.name] = food.id;
+      String? chosen;
+      switch (action) {
+        case _Resolution.search:
+          chosen = await showFoodPicker(
+            context,
+            ingredientName: row.ingredient.name,
+            authoredLine: row.authoredLine,
+            capture: capture,
+            currentFoodId: row.fromLibrary ? row.food?.id : null,
+            offerSeasoning: false,
+            offerUnmatch: false,
+            rememberOnChoose: false,
+          );
+        case _Resolution.scan:
+          chosen = await context.push<String>(
+            '/food/scan?pick=1',
+            extra: IngredientFoodRouteExtra(capture: capture),
+          );
+        case _Resolution.manual:
+          chosen = await context.push<String>(
+            '/food/new',
+            extra: IngredientFoodRouteExtra(
+              capture: capture,
+              draft: FoodDraft.blank().copyWith(name: row.ingredient.name),
+            ),
+          );
+        case _Resolution.label:
+          final reading = await showReadLabelSheet(context, capture: capture);
+          if (!mounted || reading == null || !_canDeliver) return;
+          chosen = await context.push<String>(
+            '/food/new',
+            extra: IngredientFoodRouteExtra(
+              capture: capture,
+              draft: FoodDraft.blank()
+                  .copyWith(name: row.ingredient.name)
+                  .withLabel(reading),
+            ),
+          );
       }
-      if (mounted) Navigator.of(context).pop(matches);
+      if (!_canDeliver || chosen == null) return;
+      final food = await repository.byId(chosen);
+      if (!mounted || !_canDeliver) return;
+      if (food == null || food.isDeleted || food.isModifier) {
+        setState(
+          () =>
+              _error = 'That food is no longer available. Choose another food.',
+        );
+        return;
+      }
+      ref.read(matchReviewProvider.notifier).replaceWithSavedFood(index, food);
+      await _advance(index);
+    } catch (_) {
+      if (_canDeliver) {
+        setState(
+          () => _error = 'Could not use that food. Your choices are still here. Try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _resolving = null);
+    }
+  }
+
+  Future<void> _apply(MatchReviewReady ready) async {
+    if (_busy || !_canDeliver) return;
+    final repository = ref.read(foodRepositoryProvider);
+    setState(() {
+      _applying = true;
+      _error = null;
+    });
+    try {
+      final Map<String, String> matches = {};
+      final Set<String> remember = {};
+      for (int i = 0; i < ready.rows.length; i++) {
+        final row = ready.rows[i];
+        if (!row.resolved) continue;
+        if (!mounted || !_canDeliver) return;
+        final Food food;
+        if (row.fromLibrary) {
+          final existing = await repository.byId(row.food!.id);
+          if (!mounted || !_canDeliver) return;
+          if (existing == null || existing.isDeleted || existing.isModifier) {
+            throw StateError('The selected food is no longer available.');
+          }
+          food = existing;
+        } else {
+          final key = '$i:${row.food?.id ?? 'estimate'}';
+          food = _prepared.putIfAbsent(
+            key,
+            () => row.food != null
+                ? FoodDraft.fromLookup(row.food!).toFood()
+                : _foodFromEstimate(row),
+          );
+          if (!_saved.contains(food.id)) {
+            await repository.save(food);
+            _saved.add(food.id);
+          }
+        }
+        if (!mounted || !_canDeliver) return;
+        matches[row.ingredient.name] = food.id;
+        if (row.remember) remember.add(row.ingredient.name);
+      }
+      if (mounted && _canDeliver) {
+        Navigator.of(context).pop(
+          ReviewedIngredientMatches(matches, rememberIngredientNames: remember),
+        );
+      }
+    } catch (_) {
+      if (_canDeliver) {
+        setState(
+          () => _error = 'Could not apply these matches. Your choices are still here. Try again.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _applying = false);
     }
   }
 
-  /// A food built from the model's own arithmetic, and labelled as such.
-  ///
-  /// [FoodSource.aiEstimate] is not decoration: it is what makes every later
-  /// view of this food say "AI estimate", so a number nobody verified can
-  /// never quietly pass for one that was (spec §5.4).
-  ///
-  /// The serving is the ingredient line itself, because that is what was
-  /// estimated — "2 tbsp olive oil", not olive oil per 100 g.
   Food _foodFromEstimate(IngredientMatchRow row) {
-    final AiEstimate estimate = row.estimate!;
+    final estimate = row.estimate!;
     final Quantity amount =
         row.ingredient.quantity ?? Quantity.of(1, Units.item);
-
     return Food(
       id: const Uuid().v4(),
       name: row.ingredient.name,
       source: FoodSource.aiEstimate,
-      servingOptions: <ServingOption>[
+      servingOptions: [
         ServingOption(
           id: const Uuid().v4(),
           label: QuantityFormat.formatAsAuthored(amount),
@@ -127,156 +276,188 @@ class _MatchReviewScreenState extends ConsumerState<_MatchReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    final MatchReviewState state = ref.watch(matchReviewProvider);
-    final double gutter = MediaQuery.sizeOf(context).width >= 840
+    ref.watch(currentHouseholdIdProvider);
+    ref.watch(currentUserIdProvider);
+    final state = ref.watch(matchReviewProvider);
+    final canRead = canReadLabels(ref);
+    final gutter = MediaQuery.sizeOf(context).width >= 840
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
-
-    return Scaffold(
-      backgroundColor: colors.background,
-      appBar: AppBar(
-        backgroundColor: colors.surface,
-        surfaceTintColor: Colors.transparent,
-        // Short enough to sit beside "Use these" without truncating to
-        // "Check the mat…".
-        title: Text('Matches', style: context.text.sectionHeader),
-        leading: TextButton(
-          onPressed: _applying ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        leadingWidth: 88,
-        actions: <Widget>[
-          if (state is MatchReviewReady)
-            Padding(
-              padding: const EdgeInsets.only(right: HearthSpacing.sm),
-              child: FilledButton(
-                onPressed: _applying ? null : () => _apply(state),
-                child: Text(_applying ? 'Saving…' : 'Use these'),
-              ),
-            ),
-        ],
-      ),
-      body: SafeArea(
-        child: switch (state) {
-          MatchReviewIdle() => const Center(child: CircularProgressIndicator()),
-          MatchReviewSearching(:final int done, :final int total) => _Progress(
-            done: done,
-            total: total,
+    return PopScope(
+      canPop: !_applying,
+      child: Scaffold(
+        backgroundColor: context.colors.background,
+        appBar: AppBar(
+          title: Text('Matches', style: context.text.sectionHeader),
+          leading: IconButton(
+            tooltip: 'Cancel match review',
+            onPressed: _applying ? null : () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.close),
           ),
-          MatchReviewReady(:final List<IngredientMatchRow> rows) =>
-            rows.isEmpty
-                ? Center(
+        ),
+        body: SafeArea(
+          child: !_sameAccount
+              ? Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(gutter),
                     child: Text(
-                      'Nothing here needs a match.',
+                      'Your account changed. Close this review and open the recipe again.',
                       style: context.text.body,
                     ),
-                  )
-                : ListView(
-                    padding: EdgeInsets.all(gutter),
-                    children: <Widget>[
-                      _Summary(state: state),
-                      const SizedBox(height: HearthSpacing.lg),
-                      for (int i = 0; i < rows.length; i++)
-                        Padding(
-                          padding: const EdgeInsets.only(
-                            bottom: HearthSpacing.sm,
-                          ),
-                          child: _MatchRow(
-                            row: rows[i],
-                            onChanged: (bool value) => ref
-                                .read(matchReviewProvider.notifier)
-                                .setAccepted(i, accepted: value),
-                          ),
-                        ),
-                    ],
                   ),
-        },
+                )
+              : switch (state) {
+                  MatchReviewIdle() => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                  MatchReviewSearching(:final done, :final total) => Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(gutter),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: HearthSpacing.md),
+                          Semantics(
+                            liveRegion: true,
+                            child: Text(
+                              'Looking up $done of $total',
+                              style: context.text.body,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  MatchReviewReady() => SingleChildScrollView(
+                    key: const Key('match-review-scroll'),
+                    padding: EdgeInsets.all(gutter),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 840),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Semantics(
+                              liveRegion: true,
+                              child: Text(
+                                '${state.resolvedCount} of ${state.rows.length} resolved',
+                                key: const Key('match-review-count'),
+                                style: context.text.sectionHeader,
+                              ),
+                            ),
+                            const SizedBox(height: HearthSpacing.xs),
+                            Text(
+                              'Unmatched lines won’t block saving.',
+                              style: context.text.body.copyWith(
+                                color: context.colors.textSecondary,
+                              ),
+                            ),
+                            if (state.skippedCount > 0)
+                              Text(
+                                '${state.skippedCount} skipped for now',
+                                style: context.text.metadata,
+                              ),
+                            const SizedBox(height: HearthSpacing.lg),
+                            for (int i = 0; i < state.rows.length; i++)
+                              Padding(
+                                key: _rowKeys.putIfAbsent(i, GlobalKey.new),
+                                padding: const EdgeInsets.only(
+                                  bottom: HearthSpacing.md,
+                                ),
+                                child: _MatchRow(
+                                  index: i,
+                                  row: state.rows[i],
+                                  active: _focusIndex == i,
+                                  enabled: !_busy,
+                                  canRead: canRead,
+                                  onAccept: (value) {
+                                    ref
+                                        .read(matchReviewProvider.notifier)
+                                        .setAccepted(i, accepted: value);
+                                    if (value) _advance(i);
+                                  },
+                                  onRemember: (value) => ref
+                                      .read(matchReviewProvider.notifier)
+                                      .setRemember(i, remember: value),
+                                  onResolve: (action) => _resolve(i, action),
+                                  onSkip: () {
+                                    ref
+                                        .read(matchReviewProvider.notifier)
+                                        .skip(i);
+                                    _advance(i);
+                                  },
+                                ),
+                              ),
+                            if (_error != null) ...[
+                              Semantics(
+                                liveRegion: true,
+                                child: Text(
+                                  _error!,
+                                  key: const Key('match-review-error'),
+                                  style: context.text.body.copyWith(
+                                    color: context.colors.error,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: HearthSpacing.md),
+                            ],
+                            FilledButton(
+                              key: const Key('match-review-apply'),
+                              onPressed: _busy ? null : () => _apply(state),
+                              child: Text(
+                                _applying
+                                    ? 'Applying…'
+                                    : 'Apply reviewed ${state.resolvedCount} together',
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            const SizedBox(height: HearthSpacing.sm),
+                            Text(
+                              'Only these reviewed matches change the recipe. '
+                              'Household wording is remembered only where you select it.',
+                              style: context.text.metadata.copyWith(
+                                color: context.colors.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                },
+        ),
       ),
     );
   }
 }
 
-class _Progress extends StatelessWidget {
-  const _Progress({required this.done, required this.total});
+enum _Resolution { search, scan, label, manual }
 
-  final int done;
-  final int total;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        const CircularProgressIndicator(),
-        const SizedBox(height: HearthSpacing.md),
-        Semantics(
-          liveRegion: true,
-          child: Text(
-            'Looking up $done of $total',
-            style: context.text.body.copyWith(
-              color: context.colors.textSecondary,
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _Summary extends StatelessWidget {
-  const _Summary({required this.state});
-
-  final MatchReviewReady state;
-
-  @override
-  Widget build(BuildContext context) {
-    final int found = state.foundCount;
-    final int total = state.rows.length;
-    final int unsure = state.rows
-        .where((IngredientMatchRow r) => r.isAmbiguous)
-        .length;
-
-    final int ready = found - unsure;
-
-    // Leads with what is actually ready to use, not with what was merely
-    // found: "Found all 2" above two unticked toss-ups reads as a success the
-    // screen immediately takes back.
-    final String headline = switch ((found, ready)) {
-      (0, _) => 'Nothing found.',
-      (_, 0) => 'Nothing certain enough to tick.',
-      _ when ready == total => 'All $total matched.',
-      _ => '$ready of $total matched.',
-    };
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(headline, style: context.text.sectionHeader),
-        const SizedBox(height: HearthSpacing.xs),
-        Text(
-          unsure == 0
-              ? 'Untick anything that looks wrong. Whatever is left unmatched '
-                    'is fine — the recipe saves either way.'
-              : '$unsure ${unsure == 1 ? 'is a toss-up' : 'are toss-ups'} and '
-                    'left unticked. Tick one only if it is right.',
-          style: context.text.body.copyWith(
-            color: context.colors.textSecondary,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// One ingredient, and what it was matched to.
 class _MatchRow extends StatelessWidget {
-  const _MatchRow({required this.row, required this.onChanged});
+  const _MatchRow({
+    required this.index,
+    required this.row,
+    required this.active,
+    required this.enabled,
+    required this.canRead,
+    required this.onAccept,
+    required this.onRemember,
+    required this.onResolve,
+    required this.onSkip,
+  });
 
+  final int index;
   final IngredientMatchRow row;
-  final ValueChanged<bool> onChanged;
+  final bool active;
+  final bool enabled;
+  final bool canRead;
+  final ValueChanged<bool> onAccept;
+  final ValueChanged<bool> onRemember;
+  final ValueChanged<_Resolution> onResolve;
+  final VoidCallback onSkip;
 
-  String get _sourceLabel => switch (row.food?.source) {
+  String get _source => switch (row.food?.source) {
     FoodSource.openFoodFacts => 'Open Food Facts',
     FoodSource.usda => 'USDA',
     FoodSource.manual => 'Your library',
@@ -285,301 +466,238 @@ class _MatchRow extends StatelessWidget {
     null => '',
   };
 
-  /// What the match actually works out to for this line.
-  ///
-  /// The number is the point: a plausible food name attached to the wrong
-  /// serving is exactly the error this screen exists to catch.
-  String _macrosLine(BuildContext context) {
-    final Food? food = row.food;
-    if (food == null) return '';
-
-    final IngredientMacros computed = MacroCalculator.forIngredient(
+  String _macrosFor(ParsedIngredient ingredient) {
+    final computed = MacroCalculator.forIngredient(
       RecipeIngredient(
         id: 'preview',
         sectionId: 'preview',
-        name: row.ingredient.name,
+        name: ingredient.name,
         sortOrder: 0,
-        quantity: row.ingredient.quantity,
+        quantity: ingredient.quantity,
       ),
-      food: food,
+      food: row.food,
     );
-
     return switch (computed.status) {
       IngredientMacroStatus.resolved =>
         '${computed.macros.kcal.round()} kcal · '
             '${computed.macros.proteinG.round()} g protein',
       IngredientMacroStatus.noQuantity => 'No amount on the line',
       IngredientMacroStatus.unconvertible =>
-        'Cannot convert ${row.ingredient.quantity == null ? '' : QuantityFormat.formatAsAuthored(row.ingredient.quantity!)} '
-            'to this food\'s servings',
+        'Cannot convert ${QuantityFormat.formatAsAuthored(ingredient.quantity!)} to this food\'s servings',
       _ => '',
     };
   }
 
+  Widget _action(String label, IconData icon, _Resolution action) =>
+      OutlinedButton.icon(
+        key: Key('match-$index-${action.name}'),
+        onPressed: enabled ? () => onResolve(action) : null,
+        icon: Icon(icon, size: 18),
+        label: Text(label, textAlign: TextAlign.center),
+      );
+
   @override
   Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    final Food? food = row.food;
-
-    if (food == null) {
-      return row.estimate == null
-          ? _NoMatchRow(ingredient: row.ingredient.name)
-          : _EstimateRow(row: row, onChanged: onChanged);
-    }
-
-    final String macros = _macrosLine(context);
-    final ServingOption? serving = food.defaultServing;
-
-    return Semantics(
-      checked: row.accepted,
-      label:
-          '${row.ingredient.name}, matched to ${food.name} from $_sourceLabel. '
-          '$macros.'
-          '${row.isAmbiguous ? ' Uncertain — several foods fit equally well.' : ''}',
-      onTap: () => onChanged(!row.accepted),
-      excludeSemantics: true,
-      child: Material(
-        color: row.accepted ? colors.surface : colors.surfaceSunken,
+    final colors = context.colors;
+    final food = row.food;
+    return Container(
+      key: Key('match-row-$index'),
+      padding: const EdgeInsets.all(HearthSpacing.md),
+      decoration: BoxDecoration(
+        color: colors.surface,
         borderRadius: BorderRadius.circular(HearthRadius.md),
-        child: InkWell(
-          onTap: () => onChanged(!row.accepted),
-          borderRadius: BorderRadius.circular(HearthRadius.md),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(HearthRadius.md),
-              border: Border.all(
-                color: row.accepted ? colors.outlineStrong : colors.outline,
-              ),
+        border: Border.all(
+          color: active ? colors.outlineStrong : colors.outline,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (active) Text('Next ingredient', style: context.text.metadata),
+          if (row.lineCount > 1) ...[
+            Text(
+              'Applies to ${row.lineCount} recipe lines',
+              style: context.text.label,
             ),
-            padding: const EdgeInsets.all(HearthSpacing.md),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Icon(
-                  row.accepted
-                      ? Icons.check_box
-                      : Icons.check_box_outline_blank,
-                  size: 20,
-                  color: row.accepted ? colors.accent : colors.textMuted,
-                ),
-                const SizedBox(width: HearthSpacing.md),
-                Expanded(
-                  child: Column(
+            Text(
+              'Choose, skip, or remember once for all these lines.',
+              style: context.text.metadata,
+            ),
+            const SizedBox(height: HearthSpacing.sm),
+          ],
+          for (final line in row.authoredLines)
+            Text(line, style: context.text.ingredient),
+          const SizedBox(height: HearthSpacing.sm),
+          if (food != null || row.estimate != null)
+            Semantics(
+              checked: row.accepted,
+              label:
+                  '${row.authoredLine}. ${food?.name ?? 'AI estimate'}. '
+                  '${row.accepted ? 'Included in review' : 'Not included in review'}.',
+              onTap: enabled ? () => onAccept(!row.accepted) : null,
+              child: InkWell(
+                key: Key('match-$index-accept'),
+                onTap: enabled ? () => onAccept(!row.accepted) : null,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: HearthSpacing.sm,
+                  ),
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        row.ingredient.raw.trim().isEmpty
-                            ? row.ingredient.name
-                            : row.ingredient.raw.trim(),
-                        style: context.text.ingredient,
-                      ),
-                      const SizedBox(height: HearthSpacing.xxs),
-                      Row(
-                        children: <Widget>[
-                          Icon(
-                            Icons.arrow_right_alt,
-                            size: 16,
-                            color: colors.textMuted,
-                          ),
-                          const SizedBox(width: HearthSpacing.xxs),
-                          Expanded(
-                            child: Text(
-                              food.brand == null
-                                  ? food.name
-                                  : '${food.name} · ${food.brand}',
-                              style: context.text.metadata.copyWith(
-                                color: colors.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: HearthSpacing.xxs),
-                      Text(
-                        <String>[
-                          _sourceLabel,
-                          if (serving != null) 'per ${serving.label}',
-                          if (macros.isNotEmpty) macros,
-                        ].join(' · '),
-                        style: context.text.metadata.copyWith(
-                          color: colors.textMuted,
+                    children: [
+                      ExcludeSemantics(
+                        child: Icon(
+                          row.accepted
+                              ? Icons.check_box
+                              : Icons.check_box_outline_blank,
+                          color: colors.accent,
                         ),
                       ),
-                      if (row.isAmbiguous) ...<Widget>[
-                        const SizedBox(height: HearthSpacing.xs),
-                        Row(
-                          children: <Widget>[
-                            // Never colour alone (§6.3).
-                            Icon(
-                              Icons.help_outline,
-                              size: 14,
-                              color: colors.error,
-                            ),
-                            const SizedBox(width: HearthSpacing.xxs),
-                            Expanded(
-                              child: Text(
+                      const SizedBox(width: HearthSpacing.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (food != null) ...[
+                              Text(
+                                food.brand == null
+                                    ? food.name
+                                    : '${food.name} · ${food.brand}',
+                                style: context.text.body,
+                              ),
+                              Text(
+                                [
+                                  _source,
+                                  if (food.defaultServing != null)
+                                    'per ${food.defaultServing!.label}',
+                                  if (row.lineCount == 1 &&
+                                      _macrosFor(row.ingredient).isNotEmpty)
+                                    _macrosFor(row.ingredient),
+                                ].join(' · '),
+                                style: context.text.metadata.copyWith(
+                                  color: colors.textSecondary,
+                                ),
+                              ),
+                              if (row.lineCount > 1)
+                                for (final ingredient in row.ingredients)
+                                  Text(
+                                    '${ingredient.quantity == null ? ingredient.name : QuantityFormat.formatAsAuthored(ingredient.quantity!)}: ${_macrosFor(ingredient)}',
+                                    style: context.text.metadata.copyWith(
+                                      color: colors.textSecondary,
+                                    ),
+                                  ),
+                            ] else ...[
+                              Text(
+                                'Nothing found in a real database · about ${row.estimate!.kcal.round()} kcal'
+                                '${row.lineCount > 1 ? ' for ${row.authoredLines.first}' : ''}',
+                                style: context.text.body,
+                              ),
+                              Text(
+                                'AI estimate · Hearth\'s own guess — saved as an estimate, never as fact',
+                                style: context.text.metadata.copyWith(
+                                  color: colors.textSecondary,
+                                ),
+                              ),
+                            ],
+                            if (row.isAmbiguous)
+                              Text(
                                 'Several fit equally well — check this one',
                                 style: context.text.metadata.copyWith(
                                   color: colors.textSecondary,
                                 ),
                               ),
+                            Text(
+                              row.accepted
+                                  ? 'Included in review'
+                                  : 'Not included yet',
+                              style: context.text.metadata,
                             ),
                           ],
                         ),
-                      ],
+                      ),
                     ],
                   ),
                 ),
-              ],
+              ),
+            )
+          else
+            Text(
+              'Nothing found. Match it yourself, or leave it.',
+              style: context.text.body.copyWith(color: colors.textSecondary),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// An ingredient nothing was found for.
-///
-/// Not an error and not a blocker: §5.3 is explicit that missing data never
-/// stops a save. The recipe carries an incomplete flag instead, and the line
-/// can be matched by hand whenever the user cares to.
-class _NoMatchRow extends StatelessWidget {
-  const _NoMatchRow({required this.ingredient});
-
-  final String ingredient;
-
-  @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(HearthRadius.md),
-        border: Border.all(color: colors.outline),
-      ),
-      padding: const EdgeInsets.all(HearthSpacing.md),
-      child: Row(
-        children: <Widget>[
-          Icon(Icons.remove, size: 20, color: colors.textMuted),
-          const SizedBox(width: HearthSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(ingredient, style: context.text.ingredient),
-                const SizedBox(height: HearthSpacing.xxs),
-                Text(
-                  'Nothing found. Match it yourself, or leave it.',
-                  style: context.text.metadata.copyWith(
-                    color: colors.textMuted,
+          if (row.skipped)
+            Text(
+              'Skipped for now · nutrition remains incomplete',
+              style: context.text.metadata,
+            ),
+          const SizedBox(height: HearthSpacing.sm),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final actions = <Widget>[
+                _action('Search', Icons.search, _Resolution.search),
+                _action(
+                  'Scan barcode',
+                  Icons.qr_code_scanner,
+                  _Resolution.scan,
+                ),
+                if (canRead)
+                  _action(
+                    'Read label',
+                    Icons.document_scanner_outlined,
+                    _Resolution.label,
+                  ),
+                _action(
+                  'Enter nutrition',
+                  Icons.edit_outlined,
+                  _Resolution.manual,
+                ),
+                TextButton(
+                  key: Key('match-$index-skip'),
+                  onPressed: enabled ? onSkip : null,
+                  child: const Text(
+                    'Skip for now',
+                    textAlign: TextAlign.center,
                   ),
                 ),
-              ],
-            ),
+              ];
+              return MediaQuery.textScalerOf(context).scale(14) > 20
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final action in actions)
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: HearthSpacing.xs,
+                            ),
+                            child: action,
+                          ),
+                      ],
+                    )
+                  : Wrap(
+                      spacing: HearthSpacing.sm,
+                      runSpacing: HearthSpacing.xs,
+                      children: actions,
+                    );
+            },
           ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A line only the model has a number for (spec §5.4).
-///
-/// Offered because a rough number that admits to being rough beats a silent
-/// zero — but unticked, described as a guess, and saved with a source that
-/// makes every later view of it say so. It is the weakest thing on this
-/// screen and is dressed accordingly.
-class _EstimateRow extends StatelessWidget {
-  const _EstimateRow({required this.row, required this.onChanged});
-
-  final IngredientMatchRow row;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    final AiEstimate estimate = row.estimate!;
-
-    return Semantics(
-      checked: row.accepted,
-      label:
-          '${row.ingredient.name}. Nothing found in a real database. '
-          'Hearth\'s own estimate is ${estimate.kcal.round()} calories. '
-          'Not verified.',
-      onTap: () => onChanged(!row.accepted),
-      excludeSemantics: true,
-      child: Material(
-        color: row.accepted ? colors.surface : colors.surfaceSunken,
-        borderRadius: BorderRadius.circular(HearthRadius.md),
-        child: InkWell(
-          onTap: () => onChanged(!row.accepted),
-          borderRadius: BorderRadius.circular(HearthRadius.md),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(HearthRadius.md),
-              border: Border.all(
-                color: row.accepted ? colors.outlineStrong : colors.outline,
+          if (row.resolved)
+            Material(
+              color: Colors.transparent,
+              child: CheckboxListTile(
+                key: Key('match-$index-remember'),
+                value: row.remember,
+                onChanged: enabled
+                    ? (value) => onRemember(value ?? false)
+                    : null,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(
+                  'Remember “${row.ingredient.name}” for the household',
+                  style: context.text.metadata,
+                ),
               ),
             ),
-            padding: const EdgeInsets.all(HearthSpacing.md),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Icon(
-                  row.accepted
-                      ? Icons.check_box
-                      : Icons.check_box_outline_blank,
-                  size: 20,
-                  color: row.accepted ? colors.accent : colors.textMuted,
-                ),
-                const SizedBox(width: HearthSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        row.ingredient.raw.trim().isEmpty
-                            ? row.ingredient.name
-                            : row.ingredient.raw.trim(),
-                        style: context.text.ingredient,
-                      ),
-                      const SizedBox(height: HearthSpacing.xxs),
-                      Text(
-                        'Nothing found in a real database · '
-                        'about ${estimate.kcal.round()} kcal',
-                        style: context.text.metadata.copyWith(
-                          color: colors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: HearthSpacing.xs),
-                      Row(
-                        children: <Widget>[
-                          // Never colour alone (§6.3), and the words say what
-                          // the badge will say later.
-                          Icon(
-                            Icons.auto_awesome_outlined,
-                            size: 14,
-                            color: colors.error,
-                          ),
-                          const SizedBox(width: HearthSpacing.xxs),
-                          Expanded(
-                            child: Text(
-                              'Hearth\'s own guess — saved as an estimate, '
-                              'never as fact',
-                              style: context.text.metadata.copyWith(
-                                color: colors.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+        ],
       ),
     );
   }

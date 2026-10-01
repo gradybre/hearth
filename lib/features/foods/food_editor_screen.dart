@@ -12,7 +12,6 @@ import '../../app/theme/hearth_theme.dart';
 import '../../app/widgets/unsaved_work_guard.dart';
 import '../../data/adapters/label_reader.dart';
 import '../../data/local/editor_draft_store.dart';
-import '../../data/repositories/food_repository.dart';
 import '../../domain/format/serving_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/parsing/amount_parser.dart';
@@ -21,6 +20,7 @@ import '../../domain/shopping/walmart_product.dart';
 import '../../domain/units/mass_display_mode.dart';
 import '../../domain/units/unit.dart';
 import 'food_draft.dart';
+import 'ingredient_food_capture.dart';
 import 'read_label_sheet.dart';
 import 'read_walmart_link_sheet.dart';
 import 'walmart_link_controller.dart';
@@ -68,6 +68,27 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
       widget.initialLabel?.walmartLink ?? const WalmartLinkReading.notFound();
   bool _loaded = false;
   bool _saving = false;
+  String? _saveError;
+
+  // A new food keeps its ID through a failed save/return attempt. In
+  // particular, draft cleanup can fail after the food was already committed.
+  final String _newFoodId = const Uuid().v4();
+  late final String _openedHousehold;
+  late final String _openedUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _openedHousehold = ref.read(currentHouseholdIdProvider);
+    _openedUser = ref.read(currentUserIdProvider);
+  }
+
+  bool get _sameAccount =>
+      mounted &&
+      ref.read(currentHouseholdIdProvider) == _openedHousehold &&
+      ref.read(currentUserIdProvider) == _openedUser;
+  bool get _canReturnFood =>
+      _sameAccount && (ModalRoute.of(context)?.isCurrent ?? false);
 
   /// Waits out a burst of editing before writing the draft down (review N01).
   Timer? _draftTimer;
@@ -187,65 +208,60 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
   }
 
   Future<void> _save() async {
-    // A complete package/nutrition change waits on its own inline confirm
-    // (spec R10). Save commits what was confirmed and nothing else, so a
-    // changed servings-per-package count can never take effect without
-    // somebody having looked at the sentence it produces -- and an
-    // incomplete optional entry never blocks saving the food at all.
+    if (_saving || !_canReturnFood) return;
     if (!_draft.isValid ||
         _restaurantError != null ||
         _draft.packageNutritionNeedsConfirmation) {
       setState(() => _showErrors = true);
       return;
     }
-
-    final Food food = _draft.toFood();
-    final FoodRepository repository = ref.read(foodRepositoryProvider);
-
-    // Spec §5.5: a likely duplicate is a soft warning with a merge option,
-    // never a block — two genuinely different foods can share a name.
-    final List<Food> duplicates = await repository.likelyDuplicatesOf(food);
-    if (duplicates.isNotEmpty && mounted) {
-      final _DuplicateChoice? choice = await _confirmDuplicate(duplicates);
-      if (choice == null || choice.isGoBack) return;
-      // Re-checked after the dialog, not only before it. The guard below has
-      // always been here for this window — a route disposed while a dialog is
-      // open — and the branch underneath reads `ref` and `context`, both of
-      // which throw on a state that has gone.
-      if (!mounted) return;
-
-      // Using the one already there writes nothing at all: no second copy, no
-      // merge, no remap, no soft-delete (review N05, which asks for this half
-      // first for exactly that reason). The id handed back is the existing
-      // food's, so a scan started from a recipe ingredient attaches the food
-      // the household already has rather than a duplicate of it.
-      if (choice.existingId case final String id) {
-        await ref
-            .read(editorDraftStoreProvider)
-            .clear(kind: 'food', targetId: widget.foodId);
-        _restored = false;
-        if (mounted) Navigator.of(context).pop(id);
-        return;
-      }
-    }
-
-    if (!mounted) return;
-    setState(() => _saving = true);
+    bool needsFoodId = _draft.existingId == null;
+    final food = _draft.toFood(
+      idFactory: () {
+        // toFood requests the food ID before any missing serving IDs.
+        if (needsFoodId) {
+          needsFoodId = false;
+          return _newFoodId;
+        }
+        return const Uuid().v4();
+      },
+    );
+    bool committed = false;
+    final repository = ref.read(foodRepositoryProvider);
+    final drafts = ref.read(editorDraftStoreProvider);
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
     try {
+      final duplicates = await repository.likelyDuplicatesOf(food);
+      if (!mounted || !_canReturnFood) return;
+      if (duplicates.isNotEmpty) {
+        final choice = await _confirmDuplicate(duplicates);
+        if (!_canReturnFood || choice == null || choice.isGoBack) return;
+        if (choice.existingId case final String id) {
+          await drafts.clear(kind: 'food', targetId: widget.foodId);
+          if (!mounted || !_canReturnFood) return;
+          _restored = false;
+          Navigator.of(context).pop(id);
+          return;
+        }
+      }
+      if (!mounted || !_canReturnFood) return;
       await repository.save(food);
-
-      // The draft goes once the food is committed locally, and not before. A
-      // save that throws leaves it exactly where it was, which is the moment
-      // it is worth most.
-      await ref
-          .read(editorDraftStoreProvider)
-          .clear(kind: 'food', targetId: widget.foodId);
+      committed = true;
+      if (!mounted || !_canReturnFood) return;
+      await drafts.clear(kind: 'food', targetId: widget.foodId);
+      if (!mounted || !_canReturnFood) return;
       _restored = false;
-
-      // Pops the id, not nothing: a scan started from a recipe ingredient
-      // needs to know which food it just created so it can attach it. Callers
-      // that only wanted the food saved ignore the result.
-      if (mounted) Navigator.of(context).pop(food.id);
+      Navigator.of(context).pop(food.id);
+    } catch (_) {
+      if (_canReturnFood) {
+        setState(
+          () =>
+              _saveError = committed ? 'Food saved. Tap Save again to finish.' : 'Could not save this food. Your entries are still here. Try Save again.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -422,6 +438,21 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
           child: ListView(
             padding: EdgeInsets.all(gutter),
             children: <Widget>[
+              if (_saveError != null) ...[
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    _saveError!,
+                    style: context.text.body.copyWith(color: colors.error),
+                  ),
+                ),
+                const SizedBox(height: HearthSpacing.md),
+              ],
+              if (IngredientFoodCaptureScope.of(context)
+                  case final capture?) ...[
+                IngredientFoodBanner(capture: capture),
+                const SizedBox(height: HearthSpacing.lg),
+              ],
               _TextField(
                 label: 'Name',
                 value: _draft.name,
@@ -1057,7 +1088,7 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
     _draftTimer?.cancel();
     if (!_isDirty) return;
     _draftTimer = Timer(const Duration(seconds: 2), () async {
-      if (!mounted || !_isDirty) return;
+      if (!_sameAccount || !_isDirty) return;
       await ref
           .read(editorDraftStoreProvider)
           .save(
@@ -1077,10 +1108,12 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
     if (_draftAsked) return;
     _draftAsked = true;
 
-    final EditorDraft? draft = await ref
-        .read(editorDraftStoreProvider)
-        .find(kind: 'food', targetId: widget.foodId);
-    if (draft == null || !mounted) return;
+    final drafts = ref.read(editorDraftStoreProvider);
+    final EditorDraft? draft = await drafts.find(
+      kind: 'food',
+      targetId: widget.foodId,
+    );
+    if (!mounted || !_canReturnFood || draft == null) return;
 
     final bool stale =
         _sourceUpdatedAt != null &&
@@ -1092,7 +1125,7 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
       what: 'food',
       stale: stale,
     );
-    if (!mounted) return;
+    if (!_canReturnFood) return;
     if (restore) {
       setState(() {
         _draft = FoodDraft.fromJson(draft.payload);
@@ -1101,9 +1134,7 @@ class _FoodEditorScreenState extends ConsumerState<FoodEditorScreen> {
         _restored = true;
       });
     } else {
-      await ref
-          .read(editorDraftStoreProvider)
-          .clear(kind: 'food', targetId: widget.foodId);
+      await drafts.clear(kind: 'food', targetId: widget.foodId);
     }
   }
 
