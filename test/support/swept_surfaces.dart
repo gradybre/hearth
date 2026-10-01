@@ -627,7 +627,11 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
       await tools.reach(find.byKey(const Key('usual-customize-saved-usual')));
     },
     arrived: find.text('Customize Our usual dinner'),
-    waypoints: <Finder>[find.text('Base'), find.text('Added'), find.text('Removed')],
+    waypoints: <Finder>[
+      find.text('Base'),
+      find.text('Added'),
+      find.text('Removed'),
+    ],
     farEnd: find.byKey(const Key('usual-review-variation')),
   ),
   SweptSurface(

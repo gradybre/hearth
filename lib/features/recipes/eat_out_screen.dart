@@ -328,8 +328,9 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
           ),
         ) ??
         false;
-    if (viewDetails && mounted)
+    if (viewDetails && mounted) {
       await context.push<void>('/recipe/${recipe.id}');
+    }
   }
 
   /// Whether anything real is picked for a deduction to come off.

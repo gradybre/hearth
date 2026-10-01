@@ -256,7 +256,8 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
         return 'This recipe is no longer available. Close and choose a current recipe.';
       }
       if (widget.initialRecipeId != null) {
-        if (usualOrderModifierProblem(recipe, foods) case final String problem) {
+        if (usualOrderModifierProblem(recipe, foods)
+            case final String problem) {
           return problem;
         }
         if (_initialRecipeBasis == null ||
