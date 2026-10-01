@@ -12,8 +12,9 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
 | Group | Scope | Approval | Implementation | Automated checks | Fresh-context review | Real-device verification |
 |---|---|---|---|---|---|---|
 | 1 — Daily logging | UX-039, UX-041, UX-053 | Approved 2026-09-30 | Merged in [PR #116](https://github.com/gradybre/hearth/pull/116) | 3,925 passed; analyze clean; 71 render checks and all CI passed | Passed after corrections; code candidate `9e50bd1` | Not performed |
-| 2 — Grocery clarity | UX-058, UX-060 | Approved 2026-09-30 | Implemented in [PR #117](https://github.com/gradybre/hearth/pull/117) | 3,985 passed; analyze clean; 87 render checks passed; CI status on PR | Passed after corrections; code candidate `7d2121f` | Not performed |
-| 3 — Recipe actions and nutrition | UX-001; recipe-detail scope of UX-010 | Awaiting decision | Not started | — | — | — |
+| 2 — Grocery clarity | UX-058, UX-060 | Approved 2026-09-30 | Merged in [PR #117](https://github.com/gradybre/hearth/pull/117) | 3,985 passed; analyze clean; 87 render checks and all CI passed | Passed after corrections; code candidate `7d2121f` | Not performed |
+| 3 — Recipe actions and nutrition | UX-001; recipe-detail scope of UX-010 | Approved 2026-09-30 | Implemented; review and CI pending | 4,089 passed; analyze clean; 99 render checks passed | Pending | Not performed |
+| 4 — Export preview | UX-083 | Awaiting decision | Not started | — | — | — |
 
 ## Group 1 — Daily logging
 
@@ -77,13 +78,45 @@ UX-063 work; relocating its entry does not complete that recommendation.
 
 ## Group 3 — Recipe actions and nutrition
 
-Proposed: Plan and Shop directly from recipe detail, with a reviewed personal
+Approved: Plan and Shop directly from recipe detail, with a reviewed personal
 date/meal/portion and a reviewed shared shopping quantity respectively. Plan
 defaults to Today, Dinner and one personal serving, with Undo. Shop inherits
 the displayed cooking yield and offers View list after adding. Recipe detail
 also gains Per serving / Whole dish nutrition, retaining coverage labels and
-large-text accessibility. No implementation is authorized until approved.
+large-text accessibility. The plan review sheet and the detail/actions work
+have disjoint builder ownership; shared integration stays with the
+coordinating agent. No AI request, dependency or migration is required.
+
+The date review retains its opening day across midnight, accepts fractions
+without requiring keyboard Done, and keeps its fields and actions scrollable
+with enlarged text and the keyboard open. Shopping keeps the reviewed yield,
+including quarter servings and large batches, and remains additive. The
+displayed recipe header and nutrition basis follow cooking scale together.
+
+Regression checks cover exact-entry Undo, repeated taps, cancellation and
+recoverable failures. Undo and Retry remain usable after leaving the recipe;
+an account or household change expires the earlier review instead of applying
+its saved action to the wrong context. Enlarged serving controls wrap their
+buttons and retain each serving count on one line. Confirmation actions sit
+below the full-width message so Undo, Retry and View list remain readable at
+3× text. The desktop date review is constrained to a compact dialog while
+the phone version remains scrollable.
+
+The coordinating agent independently ran formatting, analysis, all 4,089
+tests (121 opt-in skips), and 99 render checks, and inspected the changed code
+and rendered light, dark, desktop and enlarged-text fixtures. Fresh-context
+review and CI remain pending; native-device verification is unperformed.
 
 The nutrition portion of this group is limited to recipe detail; wording
 parity in the editor, cook completion and log confirmation remains later
 scope within UX-010.
+
+## Group 4 — Export preview
+
+Proposed: rename Export everything to Export food data (JSON), preview the
+local snapshot's scope, counts, logged date range, pending changes and
+exclusions, then share that exact reviewed snapshot. Sync first refreshes the
+review before sharing; Export this device now remains available. A receipt
+states the filename and only the share outcome the platform can establish.
+Readable archives, photos and restore are separate scopes. No implementation
+is authorized until approved.

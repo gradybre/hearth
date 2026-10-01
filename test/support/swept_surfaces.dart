@@ -42,13 +42,18 @@ class SweptSurface {
     required this.open,
     required this.arrived,
     this.farEnd,
+    this.isInline = false,
   });
 
   /// What it is, in the words the test failure will use.
   final String name;
 
-  /// The file in `lib/` that opens it. This is what the guard matches on.
+  /// The file in `lib/` that opens or toggles it.
   final String opensFrom;
+
+  /// A view toggled within a page, rather than a sheet or dialog. Its source
+  /// must exist, but it cannot account for an unswept overlay in that file.
+  final bool isInline;
 
   /// How to get there from a freshly opened app.
   final Future<void> Function(WidgetTester tester, SweepTools tools) open;
@@ -300,6 +305,76 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     },
     arrived: find.text('Less'),
     farEnd: find.text('Cholesterol'),
+  ),
+  SweptSurface(
+    name: 'per-serving recipe nutrition',
+    opensFrom: 'lib/features/recipes/recipe_detail_screen.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Recipes');
+      await tools.reach(find.text('Slow chilli with all the trimmings'));
+      await tools.bring(find.text('Per serving'));
+    },
+    arrived: find.byWidgetPredicate(
+      (Widget widget) =>
+          widget is ChoiceChip &&
+          widget.selected &&
+          widget.label is Text &&
+          (widget.label as Text).data == 'Per serving',
+    ),
+    farEnd: find.text('Directions'),
+  ),
+  SweptSurface(
+    name: 'whole-dish recipe nutrition',
+    opensFrom: 'lib/features/recipes/recipe_detail_screen.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Recipes');
+      await tools.reach(find.text('Slow chilli with all the trimmings'));
+      await tools.reach(find.text('Whole dish'));
+    },
+    arrived: find.byWidgetPredicate(
+      (Widget widget) =>
+          widget is ChoiceChip &&
+          widget.selected &&
+          widget.label is Text &&
+          (widget.label as Text).data == 'Whole dish',
+    ),
+    farEnd: find.text('Directions'),
+  ),
+  SweptSurface(
+    name: 'planning the recipe being read',
+    opensFrom: 'lib/features/recipes/recipe_plan_sheet.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Recipes');
+      await tools.reach(find.text('Slow chilli with all the trimmings'));
+      await tools.reach(find.text('Plan'));
+    },
+    arrived: find.text('My plan'),
+    farEnd: find.text('Cancel'),
+  ),
+  SweptSurface(
+    name: 'choosing the recipe plan date',
+    opensFrom: 'lib/features/recipes/recipe_plan_sheet.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Recipes');
+      await tools.reach(find.text('Slow chilli with all the trimmings'));
+      await tools.reach(find.text('Plan'));
+      await tools.reach(find.byKey(const ValueKey<String>('recipe-plan-date')));
+    },
+    arrived: find.text('Plan date'),
+    farEnd: find.text('Cancel'),
+  ),
+  SweptSurface(
+    name: 'shopping for the recipe being read',
+    opensFrom: 'lib/features/shopping/add_to_list_sheet.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Recipes');
+      await tools.reach(find.text('Slow chilli with all the trimmings'));
+      await tools.reach(find.text('Shop'));
+    },
+    arrived: find.text('How many'),
+    farEnd: find.text('Add to the list'),
   ),
   SweptSurface(
     name: 'the recipe filters',

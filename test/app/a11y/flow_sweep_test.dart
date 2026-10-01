@@ -31,6 +31,17 @@ void main() {
     id: 'r-chilli',
     title: 'Slow chilli with all the trimmings',
     servings: 4,
+    // A real contribution lets the detail → Shop review be reached; an
+    // empty recipe only checks the explanation that nothing can be added.
+    ingredients: <RecipeIngredient>[
+      anIngredient(
+        'Greek yoghurt',
+        foodId: 'f-yoghurt',
+        amount: 340,
+        unit: Units.gram,
+      ),
+    ],
+    steps: <RecipeStep>[aStep('Stir in the Greek yoghurt before serving.')],
   );
 
   Food yoghurt() => aFood(

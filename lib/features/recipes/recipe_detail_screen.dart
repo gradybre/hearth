@@ -7,13 +7,21 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
+import '../../app/widgets/undo_snackbar.dart';
+import '../../data/repositories/plan_repository.dart';
+import '../../data/repositories/shopping_repository.dart';
 import '../../domain/format/food_quantity_format.dart';
+import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
+import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
+import '../../domain/planning/meal_plan.dart';
+import '../../domain/planning/nutrient_coverage.dart';
 import '../../domain/recipes/ingredient_consolidator.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/recipes/recipe_scaler.dart';
 import '../../domain/units/quantity.dart';
+import '../shopping/add_to_list_sheet.dart';
 import 'collections_sheet.dart';
 import 'cook_along_screen.dart';
 import 'macro_stats_row.dart';
@@ -21,6 +29,7 @@ import 'recipe_draft.dart';
 import 'recipe_icon.dart';
 import 'recipe_library_screen.dart';
 import 'recipe_photo.dart';
+import 'recipe_plan_sheet.dart';
 import 'scale_control.dart';
 import 'step_amounts.dart';
 import 'timer_bar.dart';
@@ -49,6 +58,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
   /// 2 lb on the page, and was told to brown 1 lb. Scaling is a way of
   /// reading a recipe (§5.2), and cooking is reading it.
   double? _target;
+  bool _actionBusy = false;
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +70,18 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
           in ref.watch(foodLibraryProvider).value ?? const <Food>[])
         food.id: food,
     };
+
+    // Large controls belong to the scrolling page on a short phone. Keeping
+    // a three-row footer would leave almost no recipe to read at 3x text.
+    final bool actionsInBody = MediaQuery.textScalerOf(context).scale(14) > 21;
+    Widget actions(Recipe original) => _RecipeActions(
+      busy: _actionBusy,
+      eatenOut: original.isEatenOut,
+      onCook: original.allSteps.isEmpty ? null : () => _cook(original),
+      onPlan: () => _plan(original),
+      onShop: () => _shop(original, foods),
+      stacked: actionsInBody,
+    );
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -104,40 +126,30 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                 foods: foods,
                 target: _target,
                 onScaled: (double? value) => setState(() => _target = value),
+                actions: actionsInBody ? actions(loaded) : null,
               ),
       ),
       // The recipe screen is pushed above the shell, so it does not get the
       // shell's timer bar. Without this, opening a recipe mid-cook is the one
       // place a running timer would drop out of sight.
-      bottomNavigationBar: const CookTimerBar(),
-      // No cook-along for a meal you ordered. It has no steps to walk anyway,
-      // but saying so by kind rather than by "it happens to have no steps"
-      // keeps a restaurant meal from sprouting one the day somebody writes a
-      // note in it (spec §5.2).
-      floatingActionButton: recipe.value == null
-          ? null
-          : recipe.value!.isEatenOut
-          ? null
-          : recipe.value!.allSteps.isEmpty
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => Navigator.of(context).push<void>(
-                MaterialPageRoute<void>(
-                  // The recipe is handed over by value: cook-along runs off a
-                  // snapshot, so a partner's mid-cook edit cannot move the
-                  // step under your hands (spec §5.2).
-                  //
-                  // And scaled, because what is on screen is what the cook
-                  // means to make.
-                  builder: (BuildContext context) =>
-                      CookAlongScreen(recipe: _scaled(recipe.value!)),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          if (!actionsInBody)
+            if (recipe.value case final Recipe original)
+              ColoredBox(
+                color: colors.surface,
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.all(HearthSpacing.sm),
+                    child: actions(original),
+                  ),
                 ),
               ),
-              backgroundColor: colors.accent,
-              foregroundColor: colors.onAccent,
-              icon: const Icon(Icons.soup_kitchen_outlined),
-              label: Text('Cook', style: context.text.label),
-            ),
+          const CookTimerBar(),
+        ],
+      ),
     );
   }
 
@@ -148,8 +160,320 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
   /// before offering the control at all.
   Recipe _scaled(Recipe recipe) {
     final double? target = _target;
-    if (target == null || recipe.servings <= 0) return recipe;
+    if (target == null ||
+        !target.isFinite ||
+        !recipe.servings.isFinite ||
+        recipe.servings <= 0) {
+      return recipe;
+    }
     return RecipeScaler.toServings(recipe, target).recipe;
+  }
+
+  void _cook(Recipe original) {
+    if (_actionBusy || original.isEatenOut) return;
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        // A scaled value snapshot: changes on another device cannot change
+        // the recipe halfway through cooking it.
+        builder: (BuildContext context) =>
+            CookAlongScreen(recipe: _scaled(original)),
+      ),
+    );
+  }
+
+  Future<void> _runAction(Future<void> Function() action) async {
+    if (_actionBusy) return;
+    _setActionBusy(true);
+    try {
+      await action();
+    } finally {
+      _setActionBusy(false);
+    }
+  }
+
+  void _setActionBusy(bool value) {
+    // The app's snackbar can remain visible after this route is popped.
+    // Its reviewed Undo/Retry still works, but there is no page to rebuild.
+    if (mounted) {
+      setState(() => _actionBusy = value);
+    } else {
+      _actionBusy = value;
+    }
+  }
+
+  Future<void> _plan(Recipe original) async {
+    if (_actionBusy) return;
+    final PlanRepository plans = ref.read(planRepositoryProvider);
+    final _ActionFeedback feedback = _ActionFeedback(context);
+    await _runAction(() async {
+      final RecipePlanSelection? selection = await showRecipePlanSheet(
+        context,
+        recipe: original,
+      );
+      if (selection != null) {
+        await _savePlan(plans, feedback, original, selection);
+      }
+    });
+  }
+
+  Future<void> _savePlan(
+    PlanRepository plans,
+    _ActionFeedback feedback,
+    Recipe original,
+    RecipePlanSelection selection,
+  ) async {
+    if (!feedback.requireCurrent()) return;
+    try {
+      final MealPlanEntry added = await plans.add(
+        date: selection.date,
+        slot: selection.slot,
+        refType: PlanRefType.recipe,
+        refId: original.id,
+        servings: selection.servings,
+        // No logged macros: planning is never a claim that this was eaten.
+      );
+      if (!feedback.isCurrent) return;
+      feedback.refreshPlan();
+      showUndoSnackBar(
+        feedback.messenger,
+        stackedAction: true,
+        message:
+            'Added to My plan · ${selection.slot.label} · '
+            '${feedback.localizations.formatMediumDate(selection.date)}',
+        onUndo: () => _undoPlan(plans, feedback, added.id),
+      );
+    } on Object {
+      feedback.show(
+        'Could not add to My plan. Your choices are kept for retry.',
+        action: SnackBarAction(
+          label: 'Retry',
+          onPressed: () =>
+              _runAction(() => _savePlan(plans, feedback, original, selection)),
+        ),
+      );
+    }
+  }
+
+  Future<void> _undoPlan(
+    PlanRepository plans,
+    _ActionFeedback feedback,
+    String entryId,
+  ) => _runAction(() async {
+    if (!feedback.requireCurrent()) return;
+    try {
+      // Only the new entry's id. Another portion of this same recipe is a
+      // separate decision and must survive this Undo.
+      await plans.removeEntry(entryId);
+      feedback.refreshPlan();
+      feedback.show('Removed from My plan.');
+    } on Object {
+      feedback.show(
+        'Could not undo that plan addition.',
+        action: SnackBarAction(
+          label: 'Retry',
+          onPressed: () => _undoPlan(plans, feedback, entryId),
+        ),
+      );
+    }
+  });
+
+  Future<void> _shop(Recipe original, Map<String, Food> foods) async {
+    if (_actionBusy || original.isEatenOut) return;
+    final ShoppingRepository shopping = ref.read(shoppingRepositoryProvider);
+    final _ActionFeedback feedback = _ActionFeedback(context);
+    await _runAction(() async {
+      final ListAddition? addition = await showAddToListSheet(
+        context,
+        recipes: <Recipe>[original],
+        foods: foods.values.toList(growable: false),
+        recipe: original,
+        servings: _target ?? original.servings,
+      );
+      if (addition is RecipeAddition) {
+        await _saveShopping(shopping, feedback, addition, foods);
+      }
+    });
+  }
+
+  Future<void> _saveShopping(
+    ShoppingRepository shopping,
+    _ActionFeedback feedback,
+    RecipeAddition addition,
+    Map<String, Food> foods,
+  ) async {
+    if (!feedback.requireCurrent()) return;
+    final String? issue = recipeShoppingIssue(
+      addition.recipe,
+      servings: addition.servings,
+    );
+    if (issue != null) {
+      feedback.show(issue);
+      return;
+    }
+    try {
+      await shopping.addRecipe(
+        recipe: addition.recipe,
+        servings: addition.servings,
+        foods: foods,
+      );
+      if (!feedback.isCurrent) return;
+      feedback.container.invalidate(shoppingListProvider);
+      feedback.show(
+        'Ingredients added to our shopping list.',
+        action: SnackBarAction(
+          label: 'View list',
+          onPressed: () {
+            if (feedback.requireCurrent()) feedback.router.go('/shopping');
+          },
+        ),
+      );
+    } on Object {
+      feedback.show(
+        'Could not add ingredients. Your amount is kept for retry.',
+        action: SnackBarAction(
+          label: 'Retry',
+          onPressed: () => _runAction(
+            () => _saveShopping(shopping, feedback, addition, foods),
+          ),
+        ),
+      );
+    }
+  }
+}
+
+/// App-level feedback outlives the detail route while its Undo/Retry is visible.
+/// No callback keeps using a disposed route's context or WidgetRef.
+class _ActionFeedback {
+  _ActionFeedback(BuildContext context)
+    : messenger = ScaffoldMessenger.of(context),
+      container = ProviderScope.containerOf(context, listen: false),
+      router = GoRouter.of(context),
+      localizations = MaterialLocalizations.of(context) {
+    _userId = container.read(currentUserIdProvider);
+    _householdId = container.read(currentHouseholdIdProvider);
+  }
+
+  final ScaffoldMessengerState messenger;
+  final ProviderContainer container;
+  final GoRouter router;
+  final MaterialLocalizations localizations;
+  late final String _userId;
+  late final String _householdId;
+
+  bool get isCurrent =>
+      messenger.mounted &&
+      container.read(currentUserIdProvider) == _userId &&
+      container.read(currentHouseholdIdProvider) == _householdId;
+
+  bool requireCurrent() {
+    if (isCurrent) return true;
+    _show('Your account or household changed. Open the recipe and try again.');
+    return false;
+  }
+
+  void refreshPlan() {
+    if (!isCurrent) return;
+    container.invalidate(dayEntriesProvider);
+    container.invalidate(weekEntriesProvider);
+  }
+
+  void show(String message, {SnackBarAction? action}) {
+    if (!isCurrent) return;
+    _show(message, action: action);
+  }
+
+  void _show(String message, {SnackBarAction? action}) {
+    if (!messenger.mounted) return;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: action == null
+              ? Text(message)
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    Text(message),
+                    Align(alignment: Alignment.centerRight, child: action),
+                  ],
+                ),
+          // The action lives below the message to keep its full width.
+          // Keep the same persistence as a native SnackBar.action.
+          persist: action != null,
+        ),
+      );
+  }
+}
+
+class _RecipeActions extends StatelessWidget {
+  const _RecipeActions({
+    required this.busy,
+    required this.eatenOut,
+    required this.onCook,
+    required this.onPlan,
+    required this.onShop,
+    required this.stacked,
+  });
+
+  final bool busy;
+  final bool eatenOut;
+  final VoidCallback? onCook;
+  final VoidCallback onPlan;
+  final VoidCallback onShop;
+  final bool stacked;
+
+  @override
+  Widget build(BuildContext context) {
+    final ButtonStyle style = FilledButton.styleFrom(
+      minimumSize: const Size(0, HearthTouch.minTarget),
+    );
+    final List<Widget> buttons = <Widget>[
+      if (!eatenOut && onCook != null)
+        FilledButton.icon(
+          style: style,
+          onPressed: busy ? null : onCook,
+          icon: const Icon(Icons.soup_kitchen_outlined),
+          label: const Text('Cook'),
+        ),
+      OutlinedButton.icon(
+        style: style,
+        onPressed: busy ? null : onPlan,
+        icon: const Icon(Icons.event_outlined),
+        label: const Text('Plan'),
+      ),
+      if (!eatenOut)
+        OutlinedButton.icon(
+          style: style,
+          onPressed: busy ? null : onShop,
+          icon: const Icon(Icons.shopping_basket_outlined),
+          label: const Text('Shop'),
+        ),
+    ];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (stacked)
+          for (int i = 0; i < buttons.length; i++) ...<Widget>[
+            if (i > 0) const SizedBox(height: HearthSpacing.sm),
+            buttons[i],
+          ]
+        else
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: HearthSpacing.sm,
+            runSpacing: HearthSpacing.sm,
+            children: buttons,
+          ),
+        if (busy) ...<Widget>[
+          const SizedBox(height: HearthSpacing.xs),
+          const LinearProgressIndicator(
+            semanticsLabel: 'Saving your selection',
+          ),
+        ],
+      ],
+    );
   }
 }
 
@@ -159,6 +483,7 @@ class _RecipeBody extends StatefulWidget {
     required this.foods,
     required this.target,
     required this.onScaled,
+    this.actions,
   });
 
   final Recipe recipe;
@@ -168,6 +493,7 @@ class _RecipeBody extends StatefulWidget {
   /// button can see it too.
   final double? target;
   final ValueChanged<double?> onScaled;
+  final Widget? actions;
 
   @override
   State<_RecipeBody> createState() => _RecipeBodyState();
@@ -180,6 +506,7 @@ class _RecipeBodyState extends State<_RecipeBody> {
   /// combining are both ways of *reading* the recipe, not edits of it —
   /// nothing is written, and reopening shows it as written (spec §5.2).
   bool _combined = false;
+  bool _wholeDish = false;
 
   double get _targetServings => widget.target ?? widget.recipe.servings;
 
@@ -197,7 +524,10 @@ class _RecipeBodyState extends State<_RecipeBody> {
     // a restaurant meal never is: you cannot make the burrito bowl bigger by
     // wanting to, and doubling one would silently double its macros against a
     // portion nobody served (spec §5.2).
-    final bool scalable = original.servings > 0 && !original.isEatenOut;
+    final bool scalable =
+        original.servings.isFinite &&
+        original.servings > 0 &&
+        !original.isEatenOut;
     final ScaledRecipe? scaled = scalable
         ? RecipeScaler.toServings(original, _targetServings)
         : null;
@@ -236,9 +566,13 @@ class _RecipeBodyState extends State<_RecipeBody> {
           ),
           const SizedBox(height: HearthSpacing.sm),
           Text(
-            _summary(original),
+            _summary(recipe),
             style: text.metadata.copyWith(color: colors.textMuted),
           ),
+          if (widget.actions != null) ...<Widget>[
+            const SizedBox(height: HearthSpacing.lg),
+            widget.actions!,
+          ],
           if (original.notes != null) ...<Widget>[
             const SizedBox(height: HearthSpacing.lg),
             Text(
@@ -248,37 +582,12 @@ class _RecipeBodyState extends State<_RecipeBody> {
           ],
           if (recipe.allIngredients.isNotEmpty) ...<Widget>[
             const SizedBox(height: HearthSpacing.lg),
-            Text('Nutrition per serving', style: text.sectionHeader),
-            const SizedBox(height: HearthSpacing.sm),
-            MacroStatsRow(macros: macros.perServing),
-            // Quiet, below the four, and absent entirely when nothing here
-            // knows them — which is most recipes (spec §5.6).
-            if (macros.perServing.knowsAnyMinor) ...<Widget>[
-              const SizedBox(height: HearthSpacing.sm),
-              MinorNutrientsLine(
-                macros: macros.perServing,
-                partialFor: macros.partialNoteFor,
-              ),
-            ],
-            if (macros.usesApproximatePackageNutrition) ...<Widget>[
-              const SizedBox(height: HearthSpacing.xs),
-              Text(
-                'Uses approximate package servings',
-                style: text.metadata.copyWith(color: colors.textMuted),
-              ),
-            ],
-            // Missing data flags, never blocks (spec §5.3): shown alongside
-            // the numbers rather than hiding them, so what is known is never
-            // held back for want of what isn't — and naming the actual gap,
-            // because "not matched" sent people to re-match ingredients that
-            // were already matched and were never the problem.
-            if (macros.incompleteReason case final String reason) ...<Widget>[
-              const SizedBox(height: HearthSpacing.sm),
-              Text(
-                reason,
-                style: text.metadata.copyWith(color: colors.textMuted),
-              ),
-            ],
+            _RecipeNutrition(
+              recipe: recipe,
+              macros: macros,
+              wholeDish: _wholeDish,
+              onChanged: (bool value) => setState(() => _wholeDish = value),
+            ),
           ],
           if (scalable) ...<Widget>[
             const SizedBox(height: HearthSpacing.lg),
@@ -386,12 +695,138 @@ class _RecipeBodyState extends State<_RecipeBody> {
 
   static String _summary(Recipe recipe) {
     final List<String> parts = <String>[
-      'Serves ${recipe.servings == recipe.servings.roundToDouble() ? recipe.servings.round() : recipe.servings}',
+      recipe.servings.isFinite && recipe.servings > 0
+          ? 'Serves ${_number(recipe.servings)}'
+          : 'Yield not set',
       if (recipe.prepTime != null) '${recipe.prepTime!.inMinutes} min prep',
       if (recipe.cookTime != null) '${recipe.cookTime!.inMinutes} min cook',
       if (recipe.cuisine != null) recipe.cuisine!,
     ];
     return parts.join('  ·  ');
+  }
+}
+
+String _number(double value) => QuantityFormat.count(value);
+
+class _RecipeNutrition extends StatelessWidget {
+  const _RecipeNutrition({
+    required this.recipe,
+    required this.macros,
+    required this.wholeDish,
+    required this.onChanged,
+  });
+
+  final Recipe recipe;
+  final RecipeMacros macros;
+  final bool wholeDish;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool validYield = recipe.servings.isFinite && recipe.servings > 0;
+    final Macros shown = wholeDish ? macros.total : macros.perServing;
+    final int resolved = macros.ingredients
+        .where((IngredientMacros i) => i.isResolved)
+        .length;
+    final int counted = macros.ingredients
+        .where((IngredientMacros i) => i.isResolved || i.isDataGap)
+        .length;
+    final bool canShowNumbers = resolved > 0 && (wholeDish || validYield);
+    final String yield = validYield
+        ? '${_number(recipe.servings)} ${recipe.servings == 1 ? 'serving' : 'servings'}'
+        : 'Recipe yield needs a positive number of servings';
+    final String qualification = macros.isIncomplete ? ' known' : '';
+    final String approximation = macros.usesApproximatePackageNutrition
+        ? 'about '
+        : '';
+    final String basis = validYield && resolved > 0
+        ? '$yield · $approximation${macros.perServing.kcal.round()} kcal each$qualification · '
+              '$approximation${macros.total.kcal.round()} kcal whole dish$qualification'
+        : yield;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text('Nutrition', style: context.text.sectionHeader),
+        const SizedBox(height: HearthSpacing.sm),
+        Wrap(
+          spacing: HearthSpacing.sm,
+          runSpacing: HearthSpacing.xs,
+          children: <Widget>[
+            ChoiceChip(
+              label: const Text('Per serving'),
+              selected: !wholeDish,
+              onSelected: (_) => onChanged(false),
+            ),
+            ChoiceChip(
+              label: const Text('Whole dish'),
+              selected: wholeDish,
+              onSelected: (_) => onChanged(true),
+            ),
+          ],
+        ),
+        const SizedBox(height: HearthSpacing.sm),
+        Text(
+          basis,
+          style: context.text.metadata.copyWith(
+            color: context.colors.textMuted,
+          ),
+        ),
+        const SizedBox(height: HearthSpacing.sm),
+        if (canShowNumbers) ...<Widget>[
+          if (macros.isIncomplete)
+            Text(
+              'Known nutrition · $resolved of $counted ingredients counted',
+              style: context.text.metadata,
+            ),
+          if (MediaQuery.textScalerOf(context).scale(14) <= 21)
+            MacroStatsRow(macros: shown)
+          else
+            for (final (String label, double value) in <(String, double)>[
+              ('kcal', shown.kcal),
+              ('g protein', shown.proteinG),
+              ('g carbs', shown.carbG),
+              ('g fat', shown.fatG),
+            ])
+              Text('${value.round()} $label', style: context.text.ingredient),
+          if (shown.knowsAnyMinor) ...<Widget>[
+            const SizedBox(height: HearthSpacing.sm),
+            MinorNutrientsLine(
+              macros: shown,
+              partialFor: (MinorNutrient nutrient) =>
+                  macros.partialNoteFor(nutrient) ??
+                  (macros.coverage.of(nutrient) == MinorCoverage.partial
+                      ? 'Some ingredients are not counted'
+                      : null),
+            ),
+          ],
+        ] else
+          Text(
+            !wholeDish && !validYield
+                ? 'Set a recipe yield to see nutrition per serving.'
+                : counted == 0
+                ? 'No nutrition-counting ingredients.'
+                : 'Nutrition not available yet',
+            style: context.text.body,
+          ),
+        if (macros.usesApproximatePackageNutrition) ...<Widget>[
+          const SizedBox(height: HearthSpacing.xs),
+          Text(
+            'Uses approximate package servings',
+            style: context.text.metadata,
+          ),
+        ],
+        if (macros.incompleteReason case final String reason) ...<Widget>[
+          const SizedBox(height: HearthSpacing.sm),
+          Text(
+            reason,
+            style: context.text.metadata.copyWith(
+              color: context.colors.textMuted,
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }
 

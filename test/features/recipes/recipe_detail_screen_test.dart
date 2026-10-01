@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
+import 'package:hearth/domain/models/package_nutrition.dart';
 import 'package:hearth/domain/models/recipe.dart';
+import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 import 'package:hearth/features/recipes/macro_stats_row.dart';
 
@@ -65,7 +67,7 @@ void main() {
         foods: <Food>[oliveOilPerTbsp()],
       );
 
-      expect(find.text('Nutrition per serving'), findsOneWidget);
+      expect(find.text('Nutrition'), findsOneWidget);
       expect(find.byType(MacroStatsRow), findsOneWidget);
       // 2 tbsp at 120 kcal / 14 g fat per tbsp, across 4 servings.
       expect(find.text('60'), findsOneWidget);
@@ -80,7 +82,7 @@ void main() {
       // stays rather than disappearing.
       await openRecipe(tester, shortRibs());
 
-      expect(find.text('Nutrition per serving'), findsOneWidget);
+      expect(find.text('Nutrition'), findsOneWidget);
       expect(find.textContaining('not matched to a food'), findsOneWidget);
     });
 
@@ -92,7 +94,256 @@ void main() {
         aRecipe(id: 'recipe-empty', title: 'Just a title'),
       );
 
-      expect(find.text('Nutrition per serving'), findsNothing);
+      expect(find.text('Nutrition'), findsNothing);
+    });
+  });
+
+  group('nutrition basis and confidence', () {
+    Future<void> choose(WidgetTester tester, String label) async {
+      await tester.ensureVisible(find.text(label));
+      await tester.tap(find.text(label));
+      await pumpFrames(tester);
+    }
+
+    testWidgets('whole dish scales while per serving stays the same', (
+      WidgetTester tester,
+    ) async {
+      await openRecipe(
+        tester,
+        shortRibs(oilFoodId: 'food-oil'),
+        foods: <Food>[oliveOilPerTbsp()],
+      );
+      expect(
+        tester
+            .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Per serving'))
+            .selected,
+        isTrue,
+      );
+      expect(
+        find.text('4 servings · 60 kcal each · 240 kcal whole dish'),
+        findsOneWidget,
+      );
+      await choose(tester, 'Whole dish');
+      expect(
+        tester.widget<MacroStatsRow>(find.byType(MacroStatsRow)).macros.kcal,
+        240,
+      );
+      await choose(tester, '2×');
+      expect(
+        tester.widget<MacroStatsRow>(find.byType(MacroStatsRow)).macros.kcal,
+        480,
+      );
+      expect(find.text('Serves 8'), findsOneWidget);
+      expect(
+        find.text('8 servings · 60 kcal each · 480 kcal whole dish'),
+        findsOneWidget,
+      );
+      await choose(tester, 'Per serving');
+      expect(
+        tester.widget<MacroStatsRow>(find.byType(MacroStatsRow)).macros.kcal,
+        60,
+      );
+    });
+
+    testWidgets('both bases qualify partial nutrition and minor nutrients', (
+      WidgetTester tester,
+    ) async {
+      final Food oil = aFood(
+        'Oil',
+        id: 'oil',
+        servingOptions: <ServingOption>[
+          aServing(
+            amount: 1,
+            unit: Units.tbsp,
+            macros: const Macros(kcal: 120, fatG: 14, fiberG: 2, sodiumMg: 100),
+          ),
+        ],
+      );
+      final Recipe recipe = aRecipe(
+        id: 'partial',
+        title: 'Partial supper',
+        servings: 4,
+        ingredients: <RecipeIngredient>[
+          anIngredient('oil', amount: 2, unit: Units.tbsp, foodId: 'oil'),
+          anIngredient('mystery beans', amount: 1, unit: Units.can),
+        ],
+      );
+      await openRecipe(tester, recipe, foods: <Food>[oil]);
+      expect(
+        find.text('Known nutrition · 1 of 2 ingredients counted'),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          '4 servings · 60 kcal each known · 240 kcal whole dish known',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Some ingredients are not counted'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<MinorNutrientsLine>(find.byType(MinorNutrientsLine))
+            .macros
+            .fiberG,
+        1,
+      );
+      await choose(tester, 'Whole dish');
+      expect(
+        tester
+            .widget<MinorNutrientsLine>(find.byType(MinorNutrientsLine))
+            .macros
+            .fiberG,
+        4,
+      );
+      expect(find.textContaining('not matched to a food'), findsOneWidget);
+      await choose(tester, '2×');
+      expect(
+        tester.widget<MacroStatsRow>(find.byType(MacroStatsRow)).macros.kcal,
+        480,
+      );
+      expect(
+        find.text('Known nutrition · 1 of 2 ingredients counted'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('an approximate package remains approximate in both bases', (
+      WidgetTester tester,
+    ) async {
+      final Quantity servingAmount = Quantity.of(0.5, Units.cup);
+      final Quantity packageAmount = Quantity.of(200, Units.gram);
+      final Food sauce = aFood(
+        'Sauce',
+        id: 'sauce',
+        packSize: packageAmount,
+        packageNutrition: PackageNutrition.manual(
+          servingsPerPackage: 4,
+          servingOptionId: 'half-cup',
+          servingAmount: servingAmount,
+          packageAmount: packageAmount,
+          isApproximate: true,
+        ),
+        servingOptions: <ServingOption>[
+          ServingOption(
+            id: 'half-cup',
+            label: 'Half cup',
+            amount: servingAmount,
+            macros: const Macros(kcal: 100, sodiumMg: 50),
+          ),
+        ],
+      );
+      await openRecipe(
+        tester,
+        aRecipe(
+          id: 'approximate',
+          title: 'Saucy supper',
+          servings: 4,
+          ingredients: <RecipeIngredient>[
+            anIngredient(
+              'sauce',
+              amount: 100,
+              unit: Units.gram,
+              foodId: 'sauce',
+            ),
+          ],
+        ),
+        foods: <Food>[sauce],
+      );
+      expect(find.text('Uses approximate package servings'), findsOneWidget);
+      expect(
+        find.text(
+          '4 servings · about 50 kcal each · about 200 kcal whole dish',
+        ),
+        findsOneWidget,
+      );
+      await choose(tester, 'Whole dish');
+      expect(
+        tester.widget<MacroStatsRow>(find.byType(MacroStatsRow)).macros.kcal,
+        200,
+      );
+      expect(find.text('Uses approximate package servings'), findsOneWidget);
+      await choose(tester, '2×');
+      expect(
+        tester.widget<MacroStatsRow>(find.byType(MacroStatsRow)).macros.kcal,
+        400,
+      );
+      expect(find.textContaining('about 50 kcal each'), findsOneWidget);
+    });
+
+    testWidgets('unknown stays unknown in the whole dish', (
+      WidgetTester tester,
+    ) async {
+      await openRecipe(tester, shortRibs());
+      await choose(tester, 'Whole dish');
+      expect(find.text('Nutrition not available yet'), findsOneWidget);
+      expect(find.byType(MacroStatsRow), findsNothing);
+      expect(find.text('0'), findsNothing);
+    });
+
+    testWidgets('fractional yield is stated without rounding away the basis', (
+      WidgetTester tester,
+    ) async {
+      await openRecipe(
+        tester,
+        aRecipe(
+          id: 'fractional',
+          title: 'Quarter serving',
+          servings: 0.25,
+          ingredients: <RecipeIngredient>[
+            anIngredient(
+              'oil',
+              amount: 2,
+              unit: Units.tbsp,
+              foodId: 'food-oil',
+            ),
+          ],
+        ),
+        foods: <Food>[oliveOilPerTbsp()],
+      );
+      expect(find.text('Serves ¼'), findsOneWidget);
+      expect(
+        find.text('¼ servings · 960 kcal each · 240 kcal whole dish'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a missing yield does not claim per-serving nutrition', (
+      WidgetTester tester,
+    ) async {
+      await openRecipe(
+        tester,
+        aRecipe(
+          id: 'zero-yield',
+          title: 'Yield missing',
+          servings: 0,
+          ingredients: <RecipeIngredient>[
+            anIngredient(
+              'olive oil',
+              amount: 2,
+              unit: Units.tbsp,
+              foodId: 'food-oil',
+            ),
+          ],
+        ),
+        foods: <Food>[oliveOilPerTbsp()],
+      );
+      expect(
+        find.text('Set a recipe yield to see nutrition per serving.'),
+        findsOneWidget,
+      );
+      expect(find.byType(MacroStatsRow), findsNothing);
+      await choose(tester, 'Whole dish');
+      expect(
+        tester.widget<MacroStatsRow>(find.byType(MacroStatsRow)).macros.kcal,
+        240,
+      );
+      expect(
+        find.text('Recipe yield needs a positive number of servings'),
+        findsOneWidget,
+      );
     });
   });
 
@@ -167,6 +418,8 @@ void main() {
       // consolidating across the recipe would produce.
       await openRecipe(tester, ragu());
 
+      await tester.drag(find.byType(ListView).last, const Offset(0, -250));
+      await pumpFrames(tester);
       expect(find.textContaining('2 tsp ground cumin'), findsNWidgets(2));
       expect(find.textContaining('4 tsp'), findsNothing);
     });

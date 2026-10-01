@@ -888,7 +888,7 @@ final List<_Destination> _destinations = <_Destination>[
     name: 'a recipe',
     open: (WidgetTester tester, SweepTools tools) =>
         tools.reach(find.text(_recipeTitle)),
-    arrived: find.widgetWithText(FloatingActionButton, 'Cook'),
+    arrived: find.widgetWithText(FilledButton, 'Cook'),
   ),
   // The screen most likely to be read in a dim kitchen, and the one with the
   // most chrome per square inch: four icon buttons in the bar and a step card
@@ -897,7 +897,7 @@ final List<_Destination> _destinations = <_Destination>[
     name: 'cook-along, which is used with wet hands',
     open: (WidgetTester tester, SweepTools tools) async {
       await tools.reach(find.text(_recipeTitle));
-      await tools.reach(find.widgetWithText(FloatingActionButton, 'Cook'));
+      await tools.reach(find.widgetWithText(FilledButton, 'Cook'));
     },
     arrived: find.byTooltip('Finish cooking'),
   ),

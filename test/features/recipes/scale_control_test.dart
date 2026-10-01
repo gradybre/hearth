@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/theme/hearth_theme.dart';
 import 'package:hearth/domain/recipes/recipe_scaler.dart';
@@ -144,6 +145,66 @@ void main() {
       expect(find.text('Reset'), findsNothing);
     });
   });
+
+  for (final double width in <double>[320, 390]) {
+    testWidgets('scaling and Reset remain reachable at ${width}pt and 3x', (
+      WidgetTester tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = Size(width, 568);
+      tester.platformDispatcher.textScaleFactorTestValue = 3;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearAllTestValues);
+      double target = 4;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: HearthTheme.light(),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: StatefulBuilder(
+                builder: (BuildContext context, StateSetter setState) =>
+                    ScaleControl(
+                      originalServings: 4,
+                      targetServings: target,
+                      onChanged: (double value) =>
+                          setState(() => target = value),
+                    ),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.text('2×'));
+      await tester.tap(find.text('2×'));
+      await tester.pumpAndSettle();
+      expect(target, 8);
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.text('Reset'));
+      await tester.pumpAndSettle();
+      expect(find.text('Reset').hitTestable(), findsOneWidget);
+      await tester.tap(find.text('Reset'));
+      await tester.pumpAndSettle();
+      expect(target, 4);
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.text('3×'));
+      await tester.tap(find.text('3×'));
+      await tester.pumpAndSettle();
+      expect(target, 12);
+      final RenderParagraph amount = tester.renderObject<RenderParagraph>(
+        find.descendant(of: find.text('12'), matching: find.byType(RichText)),
+      );
+      expect(
+        amount.getBoxesForSelection(
+          const TextSelection(baseOffset: 0, extentOffset: 2),
+        ),
+        hasLength(1),
+        reason: 'A serving count must not split its digits across lines.',
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   group('scaling notes (spec §5.2 — flagged, never auto-adjusted)', () {
     Future<void> pumpNotes(

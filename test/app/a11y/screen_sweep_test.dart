@@ -637,7 +637,8 @@ void main() {
       await tester.tapAt(tester.getTopLeft(title) + const Offset(20, 20));
       await pumpFrames(tester, frames: 10);
 
-      await tester.tap(find.widgetWithText(FloatingActionButton, 'Cook'));
+      // At large text, the recipe actions scroll below its title.
+      await SweepTools(tester).reach(find.widgetWithText(FilledButton, 'Cook'));
       await pumpFrames(tester, frames: 15);
 
       expect(tester.takeException(), isNull);
