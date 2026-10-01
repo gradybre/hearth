@@ -7,6 +7,7 @@ import '../../domain/models/recipe.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/week.dart';
 import '../../domain/recipes/ingredient_consolidator.dart';
+import '../../domain/shopping/manual_addition.dart';
 import '../../domain/shopping/shopping_contribution.dart';
 import '../../domain/shopping/shopping_line.dart';
 import '../../domain/shopping/shopping_list_builder.dart';
@@ -121,6 +122,40 @@ class ShoppingRepository {
       _store.current(householdId: _householdId);
 
   Stream<void> watchChanges() => _store.watchChanges();
+
+  /// Commits reviewed plain items against the household list as it stands.
+  ///
+  /// The read, duplicate decisions, list write and outbox write share one
+  /// transaction. A tick or addition received while a paste review was open
+  /// therefore survives; the review never supplies a replacement snapshot.
+  Future<ManualAdditionResult> addManualItems(
+    List<ManualListItem> items,
+  ) async {
+    final List<ManualListItem> requested = List<ManualListItem>.of(items);
+    return _db.transaction(() async {
+      final ShoppingListSnapshot? existing = await current();
+      final ManualAdditionResult result = ManualAdditions.apply(
+        ShoppingListMerge.display(existing?.lines ?? const <ShoppingLine>[]),
+        requested,
+      );
+      if (result.added.isEmpty) return result;
+
+      final ({DateTime from, DateTime to}) range = existing == null
+          ? defaultRange()
+          : (from: existing.from, to: existing.to);
+      final List<ShoppingLine> written = await _write(
+        listId: existing?.id ?? _idFactory(),
+        from: range.from,
+        to: range.to,
+        lines: result.lines,
+      );
+      return ManualAdditionResult(
+        lines: written,
+        added: result.added,
+        skipped: result.skipped,
+      );
+    });
+  }
 
   /// The range a list opens on before anyone adjusts it.
   ({DateTime from, DateTime to}) defaultRange() {

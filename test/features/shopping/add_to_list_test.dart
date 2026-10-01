@@ -395,6 +395,58 @@ void main() {
       expect(find.text('kidney beans'), findsOneWidget);
     });
 
+    testWidgets('pasting after a clear preserves Undo and reports the batch', (
+      WidgetTester tester,
+    ) async {
+      await fill(tester);
+      await reachClear(tester);
+      await pumpFrames(tester, frames: 20);
+      await tester.tap(find.text('Clear it'));
+      await pumpFrames(tester, frames: 12);
+
+      await openAdd(tester);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey<String>('paste-items-open')),
+      );
+      await tester.tap(find.byKey(const ValueKey<String>('paste-items-open')));
+      await pumpFrames(tester, frames: 12);
+      await tester.enterText(
+        find.byKey(const ValueKey<String>('paste-items-input')),
+        'Coffee\nEggs',
+      );
+      await pumpFrames(tester);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey<String>('paste-items-review')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey<String>('paste-items-review')),
+      );
+      await pumpFrames(tester, frames: 12);
+      final Finder save = find.byKey(
+        const ValueKey<String>('paste-items-save'),
+      );
+      await tester.scrollUntilVisible(
+        save,
+        150,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey<String>('paste-items-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.tap(save);
+      await pumpFrames(tester, frames: 12);
+
+      expect(find.text('Undo'), findsOneWidget);
+      await tester.tap(find.text('Undo'));
+      await pumpFrames(tester, frames: 24);
+      expect(find.text('ground beef'), findsOneWidget);
+      expect(find.text('Coffee'), findsOneWidget);
+      expect(find.text('Eggs'), findsOneWidget);
+      expect(find.text('2 items added.'), findsOneWidget);
+    });
+
     testWidgets('and what was added since the clear stays', (
       WidgetTester tester,
     ) async {

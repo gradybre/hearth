@@ -18,6 +18,7 @@ import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/planning/day_format.dart';
 import '../../domain/planning/meal_plan.dart';
+import '../../domain/shopping/manual_addition.dart';
 import '../../domain/shopping/pack_display.dart';
 import '../../domain/shopping/shopping_contribution.dart';
 import '../../domain/shopping/shopping_line.dart';
@@ -26,6 +27,7 @@ import '../../domain/shopping/shopping_sources.dart';
 import '../../domain/units/quantity.dart';
 import 'add_to_list_sheet.dart';
 import 'grocery_clarity_view.dart';
+import 'paste_items_sheet.dart';
 import 'shopping_amount_sheet.dart';
 import 'shopping_chat_controller.dart';
 import 'shopping_export_sheet.dart';
@@ -89,6 +91,8 @@ class _BodyState extends ConsumerState<_Body> {
   List<ShoppingLine> get lines => widget.lines;
   double get gutter => widget.gutter;
   bool _showAll = false;
+  bool _adding = false;
+  GlobalKey? _additionNoticeKey;
   final Set<int> _pointers = <int>{};
   List<ShoppingLine>? _heldLines;
   Map<String, Food>? _heldFoods;
@@ -513,54 +517,84 @@ class _BodyState extends ConsumerState<_Body> {
   /// is filled by saying what you are going to cook, not by transcribing its
   /// ingredients yourself.
   Future<void> _add(BuildContext context, WidgetRef ref) async {
+    if (_adding) return;
+    _adding = true;
+    final String userId = ref.read(currentUserIdProvider);
+    final String householdId = ref.read(currentHouseholdIdProvider);
+    final ShoppingRepository repository = ref.read(shoppingRepositoryProvider);
     final List<Food> foods =
         ref.read(foodLibraryProvider).value ?? const <Food>[];
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    ManualAdditionResult? manualResult;
 
-    final ListAddition? addition = await showAddToListSheet(
-      context,
-      recipes: ref.read(recipeLibraryProvider).value ?? const <Recipe>[],
-      foods: foods,
-    );
-    if (addition == null) return;
+    // No held review is ever applied with a new account's repository, and no
+    // asynchronous completion reads a route's ref after that route is gone.
+    bool isCurrent() =>
+        mounted &&
+        ref.read(currentUserIdProvider) == userId &&
+        ref.read(currentHouseholdIdProvider) == householdId;
 
-    final ShoppingRepository repository = ref.read(shoppingRepositoryProvider);
-    switch (addition) {
-      case RecipeAddition(:final Recipe recipe, :final double servings):
-        await repository.addRecipe(
-          recipe: recipe,
-          servings: servings,
-          // Read for one thing: which shop each line belongs to.
-          foods: <String, Food>{for (final Food f in foods) f.id: f},
-        );
-      case FoodAddition(:final Food food, :final double servings):
-        await repository.addFood(food: food, servings: servings);
-      case PlainAddition(:final String name):
-        // Re-read rather than added to what this screen last drew. The other
-        // two cases go through the repository, which reads the list itself;
-        // this one writes the whole list back, and the snapshot it was
-        // holding was taken before a sheet somebody spent seconds in. An item
-        // added by hand meanwhile, or a change arrived from the other phone,
-        // would be written out of existence — the same reason `restoreLine`
-        // and the cleared-list undo both re-read.
-        final List<ShoppingLine> now =
-            (await repository.current())?.lines ?? const <ShoppingLine>[];
-        final String key = ShoppingListBuilder.keyFor(name: name);
-        // Already there is not a failure, but it is invisible — the list
-        // simply does not change, which looks exactly like a button that did
-        // nothing. Said, rather than left to be guessed at.
-        if (now.any((ShoppingLine l) => l.key == key)) {
-          messenger.showSnackBar(
-            SnackBar(content: Text('$name is already on the list.')),
-          );
-          return;
+    try {
+      final ListAddition? addition = await showAddToListSheet(
+        context,
+        recipes: ref.read(recipeLibraryProvider).value ?? const <Recipe>[],
+        foods: foods,
+        currentLines: lines,
+        unavailableReason: () =>
+            isCurrent() ? null : ShoppingAdditionExpired.message,
+        onCommit: (ListAddition draft) async {
+          if (!isCurrent()) throw const ShoppingAdditionExpired();
+          switch (draft) {
+            case RecipeAddition(:final Recipe recipe, :final double servings):
+              await repository.addRecipe(
+                recipe: recipe,
+                servings: servings,
+                foods: <String, Food>{for (final Food f in foods) f.id: f},
+              );
+            case FoodAddition(:final Food food, :final double servings):
+              await repository.addFood(food: food, servings: servings);
+            case PlainAddition(:final String name, :final Quantity? quantity):
+              manualResult = await repository.addManualItems(<ManualListItem>[
+                ManualListItem(name: name, quantity: quantity),
+              ]);
+            case PlainBatchAddition(:final List<ManualListItem> items):
+              manualResult = await repository.addManualItems(items);
+          }
+          if (!isCurrent()) throw const ShoppingAdditionExpired();
+        },
+      );
+      if (addition == null || !isCurrent()) return;
+      ref.invalidate(shoppingListProvider);
+      final ManualAdditionResult? result = manualResult;
+      if (result != null &&
+          messenger.mounted &&
+          (addition is PlainBatchAddition || result.skipped.isNotEmpty)) {
+        // Replace only our own displayed notice. A clear/delete Undo belongs
+        // to another action and keeps its full window; this result queues
+        // behind it. A key has context only while its snackbar is displayed,
+        // so a previously queued result cannot dismiss an unrelated action.
+        if (_additionNoticeKey?.currentContext != null) {
+          messenger.hideCurrentSnackBar();
         }
-        await repository.replace(<ShoppingLine>[
-          ...now,
-          ShoppingLine.manual(key: key, name: name, sortOrder: now.length),
-        ]);
+        final GlobalKey noticeKey = GlobalKey();
+        _additionNoticeKey = noticeKey;
+        messenger.showSnackBar(
+          SnackBar(
+            key: noticeKey,
+            content: Text(
+              addition is PlainAddition && result.skipped.isNotEmpty
+                  ? '${addition.name} is already on the list.'
+                  : result.skipped.isNotEmpty
+                  ? 'Added ${result.added.length}; skipped ${result.skipped.length}.'
+                  : '${result.added.length} '
+                        '${result.added.length == 1 ? 'item' : 'items'} added.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      _adding = false;
     }
-    ref.invalidate(shoppingListProvider);
   }
 
   /// Takes one recipe, food or plan build back off the list.
