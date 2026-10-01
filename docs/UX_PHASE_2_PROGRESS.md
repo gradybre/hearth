@@ -17,7 +17,7 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
 | 4 — Export preview | UX-083 | Approved 2026-10-01 | Merged in [PR #119](https://github.com/gradybre/hearth/pull/119) | 4,161 passed in UTC; 21 calendar checks in New York; analysis clean; 103 render checks and all CI passed | No actionable findings; candidate `27d9eff` | Not performed |
 | 5 — Ongoing nutrition targets | UX-052, bounded personal carry-forward and weekly exceptions | Approved 2026-10-01 | Merged in [PR #120](https://github.com/gradybre/hearth/pull/120) after Brendan's merge approval | 4,259 passed in UTC; 72 checks in New York; clean analysis; 111 render checks and all CI passed | No actionable findings; candidate `cf3bdd8`; 133 independent checks passed | Not performed |
 | 6 — Cooking ingredient checklist | UX-018 | Approved 2026-10-01 | Merged in [PR #121](https://github.com/gradybre/hearth/pull/121) | 4,339 passed in UTC; 50 checks in New York; clean analysis; 115 render checks and all final CI passed | No actionable findings after the persistence correction; reviewed code unchanged by rebase onto main | Not performed |
-| 7 — Faster grocery additions | UX-061, plain-item quantity and reviewed paste scope | Approved 2026-10-01 | Entry/review UI and transactional batch saving integrated | 4,417 passed in UTC; 35 checks in New York; clean analysis; 119 render checks passed | Final candidate review and CI recorded in the group PR | Not performed |
+| 7 — Faster grocery additions | UX-061, plain-item quantity and reviewed paste scope | Approved 2026-10-01 | Implemented in [PR #122](https://github.com/gradybre/hearth/pull/122) | 4,417 passed in UTC; 35 checks in New York; clean analysis; 119 render checks passed | Final candidate review and CI recorded in the group PR | Not performed |
 | 8 — Open meals from Plan | UX-051, source navigation and separate logging control; exact log/unlog Undo excluded | Awaiting decision | Read-only preparation complete | — | — | — |
 
 ## Group 1 — Daily logging
@@ -278,7 +278,7 @@ surfaces; keyboard and 3× tests exercise both themes. Native-device validation
 has not been performed. The coordinating agent independently ran formatting,
 clean analysis, all 4,417 UTC tests (143 opt-in/time-zone skips), 35 calendar
 and repository checks in New York, and all 119 render checks. Review and CI
-results are recorded on the group PR.
+results are recorded on [PR #122](https://github.com/gradybre/hearth/pull/122).
 
 ## Group 8 — Open meals from Plan
 
