@@ -23,23 +23,17 @@ import '../../domain/planning/week_template.dart';
 import 'entry_resolver.dart';
 import 'macro_targets_sheet.dart';
 import 'plan_date_header.dart';
+import 'week_meals_view.dart';
 import 'week_template_sheet.dart';
+import 'week_view_preference.dart';
 
-/// The week, as seven days you can read against each other (spec §5.6,
-/// review §7.2).
-///
-/// This is the step-back view. It used to be a day selector wearing a week's
-/// name: a strip of seven thirty-point rings above one day's four large ones,
-/// which spent 290 points of a 390x844 phone on one day and 116 on all seven,
-/// and pushed the week's only aggregate off the bottom of the screen
-/// entirely. Comparing two days meant selecting each in turn.
-///
-/// Seven rows now, each carrying its own figures, with the detail behind an
-/// expansion rather than in front of it. Tapping a row still selects the day
-/// without leaving the week, and `Open this day` is still the way into
-/// logging.
+/// A week of meal names or the existing seven-day nutrition comparison.
 class WeekScreen extends ConsumerStatefulWidget {
-  const WeekScreen({super.key});
+  const WeekScreen({this.showViewControl = true, super.key});
+
+  /// Plan supplies one combined compact selector. Direct Week hosts still
+  /// receive a complete screen with their own Meals/Nutrition control.
+  final bool showViewControl;
 
   @override
   ConsumerState<WeekScreen> createState() => _WeekScreenState();
@@ -61,6 +55,9 @@ class _WeekScreenState extends ConsumerState<WeekScreen> {
   @override
   Widget build(BuildContext context) {
     final DateTime selected = ref.watch(selectedDateProvider);
+    final WeekViewPreferenceState preference = ref.watch(
+      weekViewPreferenceProvider,
+    );
     final List<DateTime> days = weekOf(selected);
     final ResolvedTargets? loadedTargets = ref
         .watch(dayTargetResolutionProvider)
@@ -98,6 +95,40 @@ class _WeekScreenState extends ConsumerState<WeekScreen> {
       error: (Object e, StackTrace s) =>
           Center(child: Text('The week could not be read.\n$e')),
       data: (Map<DateTime, List<MealPlanEntry>> byDay) {
+        Widget page(List<Widget> content) => ReadingColumn(
+          child: ListView(
+            key: ValueKey<String>('week-${preference.view.name}-${days.first}'),
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              compact ? HearthSpacing.sm : gutter,
+              gutter,
+              gutter * 3,
+            ),
+            children: <Widget>[
+              _WeekHeader(days: days),
+              if (widget.showViewControl) ...<Widget>[
+                const SizedBox(height: HearthSpacing.xs),
+                _WeekContentControl(value: preference.view),
+              ],
+              if (preference.error != null)
+                _PreferenceNotice(error: preference.error!),
+              SizedBox(height: compact ? HearthSpacing.sm : HearthSpacing.lg),
+              ...content,
+            ],
+          ),
+        );
+
+        if (preference.view == WeekContentView.meals) {
+          return page(<Widget>[
+            WeekMealsView(
+              days: days,
+              entries: byDay,
+              recipes: recipes,
+              foods: foods,
+            ),
+          ]);
+        }
+
         // The parts rather than the totals, so a day can say how much of
         // itself its minor-nutrient numbers actually cover. A total reads the
         // same from six foods as from one of six (spec §5.6).
@@ -154,60 +185,174 @@ class _WeekScreenState extends ConsumerState<WeekScreen> {
         // Bounded like the other section screens (review §6.2.7): seven rows
         // of figures stretched across a 1280-point window is not a column
         // anybody reads down.
-        return ReadingColumn(
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(
-              gutter,
-              compact ? HearthSpacing.sm : gutter,
-              gutter,
-              gutter * 3,
-            ),
-            children: <Widget>[
-              _WeekHeader(days: days),
-              SizedBox(height: compact ? HearthSpacing.sm : HearthSpacing.lg),
-              // Seven rows, each with its own figures, and the one that is
-              // selected opened in place. Selecting stays here rather than
-              // dropping into the day: the point of the week is to be able to
-              // look across it without leaving it.
-              _DayRows(
-                summary: summary,
-                selected: selected,
-                targets: targets,
-                eatenParts: eatenParts,
-                eatenCoverage: eatenCoverage,
-                open: _open,
-                onSelect: (DateTime day) {
-                  ref.read(selectedDateProvider.notifier).select(day);
-                  // A second tap closes it again, so a row is a disclosure
-                  // rather than a one-way door.
-                  setState(
-                    () => _open = _open != null && isSameDay(_open!, day)
-                        ? null
-                        : day,
-                  );
-                },
-                // The row's own day, not whichever the week has selected. The
-                // open row is remembered across a change of week and the
-                // selection is not, so stepping to next week and back with
-                // the today button re-opened Wednesday's detail above a
-                // button that opened Thursday.
-                onOpen: (DateTime day) {
-                  ref.read(selectedDateProvider.notifier).select(day);
-                  ref.read(planViewProvider.notifier).show(PlanView.day);
-                },
-              ),
-              const SizedBox(height: HearthSpacing.lg),
-              _WeekTotals(summary: summary, targets: targets),
-              TargetSourceAction(
-                resolution: targetResolution,
-                hasTargets: targets != null,
-              ),
-            ],
+        return page(<Widget>[
+          // Seven rows, each with its own figures, and the one that is
+          // selected opened in place. Selecting stays here rather than
+          // dropping into the day: the point of the week is to be able to
+          // look across it without leaving it.
+          _DayRows(
+            summary: summary,
+            selected: selected,
+            targets: targets,
+            eatenParts: eatenParts,
+            eatenCoverage: eatenCoverage,
+            open: _open,
+            onSelect: (DateTime day) {
+              ref.read(selectedDateProvider.notifier).select(day);
+              // A second tap closes it again, so a row is a disclosure
+              // rather than a one-way door.
+              setState(
+                () => _open = _open != null && isSameDay(_open!, day)
+                    ? null
+                    : day,
+              );
+            },
+            // The row's own day, not whichever the week has selected. The
+            // open row is remembered across a change of week and the
+            // selection is not, so stepping to next week and back with
+            // the today button re-opened Wednesday's detail above a
+            // button that opened Thursday.
+            onOpen: (DateTime day) {
+              ref.read(selectedDateProvider.notifier).select(day);
+              ref.read(planViewProvider.notifier).show(PlanView.day);
+            },
           ),
-        );
+          const SizedBox(height: HearthSpacing.lg),
+          _WeekTotals(summary: summary, targets: targets),
+          TargetSourceAction(
+            resolution: targetResolution,
+            hasTargets: targets != null,
+          ),
+        ]);
       },
     );
   }
+}
+
+class _WeekContentControl extends ConsumerWidget {
+  const _WeekContentControl({required this.value});
+
+  final WeekContentView value;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => LayoutBuilder(
+    builder: (BuildContext context, BoxConstraints constraints) {
+      void choose(WeekContentView view) =>
+          ref.read(weekViewPreferenceProvider.notifier).choose(view);
+      final bool compact =
+          constraints.maxWidth < 340 ||
+          MediaQuery.textScalerOf(context).scale(16) > 20;
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: compact
+            ? PopupMenuButton<WeekContentView>(
+                key: const ValueKey<String>('week-content-control'),
+                tooltip: 'Change week view',
+                initialValue: value,
+                onSelected: choose,
+                position: PopupMenuPosition.under,
+                itemBuilder: (BuildContext context) =>
+                    <PopupMenuEntry<WeekContentView>>[
+                      for (final WeekContentView view in WeekContentView.values)
+                        CheckedPopupMenuItem<WeekContentView>(
+                          key: ValueKey<String>('week-content-${view.name}'),
+                          value: view,
+                          checked: value == view,
+                          child: Text(
+                            view == WeekContentView.meals
+                                ? 'Meals'
+                                : 'Nutrition',
+                            style: context.text.label,
+                          ),
+                        ),
+                    ],
+                child: Container(
+                  constraints: const BoxConstraints(
+                    minHeight: HearthTouch.androidTarget,
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: HearthSpacing.md,
+                  ),
+                  decoration: BoxDecoration(
+                    color: context.colors.surface,
+                    border: Border.all(color: context.colors.outlineStrong),
+                    borderRadius: BorderRadius.circular(HearthRadius.md),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Flexible(
+                        child: Text(
+                          value == WeekContentView.meals
+                              ? 'Meals'
+                              : 'Nutrition',
+                          style: context.text.label,
+                        ),
+                      ),
+                      const SizedBox(width: HearthSpacing.sm),
+                      const Icon(Icons.expand_more),
+                    ],
+                  ),
+                ),
+              )
+            : SegmentedButton<WeekContentView>(
+                key: const ValueKey<String>('week-content-control'),
+                segments: const <ButtonSegment<WeekContentView>>[
+                  ButtonSegment<WeekContentView>(
+                    value: WeekContentView.meals,
+                    label: Text(
+                      'Meals',
+                      key: ValueKey<String>('week-content-meals'),
+                    ),
+                  ),
+                  ButtonSegment<WeekContentView>(
+                    value: WeekContentView.nutrition,
+                    label: Text(
+                      'Nutrition',
+                      key: ValueKey<String>('week-content-nutrition'),
+                    ),
+                  ),
+                ],
+                selected: <WeekContentView>{value},
+                showSelectedIcon: false,
+                onSelectionChanged: (Set<WeekContentView> values) =>
+                    choose(values.first),
+                style: ButtonStyle(
+                  textStyle: WidgetStatePropertyAll<TextStyle>(
+                    context.text.label,
+                  ),
+                ),
+              ),
+      );
+    },
+  );
+}
+
+class _PreferenceNotice extends ConsumerWidget {
+  const _PreferenceNotice({required this.error});
+
+  final WeekViewPreferenceError error;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: HearthSpacing.sm),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          error == WeekViewPreferenceError.read
+              ? 'Your saved week view could not be read.'
+              : 'This view is open, but your choice could not be saved on this device.',
+          style: context.text.metadata,
+        ),
+        TextButton(
+          onPressed: () =>
+              ref.read(weekViewPreferenceProvider.notifier).retry(),
+          child: const Text('Try again'),
+        ),
+      ],
+    ),
+  );
 }
 
 /// The seven days, one row each, with the selected one opened in place.

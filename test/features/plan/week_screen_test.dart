@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/domain/planning/week.dart';
 
@@ -11,6 +12,10 @@ Future<void> openPlan(WidgetTester tester) async {
 
 Future<void> showWeek(WidgetTester tester) async {
   await tester.tap(find.text('Week'));
+  await pumpFrames(tester);
+  await tester.tap(
+    find.byKey(const ValueKey<String>('week-content-nutrition')),
+  );
   await pumpFrames(tester);
 }
 

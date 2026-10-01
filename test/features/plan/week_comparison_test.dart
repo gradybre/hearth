@@ -85,6 +85,15 @@ void main() {
     );
     await pumpFrames(tester, frames: 12);
     await SweepTools(tester).planView('Week');
+    final SweepTools tools = SweepTools(tester);
+    if (find.byTooltip('Change week view').evaluate().isNotEmpty) {
+      await tools.reach(find.byTooltip('Change week view'));
+    } else if (find.byTooltip('Change plan view').evaluate().isNotEmpty) {
+      await tools.reach(find.byTooltip('Change plan view'));
+    }
+    await tools.reach(
+      find.byKey(const ValueKey<String>('week-content-nutrition')),
+    );
   }
 
   group('a day logged as nothing is a logged day', () {

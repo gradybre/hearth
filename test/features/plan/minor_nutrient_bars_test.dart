@@ -12,6 +12,7 @@ import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/fixtures.dart';
+import '../../support/swept_surfaces.dart';
 
 /// Fibre, sodium and cholesterol on the plan (spec §5.6).
 void main() {
@@ -215,6 +216,7 @@ void main() {
       await pumpFrames(tester, frames: 12);
       await tester.tap(find.text('Week'));
       await pumpFrames(tester, frames: 12);
+      await SweepTools(tester).weekContent('Nutrition');
       // The week is seven rows now and the detail is behind one of them
       // (review §7.2). The guard this test exists for is unchanged: whatever
       // the day screen shows here, the week has to show too.

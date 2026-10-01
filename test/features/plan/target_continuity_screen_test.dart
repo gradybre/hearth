@@ -21,6 +21,7 @@ import 'package:hearth/features/plan/macro_targets_sheet.dart';
 import 'package:hearth/features/plan/week_screen.dart';
 
 import '../../support/app_harness.dart' show pumpFrames;
+import '../../support/swept_surfaces.dart' show SweepTools;
 
 final DateTime _week = DateTime(2026, 9, 28);
 const MacroTargets _original = MacroTargets(
@@ -537,6 +538,7 @@ void main() {
         await session.repository.setOngoingTargets(_week, _original);
         session.container.invalidate(targetResolutionProvider);
         await pumpFrames(tester, frames: 12);
+        if (weekScreen) await SweepTools(tester).weekContent('Nutrition');
         final Finder action = find.text('Using ongoing targets · Change');
         await tester.scrollUntilVisible(
           action,
@@ -573,6 +575,7 @@ void main() {
               ],
             ),
           );
+          if (weekScreen) await SweepTools(tester).weekContent('Nutrition');
           await tester.scrollUntilVisible(
             find.text('Set targets'),
             200,

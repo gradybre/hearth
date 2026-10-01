@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../app/a11y/accessibility.dart';
 import '../../app/providers.dart';
@@ -26,14 +25,13 @@ import '../../domain/planning/portion_unit.dart';
 import '../../domain/planning/target_schedule.dart';
 import '../../domain/planning/week.dart';
 import '../../domain/recipes/macro_calculator.dart';
-import '../foods/food_detail_screen.dart';
-import '../recipes/cook_along_screen.dart';
 import 'day_picker_sheet.dart';
 import 'entry_resolver.dart';
 import 'log_sheet.dart';
 import 'log_state_feedback.dart';
 import 'logged_details_sheet.dart';
 import 'macro_targets_sheet.dart';
+import 'meal_source_actions.dart';
 import 'plan_date_header.dart';
 
 /// The day view: plan and track in one place (spec §5.6).
@@ -592,50 +590,11 @@ class _EntryRow extends ConsumerWidget {
   };
 
   void _openSource(BuildContext context) {
-    switch (entry.entry.refType) {
-      case PlanRefType.recipe:
-        context.push('/recipe/${entry.entry.refId}');
-      case PlanRefType.food:
-        Navigator.of(context).push<void>(
-          MaterialPageRoute<void>(
-            builder: (BuildContext context) => FoodDetailScreen(
-              foodId: entry.entry.refId,
-              servingOptionId: entry.entry.servingOptionId,
-            ),
-          ),
-        );
-    }
+    openMealSource(context, entry.entry);
   }
 
   void _cook(BuildContext context, WidgetRef ref) {
-    // Read again at the tap so a removed or reclassified source cannot enter
-    // cook-along through a stale row. The recipe itself is the cook snapshot.
-    Recipe? saved;
-    for (final Recipe current
-        in ref.read(recipeLibraryProvider).value ?? const <Recipe>[]) {
-      if (current.id == entry.entry.refId && !current.isDeleted) {
-        saved = current;
-        break;
-      }
-    }
-    if (saved == null) {
-      _say(context, 'This recipe is no longer in your library.');
-      return;
-    }
-    if (saved.isEatenOut) {
-      _say(context, 'Restaurant meals do not have a cook-along.');
-      return;
-    }
-    if (saved.allSteps.isEmpty) {
-      _say(context, 'This recipe has no directions to cook along with yet.');
-      return;
-    }
-    final Recipe snapshot = saved;
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (BuildContext context) => CookAlongScreen(recipe: snapshot),
-      ),
-    );
+    cookMealSource(context, ref, entry.entry);
   }
 
   /// Confirms this entry as eaten, or puts it back to planned.

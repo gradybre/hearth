@@ -3,17 +3,27 @@ import 'package:flutter/material.dart';
 import '../../app/providers.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import 'week_view_preference.dart';
+
+enum _CompactWeekChoice { day, meals, nutrition }
 
 /// Day and Week, kept to one labelled control when space is scarce.
 class PlanViewControl extends StatelessWidget {
   const PlanViewControl({
     required this.value,
     required this.onChanged,
+    this.weekContent,
+    this.onWeekContentChanged,
     super.key,
   });
 
   final PlanView value;
   final ValueChanged<PlanView> onChanged;
+
+  /// When supplied by Plan, one compact menu covers both levels of choice.
+  /// Standalone Day/Week controls keep their original contract.
+  final WeekContentView? weekContent;
+  final ValueChanged<WeekContentView>? onWeekContentChanged;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -23,7 +33,13 @@ class PlanViewControl extends StatelessWidget {
           MediaQuery.textScalerOf(context).scale(16) > 20;
       return Align(
         alignment: Alignment.centerLeft,
-        child: compact ? _compact(context) : _segments(context),
+        child: compact
+            ? value == PlanView.week &&
+                      weekContent != null &&
+                      onWeekContentChanged != null
+                  ? _compactWeek(context)
+                  : _compact(context)
+            : _segments(context),
       );
     },
   );
@@ -50,33 +66,83 @@ class PlanViewControl extends StatelessWidget {
             ),
           ),
       ],
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: context.colors.surface,
-          border: Border.all(color: context.colors.outlineStrong),
-          borderRadius: BorderRadius.circular(HearthRadius.md),
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            minWidth: HearthTouch.androidTarget,
-            minHeight: HearthTouch.androidTarget,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: HearthSpacing.md),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Flexible(
-                  child: Text(
-                    value == PlanView.day ? 'Day view' : 'Week view',
-                    style: context.text.label,
-                  ),
-                ),
-                const SizedBox(width: HearthSpacing.sm),
-                const Icon(Icons.expand_more),
-              ],
-            ),
-          ),
+      child: _menuLabel(
+        context,
+        value == PlanView.day ? 'Day view' : 'Week view',
+      ),
+    ),
+  );
+
+  Widget _compactWeek(BuildContext context) {
+    final bool meals = weekContent == WeekContentView.meals;
+    return Semantics(
+      key: const ValueKey<String>('week-content-control'),
+      button: true,
+      value: meals ? 'Week Meals' : 'Week Nutrition',
+      child: PopupMenuButton<_CompactWeekChoice>(
+        key: const ValueKey<String>('plan-view-control'),
+        tooltip: 'Change plan view',
+        initialValue: meals
+            ? _CompactWeekChoice.meals
+            : _CompactWeekChoice.nutrition,
+        onSelected: (_CompactWeekChoice choice) {
+          switch (choice) {
+            case _CompactWeekChoice.day:
+              onChanged(PlanView.day);
+            case _CompactWeekChoice.meals:
+              onWeekContentChanged!(WeekContentView.meals);
+            case _CompactWeekChoice.nutrition:
+              onWeekContentChanged!(WeekContentView.nutrition);
+          }
+        },
+        position: PopupMenuPosition.under,
+        borderRadius: BorderRadius.circular(HearthRadius.md),
+        itemBuilder: (BuildContext context) =>
+            <PopupMenuEntry<_CompactWeekChoice>>[
+              CheckedPopupMenuItem<_CompactWeekChoice>(
+                key: const ValueKey<String>('plan-view-day'),
+                value: _CompactWeekChoice.day,
+                checked: false,
+                child: Text('Day', style: context.text.label),
+              ),
+              CheckedPopupMenuItem<_CompactWeekChoice>(
+                key: const ValueKey<String>('week-content-meals'),
+                value: _CompactWeekChoice.meals,
+                checked: meals,
+                child: Text('Week Meals', style: context.text.label),
+              ),
+              CheckedPopupMenuItem<_CompactWeekChoice>(
+                key: const ValueKey<String>('week-content-nutrition'),
+                value: _CompactWeekChoice.nutrition,
+                checked: !meals,
+                child: Text('Week Nutrition', style: context.text.label),
+              ),
+            ],
+        child: _menuLabel(context, meals ? 'Meals' : 'Nutrition'),
+      ),
+    );
+  }
+
+  Widget _menuLabel(BuildContext context, String label) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: context.colors.surface,
+      border: Border.all(color: context.colors.outlineStrong),
+      borderRadius: BorderRadius.circular(HearthRadius.md),
+    ),
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(
+        minWidth: HearthTouch.androidTarget,
+        minHeight: HearthTouch.androidTarget,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: HearthSpacing.md),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Flexible(child: Text(label, style: context.text.label)),
+            const SizedBox(width: HearthSpacing.sm),
+            const Icon(Icons.expand_more),
+          ],
         ),
       ),
     ),

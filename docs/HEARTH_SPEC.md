@@ -298,6 +298,26 @@ belongs to the Nutrition section.
 
 ### 5.6 Daily / Weekly Planner + Logging
 - **Combined plan + track in one view.** Each day/slot supports a *planned* state and a *logged* (actually eaten) state.
+- **Week can show meals or nutrition.** First use opens **Meals**, with seven
+  dated cards, dinner names first and expandable breakfast/lunch/snack rows.
+  Every date offers Add dinner, with other Add actions beside their expanded
+  slot. Each action captures that card's date and slot for the existing
+  portion review; it does not log anything by opening. Tapping the date opens
+  that exact Day. Planned/logged labels and saved historical names stay
+  visible. This is the current person's plan, not a shared household diary.
+  *(Phase 2: UX-045, Group 17.)*
+- **Meal sources work the same from Day and Week.** Open the current recipe
+  or food without changing the plan. Eligible planned recipes offer Cook at
+  the full saved recipe yield; personal portions do not become batch sizes.
+  Unavailable sources are explained, and a removed food serving remains
+  explicit when opening current details.
+- **Keep the Week choice on this device.** Meals / Nutrition is remembered
+  locally, with an explicit choice taking precedence over a late preference
+  restore. A failed save keeps the chosen view open and offers Retry. Nutrition
+  retains its existing comparison, totals and target controls. Day remains
+  the primary Plan destination. At compact widths or large text, Week uses one
+  menu for Day / Week Meals / Week Nutrition so another selector does not push
+  the first meal or nutrient amount below the initial viewport.
 - **Dates stay readable before the first meal or nutrition figure.** On a
   narrow screen or at enlarged text, Day and Week put the date on its own
   line above their existing date actions. A compact **Day view / Week view**

@@ -97,6 +97,7 @@ import '../domain/recipes/macro_calculator.dart';
 import '../domain/recipes/recipe_query.dart';
 import '../domain/recipes/repair_queue.dart';
 import '../domain/text/text_normaliser.dart';
+import '../features/plan/week_view_preference.dart';
 import 'cook_timers.dart';
 import 'shell/launch_target.dart';
 import 'shell/sections.dart';
@@ -525,6 +526,12 @@ enum PlanView { day, week }
 
 final NotifierProvider<PlanViewMode, PlanView> planViewProvider =
     NotifierProvider<PlanViewMode, PlanView>(PlanViewMode.new);
+
+final NotifierProvider<WeekViewPreference, WeekViewPreferenceState>
+weekViewPreferenceProvider =
+    NotifierProvider<WeekViewPreference, WeekViewPreferenceState>(
+      WeekViewPreference.new,
+    );
 
 class PlanViewMode extends Notifier<PlanView> {
   @override

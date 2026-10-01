@@ -5,6 +5,8 @@ import 'package:hearth/app/providers.dart';
 import 'package:hearth/data/local/cook_session_store.dart';
 import 'package:hearth/domain/cooking/cook_session.dart';
 import 'package:hearth/features/foods/food_detail_screen.dart';
+import 'package:hearth/features/recipes/cook_along_screen.dart';
+import 'package:hearth/features/recipes/recipe_detail_screen.dart';
 
 import 'app_harness.dart';
 import 'fake_kitchen.dart';
@@ -179,11 +181,47 @@ class SweepTools {
       const ValueKey<String>('plan-view-control'),
     );
     expect(control, findsOneWidget);
-    if (_tester.widget(control) is PopupMenuButton<PlanView>) {
+    if (label == 'Week' &&
+        find
+            .byKey(const ValueKey<String>('week-content-control'))
+            .evaluate()
+            .isNotEmpty) {
+      return;
+    }
+    if (_tester.widget(control) is PopupMenuButton<Object?>) {
       await reach(control);
       // The menu entry owns the tap; its checked label ignores pointers.
       await reach(
         find.byKey(ValueKey<String>('plan-view-${label.toLowerCase()}')),
+      );
+    } else {
+      await reach(find.descendant(of: control, matching: find.text(label)));
+    }
+  }
+
+  Future<void> weekContent(String label) async {
+    if (label != 'Meals' && label != 'Nutrition') {
+      throw ArgumentError.value(label, 'label', 'Expected Meals or Nutrition');
+    }
+    final Finder control = find.byKey(
+      const ValueKey<String>('week-content-control'),
+    );
+    await bring(control);
+    final bool popup =
+        _tester.widget(control) is PopupMenuButton<Object?> ||
+        find
+            .descendant(
+              of: control,
+              matching: find.byWidgetPredicate(
+                (Widget widget) => widget is PopupMenuButton<Object?>,
+              ),
+            )
+            .evaluate()
+            .isNotEmpty;
+    if (popup) {
+      await reach(control);
+      await reach(
+        find.byKey(ValueKey<String>('week-content-${label.toLowerCase()}')),
       );
     } else {
       await reach(find.descendant(of: control, matching: find.text(label)));
@@ -212,6 +250,22 @@ Future<void> _openTimerTray(WidgetTester tester, SweepTools tools) async {
       );
   await pumpFrames(tester, frames: 8);
   await tools.reach(find.text('Simmer the beans'));
+}
+
+Finder _weekAction(String prefix, {String? suffix}) => find
+    .byWidgetPredicate(
+      (Widget widget) =>
+          widget.key is ValueKey<String> &&
+          (widget.key! as ValueKey<String>).value.startsWith(prefix) &&
+          (suffix == null ||
+              (widget.key! as ValueKey<String>).value.endsWith(suffix)),
+    )
+    .first;
+
+Future<void> _openWeekMeals(WidgetTester tester, SweepTools tools) async {
+  await tools.tab('Plan');
+  await tools.planView('Week');
+  await tools.weekContent('Meals');
 }
 
 final List<SweptSurface> sweptSurfaces = <SweptSurface>[
@@ -418,6 +472,67 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
       await tools.planView('Week');
     },
     arrived: find.byTooltip('Previous week'),
+  ),
+  SweptSurface(
+    name: 'the weekly nutrition comparison',
+    opensFrom: 'lib/features/plan/week_screen.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Plan');
+      await tools.planView('Week');
+      await tools.weekContent('Nutrition');
+    },
+    arrived: find.byTooltip('Previous week'),
+  ),
+  SweptSurface(
+    name: 'weekly meals and expanded slots',
+    opensFrom: 'lib/features/plan/week_meals_view.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await _openWeekMeals(tester, tools);
+      await tools.reach(_weekAction('week-other-meals-'));
+    },
+    arrived: find.text('Breakfast'),
+    waypoints: <Finder>[
+      _weekAction('week-meal-open-'),
+      _weekAction('week-add-', suffix: '-breakfast'),
+      _weekAction('week-add-', suffix: '-lunch'),
+    ],
+    farEnd: _weekAction('week-add-', suffix: '-snack'),
+  ),
+  SweptSurface(
+    name: 'adding dinner from its week card',
+    opensFrom: 'lib/features/plan/week_meals_view.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await _openWeekMeals(tester, tools);
+      await tools.reach(_weekAction('week-add-', suffix: '-dinner'));
+    },
+    arrived: find.text('Add to this meal'),
+  ),
+  SweptSurface(
+    name: 'opening a recipe from the week',
+    opensFrom: 'lib/features/plan/meal_source_actions.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await _openWeekMeals(tester, tools);
+      await tools.reach(_weekAction('week-other-meals-'));
+      await tools.reach(_weekAction('week-meal-open-'));
+    },
+    arrived: find.byType(RecipeDetailScreen),
+    farEnd: find.text('Directions'),
+  ),
+  SweptSurface(
+    name: 'cooking directly from the week',
+    opensFrom: 'lib/features/plan/meal_source_actions.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await _openWeekMeals(tester, tools);
+      await tools.reach(_weekAction('week-other-meals-'));
+      await tools.reach(_weekAction('week-meal-cook-'));
+    },
+    arrived: find.byType(CookAlongScreen),
+    farEnd: find.text('Mark done'),
   ),
   SweptSurface(
     name: 'choosing where to copy a day',
