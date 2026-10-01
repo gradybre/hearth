@@ -72,8 +72,8 @@ class ScaleControl extends StatelessWidget {
                         )
                       : null,
                 ),
-                SizedBox(
-                  width: 56,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 56),
                   child: Text(
                     _servings(targetServings),
                     textAlign: TextAlign.center,
@@ -88,7 +88,8 @@ class ScaleControl extends StatelessWidget {
               ],
             ),
             const SizedBox(height: HearthSpacing.sm),
-            Row(
+            Wrap(
+              runSpacing: HearthSpacing.sm,
               children: <Widget>[
                 for (final double multiplier in multipliers)
                   _Multiplier(
@@ -96,7 +97,6 @@ class ScaleControl extends StatelessWidget {
                     selected: (factor - multiplier).abs() < 1e-9,
                     onTap: () => onChanged(originalServings * multiplier),
                   ),
-                const Spacer(),
                 if (isScaled)
                   TextButton(
                     onPressed: () => onChanged(originalServings),
@@ -162,7 +162,6 @@ class _Multiplier extends StatelessWidget {
                 minWidth: HearthTouch.minTarget,
                 minHeight: HearthTouch.minTarget,
               ),
-              alignment: Alignment.center,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(HearthRadius.md),
                 border: Border.all(
@@ -170,10 +169,14 @@ class _Multiplier extends StatelessWidget {
                 ),
               ),
               padding: const EdgeInsets.symmetric(horizontal: HearthSpacing.md),
-              child: Text(
-                label,
-                style: context.text.label.copyWith(
-                  color: selected ? colors.onAccent : colors.textPrimary,
+              child: Center(
+                widthFactor: 1,
+                heightFactor: 1,
+                child: Text(
+                  label,
+                  style: context.text.label.copyWith(
+                    color: selected ? colors.onAccent : colors.textPrimary,
+                  ),
                 ),
               ),
             ),

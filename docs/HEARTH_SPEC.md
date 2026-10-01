@@ -169,6 +169,21 @@ belongs to the Nutrition section.
   - **First to yield on cost.** Icon calls stop at a much lower share of the monthly AI ceiling than the useful modes (§3), so a month of pictures can never be the reason a recipe import is refused. A build with no backend simply has recipes without icons, and says nothing about it.
 - **Display rounding:** friendly fractions for volume (e.g., 1⅓ tbsp), decimals for weight (e.g., 50 g). Values are stored canonically and rounded only for display.
 - **Yield & nutrition basis:** `servings` (yield) is required. Nutrition is shown **per serving** by default, with a whole-recipe toggle.
+- **Recipe detail names the nutrition basis.** Per serving / Whole dish controls
+  sit with the numbers and displayed yield. Scaling changes the whole-dish
+  total, while the per-serving basis stays the same. Partial coverage,
+  unknown nutrients and approximate package evidence remain explicit in
+  either view. *(Phase 2: recipe-detail scope of UX-010.)*
+- **Act on the recipe being read.** Cook, Plan and Shop are reachable from
+  recipe detail, with controls that wrap or scroll at enlarged text. Plan
+  opens a personal review defaulting to the local opening day, Dinner and
+  one personal serving, independent of cooking yield. The user reviews the
+  date, meal and portion before adding a planned entry; this does not log
+  eating. Undo removes only that new entry. Shop opens the existing shared
+  list review seeded with the displayed cooking yield, then offers View list
+  after adding. A restaurant recipe offers Plan without Cook, Shop or scaling;
+  an unusable yield or a recipe with no shopping contribution is explained
+  before any successful-looking add. *(Phase 2: UX-001.)*
 - **Structured ingredients:** free-typed or AI-imported ingredient lines are parsed into quantity / unit / item / prep-note fields — this is what makes scaling and shopping aggregation work.
 - **Optional / to-taste ingredients:** ingredients can be flagged optional (salt to taste, garnish); optional ingredients are excluded from the shopping list and macro totals.
 - **Favorites:** any user can favorite recipes (personal, not shared) and filter to a favorites-only view.

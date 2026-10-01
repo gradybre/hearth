@@ -80,7 +80,7 @@ void main() {
     await pumpHearthApp(tester, recipes: <Recipe>[chilli()]);
     await openRecipe(tester, 'Chilli');
 
-    expect(find.widgetWithText(FloatingActionButton, 'Cook'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Cook'), findsOneWidget);
     expect(find.byType(ScaleControl), findsOneWidget);
   });
 
@@ -90,7 +90,7 @@ void main() {
     await pumpHearthApp(tester, recipes: <Recipe>[burritoBowl()]);
     await openRecipe(tester, 'My usual bowl');
 
-    expect(find.widgetWithText(FloatingActionButton, 'Cook'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Cook'), findsNothing);
   });
 
   testWidgets('and no scaling — you cannot order a bigger bowl', (
@@ -103,7 +103,9 @@ void main() {
 
     expect(find.byType(ScaleControl), findsNothing);
     // But its nutrition is still there — the numbers are the whole point.
-    expect(find.text('Nutrition per serving'), findsOneWidget);
+    expect(find.text('Nutrition'), findsOneWidget);
+    expect(find.text('Plan'), findsOneWidget);
+    expect(find.text('Shop'), findsNothing);
   });
 
   testWidgets('the editor can mark one, and it saves as eaten out', (

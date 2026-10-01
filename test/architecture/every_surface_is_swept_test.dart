@@ -27,7 +27,8 @@ void main() {
 
     final RegExp opener = RegExp(r'\b(showModalBottomSheet|showDialog)\b');
     final Set<String> declared = <String>{
-      for (final SweptSurface surface in sweptSurfaces) surface.opensFrom,
+      for (final SweptSurface surface in sweptSurfaces)
+        if (!surface.isInline) surface.opensFrom,
       ...notSweptYet.keys,
     };
 
@@ -57,10 +58,12 @@ void main() {
     // longer needs one is worse than no excuse at all.
     final RegExp opener = RegExp(r'\b(showModalBottomSheet|showDialog)\b');
     final List<String> stale = <String>[
-      for (final String path in <String>[
-        ...sweptSurfaces.map((SweptSurface s) => s.opensFrom),
-        ...notSweptYet.keys,
-      ])
+      for (final SweptSurface surface in sweptSurfaces)
+        if (!File(surface.opensFrom).existsSync() ||
+            (!surface.isInline &&
+                !opener.hasMatch(File(surface.opensFrom).readAsStringSync())))
+          surface.opensFrom,
+      for (final String path in notSweptYet.keys)
         if (!File(path).existsSync() ||
             !opener.hasMatch(File(path).readAsStringSync()))
           path,
@@ -70,7 +73,7 @@ void main() {
       stale,
       isEmpty,
       reason:
-          'These are listed as opening a sheet or dialog and no longer do:\n'
+          'These sources are missing or no longer open their declared overlay:\n'
           '${stale.join('\n')}',
     );
   });

@@ -16,15 +16,38 @@ const Duration undoWindow = Duration(seconds: 6);
 /// the kind of detail that quietly drifts apart between copies. [onUndo]
 /// firing is what the user asked for; the snackbar continuing to display
 /// afterwards is not.
+/// [stackedAction] gives a longer confirmation the full row above Undo.
 void showUndoSnackBar(
   ScaffoldMessengerState messenger, {
   required String message,
   required VoidCallback onUndo,
+  bool stackedAction = false,
 }) {
   messenger.hideCurrentSnackBar();
+  final SnackBarAction undo = SnackBarAction(
+    label: 'Undo',
+    onPressed: () {
+      // Acting on it is the decision; nothing is served by it lingering
+      // for the rest of the window after that.
+      messenger.hideCurrentSnackBar();
+      onUndo();
+    },
+  );
   messenger.showSnackBar(
     SnackBar(
-      content: Text(message),
+      // SnackBar's overflow layout still reserves 40% of the message row
+      // for its action. Put the native action below the full-width message
+      // here when requested, so large type does not become a narrow column.
+      content: stackedAction
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Text(message),
+                Align(alignment: Alignment.centerRight, child: undo),
+              ],
+            )
+          : Text(message),
       duration: undoWindow,
       // Material's own default: a SnackBar with an action sets `persist` to
       // true unless told otherwise, and the auto-dismiss timer no-ops when it
@@ -32,15 +55,7 @@ void showUndoSnackBar(
       // unless this is set. That default is exactly the bug report this
       // exists to fix; without this line the window above does nothing.
       persist: false,
-      action: SnackBarAction(
-        label: 'Undo',
-        onPressed: () {
-          // Acting on it is the decision; nothing is served by it lingering
-          // for the rest of the window after that.
-          messenger.hideCurrentSnackBar();
-          onUndo();
-        },
-      ),
+      action: stackedAction ? null : undo,
     ),
   );
 }

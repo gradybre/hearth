@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/app/providers.dart';
 import 'package:hearth/domain/shopping/shopping_line.dart';
 import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
@@ -18,6 +20,7 @@ import '../../support/app_harness.dart';
 /// The range is a fact you check once to be sure you are looking at the right
 /// list. The list is the reason the screen exists.
 void main() {
+  const String rangeLabel = '9/30 – 10/6';
   int order = 0;
   ShoppingLine line(
     String name, {
@@ -57,6 +60,12 @@ void main() {
     );
     await tester.tap(find.text('Shopping').last);
     await pumpFrames(tester, frames: 12);
+    // The placement of the reviewed range must not depend on the current
+    // month or on whether the CI runner has crossed midnight before us.
+    ProviderScope.containerOf(tester.element(find.byType(Scaffold).first))
+        .read(shoppingRangeProvider.notifier)
+        .set(from: DateTime(2026, 9, 30), to: DateTime(2026, 10, 6));
+    await pumpFrames(tester);
   }
 
   /// Where the tab bar starts, which is where the screen stops.
@@ -126,7 +135,7 @@ void main() {
       findsOneWidget,
       reason: 'the count of what is left is the fact a shop wants',
     );
-    expect(find.textContaining('9/'), findsNothing);
+    expect(find.text(rangeLabel), findsNothing);
   });
 
   group('setup moves behind Manage list', () {
@@ -153,8 +162,8 @@ void main() {
       expect(find.text('Include seasonings'), findsOneWidget);
       expect(find.text('Build from the plan'), findsOneWidget);
       expect(
-        find.textContaining('9/'),
-        findsWidgets,
+        find.text(rangeLabel),
+        findsOneWidget,
         reason: 'the range is a parameter of the build, shown beside it',
       );
     });
@@ -190,7 +199,7 @@ void main() {
       expect(find.text('Add item'), findsOneWidget);
       expect(find.text('Build from the plan'), findsOneWidget);
       expect(find.text('Manage list'), findsNothing);
-      expect(find.textContaining('9/'), findsNothing);
+      expect(find.text(rangeLabel), findsNothing);
     });
   });
 

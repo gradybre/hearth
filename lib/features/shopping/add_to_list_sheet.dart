@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
+import '../../domain/recipes/ingredient_consolidator.dart';
 import '../../domain/text/text_normaliser.dart';
 
 /// What somebody asked to put on the shopping list (spec §5.7).
@@ -50,6 +52,8 @@ Future<ListAddition?> showAddToListSheet(
   BuildContext context, {
   required List<Recipe> recipes,
   required List<Food> foods,
+  Recipe? recipe,
+  double? servings,
 }) => showModalBottomSheet<ListAddition>(
   context: context,
   backgroundColor: context.colors.background,
@@ -59,15 +63,49 @@ Future<ListAddition?> showAddToListSheet(
   constraints: BoxConstraints(
     maxHeight: MediaQuery.sizeOf(context).height * 0.85,
   ),
-  builder: (BuildContext sheet) =>
-      _AddToListSheet(recipes: recipes, foods: foods),
+  builder: (BuildContext sheet) => _AddToListSheet(
+    recipes: recipes,
+    foods: foods,
+    recipe: recipe,
+    servings: servings,
+  ),
 );
 
+/// Explains why a review cannot produce a shopping contribution. Uses the
+/// repository's source builder so eligibility never guesses at conversions.
+String? recipeShoppingIssue(Recipe recipe, {required double servings}) {
+  if (recipe.isEatenOut) {
+    return 'Meals eaten out do not add ingredients to the shopping list.';
+  }
+  if (!recipe.servings.isFinite || recipe.servings <= 0) {
+    return 'Set a positive recipe yield before adding its ingredients.';
+  }
+  if (!servings.isFinite || servings <= 0) {
+    return 'Choose a positive number of servings to add.';
+  }
+  if (IngredientConsolidator.mergeRecipes(
+    <Recipe>[recipe],
+    servingsFor: <String, double>{recipe.id: servings},
+    sourceMode: true,
+  ).isEmpty) {
+    return 'This recipe has no ingredients to add to the shopping list. '
+        'Optional ingredients are left out.';
+  }
+  return null;
+}
+
 class _AddToListSheet extends StatefulWidget {
-  const _AddToListSheet({required this.recipes, required this.foods});
+  const _AddToListSheet({
+    required this.recipes,
+    required this.foods,
+    this.recipe,
+    this.servings,
+  });
 
   final List<Recipe> recipes;
   final List<Food> foods;
+  final Recipe? recipe;
+  final double? servings;
 
   @override
   State<_AddToListSheet> createState() => _AddToListSheetState();
@@ -80,10 +118,30 @@ class _AddToListSheetState extends State<_AddToListSheet> {
   Food? _food;
   double _servings = 1;
 
+  bool get _seeded => widget.recipe != null;
+  double? get _seedServings => widget.servings ?? widget.recipe?.servings;
+  double get _maximum =>
+      _seedServings != null && _seedServings!.isFinite && _seedServings! > 99
+      ? _seedServings!
+      : 99;
+
+  double get _minimum =>
+      _seedServings != null &&
+          _seedServings!.isFinite &&
+          _seedServings! > 0 &&
+          _seedServings! < 0.5
+      ? _seedServings!
+      : 0.5;
+
   @override
   void initState() {
     super.initState();
     _search.addListener(() => setState(() {}));
+    _recipe = widget.recipe;
+    final double initial = widget.servings ?? widget.recipe?.servings ?? 1;
+    _servings = initial.isFinite && initial > 0
+        ? initial.clamp(_minimum, _maximum)
+        : 1;
   }
 
   @override
@@ -159,7 +217,8 @@ class _AddToListSheetState extends State<_AddToListSheet> {
     });
   }
 
-  void _step(double next) => setState(() => _servings = next.clamp(0.5, 99));
+  void _step(double next) =>
+      setState(() => _servings = next.clamp(_minimum, _maximum));
 
   @override
   Widget build(BuildContext context) {
@@ -168,6 +227,9 @@ class _AddToListSheetState extends State<_AddToListSheet> {
     final bool chosen = _recipe != null || _food != null;
     final List<Recipe> recipes = _matchingRecipes;
     final List<Food> foods = _matchingFoods;
+    final String? issue = _recipe == null
+        ? null
+        : recipeShoppingIssue(_recipe!, servings: _servings);
 
     return SafeArea(
       top: false,
@@ -189,44 +251,60 @@ class _AddToListSheetState extends State<_AddToListSheet> {
           // button at the end of the sheet says. A heading and an action
           // wearing the same words read as the same control to anybody
           // skimming, and as two of it to a screen reader.
-          Text('What do you need?', style: context.text.sectionHeader),
+          Text(
+            _seeded ? 'Add ingredients' : 'What do you need?',
+            style: context.text.sectionHeader,
+          ),
           const SizedBox(height: HearthSpacing.sm),
           Text(
-            'A recipe puts its ingredients on, added up with whatever is '
-            'already there.',
+            _seeded
+                ? 'For our household shopping list. Ingredients are added '
+                      'to whatever is already there.'
+                : 'A recipe puts its ingredients on, added up with whatever '
+                      'is already there.',
             style: context.text.metadata.copyWith(color: colors.textMuted),
           ),
           const SizedBox(height: HearthSpacing.md),
-          TextField(
-            controller: _search,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'A recipe, a food, or anything else',
-              hintText: 'Chilli, yoghurt, paper towels…',
+          if (!_seeded) ...<Widget>[
+            TextField(
+              controller: _search,
+              autofocus: true,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'A recipe, a food, or anything else',
+                hintText: 'Chilli, yoghurt, paper towels…',
+              ),
             ),
-          ),
-          const SizedBox(height: HearthSpacing.md),
+            const SizedBox(height: HearthSpacing.md),
+          ],
           if (chosen)
             _Chosen(
               name: _recipe?.title ?? _food!.name,
               amount: _amount(_servings),
               spokenAmount: _spoken(_servings),
-              spokenMore: _spoken((_servings + 0.5).clamp(0.5, 99)),
-              spokenFewer: _servings > 0.5
-                  ? _spoken((_servings - 0.5).clamp(0.5, 99))
+              spokenMore: _spoken((_servings + 0.5).clamp(_minimum, _maximum)),
+              spokenFewer: _servings > _minimum
+                  ? _spoken((_servings - 0.5).clamp(_minimum, _maximum))
                   : null,
               // Half a serving is the smallest ask that means anything, and
               // zero would put a whole recipe on the list — the repository
               // refuses it outright.
-              onFewer: _servings > 0.5 ? () => _step(_servings - 0.5) : null,
+              onFewer: _servings > _minimum
+                  ? () => _step(_servings - 0.5)
+                  : null,
               onMore: () => _step(_servings + 0.5),
-              onClear: () => _choose(),
-              onAdd: () => Navigator.of(context).pop(
-                _recipe != null
-                    ? RecipeAddition(recipe: _recipe!, servings: _servings)
-                    : FoodAddition(food: _food!, servings: _servings),
-              ),
+              onClear: _seeded ? null : () => _choose(),
+              issue: issue,
+              onAdd: issue != null
+                  ? null
+                  : () => Navigator.of(context).pop(
+                      _recipe != null
+                          ? RecipeAddition(
+                              recipe: _recipe!,
+                              servings: _servings,
+                            )
+                          : FoodAddition(food: _food!, servings: _servings),
+                    ),
             )
           else ...<Widget>[
             for (final Recipe recipe in recipes)
@@ -264,6 +342,13 @@ class _AddToListSheetState extends State<_AddToListSheet> {
                 onTap: () => Navigator.of(context).pop(PlainAddition(typed)),
               ),
           ],
+          if (_seeded) ...<Widget>[
+            const SizedBox(height: HearthSpacing.sm),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
         ],
       ),
     );
@@ -273,9 +358,7 @@ class _AddToListSheetState extends State<_AddToListSheet> {
       '${_number(servings)} ${servings == 1 ? 'serving' : 'servings'}';
 
   /// Halves read as halves; whole numbers do not grow a `.0`.
-  static String _number(double value) => value == value.roundToDouble()
-      ? value.round().toString()
-      : value.toStringAsFixed(1);
+  static String _number(double value) => QuantityFormat.count(value);
 }
 
 /// The thing you picked, and how much of it.
@@ -290,6 +373,7 @@ class _Chosen extends StatelessWidget {
     required this.onMore,
     required this.onClear,
     required this.onAdd,
+    this.issue,
   });
 
   final String name;
@@ -306,12 +390,40 @@ class _Chosen extends StatelessWidget {
 
   final VoidCallback? onFewer;
   final VoidCallback onMore;
-  final VoidCallback onClear;
-  final VoidCallback onAdd;
+  final VoidCallback? onClear;
+  final VoidCallback? onAdd;
+  final String? issue;
 
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
+    final Widget fewer = _Step(
+      icon: Icons.remove,
+      label: 'Fewer',
+      onPressed: onFewer,
+    );
+    final Widget more = _Step(
+      icon: Icons.add,
+      label: 'More',
+      onPressed: onMore,
+    );
+    final Widget quantity = Semantics(
+      label: 'How many',
+      value: spokenAmount,
+      increasedValue: spokenMore,
+      decreasedValue: spokenFewer ?? spokenAmount,
+      onIncrease: onMore,
+      onDecrease: onFewer,
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: HearthSpacing.sm),
+        child: Text(
+          amount,
+          textAlign: TextAlign.center,
+          style: context.text.sectionHeader,
+        ),
+      ),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -319,7 +431,8 @@ class _Chosen extends StatelessWidget {
         Row(
           children: <Widget>[
             Expanded(child: Text(name, style: context.text.label)),
-            TextButton(onPressed: onClear, child: const Text('Change')),
+            if (onClear != null)
+              TextButton(onPressed: onClear, child: const Text('Change')),
           ],
         ),
         const SizedBox(height: HearthSpacing.sm),
@@ -333,34 +446,25 @@ class _Chosen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: HearthSpacing.xs),
-        Row(
-          children: <Widget>[
-            _Step(icon: Icons.remove, label: 'Fewer', onPressed: onFewer),
-            Expanded(
-              child: Semantics(
-                label: 'How many',
-                value: spokenAmount,
-                increasedValue: spokenMore,
-                decreasedValue: spokenFewer ?? spokenAmount,
-                onIncrease: onMore,
-                onDecrease: onFewer,
-                excludeSemantics: true,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: HearthSpacing.sm,
-                  ),
-                  child: Text(
-                    amount,
-                    textAlign: TextAlign.center,
-                    style: context.text.sectionHeader,
-                  ),
-                ),
-              ),
-            ),
-            _Step(icon: Icons.add, label: 'More', onPressed: onMore),
-          ],
-        ),
+        if (MediaQuery.textScalerOf(context).scale(14) > 21) ...<Widget>[
+          quantity,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[fewer, more],
+          ),
+        ] else
+          Row(
+            children: <Widget>[
+              fewer,
+              Expanded(child: quantity),
+              more,
+            ],
+          ),
         const SizedBox(height: HearthSpacing.lg),
+        if (issue != null) ...<Widget>[
+          Text(issue!, style: context.text.body),
+          const SizedBox(height: HearthSpacing.md),
+        ],
         // A minimum rather than a fixed height, so the button grows with the
         // type instead of clipping its own label (spec §6.3).
         ConstrainedBox(
