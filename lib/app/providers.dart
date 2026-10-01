@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../data/adapters/archive_file_share.dart';
+import '../data/adapters/archive_photo_reader.dart';
 import '../data/adapters/data_export.dart';
 import '../data/adapters/edge_function_label_reader.dart';
 import '../data/adapters/edge_function_menu_reader.dart';
@@ -13,6 +15,7 @@ import '../data/adapters/edge_function_recipe_ai.dart';
 import '../data/adapters/edge_function_recipe_icon.dart';
 import '../data/adapters/edge_function_shopping_assistant.dart';
 import '../data/adapters/edge_function_thermostat.dart';
+import '../data/adapters/food_data_archive.dart';
 import '../data/adapters/image_picker_photos.dart';
 import '../data/adapters/kitchen_devices.dart';
 import '../data/adapters/label_reader.dart';
@@ -1136,6 +1139,21 @@ final Provider<DataExport> dataExportProvider = Provider<DataExport>(
 final Provider<FileShare> fileShareProvider = Provider<FileShare>(
   (Ref ref) => const SharePlusFileShare(),
 );
+
+final Provider<FoodDataArchive> foodDataArchiveProvider =
+    Provider<FoodDataArchive>(
+      (Ref ref) => FoodDataArchive(
+        dataExport: ref.watch(dataExportProvider),
+        photos: StoredArchivePhotoReader(
+          database: ref.watch(databaseProvider),
+          photos: ref.watch(recipePhotoStoreProvider),
+          storage: ref.watch(photoStorageProvider),
+        ),
+      ),
+    );
+
+final Provider<ArchiveFileShare> archiveFileShareProvider =
+    Provider<ArchiveFileShare>((Ref ref) => const SharePlusFileShare());
 
 // ── Recipe photos (spec §5.2) ────────────────────────────────────────────────
 

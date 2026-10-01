@@ -9,7 +9,9 @@ import 'package:hearth/app/providers.dart';
 import 'package:hearth/app/shell/launch_target.dart';
 import 'package:hearth/app/shell/sections.dart';
 import 'package:hearth/app/sync_controller.dart';
+import 'package:hearth/data/adapters/archive_file_share.dart';
 import 'package:hearth/data/adapters/data_export.dart';
+import 'package:hearth/data/adapters/food_data_archive.dart';
 import 'package:hearth/data/adapters/label_reader.dart';
 import 'package:hearth/data/adapters/menu_reader.dart';
 import 'package:hearth/data/adapters/nutrition_lookup.dart';
@@ -46,6 +48,7 @@ import 'package:hearth/main.dart';
 
 import 'fake_auth.dart';
 import 'fake_file_share.dart';
+import 'fake_food_archive.dart';
 import 'fake_kitchen.dart';
 
 /// Pumps the real app for a widget test.
@@ -161,6 +164,8 @@ Future<HearthDatabase> pumpHearthApp(
   /// The OS share sheet is an external handoff, even in a sweep. Tests keep
   /// the reviewed bytes here instead of opening a native destination picker.
   FileShare? fileShare,
+  FoodDataArchive? foodArchive,
+  ArchiveFileShare? archiveShare,
 
   /// The household's thermostat (spec §11).
   ///
@@ -311,6 +316,12 @@ Future<HearthDatabase> pumpHearthApp(
         // with no backend honestly does.
         shoppingAssistantProvider.overrideWithValue(shoppingAssistant),
         fileShareProvider.overrideWithValue(fileShare ?? FakeFileShare()),
+        foodDataArchiveProvider.overrideWithValue(
+          foodArchive ?? FakeFoodDataArchive(),
+        ),
+        archiveFileShareProvider.overrideWithValue(
+          archiveShare ?? FakeArchiveFileShare(),
+        ),
         // The thermostat lives behind an Edge Function and a Google account,
         // neither of which a widget test has.
         thermostatProvider.overrideWithValue(thermostat),

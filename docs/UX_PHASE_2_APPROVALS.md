@@ -34,7 +34,7 @@ the review baseline; completed work must be reconciled before asking again.
 
 ## Already decided and delivered
 
-Groups 1–11 are approved and merged. Do not ask for them again. Their bounded
+Groups 1–12 are approved and merged. Do not ask for them again. Their bounded
 scope is recorded in UX_PHASE_2_PROGRESS.md. In particular:
 
 - Group 9: [PR #124](https://github.com/gradybre/hearth/pull/124), merged
@@ -48,17 +48,27 @@ scope is recorded in UX_PHASE_2_PROGRESS.md. In particular:
   2026-10-01 as `a0f1026`; all CI passed on reviewed candidate `d1f22b5`,
   and the merged tree matches it exactly. Independent root checks passed:
   4,716 UTC tests, 87 New York checks and 165 render checks.
+- Group 12: [PR #128](https://github.com/gradybre/hearth/pull/128), merged
+  2026-10-01 as `c4a5a76`; all CI passed on reviewed candidate `adae6c4`,
+  and the merged tree matches it exactly. Independent root checks passed:
+  4,777 UTC tests, 85 New York checks and 177 render checks.
 
 ## Presented decisions
 
 | Group | Review coverage | Decision | Delivery / sequence |
 |---|---|---|---|
 | 11 — Exact log/unlog Undo | UX-051 remainder | Approved 2026-10-01: “Approve Group 11” | Merged as `a0f1026` through PR #127; independent reviews clear and all CI green |
-| 12 — Readable Today and Week | UX-087 | Approved 2026-10-01 through its decision card | Implemented on merged Group 11; independent reviews clear, all local checks passed; pull request delivery and CI pending |
-| 13 — Readable food-data archive | UX-084 | Awaiting answer; card re-presented after Group 12 approval | Can run alongside Plan work; coordinator integrates shared export/provider changes |
-| 14 — Recipe nutrition calculation receipt | UX-015; remaining UX-010 wording | Awaiting answer; card sent 2026-10-01 | Receipt can start independently; shared editor/logging changes sequenced |
-| 15 — Repeat and customize restaurant orders | UX-029, UX-033 | Awaiting answer; card sent 2026-10-01 | Restaurant work independent; logging integration sequenced |
-| 16 — Resolve missing ingredient matches in place | UX-014; narrow UX-028 search context | Awaiting answer; card sent 2026-10-01 | Match-review work independent; food picker/editor ownership sequenced |
+| 12 — Readable Today and Week | UX-087 | Approved 2026-10-01 through its decision card | Merged as `c4a5a76` through PR #128; independent reviews clear and all CI green |
+| 13 — Readable food-data archive | UX-084 | Approved 2026-10-01: “Approve those 4” for Groups 13–16 | Corrected source review clear; 4,862 UTC tests and 60 New York checks pass; final visual gate in progress |
+| 14 — Recipe nutrition calculation receipt | UX-015; remaining UX-010 wording | Approved 2026-10-01: “Approve those 4” | Independent review corrections pass focused checks; final integration validation in progress |
+| 15 — Repeat and customize restaurant orders | UX-029, UX-033 | Approved 2026-10-01: “Approve those 4” | Restaurant builder complete; shared editor/router handoff follows Group 14 |
+| 16 — Resolve missing ingredient matches in place | UX-014; narrow UX-028 search context | Approved 2026-10-01: “Approve those 4” | Subagent building match review and capture context; shared editor/router integration sequenced |
+| 17 — Meals across the week | UX-045 | Approved 2026-10-01 through its decision card | Builder complete; shared journeys pass; full validation and independent review in progress |
+| 18 — Reviewed Walmart package counts | UX-065 | Approved 2026-10-01 through its decision card | Builder complete; coordinator reproducing review findings for count units and spoken labels |
+| 19 — Daily nutrient contributors | UX-056 | Approved 2026-10-01 through its decision card | Projection/screen builder complete; shared Day entry points follow Group 17 |
+| 20 — Preserve planned amounts | UX-040 remainder | Awaiting answer; card and text overview sent 2026-10-01 | Storage/sync/export and logging integration sequenced |
+| 21 — Capture while logging | UX-042 | Awaiting answer; card and text overview sent 2026-10-01 | Shares food-return plumbing with Group 16 |
+| 22 — Preview saved weeks | UX-047 additive preview | Awaiting answer; card and text overview sent 2026-10-01 | Queues with planned amount and Plan repository work |
 
 ### Group 11 — Exact log/unlog Undo
 
@@ -110,6 +120,53 @@ intact, then apply the reviewed matches together. Making a match the household
 usual remains explicit. Medium change. No new AI behavior: the existing Read
 label action retains its normal cost when deliberately selected.
 
+### Group 17 — Meals across the week
+
+Week gains Meals / Nutrition. Meals shows seven readable day cards with dinner
+names first, other meals expandable, and a date-specific Add action. Existing
+source/Cook actions and the nutritional Week view remain. Remember the selected
+Week view on this device; Day stays the primary Plan destination. This is a
+personal overview, not a shared household calendar. Medium change; no AI.
+
+### Group 18 — Reviewed Walmart package counts
+
+Review the saved product and package count before the external handoff: for
+example, Need 600 g → 2 × 400 g packs. Permit a trip-specific correction; an
+unknown conversion needs an explicit count or Skip. Show cap-limited and
+excluded quantities, retain Copy list, and call the handoff Review at Walmart.
+No live prices, stock/catalog lookup or automatic bought checks. Medium; no AI.
+
+### Group 19 — Daily nutrient contributors
+
+Open a supported daily nutrient to see contributing logged meals, their saved
+amounts and a separate Missing information section. Rows open frozen logged
+details; percentages require a meaningful known total. Improve future logs
+opens the current food/recipe without recalculating history. Medium; no AI.
+
+### Group 20 — Preserve planned amounts
+
+Preserve the entered amount and unit of a planned food across devices, copying,
+moving and saved weeks; capture current nutrition only when logged. A changed
+or unavailable serving definition requires portion review rather than guessing.
+Existing plans retain their serving-count meaning. Larger change including
+storage, sync and export; no AI.
+
+### Group 21 — Capture while logging
+
+Add Scan alongside logging search and Read label / Enter food on a search miss.
+Review and save a shared library food, return to the captured date, slot and
+plan/log intent for personal portion confirmation. Cancel returns to the same
+search. Medium; no new AI behavior, with existing label-reading cost only on an
+explicit Read label action. Shares capture plumbing with Group 16.
+
+### Group 22 — Preview saved weeks
+
+Review seven days before applying a saved week. Choose dates and slots, see
+missing sources and possible duplicates, then explicitly add the selected valid
+entries. Preserve serving choices. Scoped Undo removes only unchanged entries
+from this application. No replacement of existing plans or template editor.
+Medium; no AI.
+
 ## Remaining coverage
 
 The complete preparation ledger covers UX-001–UX-097 and FUT-001–FUT-007.
@@ -125,9 +182,9 @@ prerequisites, scope boundaries, and current-source references:
 - [Accounts, navigation, ownership, House and future modules](ux_approval_packets/account_data_house.md):
   UX-075–UX-097 and FUT-001–FUT-007.
 
-Next after presented Groups 12–16: meal-readable Week (`week-meals`), reviewed
-Walmart package counts (`walmart-quantities`), and nutrient contributors
-(`nutrient-receipt`), unless a user modification changes ordering. Present each
-with its own numbered decision card. Later packets may be grouped where the
+Groups 17–19 now cover meal-readable Week (`week-meals`), reviewed Walmart
+package counts (`walmart-quantities`), and nutrient contributors
+(`nutrient-receipt`). Keep their answers separate from delivery order. Later
+packets may be grouped where the
 user-facing decision is truly one coherent change; keep every residual scope
 mapped and do not silently authorize deferred features.
