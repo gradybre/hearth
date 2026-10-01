@@ -280,6 +280,22 @@ belongs to the Nutrition section.
 
 ### 5.6 Daily / Weekly Planner + Logging
 - **Combined plan + track in one view.** Each day/slot supports a *planned* state and a *logged* (actually eaten) state.
+- **Dates stay readable before the first meal or nutrition figure.** On a
+  narrow screen or at enlarged text, Day and Week put the date on its own
+  line above their existing date actions. A compact **Day view / Week view**
+  menu replaces the two segments when space is scarce; ordinary phone and
+  desktop layouts retain the direct Day/Week choice. Redundant headings give
+  way before text size or touch targets do. Compact nutrition leads with the
+  complete consumed amount and unit, letting its target and status wrap
+  separately instead of keeping a long sentence. Planned calories retain their
+  explicit qualifier, and each Week amount keeps its day identity. Full date
+  and year are available to screen readers; dates outside the current year
+  and ranges crossing a year also show the year visibly. Previous, Today, Next,
+  Copy and saved-week actions retain their meaning. The date header scrolls
+  with its content.
+  Copy/move date choices, title and count can scroll at large text, while
+  Cancel and the confirmation action wrap within the sheet and stay reachable.
+  *(Phase 2: UX-087.)*
 - **Meal slots:** breakfast, lunch, dinner, snack.
 - **The destination determines the primary action.** A new meal on a future
   calendar day defaults to **Add to plan**; logging it as eaten is an explicit

@@ -33,6 +33,7 @@ import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
 import '../support/fixtures.dart';
+import '../support/swept_surfaces.dart';
 
 /// Whether the gallery is being drawn at all.
 ///
@@ -204,6 +205,16 @@ List<Object> galleryOverrides(Scene scene) => <Object>[
 /// only what is near the viewport — so a food below the fold is not merely
 /// off-screen, it is absent from the tree and no finder can see it.
 Future<void> pressLabel(WidgetTester tester, String label) async {
+  if ((label == 'Day' || label == 'Week') &&
+      find
+          .byKey(const ValueKey<String>('plan-view-control'))
+          .evaluate()
+          .isNotEmpty &&
+      find.byType(AlertDialog).evaluate().isEmpty &&
+      find.byType(BottomSheet).evaluate().isEmpty) {
+    await SweepTools(tester).planView(label);
+    return;
+  }
   Finder inFront(Finder finder) {
     // A label in the day behind a modal is not a choice in that modal. At
     // large text the actual choice may not even be built until we scroll.

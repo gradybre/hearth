@@ -103,6 +103,9 @@ class _DayPickerSheetState extends ConsumerState<_DayPickerSheet> {
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     final DateTime anchor = ref.watch(selectedDateProvider);
+    final bool scrollMealSlots =
+        MediaQuery.sizeOf(context).width < 360 ||
+        MediaQuery.textScalerOf(context).scale(16) > 20;
     // Meal prep and copy-day are about the near future, so they offer this
     // week and the next; a full calendar would be a heavier control than
     // either job needs.
@@ -136,98 +139,84 @@ class _DayPickerSheetState extends ConsumerState<_DayPickerSheet> {
         child: SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.all(HearthSpacing.lg),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Text(
-                        widget.title,
-                        style: context.text.sectionHeader,
-                      ),
-                    ),
-                    if (!widget.single)
-                      Text(
-                        _selected.isEmpty
-                            ? 'none chosen'
-                            : '${_selected.length} chosen',
-                        style: context.text.metadata.copyWith(
-                          color: colors.textMuted,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
               Flexible(
                 child: ListView(
                   shrinkWrap: true,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: HearthSpacing.lg,
-                  ),
+                  padding: EdgeInsets.zero,
                   children: <Widget>[
+                    // The title can grow with the system text setting. Let it
+                    // scroll with the choices, rather than taking their whole
+                    // viewport while the footer is pushed below the sheet.
+                    Padding(
+                      padding: const EdgeInsets.all(HearthSpacing.lg),
+                      child: Wrap(
+                        spacing: HearthSpacing.md,
+                        runSpacing: HearthSpacing.xs,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: <Widget>[
+                          Text(widget.title, style: context.text.sectionHeader),
+                          if (!widget.single)
+                            Text(
+                              _selected.isEmpty
+                                  ? 'none chosen'
+                                  : '${_selected.length} chosen',
+                              style: context.text.metadata.copyWith(
+                                color: colors.textMuted,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                     for (final DateTime day in days)
                       if (widget.excluding == null ||
                           !isSameDay(day, widget.excluding!))
-                        _DayCheck(
-                          day: day,
-                          label: _label(day),
-                          selected: _selected.contains(day),
-                          single: widget.single,
-                          onChanged: (bool value) => setState(() {
-                            // One meal is in one place, so choosing a day
-                            // here replaces the choice rather than adding to
-                            // it — and a chosen day cannot be un-chosen into
-                            // no answer at all.
-                            if (widget.single) {
-                              if (value) {
-                                _selected
-                                  ..clear()
-                                  ..add(day);
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: HearthSpacing.lg,
+                          ),
+                          child: _DayCheck(
+                            day: day,
+                            label: _label(day),
+                            selected: _selected.contains(day),
+                            single: widget.single,
+                            onChanged: (bool value) => setState(() {
+                              // One meal is in one place, so choosing a day
+                              // here replaces the choice rather than adding
+                              // to it — and cannot un-choose the only answer.
+                              if (widget.single) {
+                                if (value) {
+                                  _selected
+                                    ..clear()
+                                    ..add(day);
+                                }
+                                return;
                               }
-                              return;
-                            }
-                            if (value) {
-                              _selected.add(day);
-                            } else {
-                              _selected.remove(day);
-                            }
-                          }),
+                              if (value) {
+                                _selected.add(day);
+                              } else {
+                                _selected.remove(day);
+                              }
+                            }),
+                          ),
                         ),
+                    if (widget.single && scrollMealSlots) _mealSlots(),
                   ],
                 ),
               ),
-              if (widget.single)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: HearthSpacing.lg,
-                    vertical: HearthSpacing.sm,
-                  ),
-                  child: Wrap(
-                    spacing: HearthSpacing.sm,
-                    runSpacing: HearthSpacing.sm,
-                    children: <Widget>[
-                      for (final MealSlot slot in MealSlot.values)
-                        ChoiceChip(
-                          label: Text(slot.label),
-                          selected: slot == _slot,
-                          onSelected: (bool picked) {
-                            if (picked) setState(() => _slot = slot);
-                          },
-                        ),
-                    ],
-                  ),
-                ),
+              if (widget.single && !scrollMealSlots) _mealSlots(),
               Padding(
                 padding: const EdgeInsets.all(HearthSpacing.lg),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: HearthSpacing.sm,
+                  runSpacing: HearthSpacing.sm,
                   children: <Widget>[
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(),
                       child: const Text('Cancel'),
                     ),
-                    const SizedBox(width: HearthSpacing.sm),
                     FilledButton(
                       onPressed: _selected.isEmpty
                           ? null
@@ -253,6 +242,27 @@ class _DayPickerSheetState extends ConsumerState<_DayPickerSheet> {
       ),
     );
   }
+
+  Widget _mealSlots() => Padding(
+    padding: const EdgeInsets.symmetric(
+      horizontal: HearthSpacing.lg,
+      vertical: HearthSpacing.sm,
+    ),
+    child: Wrap(
+      spacing: HearthSpacing.sm,
+      runSpacing: HearthSpacing.sm,
+      children: <Widget>[
+        for (final MealSlot slot in MealSlot.values)
+          ChoiceChip(
+            label: Text(slot.label),
+            selected: slot == _slot,
+            onSelected: (bool picked) {
+              if (picked) setState(() => _slot = slot);
+            },
+          ),
+      ],
+    ),
+  );
 
   String _label(DateTime day) {
     // `relativeDay` counts calendar days rather than elapsed hours. This

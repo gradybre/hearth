@@ -931,7 +931,7 @@ final List<_Destination> _destinations = <_Destination>[
     name: 'the week',
     open: (WidgetTester tester, SweepTools tools) async {
       await tools.tab('Plan');
-      await tools.reach(find.text('Week'));
+      await tools.planView('Week');
     },
     arrived: find.byTooltip('Previous week'),
   ),

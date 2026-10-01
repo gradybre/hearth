@@ -34,6 +34,7 @@ import 'log_sheet.dart';
 import 'log_state_feedback.dart';
 import 'logged_details_sheet.dart';
 import 'macro_targets_sheet.dart';
+import 'plan_date_header.dart';
 
 /// The day view: plan and track in one place (spec §5.6).
 ///
@@ -72,6 +73,9 @@ class DayScreen extends ConsumerWidget {
     final double gutter = MediaQuery.sizeOf(context).width >= 840
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
+    final bool compact =
+        MediaQuery.sizeOf(context).width < 372 ||
+        MediaQuery.textScalerOf(context).scale(16) > 20;
 
     return entries.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -93,13 +97,13 @@ class DayScreen extends ConsumerWidget {
           child: ListView(
             padding: EdgeInsets.fromLTRB(
               gutter,
-              HearthSpacing.lg,
+              compact ? HearthSpacing.sm : HearthSpacing.lg,
               gutter,
               gutter * 3,
             ),
             children: <Widget>[
               _DayHeader(date: date),
-              const SizedBox(height: HearthSpacing.lg),
+              SizedBox(height: compact ? HearthSpacing.sm : HearthSpacing.lg),
               _RemainingCard(
                 entries: resolved,
                 targets: targets,
@@ -129,55 +133,14 @@ class _DayHeader extends ConsumerWidget {
 
   final DateTime date;
 
-  /// Today, Yesterday, Tomorrow — or the weekday, for a day none of those
-  /// name. `relativeDay` counts calendar days rather than elapsed hours,
-  /// which is what stopped this saying "Today" on the 23-hour night (F05).
-  String get _label => relativeDay(date) ?? weekdayName(date);
-
-  String get _subtitle => '${weekdayName(date)} ${date.day} ${monthName(date)}';
-
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final HearthColors colors = context.colors;
-
-    return Row(
-      children: <Widget>[
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(_label, style: context.text.recipeTitle),
-              Text(
-                _subtitle,
-                style: context.text.metadata.copyWith(color: colors.textMuted),
-              ),
-            ],
-          ),
-        ),
-        IconButton(
-          onPressed: () =>
-              ref.read(selectedDateProvider.notifier).shiftDays(-1),
-          tooltip: 'Previous day',
-          icon: const Icon(Icons.chevron_left),
-        ),
-        IconButton(
-          onPressed: () => ref.read(selectedDateProvider.notifier).today(),
-          tooltip: 'Go to today',
-          icon: const Icon(Icons.today_outlined),
-        ),
-        IconButton(
-          onPressed: () => ref.read(selectedDateProvider.notifier).shiftDays(1),
-          tooltip: 'Next day',
-          icon: const Icon(Icons.chevron_right),
-        ),
-        IconButton(
-          onPressed: () => _copyDay(context, ref, date),
-          tooltip: 'Copy this day to other days',
-          icon: const Icon(Icons.copy_all_outlined),
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context, WidgetRef ref) => PlanDateHeader.day(
+    date: date,
+    onPrevious: () => ref.read(selectedDateProvider.notifier).shiftDays(-1),
+    onToday: () => ref.read(selectedDateProvider.notifier).today(),
+    onNext: () => ref.read(selectedDateProvider.notifier).shiftDays(1),
+    onCopy: () => _copyDay(context, ref, date),
+  );
 
   /// Copies this day onto any number of others (spec §5.6).
   ///
@@ -242,70 +205,83 @@ class _RemainingCard extends ConsumerWidget {
     );
 
     final bool expanded = ref.watch(daySummaryExpandedProvider).value ?? false;
+    final bool compact =
+        MediaQuery.sizeOf(context).width < 372 ||
+        MediaQuery.textScalerOf(context).scale(16) > 20;
+    final Widget plannedLabel = Text(
+      '${planned.kcal.round()} kcal still planned',
+      style: context.text.metadata.copyWith(color: colors.textMuted),
+    );
 
     return _Card(
       onTap: targets == null ? null : () => showMacroTargetsSheet(context),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Wrap(
-            spacing: HearthSpacing.md,
-            runSpacing: HearthSpacing.xs,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: <Widget>[
-              Text('Daily totals', style: context.text.sectionHeader),
-              if (!planned.isZero)
-                Text(
-                  '${planned.kcal.round()} kcal still planned',
-                  style: context.text.metadata.copyWith(
-                    color: colors.textMuted,
-                  ),
-                ),
+      child: Semantics(
+        label: compact ? 'Daily totals' : null,
+        container: compact,
+        explicitChildNodes: compact,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            if (!compact) ...<Widget>[
+              Wrap(
+                spacing: HearthSpacing.md,
+                runSpacing: HearthSpacing.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: <Widget>[
+                  Text('Daily totals', style: context.text.sectionHeader),
+                  if (!planned.isZero) plannedLabel,
+                ],
+              ),
             ],
-          ),
-          if (progress.countedParts == 0) ...<Widget>[
-            const SizedBox(height: HearthSpacing.xs),
-            Text(
-              'Nothing logged yet',
-              style: context.text.metadata.copyWith(color: colors.textMuted),
+            if (progress.countedParts == 0) ...<Widget>[
+              const SizedBox(height: HearthSpacing.xs),
+              Text(
+                'Nothing logged yet',
+                style: context.text.metadata.copyWith(color: colors.textMuted),
+              ),
+            ],
+            if (!compact || progress.countedParts == 0)
+              SizedBox(height: compact ? HearthSpacing.xs : HearthSpacing.md),
+            if (expanded) ...<Widget>[
+              MacroRings(progress: progress),
+              // Below the rings and quieter than them: these have targets now,
+              // but calories are still meant to be the loudest thing here and a
+              // ring would put the three on a level with the four (spec §5.6).
+              //
+              // Shown whether or not anything has stated a value; the bars say
+              // so themselves. Hiding them was the first design and it made the
+              // feature invisible — most foods in an established library
+              // predate these columns, so "nothing has said" is the ordinary
+              // answer, and an absent row reads as a feature that was never
+              // built.
+              const SizedBox(height: HearthSpacing.lg),
+              MinorNutrientBars(progress: progress),
+            ] else
+              _CompactSummary(progress: progress, reflowCalories: compact),
+            if (compact && !planned.isZero) ...<Widget>[
+              const SizedBox(height: HearthSpacing.sm),
+              plannedLabel,
+            ],
+            const SizedBox(height: HearthSpacing.sm),
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: HearthSpacing.sm,
+              children: <Widget>[
+                TargetSourceAction(
+                  resolution: targetResolution,
+                  hasTargets: targets != null,
+                ),
+                TextButton(
+                  onPressed: () => ref
+                      .read(daySummaryExpandedProvider.notifier)
+                      .set(expanded: !expanded),
+                  child: Text(expanded ? 'Less' : 'Details'),
+                ),
+              ],
             ),
           ],
-          const SizedBox(height: HearthSpacing.md),
-          if (expanded) ...<Widget>[
-            MacroRings(progress: progress),
-            // Below the rings and quieter than them: these have targets now,
-            // but calories are still meant to be the loudest thing here and a
-            // ring would put the three on a level with the four (spec §5.6).
-            //
-            // Shown whether or not anything has stated a value; the bars say
-            // so themselves. Hiding them was the first design and it made the
-            // feature invisible — most foods in an established library
-            // predate these columns, so "nothing has said" is the ordinary
-            // answer, and an absent row reads as a feature that was never
-            // built.
-            const SizedBox(height: HearthSpacing.lg),
-            MinorNutrientBars(progress: progress),
-          ] else
-            _CompactSummary(progress: progress),
-          const SizedBox(height: HearthSpacing.sm),
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: HearthSpacing.sm,
-            children: <Widget>[
-              TargetSourceAction(
-                resolution: targetResolution,
-                hasTargets: targets != null,
-              ),
-              TextButton(
-                onPressed: () => ref
-                    .read(daySummaryExpandedProvider.notifier)
-                    .set(expanded: !expanded),
-                child: Text(expanded ? 'Less' : 'Details'),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -319,9 +295,10 @@ class _RemainingCard extends ConsumerWidget {
 /// the rings are the better picture of a day and the worse first screen,
 /// because at ordinary text they push the first meal below the fold.
 class _CompactSummary extends StatelessWidget {
-  const _CompactSummary({required this.progress});
+  const _CompactSummary({required this.progress, required this.reflowCalories});
 
   final DayProgress progress;
+  final bool reflowCalories;
 
   @override
   Widget build(BuildContext context) {
@@ -361,12 +338,19 @@ class _CompactSummary extends StatelessWidget {
             runSpacing: HearthSpacing.xxs,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: <Widget>[
+              // Keep the consumed amount and its unit together before the
+              // target wraps onto another line at enlarged text.
               Text(
-                kcal.hasTarget
+                kcal.hasTarget && !reflowCalories
                     ? '${kcal.consumed.round()} of ${kcal.target.round()} kcal'
                     : '${kcal.consumed.round()} kcal',
                 style: context.text.body,
               ),
+              if (kcal.hasTarget && reflowCalories)
+                Text(
+                  'of ${kcal.target.round()} kcal',
+                  style: context.text.body,
+                ),
               if (calories != null)
                 Row(
                   mainAxisSize: MainAxisSize.min,
