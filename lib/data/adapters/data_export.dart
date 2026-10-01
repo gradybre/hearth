@@ -220,6 +220,14 @@ class DataExport {
     final List<MacroTargetRow> targets = await (_db.select(
       _db.macroTargets,
     )..where(($MacroTargetsTable t) => t.userId.equals(userId))).get();
+    final List<OngoingMacroTargetRow> ongoingTargets =
+        await (_db.select(_db.ongoingMacroTargets)
+              ..where(($OngoingMacroTargetsTable t) => t.userId.equals(userId))
+              ..orderBy(<OrderClauseGenerator<$OngoingMacroTargetsTable>>[
+                ($OngoingMacroTargetsTable t) =>
+                    OrderingTerm.asc(t.weekStartDate),
+              ]))
+            .get();
 
     final List<ShoppingListRow> lists =
         await (_db.select(_db.shoppingLists)..where(
@@ -349,6 +357,7 @@ class DataExport {
           .where((MealPlanEntryRow e) => e.isPlanned)
           .length,
       'macro_targets': targets.length,
+      'ongoing_macro_targets': ongoingTargets.length,
       'plan_templates': templates.length,
       'collections': collections.length,
       'favorite_recipes': favorites.length,
@@ -415,6 +424,16 @@ class DataExport {
             'sodium_mg': row.sodiumMg,
             'cholesterol_mg': row.cholesterolMg,
           },
+      ],
+      // Keep the authored history and explicit stops, rather than inventing
+      // weekly copies. Exact-week records above retain their precedence.
+      'ongoing_macro_targets': <Map<String, Object?>>[
+        for (final OngoingMacroTargetRow row in ongoingTargets)
+          PlanMapper.ongoingTargetToJson(
+            id: row.id,
+            boundary: PlanMapper.ongoingTargetToDomain(row),
+            updatedAt: row.updatedAt,
+          ),
       ],
       // A week somebody built and kept. Not exported at all before this.
       'plan_templates': <Map<String, Object?>>[

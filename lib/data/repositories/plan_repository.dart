@@ -5,6 +5,7 @@ import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
 import '../../domain/planning/recent_log.dart';
+import '../../domain/planning/target_schedule.dart';
 import '../../domain/planning/week.dart';
 import '../../domain/planning/week_template.dart';
 import '../local/hearth_database.dart';
@@ -35,6 +36,7 @@ class PlanRepository {
   static const String entriesTable = 'meal_plan_entries';
   static const String daysTable = 'meal_plan_days';
   static const String targetsTable = 'macro_targets';
+  static const String ongoingTargetsTable = 'ongoing_macro_targets';
   static const String templatesTable = 'plan_templates';
 
   final HearthDatabase _db;
@@ -117,6 +119,12 @@ class PlanRepository {
 
   Future<MacroTargets?> targetsFor(DateTime date) =>
       _store.targetsFor(userId: _userId, date: date);
+
+  Future<ResolvedTargets> targetResolutionFor(DateTime date) =>
+      _store.targetResolutionFor(userId: _userId, date: date);
+
+  Stream<int> watchTargetChanges() =>
+      _store.watchTargetChanges(userId: _userId);
 
   /// Adds something to a slot, either as a plan or as a straight log.
   ///
@@ -681,28 +689,112 @@ class PlanRepository {
   /// Sets the macro targets for [date]'s week.
   Future<void> setTargets(DateTime date, MacroTargets targets) async {
     final DateTime now = _now();
+    await _db.transaction(() => _setExactTargets(date, targets, now));
+  }
+
+  /// Starts or revises ongoing targets from the current calendar week.
+  /// Existing weekly exceptions stay exceptions, but the current one must
+  /// reflect the values reviewed in this same save.
+  Future<void> setOngoingTargets(
+    DateTime effectiveWeek,
+    MacroTargets targets,
+  ) async {
+    final DateTime now = _now();
+    final DateTime monday = _currentTargetWeek(effectiveWeek, now);
     await _db.transaction(() async {
-      final String id = await _store.setTargets(
+      final MacroTargetRow? exact = await _store.targetRowFor(
         userId: _userId,
-        date: date,
-        targets: targets,
-        idFactory: _newId,
-        updatedAt: now,
+        date: monday,
       );
-      await _queue.enqueue(
-        entityTable: targetsTable,
-        entityId: id,
-        operation: WriteOperation.upsert,
-        payload: PlanMapper.targetsToJson(
-          id: id,
+      if (exact != null) await _setExactTargets(monday, targets, now);
+      await _setOngoingBoundary(
+        OngoingTargetBoundary.active(
           userId: _userId,
-          weekStart: date,
+          weekStart: monday,
           targets: targets,
-          updatedAt: now,
         ),
-        queuedAt: now,
+        now,
       );
     });
+  }
+
+  /// Stops the ongoing fallback while keeping the current week unchanged.
+  /// Future exact-week rows and all earlier boundaries remain untouched.
+  Future<void> stopOngoingTargets(DateTime effectiveWeek) async {
+    final DateTime now = _now();
+    final DateTime monday = _currentTargetWeek(effectiveWeek, now);
+    await _db.transaction(() async {
+      final MacroTargets? current = (await _store.targetResolutionFor(
+        userId: _userId,
+        date: monday,
+      )).targets;
+      if (current != null) await _setExactTargets(monday, current, now);
+      await _setOngoingBoundary(
+        OngoingTargetBoundary.stopped(userId: _userId, weekStart: monday),
+        now,
+      );
+    });
+  }
+
+  DateTime _currentTargetWeek(DateTime effectiveWeek, DateTime now) {
+    final DateTime monday = startOfWeek(effectiveWeek);
+    if (monday != startOfWeek(now.toLocal())) {
+      throw ArgumentError.value(
+        effectiveWeek,
+        'effectiveWeek',
+        'Ongoing targets can only change from the current week.',
+      );
+    }
+    return monday;
+  }
+
+  Future<void> _setExactTargets(
+    DateTime date,
+    MacroTargets targets,
+    DateTime now,
+  ) async {
+    final DateTime monday = startOfWeek(date);
+    final String id = await _store.setTargets(
+      userId: _userId,
+      date: monday,
+      targets: targets,
+      idFactory: _newId,
+      updatedAt: now,
+    );
+    await _queue.enqueue(
+      entityTable: targetsTable,
+      entityId: id,
+      operation: WriteOperation.upsert,
+      payload: PlanMapper.targetsToJson(
+        id: id,
+        userId: _userId,
+        weekStart: monday,
+        targets: targets,
+        updatedAt: now,
+      ),
+      queuedAt: now,
+    );
+  }
+
+  Future<void> _setOngoingBoundary(
+    OngoingTargetBoundary boundary,
+    DateTime now,
+  ) async {
+    final String id = await _store.setOngoingTarget(
+      boundary: boundary,
+      updatedAt: now,
+    );
+    await _queue.enqueue(
+      entityTable: ongoingTargetsTable,
+      entityId: id,
+      operation: WriteOperation.upsert,
+      payload: PlanMapper.ongoingTargetToJson(
+        id: id,
+        boundary: boundary,
+        updatedAt: now,
+      ),
+      queuedAt: now,
+    );
   }
 
   Future<void> _queueEntry(MealPlanEntry entry, DateTime now) => _queue.enqueue(

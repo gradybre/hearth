@@ -146,10 +146,12 @@ void main() {
     double textScale = 1.0,
     LaunchTarget? launchTarget,
     bool signedIn = false,
+    bool ongoingTargets = false,
     ThermostatGateway? thermostat,
   }) => pumpHearthApp(
     tester,
     size: size,
+    targetsAreOngoing: ongoingTargets,
     recipes: <Recipe>[chilli()],
     foods: <Food>[yoghurt(), menuItem()],
     // A shopping list with something on it: the list screen has two shapes,
@@ -309,7 +311,11 @@ void main() {
       for (final SweptSurface surface in sweptSurfaces) {
         testWidgets('${surface.name} in $theme', (WidgetTester tester) async {
           final SemanticsHandle handle = tester.ensureSemantics();
-          await open(tester, brightness);
+          await open(
+            tester,
+            brightness,
+            ongoingTargets: surface.withOngoingTargets,
+          );
           await pumpFrames(tester);
 
           final SweepTools tools = SweepTools(tester);

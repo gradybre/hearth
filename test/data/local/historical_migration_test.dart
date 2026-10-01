@@ -2,6 +2,8 @@ import 'package:drift_dev/api/migrations_native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/core/build_info.dart';
 import 'package:hearth/data/local/hearth_database.dart';
+import 'package:hearth/data/local/plan_store.dart';
+import 'package:hearth/domain/planning/target_schedule.dart';
 
 import 'generated_migrations/schema.dart';
 
@@ -80,4 +82,48 @@ void main() {
     final List<RecipeRow> kept = await db.select(db.recipes).get();
     expect(kept.single.title, 'Weeknight chilli');
   });
+
+  test(
+    'v29 weekly targets remain weekly choices after continuity is added',
+    () async {
+      final SchemaVerifier verifier = SchemaVerifier(GeneratedHelper());
+      final InitializedSchema old = await verifier.schemaAt(29);
+      final DateTime monday = DateTime(2026, 9, 28);
+      old.rawDatabase.execute(
+        'INSERT INTO macro_targets (id, user_id, week_start_date, kcal, '
+        'protein_g, carb_g, fat_g, fiber_g, sodium_mg, cholesterol_mg, updated_at) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        <Object?>[
+          'saved-week',
+          'me',
+          monday.millisecondsSinceEpoch ~/ 1000,
+          2000,
+          120,
+          230,
+          70,
+          null,
+          0,
+          250,
+          0,
+        ],
+      );
+      final HearthDatabase db = HearthDatabase.forTesting(old.newConnection());
+      addTearDown(db.close);
+      await verifier.migrateAndValidate(db, current);
+      final PlanStore store = PlanStore(db);
+      final ResolvedTargets currentWeek = await store.targetResolutionFor(
+        userId: 'me',
+        date: monday,
+      );
+      expect(currentWeek.source, TargetSource.exactWeek);
+      expect(currentWeek.targets!.fiberG, isNull);
+      expect(currentWeek.targets!.sodiumMg, 0);
+      expect(currentWeek.targets!.cholesterolMg, 250);
+      expect(
+        await store.targetsFor(userId: 'me', date: DateTime(2026, 10, 5)),
+        isNull,
+      );
+      expect(await db.select(db.ongoingMacroTargets).get(), isEmpty);
+    },
+  );
 }

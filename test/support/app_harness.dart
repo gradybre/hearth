@@ -39,6 +39,7 @@ import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/recent_log.dart';
+import 'package:hearth/domain/planning/target_schedule.dart';
 import 'package:hearth/domain/planning/week.dart';
 import 'package:hearth/domain/shopping/shopping_line.dart';
 import 'package:hearth/main.dart';
@@ -138,6 +139,7 @@ Future<HearthDatabase> pumpHearthApp(
   /// hand, or a line tagged with a shop.
   List<ShoppingLine> shoppingLines = const <ShoppingLine>[],
   MacroTargets? targets,
+  bool targetsAreOngoing = false,
   Set<String> favorites = const <String>{},
   List<CookTimer> timers = const <CookTimer>[],
   Map<String, String> photos = const <String, String>{},
@@ -358,6 +360,32 @@ Future<HearthDatabase> pumpHearthApp(
         // none is a different screen entirely — the one that asks you to set
         // some — so a test about the tiles has to be able to say there are.
         dayTargetsProvider.overrideWith((Ref ref) async => targets),
+        targetResolutionProvider.overrideWith((Ref ref, DateTime date) async {
+          final String userId = ref.watch(currentUserIdProvider);
+          return resolveTargetsForWeek(
+            userId: userId,
+            date: date,
+            exactWeeks: <ExactWeekTarget>[
+              if (targets != null && !targetsAreOngoing)
+                ExactWeekTarget(
+                  userId: userId,
+                  weekStart: date,
+                  targets: targets,
+                ),
+            ],
+            boundaries: <OngoingTargetBoundary>[
+              if (targets != null && targetsAreOngoing)
+                OngoingTargetBoundary.active(
+                  userId: userId,
+                  weekStart: date,
+                  targets: targets,
+                ),
+            ],
+          );
+        }),
+        targetChangesProvider.overrideWith(
+          (Ref ref) => const Stream<int>.empty(),
+        ),
         if (selectedDate case final DateTime day)
           selectedDateProvider.overrideWith(() => _FixedDate(day)),
         planChangesProvider.overrideWith(

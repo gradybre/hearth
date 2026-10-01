@@ -194,7 +194,11 @@ void main() {
     await tester.tap(find.text('Save targets'));
     await pumpFrames(tester, frames: 20);
 
-    final List<MacroTargetRow> rows = await db.select(db.macroTargets).get();
+    // A current-week save now defaults to an ongoing choice. Unknown minor
+    // values still stay null instead of freezing today's Daily Values.
+    final List<OngoingMacroTargetRow> rows = await db
+        .select(db.ongoingMacroTargets)
+        .get();
     expect(rows.single.fiberG, isNull);
     expect(rows.single.sodiumMg, isNull);
   });

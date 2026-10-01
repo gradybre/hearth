@@ -13,6 +13,105 @@
 
 \set ON_ERROR_STOP on
 
+-- Ongoing targets are private even when two people share a household.
+do $$
+declare
+  alice uuid := gen_random_uuid();
+  partner uuid := gen_random_uuid();
+  boundary uuid := gen_random_uuid();
+  visible integer;
+begin
+  insert into auth.users (
+    id, instance_id, aud, role, email, encrypted_password,
+    email_confirmed_at, created_at, updated_at
+  ) values
+    (alice, '00000000-0000-0000-0000-000000000000', 'authenticated',
+     'authenticated', alice::text || '@example.test', 'x', now(), now(), now()),
+    (partner, '00000000-0000-0000-0000-000000000000', 'authenticated',
+     'authenticated', partner::text || '@example.test', 'x', now(), now(), now());
+  update public.profiles set household_id =
+    (select household_id from public.profiles where id = alice)
+    where id = partner;
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', alice, 'role', 'authenticated')::text, true);
+  insert into public.ongoing_macro_targets (
+    id, user_id, week_start_date, is_stopped, kcal, protein_g, carb_g, fat_g,
+    fiber_g, sodium_mg, updated_at
+  ) values (boundary, alice, '2026-09-28', false, 2000, 120, 230, 70,
+    null, 0, '2000-01-01');
+  select count(*) into visible from public.ongoing_macro_targets
+    where id = boundary and fiber_g is null and sodium_mg = 0
+    and updated_at > '2000-01-01';
+  if visible <> 1 then
+    raise exception 'Own ongoing target did not retain null/zero or server timestamp';
+  end if;
+
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', partner, 'role', 'authenticated')::text, true);
+  select count(*) into visible from public.ongoing_macro_targets where id = boundary;
+  if visible <> 0 then
+    raise exception 'A household partner can read private ongoing targets';
+  end if;
+  update public.ongoing_macro_targets set kcal = 1 where id = boundary;
+  get diagnostics visible = row_count;
+  if visible <> 0 then
+    raise exception 'A household partner can update private ongoing targets';
+  end if;
+  begin
+    insert into public.ongoing_macro_targets
+      (id, user_id, week_start_date, is_stopped)
+      values (gen_random_uuid(), alice, '2026-10-05', true);
+    raise exception 'A household partner can insert another person''s target stop';
+  exception when insufficient_privilege then null;
+  end;
+
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', alice, 'role', 'authenticated')::text, true);
+  begin
+    update public.ongoing_macro_targets set user_id = partner where id = boundary;
+    raise exception 'An ongoing target can be reassigned to another person';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.ongoing_macro_targets
+      (id, user_id, week_start_date, is_stopped)
+      values (gen_random_uuid(), alice, '2026-10-06', true);
+    raise exception 'An ongoing boundary accepted a non-Monday date';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.ongoing_macro_targets set kcal = 'NaN'::numeric where id = boundary;
+    raise exception 'An ongoing target accepted a non-finite amount';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.ongoing_macro_targets set kcal = null where id = boundary;
+    raise exception 'An active ongoing target accepted a missing primary value';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.ongoing_macro_targets set is_stopped = true where id = boundary;
+    raise exception 'A stop retained active values';
+  exception when check_violation then null;
+  end;
+  insert into public.ongoing_macro_targets
+    (id, user_id, week_start_date, is_stopped)
+    values (gen_random_uuid(), alice, '2026-10-05', true);
+  select count(*) into visible from public.ongoing_macro_targets
+    where user_id = alice and is_stopped and kcal is null;
+  if visible <> 1 then raise exception 'An explicit stop did not survive'; end if;
+  begin
+    delete from public.ongoing_macro_targets where id = boundary;
+    raise exception 'A target boundary can be deleted, resurrecting older choices';
+  exception when insufficient_privilege then null;
+  end;
+  reset role;
+  raise notice 'ongoing nutrition target privacy and value guards passed';
+end;
+$$;
+
 -- ── 1. RLS is enabled on every table (spec §8.2, default-deny) ──────────────
 
 do $$

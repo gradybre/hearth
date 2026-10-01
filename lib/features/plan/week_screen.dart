@@ -16,10 +16,12 @@ import '../../domain/planning/day_format.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
+import '../../domain/planning/target_schedule.dart';
 import '../../domain/planning/week.dart';
 import '../../domain/planning/week_summary.dart';
 import '../../domain/planning/week_template.dart';
 import 'entry_resolver.dart';
+import 'macro_targets_sheet.dart';
 import 'week_template_sheet.dart';
 
 /// The week, as seven days you can read against each other (spec §5.6,
@@ -59,7 +61,15 @@ class _WeekScreenState extends ConsumerState<WeekScreen> {
   Widget build(BuildContext context) {
     final DateTime selected = ref.watch(selectedDateProvider);
     final List<DateTime> days = weekOf(selected);
-    final MacroTargets? targets = ref.watch(dayTargetsProvider).value;
+    final ResolvedTargets? loadedTargets = ref
+        .watch(dayTargetResolutionProvider)
+        .value;
+    final ResolvedTargets? targetResolution =
+        loadedTargets?.userId == ref.watch(currentUserIdProvider) &&
+            loadedTargets?.weekStart == days.first
+        ? loadedTargets
+        : null;
+    final MacroTargets? targets = targetResolution?.targets;
 
     final Map<String, Recipe> recipes = <String, Recipe>{
       for (final Recipe r
@@ -179,6 +189,10 @@ class _WeekScreenState extends ConsumerState<WeekScreen> {
               ),
               const SizedBox(height: HearthSpacing.lg),
               _WeekTotals(summary: summary, targets: targets),
+              TargetSourceAction(
+                resolution: targetResolution,
+                hasTargets: targets != null,
+              ),
             ],
           ),
         );

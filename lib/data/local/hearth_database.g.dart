@@ -7255,6 +7255,725 @@ class MacroTargetsCompanion extends UpdateCompanion<MacroTargetRow> {
   }
 }
 
+class $OngoingMacroTargetsTable extends OngoingMacroTargets
+    with TableInfo<$OngoingMacroTargetsTable, OngoingMacroTargetRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $OngoingMacroTargetsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _weekStartDateMeta = const VerificationMeta(
+    'weekStartDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> weekStartDate =
+      GeneratedColumn<DateTime>(
+        'week_start_date',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _isStoppedMeta = const VerificationMeta(
+    'isStopped',
+  );
+  @override
+  late final GeneratedColumn<bool> isStopped = GeneratedColumn<bool>(
+    'is_stopped',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_stopped" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _kcalMeta = const VerificationMeta('kcal');
+  @override
+  late final GeneratedColumn<double> kcal = GeneratedColumn<double>(
+    'kcal',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _proteinGMeta = const VerificationMeta(
+    'proteinG',
+  );
+  @override
+  late final GeneratedColumn<double> proteinG = GeneratedColumn<double>(
+    'protein_g',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _carbGMeta = const VerificationMeta('carbG');
+  @override
+  late final GeneratedColumn<double> carbG = GeneratedColumn<double>(
+    'carb_g',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _fatGMeta = const VerificationMeta('fatG');
+  @override
+  late final GeneratedColumn<double> fatG = GeneratedColumn<double>(
+    'fat_g',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _fiberGMeta = const VerificationMeta('fiberG');
+  @override
+  late final GeneratedColumn<double> fiberG = GeneratedColumn<double>(
+    'fiber_g',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sodiumMgMeta = const VerificationMeta(
+    'sodiumMg',
+  );
+  @override
+  late final GeneratedColumn<double> sodiumMg = GeneratedColumn<double>(
+    'sodium_mg',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _cholesterolMgMeta = const VerificationMeta(
+    'cholesterolMg',
+  );
+  @override
+  late final GeneratedColumn<double> cholesterolMg = GeneratedColumn<double>(
+    'cholesterol_mg',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    userId,
+    weekStartDate,
+    isStopped,
+    kcal,
+    proteinG,
+    carbG,
+    fatG,
+    fiberG,
+    sodiumMg,
+    cholesterolMg,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'ongoing_macro_targets';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<OngoingMacroTargetRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('week_start_date')) {
+      context.handle(
+        _weekStartDateMeta,
+        weekStartDate.isAcceptableOrUnknown(
+          data['week_start_date']!,
+          _weekStartDateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_weekStartDateMeta);
+    }
+    if (data.containsKey('is_stopped')) {
+      context.handle(
+        _isStoppedMeta,
+        isStopped.isAcceptableOrUnknown(data['is_stopped']!, _isStoppedMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_isStoppedMeta);
+    }
+    if (data.containsKey('kcal')) {
+      context.handle(
+        _kcalMeta,
+        kcal.isAcceptableOrUnknown(data['kcal']!, _kcalMeta),
+      );
+    }
+    if (data.containsKey('protein_g')) {
+      context.handle(
+        _proteinGMeta,
+        proteinG.isAcceptableOrUnknown(data['protein_g']!, _proteinGMeta),
+      );
+    }
+    if (data.containsKey('carb_g')) {
+      context.handle(
+        _carbGMeta,
+        carbG.isAcceptableOrUnknown(data['carb_g']!, _carbGMeta),
+      );
+    }
+    if (data.containsKey('fat_g')) {
+      context.handle(
+        _fatGMeta,
+        fatG.isAcceptableOrUnknown(data['fat_g']!, _fatGMeta),
+      );
+    }
+    if (data.containsKey('fiber_g')) {
+      context.handle(
+        _fiberGMeta,
+        fiberG.isAcceptableOrUnknown(data['fiber_g']!, _fiberGMeta),
+      );
+    }
+    if (data.containsKey('sodium_mg')) {
+      context.handle(
+        _sodiumMgMeta,
+        sodiumMg.isAcceptableOrUnknown(data['sodium_mg']!, _sodiumMgMeta),
+      );
+    }
+    if (data.containsKey('cholesterol_mg')) {
+      context.handle(
+        _cholesterolMgMeta,
+        cholesterolMg.isAcceptableOrUnknown(
+          data['cholesterol_mg']!,
+          _cholesterolMgMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {userId, weekStartDate},
+  ];
+  @override
+  OngoingMacroTargetRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return OngoingMacroTargetRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      )!,
+      weekStartDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}week_start_date'],
+      )!,
+      isStopped: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_stopped'],
+      )!,
+      kcal: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}kcal'],
+      ),
+      proteinG: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}protein_g'],
+      ),
+      carbG: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}carb_g'],
+      ),
+      fatG: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}fat_g'],
+      ),
+      fiberG: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}fiber_g'],
+      ),
+      sodiumMg: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}sodium_mg'],
+      ),
+      cholesterolMg: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}cholesterol_mg'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $OngoingMacroTargetsTable createAlias(String alias) {
+    return $OngoingMacroTargetsTable(attachedDatabase, alias);
+  }
+}
+
+class OngoingMacroTargetRow extends DataClass
+    implements Insertable<OngoingMacroTargetRow> {
+  final String id;
+  final String userId;
+  final DateTime weekStartDate;
+  final bool isStopped;
+  final double? kcal;
+  final double? proteinG;
+  final double? carbG;
+  final double? fatG;
+  final double? fiberG;
+  final double? sodiumMg;
+  final double? cholesterolMg;
+  final DateTime updatedAt;
+  const OngoingMacroTargetRow({
+    required this.id,
+    required this.userId,
+    required this.weekStartDate,
+    required this.isStopped,
+    this.kcal,
+    this.proteinG,
+    this.carbG,
+    this.fatG,
+    this.fiberG,
+    this.sodiumMg,
+    this.cholesterolMg,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['user_id'] = Variable<String>(userId);
+    map['week_start_date'] = Variable<DateTime>(weekStartDate);
+    map['is_stopped'] = Variable<bool>(isStopped);
+    if (!nullToAbsent || kcal != null) {
+      map['kcal'] = Variable<double>(kcal);
+    }
+    if (!nullToAbsent || proteinG != null) {
+      map['protein_g'] = Variable<double>(proteinG);
+    }
+    if (!nullToAbsent || carbG != null) {
+      map['carb_g'] = Variable<double>(carbG);
+    }
+    if (!nullToAbsent || fatG != null) {
+      map['fat_g'] = Variable<double>(fatG);
+    }
+    if (!nullToAbsent || fiberG != null) {
+      map['fiber_g'] = Variable<double>(fiberG);
+    }
+    if (!nullToAbsent || sodiumMg != null) {
+      map['sodium_mg'] = Variable<double>(sodiumMg);
+    }
+    if (!nullToAbsent || cholesterolMg != null) {
+      map['cholesterol_mg'] = Variable<double>(cholesterolMg);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  OngoingMacroTargetsCompanion toCompanion(bool nullToAbsent) {
+    return OngoingMacroTargetsCompanion(
+      id: Value(id),
+      userId: Value(userId),
+      weekStartDate: Value(weekStartDate),
+      isStopped: Value(isStopped),
+      kcal: kcal == null && nullToAbsent ? const Value.absent() : Value(kcal),
+      proteinG: proteinG == null && nullToAbsent
+          ? const Value.absent()
+          : Value(proteinG),
+      carbG: carbG == null && nullToAbsent
+          ? const Value.absent()
+          : Value(carbG),
+      fatG: fatG == null && nullToAbsent ? const Value.absent() : Value(fatG),
+      fiberG: fiberG == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fiberG),
+      sodiumMg: sodiumMg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sodiumMg),
+      cholesterolMg: cholesterolMg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cholesterolMg),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory OngoingMacroTargetRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return OngoingMacroTargetRow(
+      id: serializer.fromJson<String>(json['id']),
+      userId: serializer.fromJson<String>(json['userId']),
+      weekStartDate: serializer.fromJson<DateTime>(json['weekStartDate']),
+      isStopped: serializer.fromJson<bool>(json['isStopped']),
+      kcal: serializer.fromJson<double?>(json['kcal']),
+      proteinG: serializer.fromJson<double?>(json['proteinG']),
+      carbG: serializer.fromJson<double?>(json['carbG']),
+      fatG: serializer.fromJson<double?>(json['fatG']),
+      fiberG: serializer.fromJson<double?>(json['fiberG']),
+      sodiumMg: serializer.fromJson<double?>(json['sodiumMg']),
+      cholesterolMg: serializer.fromJson<double?>(json['cholesterolMg']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'userId': serializer.toJson<String>(userId),
+      'weekStartDate': serializer.toJson<DateTime>(weekStartDate),
+      'isStopped': serializer.toJson<bool>(isStopped),
+      'kcal': serializer.toJson<double?>(kcal),
+      'proteinG': serializer.toJson<double?>(proteinG),
+      'carbG': serializer.toJson<double?>(carbG),
+      'fatG': serializer.toJson<double?>(fatG),
+      'fiberG': serializer.toJson<double?>(fiberG),
+      'sodiumMg': serializer.toJson<double?>(sodiumMg),
+      'cholesterolMg': serializer.toJson<double?>(cholesterolMg),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  OngoingMacroTargetRow copyWith({
+    String? id,
+    String? userId,
+    DateTime? weekStartDate,
+    bool? isStopped,
+    Value<double?> kcal = const Value.absent(),
+    Value<double?> proteinG = const Value.absent(),
+    Value<double?> carbG = const Value.absent(),
+    Value<double?> fatG = const Value.absent(),
+    Value<double?> fiberG = const Value.absent(),
+    Value<double?> sodiumMg = const Value.absent(),
+    Value<double?> cholesterolMg = const Value.absent(),
+    DateTime? updatedAt,
+  }) => OngoingMacroTargetRow(
+    id: id ?? this.id,
+    userId: userId ?? this.userId,
+    weekStartDate: weekStartDate ?? this.weekStartDate,
+    isStopped: isStopped ?? this.isStopped,
+    kcal: kcal.present ? kcal.value : this.kcal,
+    proteinG: proteinG.present ? proteinG.value : this.proteinG,
+    carbG: carbG.present ? carbG.value : this.carbG,
+    fatG: fatG.present ? fatG.value : this.fatG,
+    fiberG: fiberG.present ? fiberG.value : this.fiberG,
+    sodiumMg: sodiumMg.present ? sodiumMg.value : this.sodiumMg,
+    cholesterolMg: cholesterolMg.present
+        ? cholesterolMg.value
+        : this.cholesterolMg,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  OngoingMacroTargetRow copyWithCompanion(OngoingMacroTargetsCompanion data) {
+    return OngoingMacroTargetRow(
+      id: data.id.present ? data.id.value : this.id,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      weekStartDate: data.weekStartDate.present
+          ? data.weekStartDate.value
+          : this.weekStartDate,
+      isStopped: data.isStopped.present ? data.isStopped.value : this.isStopped,
+      kcal: data.kcal.present ? data.kcal.value : this.kcal,
+      proteinG: data.proteinG.present ? data.proteinG.value : this.proteinG,
+      carbG: data.carbG.present ? data.carbG.value : this.carbG,
+      fatG: data.fatG.present ? data.fatG.value : this.fatG,
+      fiberG: data.fiberG.present ? data.fiberG.value : this.fiberG,
+      sodiumMg: data.sodiumMg.present ? data.sodiumMg.value : this.sodiumMg,
+      cholesterolMg: data.cholesterolMg.present
+          ? data.cholesterolMg.value
+          : this.cholesterolMg,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('OngoingMacroTargetRow(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('weekStartDate: $weekStartDate, ')
+          ..write('isStopped: $isStopped, ')
+          ..write('kcal: $kcal, ')
+          ..write('proteinG: $proteinG, ')
+          ..write('carbG: $carbG, ')
+          ..write('fatG: $fatG, ')
+          ..write('fiberG: $fiberG, ')
+          ..write('sodiumMg: $sodiumMg, ')
+          ..write('cholesterolMg: $cholesterolMg, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    userId,
+    weekStartDate,
+    isStopped,
+    kcal,
+    proteinG,
+    carbG,
+    fatG,
+    fiberG,
+    sodiumMg,
+    cholesterolMg,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is OngoingMacroTargetRow &&
+          other.id == this.id &&
+          other.userId == this.userId &&
+          other.weekStartDate == this.weekStartDate &&
+          other.isStopped == this.isStopped &&
+          other.kcal == this.kcal &&
+          other.proteinG == this.proteinG &&
+          other.carbG == this.carbG &&
+          other.fatG == this.fatG &&
+          other.fiberG == this.fiberG &&
+          other.sodiumMg == this.sodiumMg &&
+          other.cholesterolMg == this.cholesterolMg &&
+          other.updatedAt == this.updatedAt);
+}
+
+class OngoingMacroTargetsCompanion
+    extends UpdateCompanion<OngoingMacroTargetRow> {
+  final Value<String> id;
+  final Value<String> userId;
+  final Value<DateTime> weekStartDate;
+  final Value<bool> isStopped;
+  final Value<double?> kcal;
+  final Value<double?> proteinG;
+  final Value<double?> carbG;
+  final Value<double?> fatG;
+  final Value<double?> fiberG;
+  final Value<double?> sodiumMg;
+  final Value<double?> cholesterolMg;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const OngoingMacroTargetsCompanion({
+    this.id = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.weekStartDate = const Value.absent(),
+    this.isStopped = const Value.absent(),
+    this.kcal = const Value.absent(),
+    this.proteinG = const Value.absent(),
+    this.carbG = const Value.absent(),
+    this.fatG = const Value.absent(),
+    this.fiberG = const Value.absent(),
+    this.sodiumMg = const Value.absent(),
+    this.cholesterolMg = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  OngoingMacroTargetsCompanion.insert({
+    required String id,
+    required String userId,
+    required DateTime weekStartDate,
+    required bool isStopped,
+    this.kcal = const Value.absent(),
+    this.proteinG = const Value.absent(),
+    this.carbG = const Value.absent(),
+    this.fatG = const Value.absent(),
+    this.fiberG = const Value.absent(),
+    this.sodiumMg = const Value.absent(),
+    this.cholesterolMg = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       userId = Value(userId),
+       weekStartDate = Value(weekStartDate),
+       isStopped = Value(isStopped),
+       updatedAt = Value(updatedAt);
+  static Insertable<OngoingMacroTargetRow> custom({
+    Expression<String>? id,
+    Expression<String>? userId,
+    Expression<DateTime>? weekStartDate,
+    Expression<bool>? isStopped,
+    Expression<double>? kcal,
+    Expression<double>? proteinG,
+    Expression<double>? carbG,
+    Expression<double>? fatG,
+    Expression<double>? fiberG,
+    Expression<double>? sodiumMg,
+    Expression<double>? cholesterolMg,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (userId != null) 'user_id': userId,
+      if (weekStartDate != null) 'week_start_date': weekStartDate,
+      if (isStopped != null) 'is_stopped': isStopped,
+      if (kcal != null) 'kcal': kcal,
+      if (proteinG != null) 'protein_g': proteinG,
+      if (carbG != null) 'carb_g': carbG,
+      if (fatG != null) 'fat_g': fatG,
+      if (fiberG != null) 'fiber_g': fiberG,
+      if (sodiumMg != null) 'sodium_mg': sodiumMg,
+      if (cholesterolMg != null) 'cholesterol_mg': cholesterolMg,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  OngoingMacroTargetsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? userId,
+    Value<DateTime>? weekStartDate,
+    Value<bool>? isStopped,
+    Value<double?>? kcal,
+    Value<double?>? proteinG,
+    Value<double?>? carbG,
+    Value<double?>? fatG,
+    Value<double?>? fiberG,
+    Value<double?>? sodiumMg,
+    Value<double?>? cholesterolMg,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return OngoingMacroTargetsCompanion(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      weekStartDate: weekStartDate ?? this.weekStartDate,
+      isStopped: isStopped ?? this.isStopped,
+      kcal: kcal ?? this.kcal,
+      proteinG: proteinG ?? this.proteinG,
+      carbG: carbG ?? this.carbG,
+      fatG: fatG ?? this.fatG,
+      fiberG: fiberG ?? this.fiberG,
+      sodiumMg: sodiumMg ?? this.sodiumMg,
+      cholesterolMg: cholesterolMg ?? this.cholesterolMg,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (weekStartDate.present) {
+      map['week_start_date'] = Variable<DateTime>(weekStartDate.value);
+    }
+    if (isStopped.present) {
+      map['is_stopped'] = Variable<bool>(isStopped.value);
+    }
+    if (kcal.present) {
+      map['kcal'] = Variable<double>(kcal.value);
+    }
+    if (proteinG.present) {
+      map['protein_g'] = Variable<double>(proteinG.value);
+    }
+    if (carbG.present) {
+      map['carb_g'] = Variable<double>(carbG.value);
+    }
+    if (fatG.present) {
+      map['fat_g'] = Variable<double>(fatG.value);
+    }
+    if (fiberG.present) {
+      map['fiber_g'] = Variable<double>(fiberG.value);
+    }
+    if (sodiumMg.present) {
+      map['sodium_mg'] = Variable<double>(sodiumMg.value);
+    }
+    if (cholesterolMg.present) {
+      map['cholesterol_mg'] = Variable<double>(cholesterolMg.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('OngoingMacroTargetsCompanion(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('weekStartDate: $weekStartDate, ')
+          ..write('isStopped: $isStopped, ')
+          ..write('kcal: $kcal, ')
+          ..write('proteinG: $proteinG, ')
+          ..write('carbG: $carbG, ')
+          ..write('fatG: $fatG, ')
+          ..write('fiberG: $fiberG, ')
+          ..write('sodiumMg: $sodiumMg, ')
+          ..write('cholesterolMg: $cholesterolMg, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $IngredientMatchesTable extends IngredientMatches
     with TableInfo<$IngredientMatchesTable, IngredientMatchRow> {
   @override
@@ -13612,6 +14331,8 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
     this,
   );
   late final $MacroTargetsTable macroTargets = $MacroTargetsTable(this);
+  late final $OngoingMacroTargetsTable ongoingMacroTargets =
+      $OngoingMacroTargetsTable(this);
   late final $IngredientMatchesTable ingredientMatches =
       $IngredientMatchesTable(this);
   late final $CookTimersTable cookTimers = $CookTimersTable(this);
@@ -13643,6 +14364,7 @@ abstract class _$HearthDatabase extends GeneratedDatabase {
     mealPlanDays,
     mealPlanEntries,
     macroTargets,
+    ongoingMacroTargets,
     ingredientMatches,
     cookTimers,
     foodProfiles,
@@ -19219,6 +19941,359 @@ typedef $$MacroTargetsTableProcessedTableManager =
       MacroTargetRow,
       PrefetchHooks Function()
     >;
+typedef $$OngoingMacroTargetsTableCreateCompanionBuilder =
+    OngoingMacroTargetsCompanion Function({
+      required String id,
+      required String userId,
+      required DateTime weekStartDate,
+      required bool isStopped,
+      Value<double?> kcal,
+      Value<double?> proteinG,
+      Value<double?> carbG,
+      Value<double?> fatG,
+      Value<double?> fiberG,
+      Value<double?> sodiumMg,
+      Value<double?> cholesterolMg,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$OngoingMacroTargetsTableUpdateCompanionBuilder =
+    OngoingMacroTargetsCompanion Function({
+      Value<String> id,
+      Value<String> userId,
+      Value<DateTime> weekStartDate,
+      Value<bool> isStopped,
+      Value<double?> kcal,
+      Value<double?> proteinG,
+      Value<double?> carbG,
+      Value<double?> fatG,
+      Value<double?> fiberG,
+      Value<double?> sodiumMg,
+      Value<double?> cholesterolMg,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$OngoingMacroTargetsTableFilterComposer
+    extends Composer<_$HearthDatabase, $OngoingMacroTargetsTable> {
+  $$OngoingMacroTargetsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get weekStartDate => $composableBuilder(
+    column: $table.weekStartDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isStopped => $composableBuilder(
+    column: $table.isStopped,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get kcal => $composableBuilder(
+    column: $table.kcal,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get proteinG => $composableBuilder(
+    column: $table.proteinG,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get carbG => $composableBuilder(
+    column: $table.carbG,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get fatG => $composableBuilder(
+    column: $table.fatG,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get fiberG => $composableBuilder(
+    column: $table.fiberG,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get sodiumMg => $composableBuilder(
+    column: $table.sodiumMg,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get cholesterolMg => $composableBuilder(
+    column: $table.cholesterolMg,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$OngoingMacroTargetsTableOrderingComposer
+    extends Composer<_$HearthDatabase, $OngoingMacroTargetsTable> {
+  $$OngoingMacroTargetsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get weekStartDate => $composableBuilder(
+    column: $table.weekStartDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isStopped => $composableBuilder(
+    column: $table.isStopped,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get kcal => $composableBuilder(
+    column: $table.kcal,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get proteinG => $composableBuilder(
+    column: $table.proteinG,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get carbG => $composableBuilder(
+    column: $table.carbG,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get fatG => $composableBuilder(
+    column: $table.fatG,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get fiberG => $composableBuilder(
+    column: $table.fiberG,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get sodiumMg => $composableBuilder(
+    column: $table.sodiumMg,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get cholesterolMg => $composableBuilder(
+    column: $table.cholesterolMg,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$OngoingMacroTargetsTableAnnotationComposer
+    extends Composer<_$HearthDatabase, $OngoingMacroTargetsTable> {
+  $$OngoingMacroTargetsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get weekStartDate => $composableBuilder(
+    column: $table.weekStartDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isStopped =>
+      $composableBuilder(column: $table.isStopped, builder: (column) => column);
+
+  GeneratedColumn<double> get kcal =>
+      $composableBuilder(column: $table.kcal, builder: (column) => column);
+
+  GeneratedColumn<double> get proteinG =>
+      $composableBuilder(column: $table.proteinG, builder: (column) => column);
+
+  GeneratedColumn<double> get carbG =>
+      $composableBuilder(column: $table.carbG, builder: (column) => column);
+
+  GeneratedColumn<double> get fatG =>
+      $composableBuilder(column: $table.fatG, builder: (column) => column);
+
+  GeneratedColumn<double> get fiberG =>
+      $composableBuilder(column: $table.fiberG, builder: (column) => column);
+
+  GeneratedColumn<double> get sodiumMg =>
+      $composableBuilder(column: $table.sodiumMg, builder: (column) => column);
+
+  GeneratedColumn<double> get cholesterolMg => $composableBuilder(
+    column: $table.cholesterolMg,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$OngoingMacroTargetsTableTableManager
+    extends
+        RootTableManager<
+          _$HearthDatabase,
+          $OngoingMacroTargetsTable,
+          OngoingMacroTargetRow,
+          $$OngoingMacroTargetsTableFilterComposer,
+          $$OngoingMacroTargetsTableOrderingComposer,
+          $$OngoingMacroTargetsTableAnnotationComposer,
+          $$OngoingMacroTargetsTableCreateCompanionBuilder,
+          $$OngoingMacroTargetsTableUpdateCompanionBuilder,
+          (
+            OngoingMacroTargetRow,
+            BaseReferences<
+              _$HearthDatabase,
+              $OngoingMacroTargetsTable,
+              OngoingMacroTargetRow
+            >,
+          ),
+          OngoingMacroTargetRow,
+          PrefetchHooks Function()
+        > {
+  $$OngoingMacroTargetsTableTableManager(
+    _$HearthDatabase db,
+    $OngoingMacroTargetsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$OngoingMacroTargetsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$OngoingMacroTargetsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$OngoingMacroTargetsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> userId = const Value.absent(),
+                Value<DateTime> weekStartDate = const Value.absent(),
+                Value<bool> isStopped = const Value.absent(),
+                Value<double?> kcal = const Value.absent(),
+                Value<double?> proteinG = const Value.absent(),
+                Value<double?> carbG = const Value.absent(),
+                Value<double?> fatG = const Value.absent(),
+                Value<double?> fiberG = const Value.absent(),
+                Value<double?> sodiumMg = const Value.absent(),
+                Value<double?> cholesterolMg = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => OngoingMacroTargetsCompanion(
+                id: id,
+                userId: userId,
+                weekStartDate: weekStartDate,
+                isStopped: isStopped,
+                kcal: kcal,
+                proteinG: proteinG,
+                carbG: carbG,
+                fatG: fatG,
+                fiberG: fiberG,
+                sodiumMg: sodiumMg,
+                cholesterolMg: cholesterolMg,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String userId,
+                required DateTime weekStartDate,
+                required bool isStopped,
+                Value<double?> kcal = const Value.absent(),
+                Value<double?> proteinG = const Value.absent(),
+                Value<double?> carbG = const Value.absent(),
+                Value<double?> fatG = const Value.absent(),
+                Value<double?> fiberG = const Value.absent(),
+                Value<double?> sodiumMg = const Value.absent(),
+                Value<double?> cholesterolMg = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => OngoingMacroTargetsCompanion.insert(
+                id: id,
+                userId: userId,
+                weekStartDate: weekStartDate,
+                isStopped: isStopped,
+                kcal: kcal,
+                proteinG: proteinG,
+                carbG: carbG,
+                fatG: fatG,
+                fiberG: fiberG,
+                sodiumMg: sodiumMg,
+                cholesterolMg: cholesterolMg,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$OngoingMacroTargetsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$HearthDatabase,
+      $OngoingMacroTargetsTable,
+      OngoingMacroTargetRow,
+      $$OngoingMacroTargetsTableFilterComposer,
+      $$OngoingMacroTargetsTableOrderingComposer,
+      $$OngoingMacroTargetsTableAnnotationComposer,
+      $$OngoingMacroTargetsTableCreateCompanionBuilder,
+      $$OngoingMacroTargetsTableUpdateCompanionBuilder,
+      (
+        OngoingMacroTargetRow,
+        BaseReferences<
+          _$HearthDatabase,
+          $OngoingMacroTargetsTable,
+          OngoingMacroTargetRow
+        >,
+      ),
+      OngoingMacroTargetRow,
+      PrefetchHooks Function()
+    >;
 typedef $$IngredientMatchesTableCreateCompanionBuilder =
     IngredientMatchesCompanion Function({
       required String id,
@@ -22644,6 +23719,8 @@ class $HearthDatabaseManager {
       $$MealPlanEntriesTableTableManager(_db, _db.mealPlanEntries);
   $$MacroTargetsTableTableManager get macroTargets =>
       $$MacroTargetsTableTableManager(_db, _db.macroTargets);
+  $$OngoingMacroTargetsTableTableManager get ongoingMacroTargets =>
+      $$OngoingMacroTargetsTableTableManager(_db, _db.ongoingMacroTargets);
   $$IngredientMatchesTableTableManager get ingredientMatches =>
       $$IngredientMatchesTableTableManager(_db, _db.ingredientMatches);
   $$CookTimersTableTableManager get cookTimers =>

@@ -296,6 +296,45 @@ class MacroTargets extends Table {
   ];
 }
 
+/// A personal target choice that applies from one Monday until changed.
+/// Stopped rows are decisions, not deletions, so they travel through sync.
+@DataClassName('OngoingMacroTargetRow')
+class OngoingMacroTargets extends Table {
+  TextColumn get id => text()();
+  TextColumn get userId => text()();
+  DateTimeColumn get weekStartDate => dateTime()();
+  BoolColumn get isStopped => boolean()();
+  RealColumn get kcal => real().nullable()();
+  RealColumn get proteinG => real().nullable()();
+  RealColumn get carbG => real().nullable()();
+  RealColumn get fatG => real().nullable()();
+  RealColumn get fiberG => real().nullable()();
+  RealColumn get sodiumMg => real().nullable()();
+  RealColumn get cholesterolMg => real().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+
+  @override
+  List<Set<Column<Object>>> get uniqueKeys => <Set<Column<Object>>>[
+    <Column<Object>>{userId, weekStartDate},
+  ];
+
+  @override
+  List<String> get customConstraints => <String>[
+    'CHECK ((is_stopped = 1 AND kcal IS NULL AND protein_g IS NULL '
+        'AND carb_g IS NULL AND fat_g IS NULL AND fiber_g IS NULL '
+        'AND sodium_mg IS NULL AND cholesterol_mg IS NULL) OR '
+        '(is_stopped = 0 AND kcal IS NOT NULL AND protein_g IS NOT NULL '
+        'AND carb_g IS NOT NULL AND fat_g IS NOT NULL '
+        'AND kcal >= 0 AND protein_g >= 0 AND carb_g >= 0 AND fat_g >= 0 '
+        'AND (fiber_g IS NULL OR fiber_g >= 0) '
+        'AND (sodium_mg IS NULL OR sodium_mg >= 0) '
+        'AND (cholesterol_mg IS NULL OR cholesterol_mg >= 0)))',
+  ];
+}
+
 /// Writes made while offline, replayed in order on reconnect (spec §7.1).
 @DataClassName('PendingWriteRow')
 class PendingWrites extends Table {

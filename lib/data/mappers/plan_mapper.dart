@@ -6,6 +6,8 @@ import '../../domain/models/macros.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
+import '../../domain/planning/target_schedule.dart';
+import '../../domain/planning/week.dart';
 import '../local/hearth_database.dart';
 
 /// Maps plan entries, snapshots, and targets between domain and rows.
@@ -198,6 +200,75 @@ abstract final class PlanMapper {
     cholesterolMg: row.cholesterolMg,
   );
 
+  static ExactWeekTarget exactWeekTargetToDomain(MacroTargetRow row) =>
+      ExactWeekTarget(
+        userId: row.userId,
+        weekStart: row.weekStartDate,
+        targets: targetsToDomain(row),
+      );
+
+  static OngoingTargetBoundary ongoingTargetToDomain(
+    OngoingMacroTargetRow row,
+  ) => row.isStopped
+      ? OngoingTargetBoundary.stopped(
+          userId: row.userId,
+          weekStart: row.weekStartDate,
+        )
+      : OngoingTargetBoundary.active(
+          userId: row.userId,
+          weekStart: row.weekStartDate,
+          // The table's constraint requires all four primary values on an
+          // active boundary. A missing primary value is corrupt data, never
+          // a zero target that somebody chose.
+          targets: MacroTargets(
+            kcal: row.kcal!,
+            proteinG: row.proteinG!,
+            carbG: row.carbG!,
+            fatG: row.fatG!,
+            fiberG: row.fiberG,
+            sodiumMg: row.sodiumMg,
+            cholesterolMg: row.cholesterolMg,
+          ),
+        );
+
+  static OngoingMacroTargetsCompanion ongoingTargetToCompanion({
+    required String id,
+    required OngoingTargetBoundary boundary,
+    required DateTime updatedAt,
+  }) => OngoingMacroTargetsCompanion.insert(
+    id: id,
+    userId: boundary.userId,
+    weekStartDate: boundary.weekStart,
+    isStopped: boundary.isStopped,
+    kcal: Value<double?>(boundary.targets?.kcal),
+    proteinG: Value<double?>(boundary.targets?.proteinG),
+    carbG: Value<double?>(boundary.targets?.carbG),
+    fatG: Value<double?>(boundary.targets?.fatG),
+    fiberG: Value<double?>(boundary.targets?.fiberG),
+    sodiumMg: Value<double?>(boundary.targets?.sodiumMg),
+    cholesterolMg: Value<double?>(boundary.targets?.cholesterolMg),
+    updatedAt: updatedAt,
+  );
+
+  static Map<String, Object?> ongoingTargetToJson({
+    required String id,
+    required OngoingTargetBoundary boundary,
+    required DateTime updatedAt,
+  }) => <String, Object?>{
+    'id': id,
+    'user_id': boundary.userId,
+    'week_start_date': _dateOnly(boundary.weekStart),
+    'is_stopped': boundary.isStopped,
+    'kcal': boundary.targets?.kcal,
+    'protein_g': boundary.targets?.proteinG,
+    'carb_g': boundary.targets?.carbG,
+    'fat_g': boundary.targets?.fatG,
+    'fiber_g': boundary.targets?.fiberG,
+    'sodium_mg': boundary.targets?.sodiumMg,
+    'cholesterol_mg': boundary.targets?.cholesterolMg,
+    'updated_at': updatedAt.toUtc().toIso8601String(),
+  };
+
   static Map<String, Object?> targetsToJson({
     required String id,
     required String userId,
@@ -207,7 +278,7 @@ abstract final class PlanMapper {
   }) => <String, Object?>{
     'id': id,
     'user_id': userId,
-    'week_start_date': _dateOnly(weekStart),
+    'week_start_date': _dateOnly(startOfWeek(weekStart)),
     'kcal': targets.kcal,
     'protein_g': targets.proteinG,
     'fiber_g': targets.fiberG,

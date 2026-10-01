@@ -86,6 +86,7 @@ import '../domain/models/recipe.dart';
 import '../domain/planning/day_progress.dart';
 import '../domain/planning/meal_plan.dart';
 import '../domain/planning/recent_log.dart';
+import '../domain/planning/target_schedule.dart';
 import '../domain/planning/week.dart';
 import '../domain/planning/week_template.dart';
 import '../domain/recipes/ingredient_matcher.dart';
@@ -338,14 +339,32 @@ final FutureProvider<List<MealPlanEntry>> dayEntriesProvider =
           .entriesFor(ref.watch(selectedDateProvider));
     });
 
+/// Both exact-week and ongoing changes refresh the planner, including pulls
+/// from another device that leave the meal entries untouched.
+final StreamProvider<int> targetChangesProvider = StreamProvider<int>(
+  (Ref ref) => ref.watch(planRepositoryProvider).watchTargetChanges(),
+);
+
+/// A captured week keeps its own resolution while the selected day moves.
+final targetResolutionProvider =
+    FutureProvider.family<ResolvedTargets, DateTime>((Ref ref, DateTime date) {
+      ref.watch(targetChangesProvider);
+      return ref.watch(planRepositoryProvider).targetResolutionFor(date);
+    });
+
+final FutureProvider<ResolvedTargets> dayTargetResolutionProvider =
+    FutureProvider<ResolvedTargets>((Ref ref) {
+      return ref.watch(
+        targetResolutionProvider(ref.watch(selectedDateProvider)).future,
+      );
+    });
+
 /// The macro targets covering the selected day's week, or null when unset.
 final FutureProvider<MacroTargets?> dayTargetsProvider =
-    FutureProvider<MacroTargets?>((Ref ref) {
-      ref.watch(planChangesProvider);
-      return ref
-          .watch(planRepositoryProvider)
-          .targetsFor(ref.watch(selectedDateProvider));
-    });
+    FutureProvider<MacroTargets?>(
+      (Ref ref) async =>
+          (await ref.watch(dayTargetResolutionProvider.future)).targets,
+    );
 
 // ── Shopping (spec §5.7) ─────────────────────────────────────────────────────
 
