@@ -64,11 +64,11 @@ scope is recorded in UX_PHASE_2_PROGRESS.md. In particular:
 | 11 — Exact log/unlog Undo | UX-051 remainder | Approved 2026-10-01: “Approve Group 11” | Merged as `a0f1026` through PR #127; independent reviews clear and all CI green |
 | 12 — Readable Today and Week | UX-087 | Approved 2026-10-01 through its decision card | Merged as `c4a5a76` through PR #128; independent reviews clear and all CI green |
 | 13 — Readable food-data archive | UX-084 | Approved 2026-10-01: “Approve those 4” for Groups 13–16 | Merged as `7a29de6` through PR #129; independent reviews clear and all CI green |
-| 14 — Recipe nutrition calculation receipt | UX-015; remaining UX-010 wording | Approved 2026-10-01: “Approve those 4” | Corrected source/design reviews clear; final combined checks pass 4,910 UTC tests, 45 New York checks and 190 render checks; publication follows |
+| 14 — Recipe nutrition calculation receipt | UX-015; remaining UX-010 wording | Approved 2026-10-01: “Approve those 4” | PR #130 open; 4,910 UTC tests, 45 New York checks and 190 render checks pass; final published review and CI running |
 | 15 — Repeat and customize restaurant orders | UX-029, UX-033 | Approved 2026-10-01: “Approve those 4” | Restaurant builder complete; shared editor/router handoff follows Group 14 |
 | 16 — Resolve missing ingredient matches in place | UX-014; narrow UX-028 search context | Approved 2026-10-01: “Approve those 4” | Builder complete; review found camera-layout and duplicate-wording corrections; shared editor/router integration sequenced |
 | 17 — Meals across the week | UX-045 | Approved 2026-10-01 through its decision card | Independent review clear and 4,831 tests pass before combining preceding groups; combined validation running |
-| 18 — Reviewed Walmart package counts | UX-065 | Approved 2026-10-01 through its decision card | Review corrections clear; 116 focused checks pass; combined full validation running |
+| 18 — Reviewed Walmart package counts | UX-065 | Approved 2026-10-01 through its decision card | Corrected review clear; combined gates pass 4,955 UTC tests and 194 render checks; publishing behind Group 14 |
 | 19 — Daily nutrient contributors | UX-056 | Approved 2026-10-01 through its decision card | Projection/screen complete; guarded details/editor handoff being built; shared Day entry points follow Group 17 |
 | 20 — Preserve planned amounts | UX-040 remainder | Awaiting answer; card and text overview sent 2026-10-01 | Storage/sync/export and logging integration sequenced |
 | 21 — Capture while logging | UX-042 | Awaiting answer; card and text overview sent 2026-10-01 | Shares food-return plumbing with Group 16 |

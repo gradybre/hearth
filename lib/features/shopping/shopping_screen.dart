@@ -10,6 +10,8 @@ import '../../app/theme/hearth_typography.dart';
 import '../../app/widgets/reading_column.dart';
 import '../../app/widgets/swipe_to_delete.dart';
 import '../../app/widgets/undo_snackbar.dart';
+import '../../data/adapters/shopping_export.dart';
+import '../../data/auth/auth_gateway.dart';
 import '../../data/local/shopping_store.dart';
 import '../../data/repositories/shopping_repository.dart';
 import '../../domain/foods/no_match_rule.dart';
@@ -380,15 +382,7 @@ class _BodyState extends ConsumerState<_Body> {
     if (!context.mounted) return;
     switch (action) {
       case _MoreAction.export:
-        await showShoppingExportSheet(
-          context,
-          lines,
-          foods: <String, Food>{
-            for (final Food food
-                in ref.read(foodLibraryProvider).value ?? const <Food>[])
-              food.id: food,
-          },
-        );
+        await _exportReviewed(context);
       case _MoreAction.manage:
         await _manage(context, ref);
       case _MoreAction.clear:
@@ -427,6 +421,80 @@ class _BodyState extends ConsumerState<_Body> {
         );
       case null:
         break;
+    }
+  }
+
+  Future<void> _exportReviewed(BuildContext context) async {
+    final ProviderContainer container = ProviderScope.containerOf(
+      context,
+      listen: false,
+    );
+    final HearthAccount? account = container.read(accountProvider).value;
+    if (account == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Your household is still loading. Try opening the shopping review again.',
+          ),
+        ),
+      );
+      return;
+    }
+    final ShoppingRepository shopping = container.read(
+      shoppingRepositoryProvider,
+    );
+    final ModalRoute<dynamic>? openingRoute = ModalRoute.of(context);
+    bool expired = false;
+    bool active = true;
+    bool matches(HearthAccount? current) =>
+        current?.userId == account.userId &&
+        current?.householdId == account.householdId;
+    final subscription = container.listen(accountProvider, (
+      _,
+      AsyncValue<HearthAccount?> next,
+    ) {
+      if (next.hasValue && !matches(next.value)) expired = true;
+    });
+    bool isCurrent() =>
+        active &&
+        !expired &&
+        mounted &&
+        context.mounted &&
+        openingRoute?.isActive != false &&
+        matches(container.read(accountProvider).value);
+    Future<ShoppingExportSource?> readCurrent() async {
+      if (!isCurrent()) return null;
+      final current = await shopping.reviewSnapshot();
+      if (!isCurrent()) return null;
+      return ShoppingExportSource(
+        lines: current.list?.lines ?? const <ShoppingLine>[],
+        foods: current.foods,
+      );
+    }
+
+    try {
+      final ShoppingExportSource? source = await readCurrent();
+      if (source == null || !context.mounted || !isCurrent()) return;
+      await showShoppingExportSheet(
+        context,
+        source.lines,
+        foods: source.foods,
+        readCurrent: readCurrent,
+        isCurrent: isCurrent,
+      );
+    } on Object {
+      if (context.mounted && isCurrent()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not prepare the shopping review. Try again.'),
+          ),
+        );
+      }
+    } finally {
+      // A popped modal can remain mounted during its exit animation. Its
+      // pending reads must lose permission to hand off as soon as it closes.
+      active = false;
+      subscription.close();
     }
   }
 

@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:meta/meta.dart';
+
 import '../units/quantity.dart';
 import '../units/unit.dart';
 import 'shopping_line.dart';
@@ -8,14 +10,67 @@ import 'shopping_line.dart';
 ///
 /// Walmart's quantity means *how many of this product*, and Hearth's list
 /// says *how much of this ingredient*. Two pounds of beef is one two-pound
-/// pack or two one-pound packs, and nothing in the app knows which — so this
-/// is a fallback chain rather than a calculation, and every step of it is
-/// allowed to say "one".
+/// pack or two one-pound packs. [forReview] answers only from known pack
+/// evidence; [forLine] retains the list's historical display fallback.
 abstract final class CartQuantity {
   /// Above this, an amount is far likelier to be a mistyped pack size than a
   /// real shop. Two hundred packets of anything is not a weekly grocery run,
   /// and Walmart would accept the order without blinking.
   static const int cap = 24;
+
+  /// A prefilled purchase count only when a known pack measures this need.
+  ///
+  /// A count of servings without a pack is not a count of retail products.
+  /// Null asks the shopper to choose a count or skip this item. The older
+  /// [forLine] remains the shopping-list display helper; its fallback must
+  /// never authorize a retailer handoff.
+  static CartQuantityEstimate? forReview({
+    required ShoppingLine line,
+    Quantity? pack,
+  }) {
+    final Quantity? need = line.toBuy;
+    if (hasUnresolvedCountRemainder(line) ||
+        line.hasUnquantified ||
+        need == null ||
+        !need.canonicalAmount.isFinite ||
+        need.canonicalAmount <= 0 ||
+        pack == null ||
+        !pack.canonicalAmount.isFinite ||
+        pack.canonicalAmount <= 0 ||
+        pack.kind != need.kind ||
+        !sameCountUnit(pack, need)) {
+      return null;
+    }
+    final double packs = need.canonicalAmount / pack.canonicalAmount;
+    // Check the cap before converting to an integer: a tiny positive pack
+    // can overflow the ratio even though both input amounts are finite.
+    if (!packs.isFinite || packs > cap + _slack) {
+      return const CartQuantityEstimate(count: cap, wasCapped: true);
+    }
+    return CartQuantityEstimate(count: _bounded(_ceil(packs)));
+  }
+
+  /// Count nouns carry identity: a scoop is not a container. A missing hint
+  /// is the legacy generic item, not permission to convert another noun.
+  static bool sameCountUnit(Quantity a, Quantity b) =>
+      a.kind != UnitKind.count ||
+      b.kind != UnitKind.count ||
+      (a.preferredUnit ?? Units.item).id == (b.preferredUnit ?? Units.item).id;
+
+  /// Inspect the input before toBuy subtracts and loses the on-hand unit.
+  /// These rows must remain reviewable even if that subtraction reports zero.
+  static bool hasUnresolvedCountRemainder(ShoppingLine line) {
+    final Quantity? need =
+        line.wanted ?? (line.planned.length == 1 ? line.planned.single : null);
+    final Quantity? have = line.onHand;
+    return need != null &&
+        have != null &&
+        need.kind == UnitKind.count &&
+        have.kind == UnitKind.count &&
+        need.canonicalAmount > 0 &&
+        have.canonicalAmount != 0 &&
+        !sameCountUnit(need, have);
+  }
 
   static int forLine({required ShoppingLine line, Quantity? pack}) {
     final Quantity? need = line.toBuy;
@@ -70,4 +125,12 @@ abstract final class CartQuantity {
   /// Measured on the pack *count*, not on the weight — which [cap] keeps
   /// small, so a fixed slack stays far below anything a shopper could act on.
   static const double _slack = 1e-9;
+}
+
+@immutable
+class CartQuantityEstimate {
+  const CartQuantityEstimate({required this.count, this.wasCapped = false});
+
+  final int count;
+  final bool wasCapped;
 }

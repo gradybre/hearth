@@ -545,7 +545,7 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     },
     arrived: find.text('Take the list with you'),
     // Read the handoff explanation without copying or opening anything.
-    farEnd: find.textContaining('Copying the list is usually quicker.'),
+    farEnd: find.textContaining('Copy keeps the whole remaining list'),
   ),
   SweptSurface(
     name: 'putting something on the shopping list',

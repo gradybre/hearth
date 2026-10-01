@@ -26,7 +26,10 @@ void main() {
     messenger.setMockMethodCallHandler(SystemChannels.platform, (
       MethodCall call,
     ) async {
-      if (call.method.startsWith('Clipboard.')) sent.add(call);
+      if (call.method == 'Clipboard.setData') sent.add(call);
+      if (call.method == 'Clipboard.hasStrings') {
+        return <String, bool>{'value': false};
+      }
       // Every platform call this sheet can make answers the same way: it
       // does not read the clipboard, and nothing here needs a return value.
       return null;
@@ -122,6 +125,8 @@ void main() {
       foods: <String, Food>{'f-sauce': sauce(pack: jar)},
     );
 
+    await tester.ensureVisible(find.text('Copy the list'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Copy the list'));
     await tester.pumpAndSettle();
 
@@ -142,6 +147,8 @@ void main() {
       foods: <String, Food>{'f-sauce': sauce()},
     );
 
+    await tester.ensureVisible(find.text('Copy the list'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Copy the list'));
     await tester.pumpAndSettle();
 
