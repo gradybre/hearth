@@ -275,6 +275,128 @@ void main() {
     expect((await shopping.current())!.lines, hasLength(1));
   });
 
+  for (final bool paste in <bool>[false, true]) {
+    for (final bool fails in <bool>[false, true]) {
+      testWidgets(
+        'dragging a pending ${paste ? 'batch' : 'plain'} save preserves ${fails ? 'the retry draft' : 'completion'}',
+        (WidgetTester tester) async {
+          final _RecordingShopping shopping = await _open(tester);
+          final Completer<void> pending = Completer<void>();
+          shopping.pending = pending;
+          if (paste) {
+            await _paste(tester, 'Coffee\nEggs');
+            await tester.enterText(_key('paste-name-0'), 'Decaf coffee');
+            await _press(tester, 'paste-remove-1');
+          } else {
+            await tester.enterText(_key('manual-item-name'), 'Decaf coffee');
+          }
+          await _press(
+            tester,
+            paste ? 'paste-add-amount-0' : 'manual-item-add-amount',
+          );
+          final String amountKey = paste
+              ? 'paste-0-amount'
+              : 'manual-item-amount';
+          final String unitKey = paste ? 'paste-0-unit' : 'manual-item-unit';
+          await tester.enterText(_key(amountKey), '1/2');
+          await _press(tester, unitKey);
+          await _reveal(tester, find.text('lb'), menu: true);
+          await tester.tap(find.text('lb'));
+          final String saveKey = paste ? 'paste-items-save' : 'manual-item-add';
+          await _press(tester, saveKey);
+          expect(shopping.attempts, hasLength(1));
+
+          // Back and tapping outside also keep the save and its draft together.
+          await tester.binding.handlePopRoute();
+          await tester.tapAt(const Offset(8, 8));
+          await pumpFrames(tester);
+          expect(
+            _key(paste ? 'paste-items-scroll' : 'add-to-list-scroll'),
+            findsOneWidget,
+          );
+
+          final Rect sheet = tester.getRect(find.byType(BottomSheet).last);
+          await tester.flingFrom(
+            Offset(sheet.center.dx, sheet.top + 4),
+            Offset(0, sheet.height),
+            2000,
+          );
+          if (fails) {
+            pending.completeError(StateError('A recoverable write failure'));
+            await pumpFrames(tester, frames: 40);
+            expect(
+              _key(paste ? 'paste-items-scroll' : 'add-to-list-scroll'),
+              findsOneWidget,
+              reason: 'A closing gesture must not discard a pending draft.',
+            );
+            await _reveal(tester, find.text('Retry'));
+            expect(find.text('Retry'), findsOneWidget);
+            final String nameKey = paste ? 'paste-name-0' : 'manual-item-name';
+            await _reveal(tester, _key(nameKey));
+            expect(
+              tester.widget<TextField>(_key(nameKey)).controller!.text,
+              'Decaf coffee',
+            );
+            await _reveal(tester, _key(amountKey));
+            expect(
+              tester.widget<TextField>(_key(amountKey)).controller!.text,
+              '1/2',
+            );
+            await _reveal(tester, _key(unitKey));
+            expect(find.text('lb'), findsOneWidget);
+            shopping.pending = null;
+            await _press(tester, saveKey);
+          } else {
+            pending.complete();
+            await pumpFrames(tester, frames: 40);
+          }
+          final ShoppingLine saved = (await shopping.current())!.lines.single;
+          expect(saved.name, 'Decaf coffee');
+          expect(saved.planned.single.amountIn(Units.pound), 0.5);
+          expect(shopping.attempts, hasLength(fails ? 2 : 1));
+          expect(find.byType(BottomSheet), findsNothing);
+          expect(find.byType(ShoppingScreen), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+
+    for (final String dismissal in <String>['Cancel', 'back', 'outside']) {
+      testWidgets(
+        '${paste ? 'paste' : 'plain'} draft can close via $dismissal before saving',
+        (WidgetTester tester) async {
+          final _RecordingShopping shopping = await _open(tester);
+          await tester.enterText(_key('manual-item-name'), 'Coffee');
+          if (paste) await _paste(tester, 'Eggs');
+          if (dismissal == 'Cancel') {
+            await _reveal(tester, find.text('Cancel').last);
+            await tester.tap(find.text('Cancel').last);
+          } else if (dismissal == 'back') {
+            await tester.binding.handlePopRoute();
+          } else {
+            await tester.tapAt(const Offset(8, 8));
+          }
+          await pumpFrames(tester, frames: 40);
+          expect(_key('paste-items-scroll'), findsNothing);
+          if (paste) {
+            expect(_key('add-to-list-scroll'), findsOneWidget);
+            expect(
+              tester
+                  .widget<TextField>(_key('manual-item-name'))
+                  .controller!
+                  .text,
+              'Coffee',
+            );
+          } else {
+            expect(find.byType(BottomSheet), findsNothing);
+          }
+          expect(shopping.attempts, isEmpty);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
   for (final bool household in <bool>[false, true]) {
     for (final bool paste in <bool>[false, true]) {
       for (final bool retry in <bool>[false, true]) {

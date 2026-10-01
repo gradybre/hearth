@@ -80,6 +80,10 @@ Future<ListAddition?> showAddToListSheet(
   context: context,
   backgroundColor: context.colors.background,
   isScrollControlled: true,
+  // A drag closes this route with pop(), bypassing the pending-save PopScope.
+  // Keep dismissal on Cancel, back and the barrier, which can respect saving.
+  enableDrag: false,
+  showDragHandle: false,
   // Capped like every other sheet here, so a tall one at large text scrolls
   // rather than overflowing, and tapping above still dismisses.
   constraints: BoxConstraints(
@@ -530,13 +534,11 @@ class _AddToListSheetState extends State<_AddToListSheet> {
                   child: Text(_error!, style: context.text.body),
                 ),
               ],
-              if (_seeded || _error != null) ...<Widget>[
-                const SizedBox(height: HearthSpacing.sm),
-                TextButton(
-                  onPressed: _saving ? null : () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
-                ),
-              ],
+              const SizedBox(height: HearthSpacing.sm),
+              TextButton(
+                onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
             ],
           ),
         ),

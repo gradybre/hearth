@@ -26,6 +26,9 @@ Future<List<ManualListItem>?> showPasteItemsSheet(
   context: context,
   backgroundColor: context.colors.background,
   isScrollControlled: true,
+  // A drag bypasses PopScope, so dismissal uses guarded back/barrier or Cancel.
+  enableDrag: false,
+  showDragHandle: false,
   constraints: BoxConstraints(
     maxWidth: 560,
     maxHeight: MediaQuery.sizeOf(context).height * 0.85,

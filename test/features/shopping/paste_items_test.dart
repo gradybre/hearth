@@ -72,14 +72,36 @@ Future<void> _reveal(
             )
             .first;
   if (target.evaluate().isEmpty) {
-    await tester.drag(scrollable, const Offset(0, 3000));
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      target,
-      120,
-      scrollable: scrollable,
-      maxScrolls: 80,
-    );
+    if (menu) {
+      await tester.drag(scrollable, const Offset(0, 3000));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        target,
+        120,
+        scrollable: scrollable,
+        maxScrolls: 80,
+      );
+    } else {
+      // At 3× with the keyboard open, the pasted field's selection handle can
+      // cover the viewport's centre. Swipe the sheet's clear padding instead.
+      Future<void> swipe(double distance) async {
+        final Rect bounds = tester.getRect(scrollable);
+        await tester.dragFrom(
+          Offset(bounds.left + 8, bounds.center.dy),
+          Offset(0, distance),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await swipe(3000);
+      for (
+        int attempt = 0;
+        target.evaluate().isEmpty && attempt < 80;
+        attempt++
+      ) {
+        await swipe(-120);
+      }
+    }
   }
   await tester.ensureVisible(target);
   await tester.pumpAndSettle();

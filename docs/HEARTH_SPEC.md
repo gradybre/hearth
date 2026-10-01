@@ -536,9 +536,11 @@ belongs to the Nutrition section.
 - **An addition uses the latest local household list when saved.** Validate
   the whole batch before changing anything, then save accepted items and their
   sync work together. Report how many were added and skipped. A recoverable
-  save failure retains the reviewed draft for Retry; a changed account or
-  household requires a fresh review. This is local transaction safety and
-  does not claim to resolve the separate cross-device conflict work in UX-059.
+  save failure retains the reviewed draft for Retry. The sheet stays open
+  during saving; Cancel, Back and tapping outside can close an idle draft.
+  A changed account or household requires a fresh review. This is local
+  transaction safety and does not claim to resolve the separate cross-device
+  conflict work in UX-059.
 - **Seasonings are excluded by default.** Spices and salt are bought on their own rhythm, not per recipe; the existing `ingredient_match` "no match needed" rules already identify them. A toggle includes them for the shop where you do need them.
 - **Quantities are editable on the list without touching the recipe.** 1.5 lb of beef becomes 2 lb because that is how beef is sold. An edited line is marked as edited and keeps showing what the recipes called for, so a later rebuild changing the total is visible rather than silent.
 - **Needed minus Have equals Buy.** The amount editor labels a total-needed
