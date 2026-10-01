@@ -203,6 +203,29 @@ belongs to the Nutrition section.
   an unusable yield or a recipe with no shopping contribution is explained
   before any successful-looking add. *(Phase 2: UX-001.)*
 - **Structured ingredients:** free-typed or AI-imported ingredient lines are parsed into quantity / unit / item / prep-note fields — this is what makes scaling and shopping aggregation work.
+- **Repeat or customize a restaurant usual.** Saved restaurant orders offer
+  **Log this**, **Customize** and **Details**. Log this opens a personal portion
+  review using the captured diary date, meal and plan/log intent; from the
+  library, visibly choose a day and meal, starting at the opening Today and
+  Dinner. Opening either review writes nothing. Current menu portions are
+  checked again after the date/component review and before a held Save.
+  Missing or changed components require review rather than silently becoming
+  zero or acquiring a guessed portion. *(Phase 2: UX-029, UX-033.)*
+  Customization shows the saved base, additions, removals and all seven current
+  nutrition changes. Whole-recipe yield stays separate from the eventual
+  personal portion. **Reset customizations** returns to the saved order.
+  If a menu portion changes during the visit, Reset and review are required;
+  leaving unsaved choices asks before clearing them. Unresolved authored lines
+  remain in the recipe review, and ambiguous same-name food choices require
+  distinct names rather than an overwritten match.
+  **Save new variation** creates a separate reusable recipe while retaining
+  available artwork and leaving the original unchanged. From a diary visit,
+  **Save new variation and review portion** saves that recipe first and then
+  opens the existing portion review; only its explicit action adds the meal.
+  Cancelling that second review keeps the saved variation and adds no diary
+  entry. Explicit variations do not request new AI artwork. Published signed
+  modifiers remain one-time adjustments to an ordinary item, and meals with
+  negative nutrient totals cannot be logged.
 - **Optional / to-taste ingredients:** ingredients can be flagged optional (salt to taste, garnish); optional ingredients are excluded from the shopping list and macro totals.
 - **Favorites:** any user can favorite recipes (personal, not shared) and filter to a favorites-only view.
 - **Organization at scale:** **collections** ("cookbooks", e.g., *Weeknight*, *Paella experiments*) that a recipe can belong to more than one of, plus **search** and **filter**. Search is **scoped per section** for v1 (recipe search lives in Recipes, food search in Foods; unified search later). Recipe filters are **combinable chips**: tag, cuisine, total time, calories/serving, protein/serving, collection, favorites.

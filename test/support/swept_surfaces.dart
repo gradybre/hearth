@@ -8,6 +8,7 @@ import 'package:hearth/features/foods/food_detail_screen.dart';
 import 'package:hearth/features/recipes/cook_along_screen.dart';
 import 'package:hearth/features/recipes/recipe_detail_screen.dart';
 
+import '../features/recipes/restaurant_usual_fixtures.dart';
 import 'app_harness.dart';
 import 'fake_kitchen.dart';
 
@@ -605,6 +606,55 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     farEnd: find.byTooltip('Drop Harvest Bowl'),
   ),
   SweptSurface(
+    name: 'choosing when a library usual was eaten',
+    opensFrom: 'lib/features/recipes/usual_order_destination_sheet.dart',
+    createOverrides: _usualOverrides,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await _openUsual(tools);
+      await tools.reach(find.byKey(const Key('usual-log-saved-usual')));
+    },
+    arrived: find.text('Which day and meal?'),
+    waypoints: <Finder>[find.text('Dinner'), find.text('Review portion')],
+    farEnd: find.text('Cancel'),
+  ),
+  SweptSurface(
+    name: 'the saved restaurant order customization receipt',
+    opensFrom: 'lib/features/recipes/eat_out_screen.dart',
+    isInline: true,
+    createOverrides: _usualOverrides,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await _openUsual(tools);
+      await tools.reach(find.byKey(const Key('usual-customize-saved-usual')));
+    },
+    arrived: find.text('Customize Our usual dinner'),
+    waypoints: <Finder>[find.text('Base'), find.text('Added'), find.text('Removed')],
+    farEnd: find.byKey(const Key('usual-review-variation')),
+  ),
+  SweptSurface(
+    name: 'leaving an unsaved restaurant variation',
+    opensFrom: 'lib/features/recipes/eat_out_screen.dart',
+    createOverrides: _usualOverrides,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await _openUsual(tools);
+      await tools.reach(find.byKey(const Key('usual-customize-saved-usual')));
+      await tools.reach(find.byTooltip('Back to restaurants'));
+    },
+    arrived: find.text('Leave these choices?'),
+    farEnd: find.text('Discard choices'),
+  ),
+  SweptSurface(
+    name: 'reviewing unavailable saved restaurant components',
+    opensFrom: 'lib/features/recipes/eat_out_screen.dart',
+    createOverrides: () => _usualOverrides(missing: true),
+    open: (WidgetTester tester, SweepTools tools) async {
+      await _openUsual(tools);
+      await tools.reach(find.byKey(const Key('usual-log-saved-usual')));
+    },
+    arrived: find.text('Review saved components'),
+    waypoints: <Finder>[find.textContaining('House sauce')],
+    farEnd: find.text('Cancel'),
+  ),
+  SweptSurface(
     name: "the shopping list's setup",
     opensFrom: 'lib/features/shopping/shopping_screen.dart',
     open: (WidgetTester tester, SweepTools tools) async {
@@ -950,6 +1000,20 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     farEnd: find.text('Enter it by hand'),
   ),
 ];
+
+List<Object> _usualOverrides({bool missing = false}) => <Object>[
+  foodLibraryProvider.overrideWith((ref) => Stream.value(usualMenuFoods())),
+  recipeLibraryProvider.overrideWith(
+    (ref) => Stream.value([savedUsual(missing: missing)]),
+  ),
+];
+
+Future<void> _openUsual(SweepTools tools) async {
+  await tools.tab('Recipes');
+  await tools.reach(find.text('Add recipe'));
+  await tools.reach(find.text('Eat out'));
+  await tools.reach(find.text('Corner Kitchen'));
+}
 
 class _InterruptedCookProgress extends FakeCookSessionStore {
   _InterruptedCookProgress({required this.reset});
