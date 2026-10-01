@@ -19,6 +19,8 @@ import '../../domain/planning/day_format.dart';
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
+import '../../domain/planning/target_schedule.dart';
+import '../../domain/planning/week.dart';
 import 'day_picker_sheet.dart';
 import 'entry_resolver.dart';
 import 'log_sheet.dart';
@@ -38,7 +40,15 @@ class DayScreen extends ConsumerWidget {
     final AsyncValue<List<MealPlanEntry>> entries = ref.watch(
       dayEntriesProvider,
     );
-    final MacroTargets? targets = ref.watch(dayTargetsProvider).value;
+    final ResolvedTargets? loadedTargets = ref
+        .watch(dayTargetResolutionProvider)
+        .value;
+    final ResolvedTargets? targetResolution =
+        loadedTargets?.userId == ref.watch(currentUserIdProvider) &&
+            loadedTargets?.weekStart == startOfWeek(date)
+        ? loadedTargets
+        : null;
+    final MacroTargets? targets = targetResolution?.targets;
     final Map<String, Recipe> recipes = <String, Recipe>{
       for (final Recipe r
           in ref.watch(recipeLibraryProvider).value ?? const <Recipe>[])
@@ -81,7 +91,11 @@ class DayScreen extends ConsumerWidget {
             children: <Widget>[
               _DayHeader(date: date),
               const SizedBox(height: HearthSpacing.lg),
-              _RemainingCard(entries: resolved, targets: targets),
+              _RemainingCard(
+                entries: resolved,
+                targets: targets,
+                targetResolution: targetResolution,
+              ),
               const SizedBox(height: HearthSpacing.xl),
               for (final MealSlot slot in MealSlot.values) ...<Widget>[
                 _SlotSection(
@@ -195,10 +209,15 @@ class _DayHeader extends ConsumerWidget {
 /// Calories lead and the three macros follow. Over/under is carried by an icon
 /// and a word as well as colour — never colour alone (spec §6.3).
 class _RemainingCard extends ConsumerWidget {
-  const _RemainingCard({required this.entries, required this.targets});
+  const _RemainingCard({
+    required this.entries,
+    required this.targets,
+    required this.targetResolution,
+  });
 
   final List<ResolvedEntry> entries;
   final MacroTargets? targets;
+  final ResolvedTargets? targetResolution;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -258,25 +277,20 @@ class _RemainingCard extends ConsumerWidget {
           ] else
             _CompactSummary(progress: progress),
           const SizedBox(height: HearthSpacing.sm),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: HearthSpacing.sm,
             children: <Widget>[
-              if (targets == null)
-                Flexible(
-                  child: TextButton(
-                    onPressed: () => showMacroTargetsSheet(context),
-                    child: const Text('Set targets'),
-                  ),
-                )
-              else
-                const Spacer(),
-              Flexible(
-                child: TextButton(
-                  onPressed: () => ref
-                      .read(daySummaryExpandedProvider.notifier)
-                      .set(expanded: !expanded),
-                  child: Text(expanded ? 'Less' : 'Details'),
-                ),
+              TargetSourceAction(
+                resolution: targetResolution,
+                hasTargets: targets != null,
+              ),
+              TextButton(
+                onPressed: () => ref
+                    .read(daySummaryExpandedProvider.notifier)
+                    .set(expanded: !expanded),
+                child: Text(expanded ? 'Less' : 'Details'),
               ),
             ],
           ),

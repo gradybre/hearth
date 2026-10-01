@@ -384,7 +384,20 @@ belongs to the Nutrition section.
   - **A blank target means the Daily Value, not "no target".** 28 g fibre, 2,300 mg sodium, 300 mg cholesterol — the FDA's figures for a 2,000-calorie diet, in the code as `MinorNutrient.dailyValue`. They are a **default to measure against, never personalised advice**: "612 mg sodium" means nothing until it sits beside 2,300. A household that sets its own number overrides them; nothing here recommends a number to anybody. If these figures are ever changed, check current authoritative guidance rather than carrying an old reference value forward.
   - **Partial totals are reported as partial.** A recipe where five of eight ingredients know their fibre reports the fibre it can see and says how many it could not — §4's "incomplete data flags, never blocks", not a new rule. The alternative, null unless every ingredient knows, would render them blank essentially always.
   - **Unknown never renders as zero.** A food with no fibre data showing "0 g" is a wrong number where no number was the honest answer.
-- **Macro targets:** fixed daily targets set per week (can change week to week), set **manually** (goal presets that calculate from body stats are a later option). Progress bars fill against targets.
+- **Macro targets:** manually authored daily targets, private to each person.
+  On a reviewed Save for the current week, **Use these targets each new week**
+  defaults on. Once enabled, choose **This week only** or **From this week
+  onward**; an existing exact-week exception defaults to **This week only**.
+  Earlier and future weeks can receive exact-week edits only. An ongoing
+  decision starts at the current Monday and never changes earlier weeks.
+  **Stop carrying forward after this week** preserves this week's saved
+  values and explicit future exceptions; other later weeks have no targets.
+  Existing weekly records remain weekly choices until the person opts in
+  through Save. No automatic backfill or future weekly copies are created.
+  All seven authored values, including optional nulls and explicit zeroes,
+  are retained. Day and Week show the source beside **Change**. Ongoing
+  decisions and explicit stops sync privately and are included in food-data
+  exports. Goal presets remain a later option. *(Phase 2: UX-052.)*
 - **Targets are optional to seeing intake.** Daily totals always show what
   has been logged: calories, protein, carbohydrates, fat, and the available
   minor nutrients, retaining unknown and partial-data labels. Without a

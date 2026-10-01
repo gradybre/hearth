@@ -514,6 +514,7 @@ String _countLabel(String key) => switch (key) {
   'logged_entries' => 'Logged entries',
   'planned_entries' => 'Planned entries',
   'macro_targets' => 'Nutrition targets',
+  'ongoing_macro_targets' => 'Ongoing target decisions',
   'plan_templates' => 'Saved weeks',
   'collections' => 'Collections',
   'favorite_recipes' => 'Favourite recipes',

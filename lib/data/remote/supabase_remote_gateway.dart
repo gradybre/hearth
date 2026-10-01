@@ -96,6 +96,7 @@ class SupabaseRemoteGateway implements RemoteGateway {
     // before that, or by an older build, still carries a random one. Resolving
     // on the pair the key is on is what lets those meet.
     'macro_targets': 'user_id,week_start_date',
+    'ongoing_macro_targets': 'user_id,week_start_date',
   };
 
   /// What identifies a row on the way *in*, when it is not `id`.

@@ -164,6 +164,61 @@ class RemoteRows {
         );
   }
 
+  /// A stop is an ordinary synced boundary. Never drop it or fill its nulls
+  /// from an older active row, which would quietly restart ongoing targets.
+  Future<void> applyOngoingTargets(
+    Map<String, Object?> json, {
+    required Future<bool> Function(String entityId) hasPendingWrite,
+  }) async {
+    final String incomingId = '${json['id']}';
+    final String userId = '${json['user_id']}';
+    final DateTime week = _date(json['week_start_date']);
+    final DateTime incomingTime = _time(json['updated_at']);
+    final OngoingMacroTargetRow? local =
+        await (_db.select(_db.ongoingMacroTargets)..where(
+              ($OngoingMacroTargetsTable t) =>
+                  t.userId.equals(userId) & t.weekStartDate.equals(week),
+            ))
+            .getSingleOrNull();
+    if (local != null &&
+        local.id != incomingId &&
+        await hasPendingWrite(local.id)) {
+      return;
+    }
+    // The unique user/week is the boundary's identity even if an older
+    // client used a different row id. The generic sync timestamp lookup is
+    // by id, so it cannot protect a newer stop from that alternate-id row.
+    if (local != null && !incomingTime.isAfter(local.updatedAt)) return;
+
+    final OngoingMacroTargetsCompanion row = OngoingMacroTargetsCompanion(
+      id: Value<String>(incomingId),
+      userId: Value<String>(userId),
+      weekStartDate: Value<DateTime>(week),
+      isStopped: Value<bool>(json['is_stopped'] == true),
+      kcal: Value<double?>(_double(json['kcal'])),
+      proteinG: Value<double?>(_double(json['protein_g'])),
+      carbG: Value<double?>(_double(json['carb_g'])),
+      fatG: Value<double?>(_double(json['fat_g'])),
+      fiberG: Value<double?>(_double(json['fiber_g'])),
+      sodiumMg: Value<double?>(_double(json['sodium_mg'])),
+      cholesterolMg: Value<double?>(_double(json['cholesterol_mg'])),
+      updatedAt: Value<DateTime>(incomingTime),
+    );
+    await _db
+        .into(_db.ongoingMacroTargets)
+        .insert(
+          row,
+          onConflict:
+              DoUpdate<$OngoingMacroTargetsTable, OngoingMacroTargetRow>(
+                ($OngoingMacroTargetsTable _) => row,
+                target: <Column<Object>>[
+                  _db.ongoingMacroTargets.userId,
+                  _db.ongoingMacroTargets.weekStartDate,
+                ],
+              ),
+        );
+  }
+
   Future<void> applyFoodProfile(Map<String, Object?> json) => _db
       .into(_db.foodProfiles)
       .insertOnConflictUpdate(

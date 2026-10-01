@@ -30,6 +30,7 @@ part 'hearth_database.g.dart';
     MealPlanDays,
     MealPlanEntries,
     MacroTargets,
+    OngoingMacroTargets,
     IngredientMatches,
     CookTimers,
     FoodProfiles,
@@ -51,11 +52,16 @@ class HearthDatabase extends _$HearthDatabase {
   HearthDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 29;
+  int get schemaVersion => 30;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (Migrator m, int from, int to) async {
+      // Existing exact-week targets keep their meaning. No rows are inferred
+      // or backfilled: only a reviewed Save starts an ongoing schedule.
+      if (from < 30) {
+        await m.createTable(ongoingMacroTargets);
+      }
       // v29 lets a food say how its masses should read, and carry one
       // reviewed package-to-serving relationship (spec R3-R4, R9-R13). Both
       // are additive: the mode defaults to `automatic`, which is what every

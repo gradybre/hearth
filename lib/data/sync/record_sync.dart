@@ -61,6 +61,13 @@ class RecordSync {
                 _rows.applyTargets(json, hasPendingWrite: _queue.hasPendingFor),
           ),
           (table: 'collections', apply: _rows.applyCollection),
+          (
+            table: 'ongoing_macro_targets',
+            apply: (Map<String, Object?> json) => _rows.applyOngoingTargets(
+              json,
+              hasPendingWrite: _queue.hasPendingFor,
+            ),
+          ),
           (table: 'food_profiles', apply: _rows.applyFoodProfile),
           (table: 'plan_templates', apply: _rows.applyPlanTemplate),
           // After foods: a match points at one, and a foreign key does not

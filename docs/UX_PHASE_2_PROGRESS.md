@@ -14,8 +14,8 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
 | 1 — Daily logging | UX-039, UX-041, UX-053 | Approved 2026-09-30 | Merged in [PR #116](https://github.com/gradybre/hearth/pull/116) | 3,925 passed; analyze clean; 71 render checks and all CI passed | Passed after corrections; code candidate `9e50bd1` | Not performed |
 | 2 — Grocery clarity | UX-058, UX-060 | Approved 2026-09-30 | Merged in [PR #117](https://github.com/gradybre/hearth/pull/117) | 3,985 passed; analyze clean; 87 render checks and all CI passed | Passed after corrections; code candidate `7d2121f` | Not performed |
 | 3 — Recipe actions and nutrition | UX-001; recipe-detail scope of UX-010 | Approved 2026-09-30 | Merged in [PR #118](https://github.com/gradybre/hearth/pull/118) | 4,089 passed in UTC plus 2 DST checks in New York; analyze clean; 99 render checks and all CI passed | Passed after one correction; final candidate `3c64406` | Not performed |
-| 4 — Export preview | UX-083 | Approved 2026-10-01 | Implemented; fresh-context review and CI pending | 4,161 passed in UTC; 21 calendar checks in New York; analysis clean; 103 render checks passed | Pending | Not performed |
-| 5 — Ongoing nutrition targets | UX-052, bounded personal carry-forward and weekly exceptions | Approved 2026-10-01 | Domain rules built; storage and editor in progress in a separate checkout; export integration sequenced behind Group 4 | Pending aggregate checks | Pending | Not performed |
+| 4 — Export preview | UX-083 | Approved 2026-10-01 | Merged in [PR #119](https://github.com/gradybre/hearth/pull/119) | 4,161 passed in UTC; 21 calendar checks in New York; analysis clean; 103 render checks and all CI passed | No actionable findings; candidate `27d9eff` | Not performed |
+| 5 — Ongoing nutrition targets | UX-052, bounded personal carry-forward and weekly exceptions | Approved 2026-10-01 | Domain, private storage/sync, editor and export integrated; hosted migration applied | Final aggregate checks running; 111 render checks passed | Pending | Not performed |
 | 6 — Cooking ingredient checklist | UX-018 | Approved 2026-10-01 | Domain and cooking UI started separately; persistence queued behind Group 5's local schema | Pending | Pending | Not performed |
 | 7 — Faster grocery additions | UX-061, plain-item quantity and reviewed paste scope | Awaiting decision | Not started | — | — | — |
 
@@ -169,9 +169,34 @@ the user enables continuity; historical weeks remain unchanged. No body-stat
 presets, automatic coaching or trend history is included. This needs local
 and server storage, sync and export changes. Independent files may be built
 alongside Group 4; shared integration is sequenced. The first worker owns
-only the new target-schedule domain model and its tests while export work is
-active. Storage, sync, the target editor and export will follow within the
-approved group.
+only the new target-schedule domain model and its tests while export work was
+active. Storage, sync, the target editor and export are now integrated.
+
+Exact-week rows take precedence over private, effective-dated ongoing choices.
+An explicit stop travels to other devices and cannot resurrect an older choice.
+All seven authored values retain their null/zero meaning. The editor captures
+the account and week when opened, retains typed values after recoverable
+failures, and rejects an ongoing save after the week changes. Day and Week
+read the values and source together and refresh when targets change without
+a meal edit. JSON exports retain personal boundaries and stops alongside
+the existing exact-week rows. The schema-30 upgrade adds no inferred rows;
+the new hosted table has same-household privacy guards and finite-value checks.
+Local reset and schema guards passed; all 46 hosted migration versions match.
+
+Regression tests exposed the existing wrong-week editor save, a queued
+midweek date, and a stale alternate-ID sync record replacing a newer stop;
+each failed before correction. Old-device weekly rows retain their exact-week
+meaning after migration. Target scope/stop controls are covered in accessibility
+sweeps and light, dark, desktop and 3× captures.
+
+Declaration for this group: a builder additionally proved four domain guards
+by temporarily reversing exact-week precedence, removing the historical
+cutoff, removing the exact-week user filter, and skipping stop boundaries.
+Each experiment failed its focused test and the original source was restored.
+These deliberate negative checks must appear in the PR's `NEGATIVE_TESTS`
+field; under the repository policy this group requires Brendan's merge
+decision after review and green CI. There is no unresolved implementation
+deviation from the approved scope.
 
 ## Group 6 — Cooking ingredient checklist
 

@@ -44,6 +44,7 @@ class SweptSurface {
     this.farEnd,
     this.waypoints = const <Finder>[],
     this.isInline = false,
+    this.withOngoingTargets = false,
   });
 
   /// What it is, in the words the test failure will use.
@@ -55,6 +56,9 @@ class SweptSurface {
   /// A view toggled within a page, rather than a sheet or dialog. Its source
   /// must exist, but it cannot account for an unswept overlay in that file.
   final bool isInline;
+
+  /// Exercises the ongoing editor's distinct scope and stop controls.
+  final bool withOngoingTargets;
 
   /// How to get there from a freshly opened app.
   final Future<void> Function(WidgetTester tester, SweepTools tools) open;
@@ -204,7 +208,25 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
       await tools.reach(find.text('Daily totals'));
     },
     arrived: find.text('Weekly targets'),
+    waypoints: <Finder>[find.text('Use these targets each new week')],
     farEnd: find.text('Save targets'),
+  ),
+  SweptSurface(
+    name: 'ongoing target scope and stop controls',
+    opensFrom: 'lib/features/plan/macro_targets_sheet.dart',
+    isInline: true,
+    withOngoingTargets: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Plan');
+      await tools.reach(find.text('Using ongoing targets · Change'));
+    },
+    arrived: find.text('Weekly targets'),
+    waypoints: <Finder>[
+      find.text('This week only'),
+      find.text('From this week onward'),
+      find.text('Save targets'),
+    ],
+    farEnd: find.text('Stop carrying forward after this week'),
   ),
   SweptSurface(
     name: 'the unsaved-work question',

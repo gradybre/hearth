@@ -1,8 +1,10 @@
+import 'package:collection/collection.dart';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../domain/planning/day_progress.dart';
 import '../../domain/planning/meal_plan.dart';
+import '../../domain/planning/target_schedule.dart';
 import '../../domain/planning/week.dart';
 import '../mappers/plan_mapper.dart';
 import 'hearth_database.dart';
@@ -207,16 +209,43 @@ class PlanStore {
   Future<MacroTargets?> targetsFor({
     required String userId,
     required DateTime date,
-  }) async {
-    final MacroTargetRow? row =
-        await (_db.select(_db.macroTargets)..where(
-              ($MacroTargetsTable t) =>
-                  t.userId.equals(userId) &
-                  t.weekStartDate.equals(startOfWeek(date)),
-            ))
+  }) async => (await targetResolutionFor(userId: userId, date: date)).targets;
+
+  /// Reads both kinds of targets from one snapshot. Even a weekly exception
+  /// retains the ongoing choice beneath it for the target editor.
+  Future<ResolvedTargets> targetResolutionFor({
+    required String userId,
+    required DateTime date,
+  }) => _db.transaction(() async {
+    final DateTime monday = startOfWeek(date);
+    final MacroTargetRow? exact = await targetRowFor(
+      userId: userId,
+      date: monday,
+    );
+    final OngoingMacroTargetRow? boundary =
+        await (_db.select(_db.ongoingMacroTargets)
+              ..where(
+                ($OngoingMacroTargetsTable t) =>
+                    t.userId.equals(userId) &
+                    t.weekStartDate.isSmallerOrEqualValue(monday),
+              )
+              ..orderBy(<OrderClauseGenerator<$OngoingMacroTargetsTable>>[
+                ($OngoingMacroTargetsTable t) =>
+                    OrderingTerm.desc(t.weekStartDate),
+              ])
+              ..limit(1))
             .getSingleOrNull();
-    return row == null ? null : PlanMapper.targetsToDomain(row);
-  }
+    return resolveTargetsForWeek(
+      userId: userId,
+      date: monday,
+      exactWeeks: <ExactWeekTarget>[
+        if (exact != null) PlanMapper.exactWeekTargetToDomain(exact),
+      ],
+      boundaries: <OngoingTargetBoundary>[
+        if (boundary != null) PlanMapper.ongoingTargetToDomain(boundary),
+      ],
+    );
+  });
 
   Future<MacroTargetRow?> targetRowFor({
     required String userId,
@@ -250,6 +279,15 @@ class PlanStore {
     Namespace.url.value,
     'hearth:macro-targets:$userId:${_dateKey(startOfWeek(weekStart))}',
   );
+
+  /// The ongoing boundary has its own identity even when an exact-week
+  /// exception exists for the same person and Monday.
+  static String ongoingIdFor(String userId, DateTime weekStart) =>
+      const Uuid().v5(
+        Namespace.url.value,
+        'hearth:ongoing-macro-targets:$userId:'
+        '${_dateKey(startOfWeek(weekStart))}',
+      );
 
   static String _dateKey(DateTime date) =>
       '${date.year.toString().padLeft(4, '0')}-'
@@ -291,6 +329,75 @@ class PlanStore {
           ),
         );
     return id;
+  }
+
+  Future<OngoingMacroTargetRow?> ongoingTargetRowFor({
+    required String userId,
+    required DateTime date,
+  }) =>
+      (_db.select(_db.ongoingMacroTargets)..where(
+            ($OngoingMacroTargetsTable t) =>
+                t.userId.equals(userId) &
+                t.weekStartDate.equals(startOfWeek(date)),
+          ))
+          .getSingleOrNull();
+
+  Future<String> setOngoingTarget({
+    required OngoingTargetBoundary boundary,
+    required DateTime updatedAt,
+  }) async {
+    final OngoingMacroTargetRow? existing = await ongoingTargetRowFor(
+      userId: boundary.userId,
+      date: boundary.weekStart,
+    );
+    final String id =
+        existing?.id ?? ongoingIdFor(boundary.userId, boundary.weekStart);
+    await _db
+        .into(_db.ongoingMacroTargets)
+        .insertOnConflictUpdate(
+          PlanMapper.ongoingTargetToCompanion(
+            id: id,
+            boundary: boundary,
+            updatedAt: updatedAt,
+          ),
+        );
+    return id;
+  }
+
+  /// A fresh revision when this person's saved target data changes.
+  ///
+  /// Watching both tables also catches remote updates with unchanged row
+  /// counts and no plan-entry edits. Comparing the complete scoped result
+  /// suppresses notifications caused only by another person's writes.
+  Stream<int> watchTargetChanges({required String userId}) {
+    int revision = 0;
+    return _db
+        .customSelect(
+          'SELECT 0 AS target_kind, id, week_start_date, 0 AS is_stopped, '
+          'kcal, protein_g, carb_g, fat_g, fiber_g, sodium_mg, cholesterol_mg, '
+          'updated_at FROM macro_targets WHERE user_id = ? '
+          'UNION ALL '
+          'SELECT 1 AS target_kind, id, week_start_date, is_stopped, '
+          'kcal, protein_g, carb_g, fat_g, fiber_g, sodium_mg, cholesterol_mg, '
+          'updated_at FROM ongoing_macro_targets WHERE user_id = ? '
+          'ORDER BY target_kind, week_start_date, id',
+          variables: <Variable<String>>[
+            Variable<String>(userId),
+            Variable<String>(userId),
+          ],
+          readsFrom: <ResultSetImplementation>{
+            _db.macroTargets,
+            _db.ongoingMacroTargets,
+          },
+        )
+        .watch()
+        .map(
+          (List<QueryRow> rows) => <Map<String, dynamic>>[
+            for (final QueryRow row in rows) row.data,
+          ],
+        )
+        .distinct(const DeepCollectionEquality().equals)
+        .map((_) => ++revision);
   }
 
   Stream<void> watchTargets() =>

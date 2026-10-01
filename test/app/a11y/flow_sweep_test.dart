@@ -90,6 +90,7 @@ void main() {
     WidgetTester tester, {
     required Size size,
     required double scale,
+    bool ongoingTargets = false,
   }) => pumpHearthApp(
     tester,
     size: size,
@@ -114,6 +115,7 @@ void main() {
       fatG: 70,
     ),
     textScale: scale,
+    targetsAreOngoing: ongoingTargets,
   );
 
   // The sizes the screen sweep uses, at the two scales that matter: ordinary,
@@ -132,7 +134,12 @@ void main() {
         testWidgets('${surface.name} survives $at', (
           WidgetTester tester,
         ) async {
-          await openApp(tester, size: device.size, scale: scale);
+          await openApp(
+            tester,
+            size: device.size,
+            scale: scale,
+            ongoingTargets: surface.withOngoingTargets,
+          );
           final SweepTools tools = SweepTools(tester);
 
           await surface.open(tester, tools);

@@ -555,6 +555,17 @@ void main() {
       expect(await repository.targetsFor(DateTime(2026, 8, 30)), targets);
     });
 
+    test('a midweek save queues the same Monday as the stored row', () async {
+      await repository.setTargets(today, targets);
+
+      final MacroTargetRow row =
+          (await db.select(db.macroTargets).get()).single;
+      final PendingWrite write = (await queue.pending()).single;
+      expect(row.weekStartDate, DateTime(2026, 8, 24));
+      expect(write.entityId, row.id);
+      expect(write.payload['week_start_date'], '2026-08-24');
+    });
+
     test('do not leak into the next week', () async {
       await repository.setTargets(today, targets);
       expect(await repository.targetsFor(DateTime(2026, 9, 1)), isNull);
