@@ -27,7 +27,6 @@ import '../../domain/text/text_normaliser.dart';
 import '../foods/food_picker.dart';
 import '../foods/read_label_sheet.dart';
 import '../plan/logging_intent.dart';
-import 'macro_stats_row.dart';
 import 'match_review_controller.dart';
 import 'match_review_screen.dart';
 import 'recipe_chat_controller.dart' show ChatMessage;
@@ -35,6 +34,7 @@ import 'recipe_draft.dart';
 import 'recipe_icon.dart';
 import 'recipe_icon_controller.dart';
 import 'recipe_import_controller.dart';
+import 'recipe_nutrition_receipt.dart';
 import 'recipe_photo.dart';
 import 'recipe_revise_controller.dart';
 
@@ -825,8 +825,9 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     // the macro card: the ingredient rows and the nutrition summary are two
     // views of the same calculation, and they must never disagree about which
     // lines counted.
+    final Recipe preview = draft.toRecipe(idFactory: () => 'preview');
     final RecipeMacros macros = MacroCalculator.forRecipe(
-      draft.toRecipe(idFactory: () => 'preview'),
+      preview,
       foods: _foods,
     );
     final Map<String, IngredientMacroStatus> statusByName =
@@ -1036,7 +1037,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
                 // Whole-recipe, not per section: nutrition is about the dish,
                 // and a section's macros on their own are not a number anyone
                 // eats (spec §5.2's flatten-for-nutrition).
-                _LiveMacros(macros: macros),
+                _LiveMacros(recipe: preview, macros: macros, foods: _foods),
               ],
               if (draft.parsedDirections.steps.isNotEmpty) ...<Widget>[
                 const SizedBox(height: HearthSpacing.lg),
@@ -1751,24 +1752,44 @@ class _IngredientRow extends StatelessWidget {
 
 /// Per-serving and whole-recipe macros, updating as ingredients change
 /// (spec §5.2's live nutrition).
-class _LiveMacros extends StatelessWidget {
-  const _LiveMacros({required this.macros});
+class _LiveMacros extends StatefulWidget {
+  const _LiveMacros({
+    required this.recipe,
+    required this.macros,
+    required this.foods,
+  });
 
-  /// Handed in already computed, so this card and the ingredient rows above
-  /// it are guaranteed to be describing the same calculation.
+  final Recipe recipe;
+  // The ingredient preview and receipt share this exact calculation.
   final RecipeMacros macros;
+  final Map<String, Food> foods;
 
   @override
-  Widget build(BuildContext context) {
-    return _PreviewCard(
-      title: 'Nutrition per serving',
-      // Missing data flags, never blocks (spec §5.3) — and names the actual
-      // gap, since "not matched" sent people to re-match ingredients that
-      // were already matched and were never the problem.
-      note: macros.incompleteReason,
-      child: MacroStatsRow(macros: macros.perServing),
-    );
-  }
+  State<_LiveMacros> createState() => _LiveMacrosState();
+}
+
+class _LiveMacrosState extends State<_LiveMacros> {
+  bool _wholeDish = false;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: context.colors.surfaceSunken,
+      borderRadius: BorderRadius.circular(HearthRadius.md),
+      border: Border.all(color: context.colors.outline),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(HearthSpacing.md),
+      child: RecipeNutritionSummary(
+        recipe: widget.recipe,
+        macros: widget.macros,
+        foods: widget.foods,
+        wholeDish: _wholeDish,
+        isDraft: true,
+        onChanged: (bool value) => setState(() => _wholeDish = value),
+      ),
+    ),
+  );
 }
 
 class _DirectionsPreview extends StatelessWidget {

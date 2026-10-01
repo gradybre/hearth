@@ -29,6 +29,16 @@ import 'day_picker_sheet.dart';
 import 'entry_resolver.dart';
 import 'logging_intent.dart';
 
+String _nutritionBasis(
+  String basis,
+  Macros macros, {
+  bool known = false,
+  bool approximate = false,
+}) =>
+    '$basis · ${approximate ? 'about ' : ''}${macros.kcal.round()} kcal '
+    '· P ${macros.proteinG.round()} g · C ${macros.carbG.round()} g '
+    '· F ${macros.fatG.round()} g${known ? ' (known)' : ''}';
+
 /// Adds something to a slot, or confirms something already planned.
 ///
 /// Logging speed is the success bar, so the default path is deliberately
@@ -205,7 +215,11 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
       (_currentAmountBasis(foods) == null || _standardFor(foods) == null);
 
   String? _saveProblem(Map<String, Food> foods, Map<String, Recipe> recipes) {
-    if (_correctingLog) return null;
+    if (_correctingLog) {
+      return _frozenPerServing == null
+          ? 'Saved nutrition is unavailable for this meal.'
+          : null;
+    }
     final bool isFood =
         _food != null || widget.existing?.entry.refType == PlanRefType.food;
     if (isFood) {
@@ -403,7 +417,7 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     final double portion = snapshot.servings > 0
         ? snapshot.servings
         : entry.servings;
-    if (portion <= 0) return null;
+    if (!portion.isFinite || portion <= 0) return null;
     return snapshot.macros.scaledBy(1 / portion);
   }
 
@@ -1026,6 +1040,13 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     final double servings = _currentServings(foods);
     final Macros total = perServing.scaledBy(servings);
     final bool alreadyLogged = widget.existing?.entry.isLogged ?? false;
+    final Recipe? selectedRecipe = _recipeFor(recipes);
+    // Current whole-dish facts belong only to a new/planned meal. A portion
+    // correction must continue to speak from its frozen saved nutrition.
+    final RecipeMacros? recipeNutrition =
+        !alreadyLogged && selectedRecipe != null
+        ? MacroCalculator.forRecipe(selectedRecipe, foods: foods)
+        : null;
     // Frozen for a meal already logged, live for one about to be (spec R12).
     final MacroSnapshot? frozenSnapshot = widget.existing?.entry.macroSnapshot;
     final bool approximatePackage = alreadyLogged
@@ -1096,15 +1117,73 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
             ),
           ),
           const SizedBox(height: HearthSpacing.xs),
-          Text(
-            alreadyLogged
-                ? 'Already logged. Adjust the portion or remove it.'
-                : '${total.kcal.round()} kcal · '
-                      'P ${total.proteinG.round()}  '
-                      'C ${total.carbG.round()}  '
-                      'F ${total.fatG.round()}',
-            style: context.text.metadata.copyWith(color: colors.textMuted),
-          ),
+          if (recipeNutrition != null && selectedRecipe != null) ...<Widget>[
+            if (recipeNutrition.isIncomplete)
+              Text(
+                'Known nutrition · some ingredients are not counted',
+                style: context.text.metadata.copyWith(color: colors.textMuted),
+              ),
+            if (recipeNutrition.ingredients.any(
+              (IngredientMacros i) => i.isResolved,
+            )) ...<Widget>[
+              Text(
+                _nutritionBasis(
+                  'Per serving',
+                  perServing,
+                  known: recipeNutrition.isIncomplete,
+                  approximate: approximatePackage,
+                ),
+                style: context.text.metadata.copyWith(color: colors.textMuted),
+              ),
+              if (selectedRecipe.servings.isFinite &&
+                  selectedRecipe.servings > 0)
+                Text(
+                  _nutritionBasis(
+                    'Whole dish (${writeAmount(selectedRecipe.servings)} servings)',
+                    recipeNutrition.total,
+                    known: recipeNutrition.isIncomplete,
+                    approximate: approximatePackage,
+                  ),
+                  style: context.text.metadata.copyWith(
+                    color: colors.textMuted,
+                  ),
+                ),
+              Text(
+                _nutritionBasis(
+                  'Your portion',
+                  total,
+                  known: recipeNutrition.isIncomplete,
+                  approximate: approximatePackage,
+                ),
+                style: context.text.body,
+              ),
+            ] else
+              Text(
+                'Nutrition unavailable · no ingredients could be counted',
+                style: context.text.body,
+              ),
+          ] else ...<Widget>[
+            Text(
+              alreadyLogged
+                  ? 'Already logged. Adjust the portion or remove it.'
+                  : '${total.kcal.round()} kcal · '
+                        'P ${total.proteinG.round()}  '
+                        'C ${total.carbG.round()}  '
+                        'F ${total.fatG.round()}',
+              style: context.text.metadata.copyWith(color: colors.textMuted),
+            ),
+            if (alreadyLogged &&
+                widget.existing?.entry.refType == PlanRefType.recipe &&
+                _frozenPerServing != null)
+              Text(
+                _nutritionBasis(
+                  'Your portion · saved nutrition',
+                  total,
+                  approximate: approximatePackage,
+                ),
+                style: context.text.body,
+              ),
+          ],
           // Said beside the number rather than folded into it: a package
           // printed as 'about 2 servings' gives an exact-looking total that
           // is not an exact measurement (spec R10, R12).

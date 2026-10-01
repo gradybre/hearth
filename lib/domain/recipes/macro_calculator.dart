@@ -46,11 +46,20 @@ class IngredientMacros {
     required this.macros,
     required this.status,
     this.usesApproximatePackage = false,
+    this.serving,
+    this.servingCount,
   });
 
   final RecipeIngredient ingredient;
   final Macros macros;
   final IngredientMacroStatus status;
+
+  /// The exact nutrition row and multiplier that supplied [macros].
+  ///
+  /// Receipt metadata only: choosing the row and doing the arithmetic still
+  /// happen together in the calculator. Null on excluded or unresolved lines.
+  final ServingOption? serving;
+  final double? servingCount;
 
   /// True when this ingredient's macros were bridged through a package's
   /// "about N servings" count rather than an exact one (spec R10, R12).
@@ -301,6 +310,8 @@ abstract final class MacroCalculator {
         ingredient: ingredient,
         macros: direct.macros.scaledBy(ratio),
         status: IngredientMacroStatus.resolved,
+        serving: direct,
+        servingCount: ratio,
       );
     }
 
@@ -339,6 +350,8 @@ abstract final class MacroCalculator {
             ingredient: ingredient,
             macros: packageServing.macros.scaledBy(ratio),
             status: IngredientMacroStatus.resolved,
+            serving: packageServing,
+            servingCount: ratio,
             usesApproximatePackage:
                 food.packageNutrition?.isApproximate ?? false,
           );
@@ -386,6 +399,8 @@ abstract final class MacroCalculator {
         ingredient: ingredient,
         macros: option.macros.scaledBy(ratio),
         status: IngredientMacroStatus.resolved,
+        serving: option,
+        servingCount: ratio,
       );
     }
     return null;
