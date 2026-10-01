@@ -256,7 +256,7 @@ void main() {
             },
           );
           await pumpFrames(tester);
-          await tester.tap(find.text('Week').last);
+          await SweepTools(tester).planView('Week');
           await pumpFrames(tester, frames: 10);
           expect(
             tester.takeException(),
@@ -503,7 +503,7 @@ void main() {
       await tester.tap(find.text('Plan').last);
       await pumpFrames(tester);
 
-      await tester.tap(find.text('Week'));
+      await SweepTools(tester).planView('Week');
       await pumpFrames(tester, frames: 10);
 
       expect(tester.takeException(), isNull);
@@ -578,7 +578,7 @@ void main() {
       await at3x(tester);
       await tester.tap(find.text('Plan').last);
       await pumpFrames(tester);
-      await tester.tap(find.text('Week'));
+      await SweepTools(tester).planView('Week');
       await pumpFrames(tester, frames: 10);
 
       expect(tester.takeException(), isNull);

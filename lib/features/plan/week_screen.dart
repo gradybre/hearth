@@ -22,6 +22,7 @@ import '../../domain/planning/week_summary.dart';
 import '../../domain/planning/week_template.dart';
 import 'entry_resolver.dart';
 import 'macro_targets_sheet.dart';
+import 'plan_date_header.dart';
 import 'week_template_sheet.dart';
 
 /// The week, as seven days you can read against each other (spec §5.6,
@@ -88,6 +89,9 @@ class _WeekScreenState extends ConsumerState<WeekScreen> {
     final double gutter = MediaQuery.sizeOf(context).width >= 840
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
+    final bool compact =
+        MediaQuery.sizeOf(context).width < 372 ||
+        MediaQuery.textScalerOf(context).scale(16) > 20;
 
     return week.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -152,10 +156,15 @@ class _WeekScreenState extends ConsumerState<WeekScreen> {
         // anybody reads down.
         return ReadingColumn(
           child: ListView(
-            padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, gutter * 3),
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              compact ? HearthSpacing.sm : gutter,
+              gutter,
+              gutter * 3,
+            ),
             children: <Widget>[
               _WeekHeader(days: days),
-              const SizedBox(height: HearthSpacing.lg),
+              SizedBox(height: compact ? HearthSpacing.sm : HearthSpacing.lg),
               // Seven rows, each with its own figures, and the one that is
               // selected opened in place. Selecting stays here rather than
               // dropping into the day: the point of the week is to be able to
@@ -335,6 +344,17 @@ class _DayRow extends StatelessWidget {
     // the weight: two calls can straddle midnight and disagree about which
     // day is today, on the one screen whose job is attributing food to days.
     final bool today = day.isToday(DateTime.now());
+    final bool compact =
+        MediaQuery.sizeOf(context).width < 372 ||
+        MediaQuery.textScalerOf(context).scale(16) > 20;
+    final bool reflowCalories =
+        compact &&
+        targets?.kcal != null &&
+        (day.state == DayLogState.logged ||
+            day.state == DayLogState.loggedAsNothing);
+    final TextStyle caloriesStyle = context.text.body.copyWith(
+      fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+    );
     final String name =
         '${shortWeekdayName(day.date)} ${day.date.day}'
         '${today ? ' · Today' : ''}';
@@ -370,9 +390,9 @@ class _DayRow extends StatelessWidget {
                   minHeight: HearthTouch.androidTarget,
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(
+                  padding: EdgeInsets.symmetric(
                     horizontal: HearthSpacing.md,
-                    vertical: HearthSpacing.sm,
+                    vertical: compact ? HearthSpacing.xs : HearthSpacing.sm,
                   ),
                   // A wrap, not a row: at three times the text a date, a pair
                   // of calorie figures and a protein figure are far wider
@@ -401,13 +421,16 @@ class _DayRow extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        _eatenText(),
-                        style: context.text.body.copyWith(
-                          fontFeatures: const <FontFeature>[
-                            FontFeature.tabularFigures(),
-                          ],
-                        ),
+                        reflowCalories
+                            ? '${day.eaten.kcal.round()} kcal'
+                            : _eatenText(),
+                        style: caloriesStyle,
                       ),
+                      if (reflowCalories)
+                        Text(
+                          'of ${targets!.kcal.round()} kcal',
+                          style: caloriesStyle,
+                        ),
                       // §7.2 names protein among the four things a row
                       // carries: it is the number this household steers by,
                       // and the one a day can miss while its calories look
@@ -519,87 +542,28 @@ class _WeekHeader extends ConsumerWidget {
 
   final List<DateTime> days;
 
-  static const List<String> _months = <String>[
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-
-  String get _range {
-    final DateTime from = days.first;
-    final DateTime to = days.last;
-    if (from.month == to.month) {
-      return '${from.day}–${to.day} ${_months[from.month - 1]}';
-    }
-    return '${from.day} ${_months[from.month - 1]} – '
-        '${to.day} ${_months[to.month - 1]}';
-  }
-
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Row(
-    children: <Widget>[
-      // The range, and no page title above it. "This week" sat under a
-      // Day/Week toggle that already says Week, under a "Nutrition" section
-      // header, under "Home" — four headings before any food (review
-      // §6.2.1) — and at twice the text on a 320-point phone those two words
-      // alone were 490 points tall in a 380-point viewport.
-      Expanded(
-        child: Text(
-          _range,
-          style: context.text.sectionHeader.copyWith(
-            color: context.colors.textSecondary,
-          ),
+  Widget build(BuildContext context, WidgetRef ref) => PlanDateHeader.week(
+    firstDay: days.first,
+    lastDay: days.last,
+    onPrevious: () => ref.read(selectedDateProvider.notifier).shiftDays(-7),
+    onToday: () => ref.read(selectedDateProvider.notifier).today(),
+    onNext: () => ref.read(selectedDateProvider.notifier).shiftDays(7),
+    trailingAction: PopupMenuButton<VoidCallback>(
+      icon: const Icon(Icons.more_vert),
+      tooltip: 'More',
+      onSelected: (VoidCallback run) => run(),
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<VoidCallback>>[
+        PopupMenuItem<VoidCallback>(
+          value: () => _save(context, ref),
+          child: Text('Save this week to use again', style: context.text.body),
         ),
-      ),
-      IconButton(
-        onPressed: () => ref.read(selectedDateProvider.notifier).shiftDays(-7),
-        tooltip: 'Previous week',
-        icon: const Icon(Icons.chevron_left),
-      ),
-      IconButton(
-        onPressed: () => ref.read(selectedDateProvider.notifier).today(),
-        tooltip: 'Go to this week',
-        icon: const Icon(Icons.today_outlined),
-      ),
-      IconButton(
-        onPressed: () => ref.read(selectedDateProvider.notifier).shiftDays(7),
-        tooltip: 'Next week',
-        icon: const Icon(Icons.chevron_right),
-      ),
-      // The two template actions, in words. They were icon-only with their
-      // meaning in a tooltip — a hover, on a device with no pointer — and a
-      // bookmark and a bookmark-with-a-plus are not two things anybody tells
-      // apart at sixteen points (review §7.2, spec §6.3). The three arrows
-      // beside them stay as arrows: previous, today and next are
-      // conventional and unambiguous.
-      PopupMenuButton<VoidCallback>(
-        icon: const Icon(Icons.more_vert),
-        tooltip: 'More',
-        onSelected: (VoidCallback run) => run(),
-        itemBuilder: (BuildContext context) => <PopupMenuEntry<VoidCallback>>[
-          PopupMenuItem<VoidCallback>(
-            value: () => _save(context, ref),
-            child: Text(
-              'Save this week to use again',
-              style: context.text.body,
-            ),
-          ),
-          PopupMenuItem<VoidCallback>(
-            value: () => _apply(context, ref),
-            child: Text('Use a saved week', style: context.text.body),
-          ),
-        ],
-      ),
-    ],
+        PopupMenuItem<VoidCallback>(
+          value: () => _apply(context, ref),
+          child: Text('Use a saved week', style: context.text.body),
+        ),
+      ],
+    ),
   );
 
   Future<void> _save(BuildContext context, WidgetRef ref) async {

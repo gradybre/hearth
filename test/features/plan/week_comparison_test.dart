@@ -7,6 +7,7 @@ import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/week.dart';
 
 import '../../support/app_harness.dart';
+import '../../support/swept_surfaces.dart';
 
 /// The week as a comparison rather than a day selector (review §7.2).
 ///
@@ -83,8 +84,7 @@ void main() {
       selectedDate: thursday,
     );
     await pumpFrames(tester, frames: 12);
-    await tester.tap(find.text('Week').last);
-    await pumpFrames(tester, frames: 12);
+    await SweepTools(tester).planView('Week');
   }
 
   group('a day logged as nothing is a logged day', () {
@@ -232,7 +232,7 @@ void main() {
       await openWeek(tester, size: const Size(320, 568), scale: 2);
 
       expect(find.text('This week'), findsNothing);
-      expect(find.textContaining('7–13 Sep'), findsWidgets);
+      expect(find.textContaining('Sep 7–13'), findsWidgets);
     });
 
     testWidgets('and a day is on screen before any scrolling', (

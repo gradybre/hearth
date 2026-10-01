@@ -169,6 +169,26 @@ class SweepTools {
     await _tester.tap(find.text(label).last);
     await pumpFrames(_tester, frames: 12);
   }
+
+  /// Selects the real Day/Week control in its direct or compact menu form.
+  Future<void> planView(String label) async {
+    if (label != 'Day' && label != 'Week') {
+      throw ArgumentError.value(label, 'label', 'Expected Day or Week');
+    }
+    final Finder control = find.byKey(
+      const ValueKey<String>('plan-view-control'),
+    );
+    expect(control, findsOneWidget);
+    if (_tester.widget(control) is PopupMenuButton<PlanView>) {
+      await reach(control);
+      // The menu entry owns the tap; its checked label ignores pointers.
+      await reach(
+        find.byKey(ValueKey<String>('plan-view-${label.toLowerCase()}')),
+      );
+    } else {
+      await reach(find.descendant(of: control, matching: find.text(label)));
+    }
+  }
 }
 
 /// The surfaces this sweep visits.
@@ -320,14 +340,33 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     farEnd: find.text('Done'),
   ),
   SweptSurface(
+    name: 'changing Plan to the week',
+    opensFrom: 'lib/features/plan/plan_view_control.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Plan');
+      await tools.planView('Week');
+    },
+    arrived: find.byTooltip('Previous week'),
+  ),
+  SweptSurface(
+    name: 'choosing where to copy a day',
+    opensFrom: 'lib/features/plan/day_picker_sheet.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Plan');
+      await tools.reach(find.byTooltip('Copy this day to other days'));
+    },
+    arrived: find.text('Copy this day to'),
+    farEnd: find.text('Cancel'),
+  ),
+  SweptSurface(
     name: "the day's targets",
     opensFrom: 'lib/features/plan/macro_targets_sheet.dart',
     open: (WidgetTester tester, SweepTools tools) async {
       await tools.tab('Plan');
-      // The card's own caption, and now the only thing wearing it: it used to
-      // read "Today" — the page's title as well — so this had to reach for
-      // the second one and hope the order held (review F05).
-      await tools.reach(find.text('Daily totals'));
+      // The visible Change action remains available even when the compact
+      // layout omits a redundant summary heading.
+      await tools.reach(find.text('This week’s targets · Change'));
     },
     arrived: find.text('Weekly targets'),
     waypoints: <Finder>[find.text('Use these targets each new week')],
@@ -799,9 +838,6 @@ const Map<String, String> notSweptYet = <String, String>{
   'lib/features/foods/read_label_sheet.dart':
       'Needs a photo picker and a label-reading response to get past its '
       'first frame.',
-  'lib/features/plan/day_picker_sheet.dart':
-      'Reached from "Add to several days", which is itself inside the log '
-      'sheet\'s confirm view.',
   'lib/features/plan/week_template_sheet.dart':
       'Saving and applying a week both need a week with something in it.',
   'lib/features/recipes/collections_sheet.dart':

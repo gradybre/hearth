@@ -5,7 +5,9 @@ import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../app/widgets/reading_column.dart';
 import 'day_screen.dart';
+import 'plan_view_control.dart';
 import 'week_screen.dart';
 
 /// The Plan section: a day view and a week summary (spec §5.6).
@@ -23,35 +25,27 @@ class PlanScreen extends ConsumerWidget {
     final double gutter = MediaQuery.sizeOf(context).width >= 840
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
+    final bool compact =
+        MediaQuery.sizeOf(context).width < 372 ||
+        MediaQuery.textScalerOf(context).scale(16) > 20;
 
     return Scaffold(
       backgroundColor: colors.background,
       body: SafeArea(
         child: Column(
           children: <Widget>[
-            Padding(
-              padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
-              child: SegmentedButton<PlanView>(
-                segments: const <ButtonSegment<PlanView>>[
-                  ButtonSegment<PlanView>(
-                    value: PlanView.day,
-                    label: Text('Day'),
-                    icon: Icon(Icons.wb_sunny_outlined, size: 18),
-                  ),
-                  ButtonSegment<PlanView>(
-                    value: PlanView.week,
-                    label: Text('Week'),
-                    icon: Icon(Icons.view_week_outlined, size: 18),
-                  ),
-                ],
-                selected: <PlanView>{view},
-                showSelectedIcon: false,
-                onSelectionChanged: (Set<PlanView> selection) =>
-                    ref.read(planViewProvider.notifier).show(selection.first),
-                style: ButtonStyle(
-                  textStyle: WidgetStatePropertyAll<TextStyle>(
-                    context.text.label,
-                  ),
+            ReadingColumn(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  gutter,
+                  compact ? HearthSpacing.sm : gutter,
+                  gutter,
+                  0,
+                ),
+                child: PlanViewControl(
+                  value: view,
+                  onChanged: (PlanView selection) =>
+                      ref.read(planViewProvider.notifier).show(selection),
                 ),
               ),
             ),

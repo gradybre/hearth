@@ -34,7 +34,7 @@ the review baseline; completed work must be reconciled before asking again.
 
 ## Already decided and delivered
 
-Groups 1–10 are approved and merged. Do not ask for them again. Their bounded
+Groups 1–11 are approved and merged. Do not ask for them again. Their bounded
 scope is recorded in UX_PHASE_2_PROGRESS.md. In particular:
 
 - Group 9: [PR #124](https://github.com/gradybre/hearth/pull/124), merged
@@ -44,13 +44,17 @@ scope is recorded in UX_PHASE_2_PROGRESS.md. In particular:
   The final main source exactly matches that combined candidate. Combined
   checks: 4,655 UTC tests, 116 New York checks, 157 render checks. Native device
   acceptance has not been performed.
+- Group 11: [PR #127](https://github.com/gradybre/hearth/pull/127), merged
+  2026-10-01 as `a0f1026`; all CI passed on reviewed candidate `d1f22b5`,
+  and the merged tree matches it exactly. Independent root checks passed:
+  4,716 UTC tests, 87 New York checks and 165 render checks.
 
 ## Presented decisions
 
 | Group | Review coverage | Decision | Delivery / sequence |
 |---|---|---|---|
-| 11 — Exact log/unlog Undo | UX-051 remainder | Approved 2026-10-01: “Approve Group 11” | Built in `codex/exact-log-undo`; independent review and full validation underway |
-| 12 — Readable Today and Week | UX-087 | Approved 2026-10-01 through its decision card | Standalone components passed review and 47 independent checks; real-screen baseline regressions prepared; Day/Week integration queued behind Group 11 |
+| 11 — Exact log/unlog Undo | UX-051 remainder | Approved 2026-10-01: “Approve Group 11” | Merged as `a0f1026` through PR #127; independent reviews clear and all CI green |
+| 12 — Readable Today and Week | UX-087 | Approved 2026-10-01 through its decision card | Implemented on merged Group 11; independent reviews clear, all local checks passed; pull request delivery and CI pending |
 | 13 — Readable food-data archive | UX-084 | Awaiting answer; card re-presented after Group 12 approval | Can run alongside Plan work; coordinator integrates shared export/provider changes |
 | 14 — Recipe nutrition calculation receipt | UX-015; remaining UX-010 wording | Awaiting answer; card sent 2026-10-01 | Receipt can start independently; shared editor/logging changes sequenced |
 | 15 — Repeat and customize restaurant orders | UX-029, UX-033 | Awaiting answer; card sent 2026-10-01 | Restaurant work independent; logging integration sequenced |

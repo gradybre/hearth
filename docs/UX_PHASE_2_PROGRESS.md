@@ -426,3 +426,50 @@ the full diff and independently passed formatting, clean analysis, all 4,716
 UTC tests (189 opt-in/time-zone skips), 87 New York checks and all 165 gallery
 render checks, including the new light, dark, desktop and 3× Undo captures.
 Native-device validation has not been performed.
+
+[PR #127](https://github.com/gradybre/hearth/pull/127) merged on 2026-10-01 as
+`a0f1026`. All CI checks passed on `d1f22b5`; the merged tree is identical.
+Fresh-context code review found no actionable issues and independently passed
+127 focused UTC tests and 61 New York tests. Independent design review inspected
+all 16 new captures and found no actionable issues.
+
+## Group 12 — Readable Today and Week
+
+Approved: give dates their own line on narrow screens or at enlarged text,
+remove redundant headings, and offer a compact Day/Week choice. Preserve full
+text scaling, date actions and ordinary phone/desktop navigation while bringing
+a meaningful nutrition figure or meal into the initial viewport. No AI,
+dependency, schema or data behavior changes.
+
+Day and Week now use readable date headers with full date/year announcements
+and 48-point date actions. A compact labelled menu replaces the Day/Week
+segments when space is scarce. Compact summaries lead with a complete calorie
+amount and unit; targets, remaining amounts, planned qualifiers and Week day
+identity remain available at full text size. Ordinary phone headings keep
+whole words, wrapping their actions below when needed. The shared Copy/Move
+picker scrolls its title and choices while its wrapping action footer stays
+reachable. Existing date navigation, saved-week actions, copy/move results and
+Group 11's exact logging Undo retain their behavior.
+
+Behavioral failures preceded repairs for the initial nutrition figure falling
+below the usable viewport, ordinary-phone weekday wrapping, and an overflowing
+Copy dialog with unreachable Cancel. Real-shell tests include the Home bar,
+bottom tabs and safe areas at 320×568 with 3× text, plus ordinary phone and
+desktop journeys in both themes. Dedicated picker journeys exercise Cancel,
+multi-date Copy with sorted results, and Move with a changed meal slot using
+the visible controls.
+
+Fresh-context code review found a calendar-dependent test fixture: its fixed
+2026 date would become a historical date, and its Monday could gain a Today
+label. Both fixture boundaries were reproduced before correction. The ordinary
+viewport fixture now uses a Wednesday in the current year outside the current
+week; the existing strict viewport assertions remain. Separate checks retain
+historical-date, New Year and Today coverage. No production correctness or
+security findings remain. Independent design review inspected all 24 new
+light, dark, desktop and 3× captures and found no actionable issues.
+
+The coordinating agent read the full diff and independently passed formatting,
+clean analysis, all 4,777 UTC tests (201 opt-in/time-zone skips), 85 New York
+checks and all 177 render checks. The final fixture-only correction did not
+change production or render code. Native-device and live screen-reader
+acceptance have not been performed. Pull request delivery and CI are pending.
