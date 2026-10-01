@@ -7,6 +7,7 @@ import '../../domain/models/food.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/week_template.dart';
+import '../../domain/shopping/shopping_contribution.dart';
 import '../local/food_store.dart';
 import '../local/hearth_database.dart';
 import '../local/pending_write_store.dart';
@@ -27,20 +28,72 @@ class ExportedFile {
   int get bytes => utf8.encode(contents).length;
 }
 
+/// A single local database read, ready to review and then share unchanged.
+@immutable
+class ExportSnapshot {
+  ExportSnapshot({
+    required this.file,
+    required this.householdId,
+    required this.userId,
+    required this.capturedAt,
+    required Map<String, int> counts,
+    required this.loggedDayStart,
+    required this.loggedDayEnd,
+    required this.pendingChanges,
+    required List<String> exclusions,
+    required List<String> missingReferences,
+  }) : counts = Map<String, int>.unmodifiable(counts),
+       exclusions = List<String>.unmodifiable(exclusions),
+       missingReferences = List<String>.unmodifiable(missingReferences);
+
+  final ExportedFile file;
+  final String householdId;
+  final String userId;
+  final DateTime capturedAt;
+  final Map<String, int> counts;
+
+  /// Calendar dates of the exported logged entries' meal-plan days.
+  ///
+  /// Stored as UTC midnight to retain the date without a local time offset;
+  /// format their calendar fields directly, without converting to local time.
+  /// These are not the wall-clock times when somebody tapped Log.
+  final DateTime? loggedDayStart;
+  final DateTime? loggedDayEnd;
+
+  /// Pending writes across this device, including work outside this scope.
+  ///
+  /// Zero does not establish whether the cloud or another device has more data.
+  final int pendingChanges;
+  final List<String> exclusions;
+  final List<String> missingReferences;
+
+  bool get localReferencesComplete => missingReferences.isEmpty;
+}
+
+/// What the operating system reported after opening the share sheet.
+enum FileShareOutcome {
+  /// An action was selected; this does not prove a file was saved or delivered.
+  actionSelected,
+  dismissed,
+
+  /// The platform could not report what the person did with the share sheet.
+  unavailable,
+}
+
 /// Handing a file to the OS (rule 7).
 ///
 /// An interface so the builder can be exercised without a share sheet, and so
 /// `share_plus` is touched in exactly one file.
 abstract interface class FileShare {
-  Future<void> share(ExportedFile file);
+  Future<FileShareOutcome> share(ExportedFile file);
 }
 
-/// Everything this household and this person have, as JSON (spec §7.4).
+/// The household's food records and this person's planning data (spec §7.4).
 ///
 /// Cheap insurance and on-brand for a personal tool: the point is that Hearth
-/// can be walked away from. It reads the local database rather than the
-/// server, which is the same data — the local copy is what sync maintains —
-/// and means an export works on a plane.
+/// can be walked away from. Reading the local database means an export works
+/// on a plane. It cannot establish whether the cloud or another device has
+/// additional data.
 ///
 /// **Photos are not included.** They are binary, they would turn a 200 KB
 /// share into tens of megabytes, and after Phase 5 they live in the
@@ -72,35 +125,31 @@ class DataExport {
   Future<ExportedFile> build({
     required String householdId,
     required String userId,
-  }) async {
-    final Map<String, Object?> data = await asJson(
-      householdId: householdId,
-      userId: userId,
-    );
-    final DateTime at = _now();
-    return ExportedFile(
-      name:
-          'hearth-${at.year.toString().padLeft(4, '0')}-'
-          '${at.month.toString().padLeft(2, '0')}-'
-          '${at.day.toString().padLeft(2, '0')}.json',
-      // Indented on purpose. This is a file a person may open and read, and
-      // the few extra kilobytes buy that.
-      contents: const JsonEncoder.withIndent('  ').convert(data),
-    );
-  }
+  }) async => (await prepare(householdId: householdId, userId: userId)).file;
 
   /// The export as a map, which is the part worth testing.
+  Future<Map<String, Object?>> asJson({
+    required String householdId,
+    required String userId,
+  }) async => jsonDecode(
+    (await prepare(householdId: householdId, userId: userId)).file.contents,
+  ) as Map<String, Object?>;
+
+  /// Capture the exact file and the facts shown before sharing it.
+  ///
+  /// Nothing needs to be rebuilt after review. Later database writes cannot
+  /// change the file or the counts the person approved.
   ///
   /// Read inside one transaction. Every section used to be its own query, so
   /// a sync pass landing halfway through could leave the file holding an
   /// entry whose day had not been written yet — a file that fails its own
   /// reference check for no reason anybody could reconstruct afterwards.
-  Future<Map<String, Object?>> asJson({
+  Future<ExportSnapshot> prepare({
     required String householdId,
     required String userId,
   }) => _db.transaction(() => _read(householdId: householdId, userId: userId));
 
-  Future<Map<String, Object?>> _read({
+  Future<ExportSnapshot> _read({
     required String householdId,
     required String userId,
   }) async {
@@ -172,6 +221,25 @@ class DataExport {
       _db.macroTargets,
     )..where(($MacroTargetsTable t) => t.userId.equals(userId))).get();
 
+    final List<ShoppingListRow> lists =
+        await (_db.select(_db.shoppingLists)..where(
+              ($ShoppingListsTable l) => l.householdId.equals(householdId),
+            ))
+            .get();
+    final Set<String> listIds = <String>{
+      for (final ShoppingListRow list in lists) list.id,
+    };
+    final List<ShoppingItemRow> shoppingItems = <ShoppingItemRow>[
+      for (final ShoppingItemRow item
+          in await _db.select(_db.shoppingListItems).get())
+        if (listIds.contains(item.listId)) item,
+    ];
+    final List<ShoppingContribution> shoppingContributions =
+        <ShoppingContribution>[
+          for (final ShoppingItemRow item in shoppingItems)
+            ...ShoppingMapper.contributionsFromJson(item.contributions),
+        ];
+
     // Decoded by the domain's own reader rather than by a second one written
     // here. A parallel decoder knowing the key names is a decoder that stops
     // knowing them: rename a field on `TemplateEntry` and this one yields
@@ -197,6 +265,11 @@ class DataExport {
         if (match.foodId case final String id) id,
       for (final TemplateEntry entry in templateEntries)
         if (entry.refType == PlanRefType.food) entry.refId,
+      for (final ShoppingItemRow item in shoppingItems)
+        if (item.foodId case final String id) id,
+      for (final ShoppingContribution contribution in shoppingContributions)
+        if (contribution.kind == ShoppingSourceKind.food)
+          if (contribution.refId case final String id) id,
     };
     final Set<String> recipeRefs = <String>{
       for (final MealPlanEntryRow entry in entries)
@@ -211,6 +284,11 @@ class DataExport {
       ...favorites,
       for (final TemplateEntry entry in templateEntries)
         if (entry.refType == PlanRefType.recipe) entry.refId,
+      for (final ShoppingItemRow item in shoppingItems)
+        ...ShoppingMapper.sourceIdsToList(item.sourceRecipeIds),
+      for (final ShoppingContribution contribution in shoppingContributions)
+        if (contribution.kind == ShoppingSourceKind.recipe)
+          if (contribution.refId case final String id) id,
     };
 
     // A referenced global joins the export, marked as somebody else's
@@ -241,27 +319,53 @@ class DataExport {
         'recipe $id',
     ];
 
-    // A queue with anything in it is proof the server does not have
-    // everything this file does — which makes "everything Hearth holds" a
-    // claim about a phone rather than about an account, and worth saying out
-    // loud rather than leaving to be assumed.
+    // The outbox is device-wide. It may contain work outside this export's
+    // scope, or a write the server accepted before its acknowledgement was
+    // lost. Neither a non-empty nor an empty queue proves cloud completeness.
     final int unsent = await PendingWriteStore(_db).count();
 
-    final List<ShoppingListRow> lists =
-        await (_db.select(_db.shoppingLists)..where(
-              ($ShoppingListsTable l) => l.householdId.equals(householdId),
-            ))
-            .get();
-    final Set<String> listIds = <String>{
-      for (final ShoppingListRow list in lists) list.id,
+    final Map<String, Object?>? profile = await _profile(userId);
+    final Set<String> loggedDayIds = <String>{
+      for (final MealPlanEntryRow entry in entries)
+        if (entry.isLogged) entry.dayId,
     };
-    final List<ShoppingItemRow> shoppingItems = <ShoppingItemRow>[
-      for (final ShoppingItemRow item
-          in await _db.select(_db.shoppingListItems).get())
-        if (listIds.contains(item.listId)) item,
+    final List<DateTime> loggedDays = <DateTime>[
+      for (final MealPlanDayRow day in days)
+        if (loggedDayIds.contains(day.id))
+          DateTime.utc(day.day.year, day.day.month, day.day.day),
+    ];
+    final DateTime? loggedDayStart = loggedDays.firstOrNull;
+    final DateTime? loggedDayEnd = loggedDays.lastOrNull;
+    final Map<String, int> counts = <String, int>{
+      'recipes': recipes.length,
+      'foods': exportedFoods.length,
+      'global_foods_referenced': exportedFoods.length - owned.length,
+      'meal_plan_days': days.length,
+      'meal_plan_entries': entries.length,
+      'logged_entries': entries
+          .where((MealPlanEntryRow e) => e.isLogged)
+          .length,
+      'planned_entries': entries
+          .where((MealPlanEntryRow e) => e.isPlanned)
+          .length,
+      'macro_targets': targets.length,
+      'plan_templates': templates.length,
+      'collections': collections.length,
+      'favorite_recipes': favorites.length,
+      'ingredient_matches': matches.length,
+      'food_profiles': profile == null ? 0 : 1,
+      'shopping_lists': lists.length,
+      'shopping_items': shoppingItems.length,
+    };
+    const List<String> exclusions = <String>[
+      'Recipe photos. The file names them where a recipe has one, which '
+          'is a reference and not a backup.',
+      'The global food catalogue, apart from the definitions this file '
+          'points at.',
+      'Anybody else\'s plans, logs, targets, favourites or food profile.',
     ];
 
-    return <String, Object?>{
+    final Map<String, Object?> data = <String, Object?>{
       'format': 'hearth-export',
       'version': formatVersion,
       'exported_at': at.toUtc().toIso8601String(),
@@ -269,8 +373,8 @@ class DataExport {
       'user_id': userId,
       'note':
           'Recipe photos are not included. See the manifest for what else is '
-          'not, and for whether this device had sent everything when the file '
-          'was made.',
+          'excluded, missing local references and this device\'s pending '
+          'changes. This local snapshot does not verify cloud completeness.',
       'recipes': <Map<String, Object?>>[
         for (final Recipe recipe in recipes)
           RecipeMapper.toJson(recipe, updatedAt: recipe.updatedAt ?? at),
@@ -341,7 +445,7 @@ class DataExport {
             'needs_no_match': row.needsNoMatch,
           },
       ],
-      'food_profile': await _profile(userId),
+      'food_profile': profile,
       'shopping_lists': <Map<String, Object?>>[
         for (final ShoppingListRow list in lists)
           <String, Object?>{
@@ -365,47 +469,56 @@ class DataExport {
           'household_id': householdId,
           'user_id': userId,
         },
-        'counts': <String, Object?>{
-          'recipes': recipes.length,
-          'foods': exportedFoods.length,
-          'global_foods_referenced': exportedFoods.length - owned.length,
-          'meal_plan_days': days.length,
-          'meal_plan_entries': entries.length,
-          'macro_targets': targets.length,
-          'plan_templates': templates.length,
-          'collections': collections.length,
-          'favorite_recipes': favorites.length,
-          'ingredient_matches': matches.length,
-          'shopping_lists': lists.length,
-          'shopping_items': shoppingItems.length,
-        },
-        'excluded': <String>[
-          'Recipe photos. The file names them where a recipe has one, which '
-              'is a reference and not a backup.',
-          'The global food catalogue, apart from the definitions this file '
-              'points at.',
-          'Anybody else\'s plans, logs, targets, favourites or food profile.',
-        ],
+        'counts': counts,
+        'logged_day_start': loggedDayStart == null
+            ? null
+            : _dateOnly(loggedDayStart),
+        'logged_day_end': loggedDayEnd == null ? null : _dateOnly(loggedDayEnd),
+        'excluded': exclusions,
         // Named rather than hidden. A reference to something that is not here
         // is a fact about the file, and the alternative is a file that looks
         // whole and is not.
         'missing_references': missing,
-        // A claim about an account, not about a phone. Anything still in the
-        // outbox means the server has less than this file does, so this file
-        // cannot be called complete without saying which way it is wrong.
+        'local_references_complete': missing.isEmpty,
+        'pending_changes': unsent,
+        'pending_changes_scope': 'device',
+        // Keep the v2 boolean for readers that already use it. Its limited
+        // meaning is explicit; it cannot establish account completeness.
         'complete': unsent == 0 && missing.isEmpty,
-        'note': unsent == 0
-            ? (missing.isEmpty
-                  ? 'This device had sent everything it had when the file was '
-                        'made.'
-                  : 'Some records point at things this device does not hold. '
-                        'They are listed above.')
-            : '\$unsent ${unsent == 1 ? 'change has' : 'changes have'} not '
-                  'been sent to '
-                  'the server when this file was made, so the server holds '
-                  'less than this file does.',
+        'completeness_scope': 'local_references_and_device_pending_changes',
+        'note': <String>[
+          if (unsent == 0)
+            'No pending changes were recorded on this device when the file '
+                'was made.'
+          else
+            '$unsent ${unsent == 1 ? 'change was' : 'changes were'} pending '
+                'on this device when the file was made. This count is '
+                'device-wide and may include work outside this export.',
+          if (missing.isNotEmpty)
+            'Some records point at things this device does not hold. '
+                'They are listed above.',
+          'This local snapshot does not verify whether the cloud or another '
+              'device holds additional data.',
+        ].join(' '),
       },
     };
+
+    return ExportSnapshot(
+      file: ExportedFile(
+        name: 'hearth-${_dateOnly(at)}.json',
+        // Indented on purpose: this is a file a person may open and read.
+        contents: const JsonEncoder.withIndent('  ').convert(data),
+      ),
+      householdId: householdId,
+      userId: userId,
+      capturedAt: at,
+      counts: counts,
+      loggedDayStart: loggedDayStart,
+      loggedDayEnd: loggedDayEnd,
+      pendingChanges: unsent,
+      exclusions: exclusions,
+      missingReferences: missing,
+    );
   }
 
   /// A stored JSON list, decoded, or an empty list if it is not one.

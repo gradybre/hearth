@@ -151,6 +151,16 @@ void main() {
             reason: '${surface.name} overflowed at $at',
           );
 
+          for (final Finder waypoint in surface.waypoints) {
+            await tools.bring(waypoint);
+            expect(waypoint, findsWidgets);
+            expect(
+              tester.takeException(),
+              isNull,
+              reason: 'a section of ${surface.name} overflowed at $at',
+            );
+          }
+
           // And to its far end, where there is one. A lazy list does not
           // build what is off the screen, and a row that is never built
           // cannot overflow.

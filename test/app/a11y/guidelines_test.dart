@@ -951,7 +951,7 @@ final List<_Destination> _destinations = <_Destination>[
   _Destination(
     name: 'settings · your data',
     open: _settingsPage('Your data'),
-    arrived: find.text('Export my data'),
+    arrived: find.text('Export food data (JSON)'),
   ),
   _Destination(
     name: 'your food profile',

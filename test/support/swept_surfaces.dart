@@ -42,6 +42,7 @@ class SweptSurface {
     required this.open,
     required this.arrived,
     this.farEnd,
+    this.waypoints = const <Finder>[],
     this.isInline = false,
   });
 
@@ -71,6 +72,10 @@ class SweptSurface {
   /// never built cannot overflow — so a sweep that only looks at the first
   /// viewport passes on a sheet whose last control is unreachable.
   final Finder? farEnd;
+
+  /// Long reviews are read section by section before reaching the action.
+  /// Each waypoint is checked, so large text never silently skips a section.
+  final List<Finder> waypoints;
 }
 
 /// The scrolling and tapping a sweep needs, shared by every surface.
@@ -153,6 +158,41 @@ class SweepTools {
 /// or listed in [notSweptYet] with a reason. There is no third option: that
 /// is the whole point.
 final List<SweptSurface> sweptSurfaces = <SweptSurface>[
+  SweptSurface(
+    name: 'the food data export review',
+    opensFrom: 'lib/features/account/settings_screen.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.reach(find.byTooltip('Settings').last);
+      await tools.reach(find.text('Your data'));
+      await tools.reach(find.text('Export food data (JSON)'));
+      await pumpFrames(tester, frames: 20);
+    },
+    arrived: find.text('Review food export'),
+    waypoints: <Finder>[
+      find.byKey(const Key('export-review-counts')),
+      find.byKey(const Key('export-review-exclusions')),
+    ],
+    farEnd: find.text('Export this device now'),
+  ),
+  SweptSurface(
+    name: 'the food data export receipt',
+    opensFrom: 'lib/features/account/export_review_screen.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.reach(find.byTooltip('Settings').last);
+      await tools.reach(find.text('Your data'));
+      await tools.reach(find.text('Export food data (JSON)'));
+      await pumpFrames(tester, frames: 20);
+      await tools.bring(find.byKey(const Key('export-review-counts')));
+      await tools.bring(find.byKey(const Key('export-review-exclusions')));
+      // pumpHearthApp always replaces the OS adapter with a fake. The
+      // receipt is reached without sending a file outside this test.
+      await tools.reach(find.text('Export this device now'));
+    },
+    arrived: find.text('Export receipt'),
+    farEnd: find.text('Done'),
+  ),
   SweptSurface(
     name: "the day's targets",
     opensFrom: 'lib/features/plan/macro_targets_sheet.dart',
