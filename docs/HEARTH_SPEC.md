@@ -308,8 +308,26 @@ belongs to the Nutrition section.
   details, with that missing basis explained; it is not silently re-costed or
   logged as zero. Current food details are read-only for both household and
   global foods and do not claim to show a past log's frozen nutrition. Existing
-  More/long-press actions and swipe-delete Undo remain available. Exact Undo
-  for logging or unlogging remains a separate change.
+  More/long-press actions and swipe-delete Undo remain available.
+- **One-tap Log and Unlog offer an exact Undo.** The Day row's check still
+  acts immediately, then offers **Undo**. Undo restores the entry's previous
+  planned/logged state, portion, saved name, nutrition, coverage, original
+  entered amount and recording time; it does not recalculate an old meal from
+  today's recipe or food. Restoring a planned entry also removes the snapshot
+  and logged time created by the tap. *(Phase 2: UX-051, Group 11.)*
+  - If that entry has changed again, moved or been removed, explain that it
+    has changed and leave the newer state alone. Changing it away and back
+    still counts as a later change. Repeated Undo never creates another meal
+    or another restoration. A normal sync confirmation of the same meal does
+    not expire Undo merely because the server timestamp or JSON formatting
+    changed.
+  - The offer belongs to the active account, household and local session.
+    Leaving that scope expires it. A storage failure leaves a safe retry;
+    retry still checks that the entry has not changed. The feedback and its
+    action remain readable at large text sizes and usable with assistive
+    navigation.
+  - This covers the existing Day row's one-tap check. New-entry logging,
+    portion corrections and a durable undo history are separate scopes.
 - **Changing a portion is visible, not a gesture you have to know.** Each
   meal row carries a way in to Edit portion and Remove. Long press stays as a
   shortcut for those who know it, and one tap still logs and unlogs — but a
@@ -918,7 +936,8 @@ A layered strategy. **Automated tests** (authored by Claude Code alongside each 
 ### 9.2 Widget tests (Flutter components)
 - Recipe editor: add/remove/reorder ingredients and sections; live-nutrition updates.
 - Cook-along: step advance, tap-anywhere-to-advance, checkable steps, **multiple concurrent timers**, keep-awake.
-- Logging: one-tap confirm + portion stepper.
+- Logging: one-tap confirm + portion stepper; Log/Unlog Undo restores the exact
+  previous state and refuses a stale, changed or expired entry without writes.
 - Macro progress bars: correct fill, and over/under conveyed by **icon/label, not color alone** (accessibility).
 - Combinable filter chips.
 - Match review screen: low-confidence highlight, source badges, inline manual entry.

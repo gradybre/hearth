@@ -18,6 +18,143 @@ class PlanStore {
   PlanStore(this._db);
 
   final HearthDatabase _db;
+  bool _observingLogConnection = false;
+  bool _logConnectionClosed = false;
+
+  bool get isLogStateConnectionClosed => _logConnectionClosed;
+
+  /// Connection-local evidence for short-lived Log/Unlog receipts. These TEMP
+  /// objects are not application history and never enter the persistent schema.
+  /// Triggers observe content changes from repository, direct and sync writers;
+  /// a timestamp cannot distinguish two edits in the same clock tick. A server
+  /// confirmation changing only its timestamp or JSON encoding is not an edit.
+  /// Revision rows remain after deletion so reinserting an id cannot revive an
+  /// old receipt.
+  ///
+  /// Run before the action transaction. Idempotent SQL also handles two stores
+  /// sharing a connection, and a new connection gets a new session token.
+  Future<void> prepareLogStateTracking() async {
+    if (!_observingLogConnection) {
+      _observingLogConnection = true;
+      // Drift closes this stream with its connection. Observe that terminal
+      // event without needing to reopen/query a database that was disposed.
+      _db.tableUpdates().listen(
+        (_) {},
+        onDone: () => _logConnectionClosed = true,
+      );
+    }
+    await _db.customStatement('''
+      CREATE TEMP TABLE IF NOT EXISTS hearth_log_state_session (
+        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+        token TEXT NOT NULL
+      )
+    ''');
+    await _db.customStatement(
+      'INSERT OR IGNORE INTO temp.hearth_log_state_session VALUES (1, ?)',
+      <Object>[const Uuid().v4()],
+    );
+    await _db.customStatement('''
+      CREATE TEMP TABLE IF NOT EXISTS hearth_log_state_revisions (
+        entry_id TEXT PRIMARY KEY, revision INTEGER NOT NULL
+      )
+    ''');
+    // fullkey retains array positions; container rows distinguish empty
+    // arrays/objects, and null leaves distinguish missing from explicit null.
+    // Traversal ids/order are deliberately absent: object order is not data.
+    // Conflicting duplicate member paths are ambiguous, so changed raw text
+    // with either tree containing them conservatively counts as an edit.
+    String jsonTree(String row) =>
+        '''
+      SELECT fullkey,
+        CASE WHEN type IN ('integer', 'real') THEN 'number' ELSE type END,
+        atom FROM json_tree($row.macro_snapshot)
+    ''';
+    final String contentChanged = <String>[
+      for (final String column in <String>[
+        'id',
+        'day_id',
+        'meal_slot',
+        'ref_type',
+        'ref_id',
+        'servings',
+        'serving_option_id',
+        'is_planned',
+        'is_logged',
+        'logged_at',
+      ])
+        'OLD.$column IS NOT NEW.$column',
+      '''CASE
+        WHEN OLD.macro_snapshot IS NEW.macro_snapshot THEN 0
+        WHEN json_valid(OLD.macro_snapshot) = 1
+          AND json_valid(NEW.macro_snapshot) = 1
+        THEN EXISTS (SELECT fullkey FROM json_tree(OLD.macro_snapshot)
+            GROUP BY fullkey HAVING COUNT(*) > 1)
+          OR EXISTS (SELECT fullkey FROM json_tree(NEW.macro_snapshot)
+            GROUP BY fullkey HAVING COUNT(*) > 1)
+          OR EXISTS (${jsonTree('OLD')} EXCEPT ${jsonTree('NEW')})
+          OR EXISTS (${jsonTree('NEW')} EXCEPT ${jsonTree('OLD')})
+        ELSE 1
+      END''',
+    ].join(' OR ');
+    for (final String event in <String>['INSERT', 'UPDATE', 'DELETE']) {
+      final String row = event == 'DELETE' ? 'OLD' : 'NEW';
+      await _db.customStatement('''
+        CREATE TEMP TRIGGER IF NOT EXISTS hearth_log_state_${event.toLowerCase()}
+        AFTER $event ON main.meal_plan_entries
+        ${event == 'UPDATE' ? 'WHEN $contentChanged' : ''}
+        BEGIN
+          INSERT INTO hearth_log_state_revisions(entry_id, revision)
+          VALUES ($row.id, 1)
+          ON CONFLICT(entry_id) DO UPDATE SET revision = revision + 1;
+          ${event == 'UPDATE' ? '''
+          INSERT INTO hearth_log_state_revisions(entry_id, revision)
+          SELECT OLD.id, 1 WHERE OLD.id != NEW.id
+          ON CONFLICT(entry_id) DO UPDATE SET revision = revision + 1;
+          ''' : ''}
+        END
+      ''');
+    }
+  }
+
+  /// Read inside the same transaction as the guarded mutation.
+  Future<StoredLogState?> logState(String id) async {
+    final MealPlanEntryRow? row = await (_db.select(
+      _db.mealPlanEntries,
+    )..where(($MealPlanEntriesTable e) => e.id.equals(id))).getSingleOrNull();
+    if (row == null) return null;
+    final MealPlanDayRow? day =
+        await (_db.select(_db.mealPlanDays)
+              ..where(($MealPlanDaysTable d) => d.id.equals(row.dayId)))
+            .getSingleOrNull();
+    if (day == null) return null;
+    final QueryRow evidence = await _db
+        .customSelect(
+          '''
+      SELECT token, COALESCE(revision, 0) AS revision
+      FROM temp.hearth_log_state_session
+      LEFT JOIN temp.hearth_log_state_revisions ON entry_id = ?
+      WHERE singleton = 1
+    ''',
+          variables: <Variable<Object>>[Variable<String>(id)],
+        )
+        .getSingle();
+    return StoredLogState(
+      row: row,
+      userId: day.userId,
+      connection: evidence.read<String>('token'),
+      revision: evidence.read<int>('revision'),
+    );
+  }
+
+  /// Restores the raw snapshot, including fields this client cannot interpret.
+  /// [updatedAt] is the new sync write time; all original meal times remain.
+  Future<void> restoreLogState(MealPlanEntryRow row, DateTime updatedAt) async {
+    await _db
+        .into(_db.mealPlanEntries)
+        .insertOnConflictUpdate(
+          row.copyWith(updatedAt: updatedAt).toCompanion(false),
+        );
+  }
 
   /// The day row for [date], creating it if this is the first thing put there.
   ///
@@ -402,4 +539,19 @@ class PlanStore {
 
   Stream<void> watchTargets() =>
       _db.select(_db.macroTargets).watch().map((_) {});
+}
+
+/// Raw row and the storage evidence read with it in an action transaction.
+class StoredLogState {
+  const StoredLogState({
+    required this.row,
+    required this.userId,
+    required this.connection,
+    required this.revision,
+  });
+
+  final MealPlanEntryRow row;
+  final String userId;
+  final String connection;
+  final int revision;
 }

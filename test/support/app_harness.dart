@@ -105,6 +105,10 @@ Future<HearthDatabase> pumpHearthApp(
   List<Food> foods = const <Food>[],
   Stream<List<Food>>? foodStream,
   List<MealPlanEntry> entries = const <MealPlanEntry>[],
+
+  /// Re-read seeded plan entries after a UI action invalidates the day.
+  /// Uses one-shot reads; the harness still suppresses SQLite subscriptions.
+  bool readPlanEntriesFromStore = false,
   List<RecentLog> recentLogs = const <RecentLog>[],
 
   /// A whole week, for the screen that compares seven days.
@@ -356,7 +360,14 @@ Future<HearthDatabase> pumpHearthApp(
         ),
         // Same reasoning as the libraries: fake async cannot drive sqlite, so
         // the planner's day is fed directly.
-        dayEntriesProvider.overrideWith((Ref ref) async => entries),
+        dayEntriesProvider.overrideWith((Ref ref) async {
+          if (readPlanEntriesFromStore) {
+            return ref
+                .watch(planRepositoryProvider)
+                .entriesFor(ref.watch(selectedDateProvider));
+          }
+          return entries;
+        }),
         // Same reasoning again: the targets live in sqlite, and a day with
         // none is a different screen entirely — the one that asks you to set
         // some — so a test about the tiles has to be able to say there are.

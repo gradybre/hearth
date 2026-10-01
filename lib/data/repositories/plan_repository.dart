@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:uuid/uuid.dart';
 
 import '../../domain/models/macros.dart';
 import '../../domain/planning/day_progress.dart';
+import '../../domain/planning/log_state_change.dart';
 import '../../domain/planning/logged_portion.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
@@ -46,6 +49,166 @@ class PlanRepository {
   final String _userId;
   final DateTime Function() _now;
   final String Function() _newId;
+  final Expando<_LogStateReceipt> _logStateReceipts =
+      Expando<_LogStateReceipt>();
+
+  /// One-tap logging has an expected state, unlike the portion-correction API.
+  /// A stale callback cannot correct, unlog or re-log a newer record. Null means
+  /// the expected meal/session no longer applies, with no write or queued work.
+  Future<LogStateChange?> changeLogState({
+    required MealPlanEntry expected,
+    required bool logged,
+    required LogStateScope scope,
+    Macros? liveMacros,
+    String? label,
+    NutrientCoverage? liveCoverage,
+    bool usesApproximatePackage = false,
+    LoggedPortion? loggedPortion,
+  }) async {
+    if (!_scopeApplies(scope) || expected.isLogged == logged) return null;
+    if (logged &&
+        (liveMacros == null || label == null || liveCoverage == null)) {
+      throw ArgumentError(
+        'Logging requires current nutrition, coverage and name.',
+      );
+    }
+    await _store.prepareLogStateTracking();
+    try {
+      final _LogStateReceipt? saved = await _db.transaction(() async {
+        _requireLogScope(scope);
+        final StoredLogState? before = await _store.logState(expected.id);
+        if (before == null ||
+            before.userId != _userId ||
+            !_sameLogEntry(PlanMapper.entryToDomain(before.row), expected)) {
+          return null;
+        }
+        final MealPlanEntry current = PlanMapper.entryToDomain(before.row);
+        final DateTime now = _now();
+        final MealPlanEntry after = logged
+            ? current.log(
+                liveMacros: liveMacros!,
+                at: now,
+                label: label!,
+                coverage: liveCoverage!,
+                usesApproximatePackage: usesApproximatePackage,
+                loggedPortion: loggedPortion,
+              )
+            : current.unlog();
+        await _store.upsertEntry(after, updatedAt: now);
+        final StoredLogState written = (await _store.logState(expected.id))!;
+        await _queueLogState(written.row, now);
+        _requireLogScope(scope);
+        return _LogStateReceipt(before: before, after: written, scope: scope);
+      });
+      if (saved == null) return null;
+      final LogStateChange change = LogStateChange(
+        before: PlanMapper.entryToDomain(saved.before.row),
+        after: PlanMapper.entryToDomain(saved.after.row),
+      );
+      _logStateReceipts[change] = saved;
+      return change;
+    } on _ExpiredLogScope {
+      return null;
+    }
+  }
+
+  /// Restores exactly what this action replaced, once. Later content changes,
+  /// including an edit put back to the same values, make the receipt stale.
+  /// A normal server timestamp/JSON-encoding confirmation remains undoable.
+  Future<UndoLogStateResult> undoLogState(
+    LogStateChange change, {
+    required LogStateScope scope,
+  }) {
+    final _LogStateReceipt? saved = _logStateReceipts[change];
+    if (saved == null ||
+        !identical(saved.scope, scope) ||
+        !_scopeApplies(scope)) {
+      return Future<UndoLogStateResult>.value(UndoLogStateResult.expired);
+    }
+    if (saved.restored) {
+      return Future<UndoLogStateResult>.value(
+        UndoLogStateResult.alreadyRestored,
+      );
+    }
+    return saved.pending ??= _undoLogState(saved)
+        .then((UndoLogStateResult result) {
+          if (result == UndoLogStateResult.restored) saved.restored = true;
+          return result;
+        })
+        .whenComplete(() => saved.pending = null);
+  }
+
+  Future<UndoLogStateResult> _undoLogState(_LogStateReceipt saved) async {
+    await _store.prepareLogStateTracking();
+    try {
+      return await _db.transaction(() async {
+        _requireLogScope(saved.scope);
+        final StoredLogState? current = await _store.logState(
+          saved.after.row.id,
+        );
+        if (current == null ||
+            current.userId != _userId ||
+            current.connection != saved.after.connection ||
+            current.revision != saved.after.revision) {
+          return UndoLogStateResult.changed;
+        }
+        final DateTime now = _now();
+        await _store.restoreLogState(saved.before.row, now);
+        await _queueLogState(saved.before.row, now);
+        _requireLogScope(saved.scope);
+        return UndoLogStateResult.restored;
+      });
+    } on _ExpiredLogScope {
+      return UndoLogStateResult.expired;
+    }
+  }
+
+  bool _scopeApplies(LogStateScope scope) =>
+      scope.isActive &&
+      scope.userId == _userId &&
+      !_store.isLogStateConnectionClosed;
+
+  Future<void> _queueLogState(MealPlanEntryRow row, DateTime now) {
+    // The raw JSON is history, including future keys and old omissions.
+    // Never re-cost it, or canonicalize unknown evidence via a model.
+    final Map<String, Object?> payload = PlanMapper.entryToJson(
+      PlanMapper.entryToDomain(row),
+      updatedAt: now,
+    );
+    payload['macro_snapshot'] = row.macroSnapshot == null
+        ? null
+        : jsonDecode(row.macroSnapshot!);
+    // SQLite reads DateTime in the local zone. An unqualified local ISO value
+    // would be interpreted as a different instant by the remote database.
+    payload['logged_at'] = row.loggedAt?.toUtc().toIso8601String();
+    return _queue.enqueue(
+      entityTable: entriesTable,
+      entityId: row.id,
+      operation: WriteOperation.upsert,
+      payload: payload,
+      queuedAt: now,
+    );
+  }
+
+  void _requireLogScope(LogStateScope scope) {
+    if (!_scopeApplies(scope)) throw const _ExpiredLogScope();
+  }
+
+  static bool _sameLogEntry(MealPlanEntry a, MealPlanEntry b) =>
+      a.id == b.id &&
+      a.dayId == b.dayId &&
+      a.slot == b.slot &&
+      a.refType == b.refType &&
+      a.refId == b.refId &&
+      a.servings == b.servings &&
+      a.servingOptionId == b.servingOptionId &&
+      a.isPlanned == b.isPlanned &&
+      a.isLogged == b.isLogged &&
+      _storedSecond(a.loggedAt) == _storedSecond(b.loggedAt) &&
+      a.macroSnapshot == b.macroSnapshot;
+
+  static int? _storedSecond(DateTime? value) =>
+      value == null ? null : value.millisecondsSinceEpoch ~/ 1000;
 
   /// The id of the row for one user's one day.
   ///
@@ -818,4 +981,22 @@ class PlanRepository {
     payload: PlanMapper.dayToJson(day: day, userId: _userId),
     queuedAt: now,
   );
+}
+
+class _LogStateReceipt {
+  _LogStateReceipt({
+    required this.before,
+    required this.after,
+    required this.scope,
+  });
+
+  final StoredLogState before;
+  final StoredLogState after;
+  final LogStateScope scope;
+  bool restored = false;
+  Future<UndoLogStateResult>? pending;
+}
+
+class _ExpiredLogScope implements Exception {
+  const _ExpiredLogScope();
 }
