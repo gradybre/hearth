@@ -1,8 +1,14 @@
 import 'dart:convert';
 
 import 'package:hearth/data/mappers/plan_mapper.dart';
+import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
+import 'package:hearth/domain/planning/logged_portion.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/nutrient_coverage.dart';
+import 'package:hearth/domain/planning/portion_unit.dart';
+import 'package:hearth/domain/units/quantity.dart';
+import 'package:hearth/domain/units/unit.dart';
 import 'package:test/test.dart';
 
 /// What a frozen log entry remembers (spec §5.6, CLAUDE.md rule 3).
@@ -110,6 +116,142 @@ void main() {
       )!;
 
       expect(PlanMapper.snapshotToJson(snapshot)['kcal'], 100.0);
+    });
+  });
+
+  group('frozen entered portions', () {
+    final LoggedPortion portion = LoggedPortion.tryCapture(
+      amount: 125,
+      unit: const PortionUnit.raw(Units.gram),
+      servings: 125 / 170,
+      standard: ServingOption(
+        id: 'pot',
+        label: '170 g pot',
+        amount: Quantity.of(170, Units.gram),
+        macros: const Macros(kcal: 170),
+      ),
+    )!;
+    MacroSnapshot snapshotWith(Object? evidence, {double? count}) =>
+        PlanMapper.snapshotFromJson(
+          jsonEncode(<String, Object?>{
+            ...PlanMapper.snapshotToJson(logged),
+            'servings': count ?? portion.servings,
+            'logged_portion': evidence,
+            'future_snapshot': <String, Object?>{'keep': true},
+          }),
+        )!;
+    MacroSnapshot correct(MacroSnapshot snapshot, double count) =>
+        MealPlanEntry(
+              id: 'entry',
+              dayId: 'day',
+              slot: MealSlot.lunch,
+              refType: PlanRefType.food,
+              refId: 'food',
+              servings: snapshot.servings,
+              isLogged: true,
+              loggedAt: snapshot.capturedAt,
+              macroSnapshot: snapshot,
+            )
+            .log(
+              liveMacros: const Macros(kcal: 999),
+              at: DateTime.utc(2026, 10, 1),
+              label: 'Today',
+              portion: count,
+              coverage: const NutrientCoverage.allComplete(),
+            )
+            .macroSnapshot!;
+
+    test('a new receipt survives JSON with exact amount and no duplicate opaque key', () {
+      final MacroSnapshot saved = snapshotWith(portion.toJson());
+      final MacroSnapshot back = roundTrip(saved);
+      expect(back, saved);
+      expect(back.hashCode, saved.hashCode);
+      expect(back.usableLoggedPortion!.enteredAmount, 125);
+      expect(back.usableLoggedPortion!.enteredUnit.id, 'unit:g');
+      expect(back.unreadFields.containsKey('logged_portion'), isFalse);
+    });
+
+    test('legacy snapshots do not gain an amount or an optional JSON key', () {
+      final MacroSnapshot back = roundTrip(logged);
+      expect(back.usableLoggedPortion, isNull);
+      expect(
+        PlanMapper.snapshotToJson(back).containsKey('logged_portion'),
+        isFalse,
+      );
+    });
+
+    test(
+      'unsupported and malformed evidence stays opaque through correction',
+      () {
+        final List<Object?> values = <Object?>[
+          <String, Object?>{
+            ...portion.toJson(),
+            'version': 99,
+            'future': <int>[1, 2],
+          },
+          <String, Object?>{...portion.toJson(), 'entered_amount': '125'},
+          <String, Object?>{...portion.toJson(), 'associated_servings': 99},
+          <String, Object?>{...portion.toJson(), 'conversion': null},
+          <String, Object?>{...portion.toJson(), 'invalidated': true},
+          <Object?>['unexpected', 42],
+          'unreadable',
+          null,
+        ];
+        for (final Object? raw in values) {
+          final MacroSnapshot saved = snapshotWith(raw);
+          expect(saved.usableLoggedPortion, isNull);
+          final MacroSnapshot corrected = roundTrip(correct(saved, 0.5));
+          expect(corrected.usableLoggedPortion, isNull);
+          expect(PlanMapper.snapshotToJson(corrected)['logged_portion'], raw);
+          expect(corrected.unreadFields['future_snapshot'], <String, Object?>{
+            'keep': true,
+          });
+        }
+      },
+    );
+
+    test('nested future evidence survives a recognized amount correction', () {
+      final Map<String, Object?> raw = portion.toJson();
+      raw['future'] = <String, Object?>{'source': 'scale'};
+      (raw['conversion']! as Map<String, Object?>)['future_ratio'] = <int>[
+        1,
+        2,
+      ];
+      final MacroSnapshot corrected = roundTrip(
+        correct(snapshotWith(raw), 0.5),
+      );
+      expect(corrected.usableLoggedPortion!.enteredAmount, closeTo(85, 1e-12));
+      final Map<String, Object?> output =
+          PlanMapper.snapshotToJson(corrected)['logged_portion']!
+              as Map<String, Object?>;
+      expect(output['future'], <String, Object?>{'source': 'scale'});
+      expect(
+        (output['conversion']! as Map<String, Object?>)['future_ratio'],
+        <int>[1, 2],
+      );
+      expect(output['associated_servings'], 0.5);
+    });
+
+    test('an older client count mismatch never regains a guessed amount after correction', () {
+      final Map<String, Object?> raw = portion.toJson();
+      raw['future'] = 'retained';
+      final MacroSnapshot stale = snapshotWith(raw, count: 2);
+      expect(stale.loggedPortion, isNotNull);
+      expect(stale.usableLoggedPortion, isNull);
+      expect(
+        PlanMapper.snapshotToJson(roundTrip(stale))['logged_portion'],
+        raw,
+      );
+
+      final MacroSnapshot corrected = roundTrip(
+        correct(stale, portion.servings),
+      );
+      expect(corrected.usableLoggedPortion, isNull);
+      final Map<String, Object?> output =
+          PlanMapper.snapshotToJson(corrected)['logged_portion']!
+              as Map<String, Object?>;
+      expect(output, <String, Object?>{...raw, 'invalidated': true});
+      expect(roundTrip(correct(corrected, 1)).usableLoggedPortion, isNull);
     });
   });
 }

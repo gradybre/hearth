@@ -2,6 +2,7 @@ import 'package:collection/collection.dart';
 import 'package:meta/meta.dart';
 
 import '../models/macros.dart';
+import 'logged_portion.dart';
 import 'nutrient_coverage.dart';
 
 /// The four meal slots a day is divided into (spec §5.6).
@@ -42,6 +43,7 @@ class MacroSnapshot {
     required this.label,
     this.coverage = const NutrientCoverage.notRecorded(),
     this.usesApproximatePackageNutrition = false,
+    this.loggedPortion,
     this.unreadFields = const <String, Object?>{},
   });
 
@@ -82,6 +84,14 @@ class MacroSnapshot {
   /// as making no approximate claim — which is exactly what it made.
   final bool usesApproximatePackageNutrition;
 
+  /// Optional evidence of the amount actually entered. Always check
+  /// [usableLoggedPortion] before displaying or converting it: an older
+  /// client can preserve this object while changing the snapshot's count.
+  final LoggedPortion? loggedPortion;
+
+  LoggedPortion? get usableLoggedPortion =>
+      loggedPortion?.matchesServings(servings) == true ? loggedPortion : null;
+
   /// Keys this version does not understand, carried so it cannot destroy them.
   ///
   /// A snapshot is frozen history, and a *newer* client may have written
@@ -104,13 +114,11 @@ class MacroSnapshot {
       other.coverage == coverage &&
       other.usesApproximatePackageNutrition ==
           usesApproximatePackageNutrition &&
+      other.loggedPortion == loggedPortion &&
       // In the comparison because a round-trip test written as
       // `roundTrip(x) == x` is the natural way to guard this, and without it
       // that test passes while the fields are being lost.
-      const MapEquality<String, Object?>().equals(
-        other.unreadFields,
-        unreadFields,
-      ) &&
+      const DeepCollectionEquality().equals(other.unreadFields, unreadFields) &&
       other.capturedAt == capturedAt &&
       other.label == label;
 
@@ -120,7 +128,8 @@ class MacroSnapshot {
     servings,
     coverage,
     usesApproximatePackageNutrition,
-    const MapEquality<String, Object?>().hash(unreadFields),
+    loggedPortion,
+    const DeepCollectionEquality().hash(unreadFields),
     capturedAt,
     label,
   );
@@ -178,13 +187,15 @@ class MealPlanEntry {
   final bool isLogged;
   final DateTime? loggedAt;
 
-  /// Set exactly once, when the entry is logged. Null while merely planned.
+  /// Captured when logged; corrections retain its basis. Null while planned.
   final MacroSnapshot? macroSnapshot;
 
   /// Marks this entry eaten, freezing [liveMacros] at the given portion.
   ///
   /// [liveMacros] is the macros for a *single* serving as they stand right
-  /// now; they are scaled by the portion and then frozen.
+  /// now; they are scaled by the portion and then frozen. A correction of an
+  /// already logged entry instead scales its saved nutrition and preserves
+  /// its original name, qualifications and capture time.
   MealPlanEntry log({
     required Macros liveMacros,
     required DateTime at,
@@ -196,8 +207,42 @@ class MealPlanEntry {
     // meal must not quietly drop the qualifier the meal was recorded with,
     // and a caller that has nothing new to say should not have to restate it.
     bool? usesApproximatePackage,
+    LoggedPortion? loggedPortion,
   }) {
     final double logged = portion ?? servings;
+    final MacroSnapshot? previous = isLogged ? macroSnapshot : null;
+    final double frozenCount = previous != null && previous.servings > 0
+        ? previous.servings
+        : servings;
+    final LoggedPortion? savedBasis = previous?.usableLoggedPortion;
+    LoggedPortion? evidence = loggedPortion;
+    Map<String, Object?> unread =
+        previous?.unreadFields ?? const <String, Object?>{};
+    if (previous != null) {
+      // A known correction can change the entered amount/unit, never the
+      // frozen conversion definition. Legacy or stale evidence cannot be
+      // upgraded by consulting today's food; keep it opaque for fallback.
+      final LoggedPortion? entered = loggedPortion == null
+          ? null
+          : savedBasis?.corrected(
+              amount: loggedPortion.enteredAmount,
+              unit: loggedPortion.enteredUnit,
+            );
+      evidence = entered?.matchesServings(logged) == true
+          ? entered
+          : savedBasis?.withServings(logged);
+      if (savedBasis == null && previous.loggedPortion != null) {
+        // Preserve the old receipt, but never revive it if a generic
+        // correction happens to land on the same count it once described.
+        unread = <String, Object?>{
+          ...unread,
+          'logged_portion': <String, Object?>{
+            ...previous.loggedPortion!.toJson(),
+            'invalidated': true,
+          },
+        };
+      }
+    }
     return MealPlanEntry(
       id: id,
       dayId: dayId,
@@ -210,12 +255,17 @@ class MealPlanEntry {
       servingOptionId: servingOptionId,
       isPlanned: isPlanned,
       isLogged: true,
-      loggedAt: at,
+      loggedAt: previous == null ? at : loggedAt ?? at,
       macroSnapshot: MacroSnapshot(
-        macros: liveMacros.scaledBy(logged),
+        macros: previous == null
+            ? liveMacros.scaledBy(logged)
+            : frozenCount.isFinite && frozenCount > 0
+            ? previous.macros.scaledBy(logged / frozenCount)
+            : previous.macros,
         servings: logged,
-        capturedAt: at,
-        label: label,
+        capturedAt: previous?.capturedAt ?? at,
+        label: previous?.label ?? label,
+        loggedPortion: evidence,
         // Required, not defaulted. Defaulting to `ofOne(liveMacros)` looked
         // harmless and was the whole bug wearing a hat: a recipe's summed
         // total is non-null whenever *any* ingredient stated the nutrient, so
@@ -226,18 +276,18 @@ class MealPlanEntry {
         //
         // Scaling a portion cannot change what was known: half a recipe whose
         // fibre was partial is still partial.
-        coverage: coverage,
+        coverage: previous?.coverage ?? coverage,
         // Scaling a portion cannot make an approximate basis exact, so this
-        // survives a re-log untouched unless the caller says otherwise.
+        // survives a correction untouched.
         usesApproximatePackageNutrition:
+            previous?.usesApproximatePackageNutrition ??
             usesApproximatePackage ??
-            macroSnapshot?.usesApproximatePackageNutrition ??
             false,
         // Carried across a re-log. Editing a portion on an already-logged meal
         // comes through here, and that is exactly the local edit `unreadFields`
         // exists to survive — dropping them would delete a newer client's
         // record of the same meal, for both people (§4).
-        unreadFields: macroSnapshot?.unreadFields ?? const <String, Object?>{},
+        unreadFields: unread,
       ),
     );
   }

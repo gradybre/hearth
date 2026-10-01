@@ -18,8 +18,8 @@ by the coordinating agent under [the ownership rules](ORCHESTRATION.md).
 | 5 — Ongoing nutrition targets | UX-052, bounded personal carry-forward and weekly exceptions | Approved 2026-10-01 | Merged in [PR #120](https://github.com/gradybre/hearth/pull/120) after Brendan's merge approval | 4,259 passed in UTC; 72 checks in New York; clean analysis; 111 render checks and all CI passed | No actionable findings; candidate `cf3bdd8`; 133 independent checks passed | Not performed |
 | 6 — Cooking ingredient checklist | UX-018 | Approved 2026-10-01 | Merged in [PR #121](https://github.com/gradybre/hearth/pull/121) | 4,339 passed in UTC; 50 checks in New York; clean analysis; 115 render checks and all final CI passed | No actionable findings after the persistence correction; reviewed code unchanged by rebase onto main | Not performed |
 | 7 — Faster grocery additions | UX-061, plain-item quantity and reviewed paste scope | Approved 2026-10-01 | Merged in [PR #122](https://github.com/gradybre/hearth/pull/122) | 4,427 passed in UTC; 35 checks in New York; clean analysis; 119 render checks and all final CI passed | No actionable findings after dismissal correction; 47 independent final checks passed | Not performed |
-| 8 — Open meals from Plan | UX-051, source navigation and separate logging control; exact log/unlog Undo excluded | Approved 2026-10-01 | Implemented in [PR #123](https://github.com/gradybre/hearth/pull/123); final review and CI pending | 4,500 UTC tests; 38 New York checks; clean analysis; 135 render checks | Design review passed; code correction under final review | Not performed |
-| 9 — Trustworthy logged portions | UX-040, new food-log portion evidence and frozen details; Plan-only input continuity excluded | Approved 2026-10-01 | Data work in parallel; shared Plan integration follows Group 8 | Pending | Pending | Not performed |
+| 8 — Open meals from Plan | UX-051, source navigation and separate logging control; exact log/unlog Undo excluded | Approved 2026-10-01 | Merged in [PR #123](https://github.com/gradybre/hearth/pull/123) | 4,500 UTC tests; 38 New York checks; clean analysis; 135 render checks and all final CI passed | Code correction passed on `57e0968`; 44 independent focused tests; all 48 design captures reviewed | Not performed |
+| 9 — Trustworthy logged portions | UX-040, new food-log portion evidence and frozen details; Plan-only input continuity excluded | Approved 2026-10-01 | Implemented, including Day integration; pull request verification follows | 4,583 UTC tests; 32 New York checks; clean analysis; 143 render checks | All 40 integration captures cleared; code corrections tested, final candidate review follows | Not performed |
 | 10 — Adjustable cooking timers | UX-019, extend and set time left on existing timers | Approved 2026-10-01 | Independent timer implementation in progress | Pending | Pending | Not performed |
 
 ## Group 1 — Daily logging
@@ -342,6 +342,27 @@ unsupported or stale metadata and preservation through storage, sync and export.
 No AI request or database migration is planned. Domain/data work can proceed
 alongside Group 8; logging and standalone details follow its agreed API, while
 shared Day rows and source navigation wait for Group 8's ownership to finish.
+
+The logged-portion evidence is optional snapshot JSON, so it needs no database
+migration or export-version change. Tests preserve it through a queued write,
+a remote read on another local database, and JSON export, including unsupported
+future records and unknown nested fields. Corrections retain the frozen name,
+nutrition, coverage, conversion and recording time; Move keeps the recording
+time separate from the diary date. Generic corrections cannot accidentally
+revive stale amount evidence from an older client.
+
+Independent design review prompted accurate fallback copy for unreadable or
+stale evidence, while genuine older records still say the amount was not
+recorded. Regression checks also caught wrapped action labels crossing their
+button outline at 3× text. Both fixes passed focused checks before integration.
+
+The complete Day flow exposes saved details from More, keeps the recorded
+portion visible on the row, and offers a separate current-food view. Review
+also caught an open planned editor mixing different versions of a food.
+Entered amounts, nutrition and the receipt now use one definition. Pending
+typing retains its original unit through library updates; removed units or
+sources require a valid choice rather than creating a guessed log. Regression
+failures preceded each correction, including continuing to type after an update.
 
 ## Group 10 — Adjustable cooking timers
 

@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 
 import '../../domain/models/macros.dart';
 import '../../domain/planning/day_progress.dart';
+import '../../domain/planning/logged_portion.dart';
 import '../../domain/planning/meal_plan.dart';
 import '../../domain/planning/nutrient_coverage.dart';
 import '../../domain/planning/target_schedule.dart';
@@ -44,6 +45,7 @@ abstract final class PlanMapper {
     'servings',
     'captured_at',
     'label',
+    'logged_portion',
   };
 
   static Map<String, Object?> snapshotToJson(MacroSnapshot snapshot) =>
@@ -77,6 +79,8 @@ abstract final class PlanMapper {
         'servings': snapshot.servings,
         'captured_at': snapshot.capturedAt.toIso8601String(),
         'label': snapshot.label,
+        if (snapshot.loggedPortion case final LoggedPortion portion)
+          'logged_portion': portion.toJson(),
       };
 
   /// Rebuilds a snapshot from stored JSON.
@@ -87,6 +91,9 @@ abstract final class PlanMapper {
     if (raw == null || raw.isEmpty) return null;
     final Object? decoded = jsonDecode(raw);
     if (decoded is! Map<String, Object?>) return null;
+    final LoggedPortion? portion = LoggedPortion.fromJson(
+      decoded['logged_portion'],
+    );
 
     return MacroSnapshot(
       macros: Macros(
@@ -111,9 +118,12 @@ abstract final class PlanMapper {
       // history nobody made.
       usesApproximatePackageNutrition:
           decoded['uses_approximate_package_nutrition'] == true,
+      loggedPortion: portion,
       unreadFields: <String, Object?>{
         for (final MapEntry<String, Object?> field in decoded.entries)
-          if (!_snapshotKeys.contains(field.key)) field.key: field.value,
+          if (!_snapshotKeys.contains(field.key) ||
+              (field.key == 'logged_portion' && portion == null))
+            field.key: field.value,
       },
       servings: _double(decoded['servings']),
       capturedAt:

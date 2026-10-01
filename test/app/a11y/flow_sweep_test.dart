@@ -5,6 +5,7 @@ import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
+import 'package:hearth/domain/planning/nutrient_coverage.dart';
 import 'package:hearth/domain/shopping/shopping_line.dart';
 import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
@@ -91,6 +92,7 @@ void main() {
     required Size size,
     required double scale,
     bool ongoingTargets = false,
+    bool loggedMeal = false,
     List<Object> extraOverrides = const <Object>[],
   }) => pumpHearthApp(
     tester,
@@ -108,7 +110,21 @@ void main() {
         storeTag: 'Costco',
       ),
     ],
-    entries: <MealPlanEntry>[breakfast()],
+    entries: <MealPlanEntry>[
+      loggedMeal
+          ? breakfast().log(
+              liveMacros: const Macros(
+                kcal: 400,
+                proteinG: 30,
+                carbG: 40,
+                fatG: 10,
+              ),
+              at: DateTime.utc(2026, 6, 1, 8),
+              coverage: const NutrientCoverage.notRecorded(),
+              label: 'Slow chilli with all the trimmings',
+            )
+          : breakfast(),
+    ],
     targets: const MacroTargets(
       kcal: 2200,
       proteinG: 170,
@@ -141,6 +157,7 @@ void main() {
             size: device.size,
             scale: scale,
             ongoingTargets: surface.withOngoingTargets,
+            loggedMeal: surface.withLoggedMeal,
             extraOverrides: surface.createOverrides?.call() ?? const <Object>[],
           );
           final SweepTools tools = SweepTools(tester);

@@ -5,6 +5,7 @@ import 'package:hearth/data/local/hearth_database.dart';
 import 'package:hearth/data/repositories/plan_repository.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
+import 'package:hearth/domain/planning/logged_portion.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/nutrient_coverage.dart';
 import 'package:hearth/domain/units/quantity.dart';
@@ -105,6 +106,7 @@ class _FailingPlans implements PlanRepository {
     required double servings,
     Macros? loggedMacros,
     NutrientCoverage? loggedCoverage,
+    LoggedPortion? loggedPortion,
     bool usesApproximatePackage = false,
     String? label,
     String? servingOptionId,
