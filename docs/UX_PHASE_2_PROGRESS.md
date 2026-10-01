@@ -579,3 +579,29 @@ This is queued behind [Group 14 PR #130](https://github.com/gradybre/hearth/pull
 Dependent PRs retain their reviewed commits and will merge in order after every
 required check passes. Neither group is described as merged here. Groups 20–22
 remain awaiting answers.
+
+## Group 17 final validation — 2026-10-01
+
+Week now offers Meals and Nutrition. First use opens Meals; the device remembers
+an explicit later choice. Seven day cards lead with dinner, expand other meals,
+and open Add for the exact selected date and slot. Source and Cook actions use
+the current recipe while logged names remain historical. This is the current
+person's plan, with no partner diary query or shared nutrition expansion.
+
+The compact Day/Week control exposes both Week choices without another fixed
+header row. Preference writes are ordered and retryable; an old read cannot
+replace a newer selection. Existing Nutrition journeys explicitly choose that
+view and retain their original assertions.
+
+Final root checks on combined Groups 13/14/18/17 passed 5,009 UTC tests, 37 New York
+checks, 200 render checks and clean format/analysis. Both independent source
+reviews are clear; the initial design review inspected all 24 new captures.
+Afterward the branch was aligned with the published parents, changing only
+progress and decision documents. No runtime source or test changed after those
+gates. Native device acceptance has not been performed.
+
+[Group 14 PR #130](https://github.com/gradybre/hearth/pull/130) and
+[Group 18 PR #131](https://github.com/gradybre/hearth/pull/131) precede this change.
+The reviewed source for those groups is already included in the validation above.
+Final published-head review and CI still govern release; this checkpoint does
+not claim any of Groups 14/17/18 merged. Groups 20–22 remain unanswered.
