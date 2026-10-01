@@ -4,6 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/data/adapters/shopping_assistant.dart';
 import 'package:hearth/data/local/hearth_database.dart';
+import 'package:hearth/data/local/pending_write_store.dart';
+import 'package:hearth/data/local/shopping_store.dart';
+import 'package:hearth/data/repositories/shopping_repository.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
@@ -45,6 +48,18 @@ void main() {
         databaseProvider.overrideWithValue(db),
         currentHouseholdIdProvider.overrideWithValue('house-1'),
         shoppingAssistantProvider.overrideWithValue(assistant),
+        // The rebuild fixtures below move to October 1–7. Seed a different
+        // week explicitly: today's default range eventually becomes that
+        // same week and no longer exercises the changed-range guard.
+        shoppingRepositoryProvider.overrideWithValue(
+          ShoppingRepository(
+            database: db,
+            store: ShoppingStore(db),
+            queue: PendingWriteStore(db),
+            householdId: 'house-1',
+            now: () => DateTime(2026, 9, 24),
+          ),
+        ),
       ],
     );
   });
