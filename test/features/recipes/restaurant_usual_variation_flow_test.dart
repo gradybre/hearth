@@ -482,6 +482,10 @@ void main() {
         expect(await db.select(db.mealPlanEntries).get(), isEmpty);
         final SweepTools tools = SweepTools(tester);
         await tools.reach(find.text('Save new variation and review portion'));
+        // The new recipe lands before photo preservation and its portion
+        // review. Assert the completed user-visible handoff, not that first
+        // intermediate database write.
+        await _waitForHandoff(tester, portionReview: true);
 
         final List<RecipeRow> rows = await db.select(db.recipes).get();
         expect(rows, hasLength(2));
@@ -581,6 +585,7 @@ void main() {
       final HearthDatabase db = await _openVariation(tester, icons: icons);
       final RecipeRow before = (await db.select(db.recipes).get()).single;
       await SweepTools(tester).reach(find.text('Save new variation'));
+      await _waitForHandoff(tester);
       final List<RecipeRow> rows = await db.select(db.recipes).get();
       expect(rows, hasLength(2));
       expect(
@@ -643,6 +648,7 @@ void main() {
       await pumpFrames(tester, frames: 12);
       await tester.enterText(find.byType(TextField).first, 'Tuesday dinner');
       await SweepTools(tester).reach(find.text('Save new variation'));
+      await _waitForHandoff(tester);
       final List<RecipeRow> rows = await db.select(db.recipes).get();
       expect(rows, hasLength(2));
       expect(
@@ -692,6 +698,7 @@ void main() {
         expect(tester.widget<Text>(action).maxLines, isNull);
         expect(tester.takeException(), isNull);
         await tools.reach(find.byKey(const Key('variation-save')));
+        await _waitForHandoff(tester, portionReview: true);
         expect(await db.select(db.recipes).get(), hasLength(2));
         expect(await db.select(db.mealPlanEntries).get(), isEmpty);
         expect(icons.titles, isEmpty);
@@ -761,6 +768,26 @@ Future<void> _saveWithPhotoIo(
 ) async {
   final Finder action = find.byKey(const Key('variation-save'));
   await _tapWithPhotoIo(tester, photos, action);
+}
+
+Future<void> _waitForHandoff(
+  WidgetTester tester, {
+  bool portionReview = false,
+}) async {
+  bool completed() => portionReview
+      ? find.byType(BottomSheet).evaluate().isNotEmpty
+      : find.byType(RecipeEditorScreen).evaluate().isEmpty;
+  for (int frame = 0; frame < 60 && !completed(); frame++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 5)),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+  expect(
+    completed(),
+    isTrue,
+    reason: 'The variation save must finish its visible handoff.',
+  );
 }
 
 Future<void> _tapWithPhotoIo(
