@@ -522,6 +522,36 @@ belongs to the Nutrition section.
   an 844-point screen at ordinary text: on screen only in the sense that its
   heading is, with everything the heading labels below the fold.
 - Add individual foods or recipes (recipe added as N servings) to any slot on any day.
+- **Explain a daily nutrient total.** Each of the seven totals in compact and
+  expanded Day opens its captured date's **Logged meals** contribution list
+  and a separate **Missing information** section. Show the saved name,
+  logged portion, nutrient amount and package-approximation qualifier. Read
+  only frozen snapshots: current foods, servings and targets never re-cost
+  the receipt. Known zero, unknown, partial and older unrecorded coverage
+  remain distinct. A partially known meal may appear in both sections, but
+  its amount is counted once. *(Phase 2: UX-056.)*
+  If an older logged meal has no saved snapshot, neither Day nor Week may
+  substitute the current food's nutrition. Mixed days show the known saved
+  subtotal with an incomplete-history qualifier; days with no available
+  snapshots show **unavailable**, distinct from zero and **Nothing logged
+  yet**. Remaining amounts and target verdicts do not treat incomplete
+  intake as complete. Weekly averages exclude days with missing saved
+  history and disclose that exclusion; genuine logged-zero days still count.
+  Percentages describe the known sum only when it is finite and positive,
+  all contributions are nonnegative and coverage supports that statement.
+  Partial totals say **of known total**; unavailable, signed and legacy
+  coverage cannot support a percentage. Shortened numbers say **about** and
+  preserve tiny nonzero contributions. Empty days remain openable with an
+  explanation rather than fabricated nutrition.
+  A row opens **View logged details**. **Improve future logs** explicitly
+  opens the current household food or recipe; a global food opens the
+  existing reviewed copy flow. Editing current facts never changes history.
+  Missing sources keep saved details readable while explaining why a current
+  editor is unavailable. Changing account or household expires the receipt;
+  correction or current-source handoffs also verify the captured meal still
+  exists unchanged on that date. Deliberate editor/portion actions close the
+  receipt before entering the established flow. Target editing stays a
+  separate labelled action. No new nutrients, AI calls or schema are added.
 - **Week starts Monday.**
 - **Weekly summary view:** per-day totals for the four tracked macros — **calories, protein, carbohydrates, fat** — across the week. Tap a day to see slot-level detail.
 - **Minor nutrients (fibre, sodium, cholesterol).** *Lifted from §12 at Brendan's request, v0.9.* Three optional nutrients carried alongside the four macros, and unlike them **nullable — null means unknown, never zero**. Every source Hearth already reads gives all three (Open Food Facts and USDA return them in the payload the adapter is already fetching; a US nutrition label is legally required to print them), so they cost no extra call.

@@ -39,6 +39,69 @@ void main() {
     expect(zero.countedParts, 1);
   });
 
+  group('missing saved nutrition', () {
+    test('an absent-only day has no intake or target verdict', () {
+      final DayProgress day = DayProgress.fromParts(
+        parts: const <Macros>[Macros.zero],
+        missingSnapshotCount: 1,
+        targets: targets,
+      );
+      expect(day.countedParts, 1);
+      expect(day.availability, SavedNutritionAvailability.unavailable);
+      for (final MacroProgress macro in day.all) {
+        expect(macro.hasKnownIntake, isFalse);
+        expect(macro.canCompare, isFalse);
+        expect(macro.remaining, isNull);
+        expect(macro.tone, MacroTone.neutral);
+        expect(macro.isOver, isFalse);
+      }
+      for (final MinorProgress minor in day.allMinor) {
+        expect(minor.isKnown, isFalse);
+        expect(minor.canCompare, isFalse);
+        expect(minor.remaining, isNull);
+      }
+    });
+
+    test(
+      'a mixed day preserves its known subtotal without a complete judgment',
+      () {
+        final DayProgress day = DayProgress.fromParts(
+          parts: const <Macros>[
+            Macros(kcal: 2300, proteinG: 180, fiberG: 28, sodiumMg: 2400),
+            Macros.zero,
+          ],
+          missingSnapshotCount: 1,
+          targets: targets,
+        );
+        expect(day.availability, SavedNutritionAvailability.partial);
+        expect(day.consumed.kcal, 2300);
+        for (final MacroProgress macro in day.all) {
+          expect(macro.hasKnownIntake, isTrue);
+          expect(macro.canCompare, isFalse);
+          expect(macro.remaining, isNull);
+          expect(macro.tone, MacroTone.neutral);
+        }
+        expect(day.minor(MinorNutrient.fiber).consumed, 28);
+        expect(day.minor(MinorNutrient.sodium).consumed, 2400);
+        for (final MinorProgress minor in day.allMinor) {
+          expect(minor.canCompare, isFalse);
+          expect(minor.remaining, isNull);
+          expect(minor.tone, MacroTone.neutral);
+        }
+      },
+    );
+
+    test('a real zero remains known beside unavailable history', () {
+      final DayProgress day = DayProgress.fromParts(
+        parts: const <Macros>[Macros.zero, Macros.zero],
+        missingSnapshotCount: 1,
+      );
+      expect(day.availability, SavedNutritionAvailability.partial);
+      expect(day.calories.hasKnownIntake, isTrue);
+      expect(day.calories.consumed, 0);
+    });
+  });
+
   group('remaining for the day (spec §5.6)', () {
     test('reports what is left', () {
       final DayProgress day = DayProgress.from(

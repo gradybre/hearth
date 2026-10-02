@@ -179,6 +179,9 @@ class _WeekScreenState extends ConsumerState<WeekScreen> {
               plannedCount: (byDay[day] ?? const <MealPlanEntry>[])
                   .where((MealPlanEntry e) => !e.isLogged)
                   .length,
+              missingSnapshotCount: EntryResolver.missingSnapshotCount(
+                resolved[day] ?? const <ResolvedEntry>[],
+              ),
             ),
         ]);
 
@@ -461,6 +464,8 @@ class _DayRow extends StatelessWidget {
     // Said in full rather than as a zero: a fast and a forgotten day both
     // show 0, and only one of them is a statement about what was eaten.
     DayLogState.loggedAsNothing => 'logged as nothing',
+    DayLogState.loggedIncomplete => '${day.loggedCount} logged · incomplete',
+    DayLogState.loggedUnavailable => '${day.loggedCount} logged',
     DayLogState.plannedOnly => 'nothing logged yet',
     DayLogState.untouched => 'nothing logged',
   };
@@ -470,6 +475,9 @@ class _DayRow extends StatelessWidget {
   /// A planned day shows what the plan would come to, marked as a plan. An
   /// untouched one shows nothing at all, because zero is a claim.
   String _eatenText() => switch (day.state) {
+    DayLogState.loggedUnavailable => 'Saved nutrition unavailable',
+    DayLogState.loggedIncomplete =>
+      'Known subtotal ${day.eaten.kcal.round()} kcal',
     DayLogState.logged || DayLogState.loggedAsNothing =>
       targets?.kcal == null
           ? '${day.eaten.kcal.round()} kcal'
@@ -617,6 +625,7 @@ class _DayRow extends StatelessWidget {
               targets: targets,
               eatenParts: eatenParts,
               eatenCoverage: eatenCoverage,
+              missingSnapshotCount: day.missingSnapshotCount,
               onOpen: onOpen,
             ),
           ),
@@ -635,12 +644,14 @@ class _DayDetail extends StatelessWidget {
     required this.targets,
     required this.eatenParts,
     required this.eatenCoverage,
+    required this.missingSnapshotCount,
     required this.onOpen,
   });
 
   final MacroTargets? targets;
   final List<Macros> eatenParts;
   final List<NutrientCoverage> eatenCoverage;
+  final int missingSnapshotCount;
   final VoidCallback onOpen;
 
   @override
@@ -649,6 +660,13 @@ class _DayDetail extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
+        if (missingSnapshotCount > 0)
+          Text(
+            '$missingSnapshotCount logged '
+            '${missingSnapshotCount == 1 ? 'meal has' : 'meals have'} '
+            'no saved nutrition. Target comparisons are unavailable.',
+            style: context.text.metadata.copyWith(color: colors.textMuted),
+          ),
         if (targets == null)
           Text(
             'No targets set for this week.',
@@ -658,6 +676,7 @@ class _DayDetail extends StatelessWidget {
               parts: eatenParts,
               coverage: eatenCoverage,
               targets: targets!,
+              missingSnapshotCount: missingSnapshotCount,
             )
             case final DayProgress progress) ...<Widget>[
           MacroRings(progress: progress),
@@ -802,9 +821,13 @@ class _WeekTotals extends StatelessWidget {
             const SizedBox(height: HearthSpacing.xxs),
             Text(
               <String>[
-                summary.loggedDays == 1
+                summary.incompleteDays > 0
+                    ? 'over ${summary.averagedDays} fully saved ${summary.averagedDays == 1 ? 'day' : 'days'}'
+                    : summary.loggedDays == 1
                     ? 'over 1 logged day'
                     : 'over ${summary.loggedDays} logged days',
+                if (summary.incompleteDays > 0)
+                  '${summary.incompleteDays} incomplete ${summary.incompleteDays == 1 ? 'day' : 'days'} excluded',
                 if (summary.daysNotLogged > 0)
                   '${summary.daysNotLogged} not logged',
               ].join(' · '),
@@ -819,7 +842,11 @@ class _WeekTotals extends StatelessWidget {
 
     return _Card(
       child: Text(
-        'Nothing logged this week yet.',
+        summary.isEmpty
+            ? 'Nothing logged this week yet.'
+            : 'Saved nutrition unavailable for the weekly average. '
+                  '${summary.incompleteDays} logged ${summary.incompleteDays == 1 ? 'day is' : 'days are'} '
+                  'incomplete and excluded.',
         style: context.text.body.copyWith(color: colors.textSecondary),
       ),
     );

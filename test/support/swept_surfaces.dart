@@ -758,6 +758,77 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     arrived: find.text('Add to this meal'),
   ),
   SweptSurface(
+    name: 'the saved daily calorie contributors',
+    opensFrom: 'lib/features/plan/nutrient_contributors_flow.dart',
+    isInline: true,
+    withLoggedMeal: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Plan');
+      await tools.reach(find.byKey(const Key('macro-total-calories')));
+    },
+    arrived: find.text('Calories contributors'),
+    waypoints: <Finder>[
+      find.text('Logged meals'),
+      find.byKey(const Key('contributor-known-open-e1')),
+    ],
+    farEnd: find.byKey(const Key('contributor-known-improve-e1')),
+  ),
+  SweptSurface(
+    name: 'missing information in a daily nutrient receipt',
+    opensFrom: 'lib/features/plan/nutrient_contributors_screen.dart',
+    isInline: true,
+    withLoggedMeal: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Plan');
+      await tools.reach(find.byKey(const Key('minor-total-fiber')));
+    },
+    arrived: find.text('Fibre contributors'),
+    waypoints: <Finder>[
+      find.text('Missing information'),
+      find.byKey(const Key('contributor-missing-open-e1')),
+    ],
+    farEnd: find.byKey(const Key('contributor-missing-improve-e1')),
+  ),
+  SweptSurface(
+    name: 'frozen details from a daily nutrient contributor',
+    opensFrom: 'lib/features/plan/nutrient_contributors_flow.dart',
+    isInline: true,
+    withLoggedMeal: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Plan');
+      await tools.reach(find.byKey(const Key('macro-total-calories')));
+      await tools.reach(find.byKey(const Key('contributor-known-open-e1')));
+    },
+    arrived: find.text('Logged details'),
+    waypoints: <Finder>[
+      find.textContaining('Calories:'),
+      find.textContaining('Cholesterol:'),
+      find.text('Edit portion'),
+      find.text('View current recipe'),
+    ],
+    farEnd: find.text('Close'),
+  ),
+  SweptSurface(
+    name: 'improving the current recipe from a daily nutrient receipt',
+    opensFrom: 'lib/features/plan/nutrient_contributors_flow.dart',
+    isInline: true,
+    withLoggedMeal: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Plan');
+      await tools.reach(find.byKey(const Key('minor-total-fiber')));
+      await tools.reach(
+        find.byKey(const Key('contributor-missing-improve-e1')),
+      );
+      // The established editor loads the synthetic recipe asynchronously.
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+      });
+      await pumpFrames(tester, frames: 20);
+    },
+    arrived: find.text('Edit recipe'),
+    farEnd: find.text('Cancel'),
+  ),
+  SweptSurface(
     name: 'frozen logged nutrition and its actions',
     opensFrom: 'lib/features/plan/logged_details_sheet.dart',
     withLoggedMeal: true,

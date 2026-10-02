@@ -9,6 +9,7 @@ import 'package:hearth/app/providers.dart';
 import 'package:hearth/app/shell/launch_target.dart';
 import 'package:hearth/app/shell/sections.dart';
 import 'package:hearth/data/adapters/thermostat.dart';
+import 'package:hearth/data/auth/local_auth_gateway.dart';
 import 'package:hearth/domain/house/thermostat.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
@@ -72,6 +73,7 @@ const String _recipeTitle = 'Slow chilli with all the trimmings';
 void main() {
   Recipe chilli() => aRecipe(
     id: 'r-chilli',
+    householdId: LocalAuthGateway.account.householdId,
     title: _recipeTitle,
     servings: 4,
     sections: <RecipeSection>[

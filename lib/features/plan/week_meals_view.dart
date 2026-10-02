@@ -266,6 +266,7 @@ class _Meal extends ConsumerWidget {
         !food!.servingOptions.any(
           (ServingOption serving) => serving.id == entry.servingOptionId,
         );
+    final bool missingSnapshot = entry.isLogged && entry.macroSnapshot == null;
     return Padding(
       padding: const EdgeInsets.only(bottom: HearthSpacing.sm),
       child: Column(
@@ -274,7 +275,8 @@ class _Meal extends ConsumerWidget {
           Semantics(
             button: _available,
             label:
-                '${_available ? 'Open ${_kind.toLowerCase()} ' : ''}$_label. ${entry.slot.label}. ${entry.isLogged ? 'Logged' : 'Planned'}.',
+                '${_available ? 'Open ${_kind.toLowerCase()} ' : ''}$_label. ${entry.slot.label}. ${entry.isLogged ? 'Logged' : 'Planned'}.'
+                '${missingSnapshot ? ' Saved nutrition unavailable.' : ''}',
             hint: _available ? 'Shows current library details' : null,
             onTap: _available ? () => openMealSource(context, entry) : null,
             child: ExcludeSemantics(
@@ -302,6 +304,13 @@ class _Meal extends ConsumerWidget {
                             color: context.colors.textMuted,
                           ),
                         ),
+                        if (missingSnapshot)
+                          Text(
+                            'Saved nutrition unavailable',
+                            style: context.text.metadata.copyWith(
+                              color: context.colors.textMuted,
+                            ),
+                          ),
                       ],
                     ),
                   ),

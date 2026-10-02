@@ -20,6 +20,47 @@ import 'log_sheet.dart';
 import 'logged_details_sheet.dart';
 import 'nutrient_contributors_screen.dart';
 
+/// Owns the continuous lifetime of a rendered Day action, before it is tapped.
+///
+/// Checking identity only inside [showDailyNutrientContributors] would attach
+/// old displayed entries to the new account if a held press ends before the
+/// next frame. This guard latches changes from render time, including A→B→A.
+/// Close it when that render is replaced or its widget is disposed. A receipt
+/// opened while it is active gets its own lifetime, so normal Day rebuilds do
+/// not expire an already-open receipt.
+class NutrientContributorsEntryGuard {
+  NutrientContributorsEntryGuard(ProviderContainer container)
+    : _scope = _ContributorScope(container);
+
+  final _ContributorScope _scope;
+
+  Future<void> open(
+    BuildContext context, {
+    required DateTime date,
+    required SupportedNutrient nutrient,
+    required Iterable<MealPlanEntry> entries,
+  }) {
+    if (!context.mounted ||
+        !identical(
+          ProviderScope.containerOf(context, listen: false),
+          _scope.container,
+        ) ||
+        !_scope.active) {
+      return Future<void>.value();
+    }
+    // No asynchronous gap between validating the render and creating the
+    // receipt's independent scope.
+    return showDailyNutrientContributors(
+      context,
+      date: date,
+      nutrient: nutrient,
+      entries: entries,
+    );
+  }
+
+  void close() => _scope.close();
+}
+
 /// Captures one day's receipt and one continuous account/household lifetime.
 /// Current-source reads and explicit editors cannot change its saved values.
 Future<void> showDailyNutrientContributors(
