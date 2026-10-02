@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +12,7 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../data/local/preference_store.dart';
 import '../../domain/foods/eatable_foods.dart';
+import '../../domain/foods/usual_order_projection.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
@@ -54,13 +56,26 @@ Future<void> showLogSheet(
   required MealSlot slot,
   ResolvedEntry? existing,
   DateTime Function()? clock,
-}) => showModalBottomSheet<void>(
-  context: context,
-  isScrollControlled: true,
-  backgroundColor: Colors.transparent,
-  builder: (BuildContext context) =>
-      _LogSheet(date: date, slot: slot, existing: existing, clock: clock),
-);
+  String? initialRecipeId,
+  LoggingIntent? initialIntent,
+}) {
+  if (existing != null && (initialRecipeId != null || initialIntent != null)) {
+    throw ArgumentError('An existing meal cannot also preselect a new recipe.');
+  }
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (BuildContext context) => _LogSheet(
+      date: initialIntent?.date ?? date,
+      slot: initialIntent?.slot ?? slot,
+      existing: existing,
+      clock: clock,
+      initialRecipeId: initialRecipeId,
+      initialIntent: initialIntent,
+    ),
+  );
+}
 
 class _LogSheet extends ConsumerStatefulWidget {
   const _LogSheet({
@@ -68,12 +83,16 @@ class _LogSheet extends ConsumerStatefulWidget {
     required this.slot,
     this.existing,
     this.clock,
+    this.initialRecipeId,
+    this.initialIntent,
   });
 
   final DateTime date;
   final MealSlot slot;
   final ResolvedEntry? existing;
   final DateTime Function()? clock;
+  final String? initialRecipeId;
+  final LoggingIntent? initialIntent;
 
   @override
   ConsumerState<_LogSheet> createState() => _LogSheetState();
@@ -136,6 +155,8 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   /// rounding must never replace the numeric amount that was entered.
   double? _enteredAmount;
 
+  String? _initialRecipeBasis;
+
   bool get _correctingLog => widget.existing?.entry.isLogged ?? false;
 
   LoggedPortion? get _frozenPortion =>
@@ -179,10 +200,12 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   }
 
   Recipe? _recipeFor(Map<String, Recipe> recipes) =>
-      _recipe ??
-      (widget.existing?.entry.refType == PlanRefType.recipe
-          ? recipes[widget.existing!.entry.refId]
-          : null);
+      widget.initialRecipeId != null
+      ? recipes[widget.initialRecipeId]
+      : _recipe ??
+            (widget.existing?.entry.refType == PlanRefType.recipe
+                ? recipes[widget.existing!.entry.refId]
+                : null);
 
   PortionUnit? _currentAmountBasis(Map<String, Food> foods) {
     if (_correctingLog) return _amountBasis;
@@ -232,10 +255,89 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
       if (recipe == null || recipe.isDeleted) {
         return 'This recipe is no longer available. Close and choose a current recipe.';
       }
+      if (widget.initialRecipeId != null) {
+        if (usualOrderModifierProblem(recipe, foods)
+            case final String problem) {
+          return problem;
+        }
+        if (_initialRecipeBasis == null ||
+            _recipeBasis(recipe, foods) != _initialRecipeBasis) {
+          return 'This order’s ingredients or portions changed. Close and choose '
+              'Log this again to review the current order.';
+        }
+        final RecipeMacros nutrition = MacroCalculator.forRecipe(
+          recipe,
+          foods: foods,
+        );
+        if (nutrition.total.isBelowNothing) {
+          return 'This order now comes to less than nothing. Review it in Details before logging.';
+        }
+        final Iterable<IngredientMacros> counted = nutrition.ingredients.where(
+          (IngredientMacros i) => i.isResolved,
+        );
+        final bool adjustments = counted.any(
+          (IngredientMacros i) =>
+              (i.ingredient.quantity?.canonicalAmount ?? 0) < 0 ||
+              (foods[i.ingredient.foodId]?.isModifier ?? false),
+        );
+        if (adjustments &&
+            !counted.any(
+              (IngredientMacros i) =>
+                  (i.ingredient.quantity?.canonicalAmount ?? 0) > 0 &&
+                  !(foods[i.ingredient.foodId]?.isModifier ?? false),
+            )) {
+          return 'Keep a menu item for the adjustments to apply to. Review this order in Details.';
+        }
+      }
     }
     return _amountNeedsReview(foods)
         ? 'This food’s portion options changed. Choose a current unit and enter the amount again.'
         : null;
+  }
+
+  // A held preselected review may read current nutrient numbers, but must
+  // not silently reinterpret quantities or drop a newly unavailable line.
+  String _recipeBasis(Recipe recipe, Map<String, Food> foods) =>
+      jsonEncode(<Object?>[
+        recipe.id,
+        recipe.servings,
+        for (final RecipeIngredient ingredient in recipe.allIngredients)
+          <Object?>[
+            ingredient.id,
+            ingredient.foodId,
+            ingredient.isOptional,
+            ingredient.needsNoMatch,
+            ingredient.quantity?.canonicalAmount,
+            ingredient.quantity?.kind.name,
+            ingredient.quantity?.preferredUnit?.id,
+            foods[ingredient.foodId]?.isDeleted,
+            foods[ingredient.foodId]?.isModifier,
+            for (final ServingOption serving
+                in foods[ingredient.foodId]?.servingOptions ??
+                    const <ServingOption>[])
+              <Object?>[
+                serving.id,
+                serving.amount.canonicalAmount,
+                serving.amount.kind.name,
+                serving.amount.preferredUnit?.id,
+              ],
+          ],
+      ]);
+
+  ({Map<String, Food> foods, Map<String, Recipe> recipes})
+  _latestInitialRecipe() {
+    final Map<String, Food> foods = <String, Food>{
+      for (final Food food
+          in ref.read(foodLibraryProvider).value ?? const <Food>[])
+        food.id: food,
+    };
+    final Map<String, Recipe> recipes = <String, Recipe>{
+      for (final Recipe recipe
+          in ref.read(recipeLibraryProvider).value ?? const <Recipe>[])
+        recipe.id: recipe,
+    };
+    _recipe = recipes[widget.initialRecipeId];
+    return (foods: foods, recipes: recipes);
   }
 
   /// What actually gets written: the per-serving macros, the portion, and
@@ -373,11 +475,13 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   @override
   void initState() {
     super.initState();
-    _openingIntent = LoggingIntent.forMeal(
-      date: widget.date,
-      slot: widget.slot,
-      today: _now,
-    );
+    _openingIntent =
+        widget.initialIntent ??
+        LoggingIntent.forMeal(
+          date: widget.date,
+          slot: widget.slot,
+          today: _now,
+        );
     // A correction opens in the unit it was typed in. The food it belongs to
     // may not have arrived yet, so this is read by entry id and matched to a
     // unit once the library resolves.
@@ -557,6 +661,11 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     required Map<String, Recipe> recipes,
     PortionUnit? typedIn,
   }) async {
+    if (widget.initialRecipeId != null) {
+      final latest = _latestInitialRecipe();
+      foods = latest.foods;
+      recipes = latest.recipes;
+    }
     _portionField.currentState?._commitPendingInput();
     if (_saveProblem(foods, recipes) != null) return;
     setState(() => _busy = true);
@@ -666,6 +775,11 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     required Map<String, Recipe> recipes,
     PortionUnit? typedIn,
   }) async {
+    if (widget.initialRecipeId != null) {
+      final latest = _latestInitialRecipe();
+      foods = latest.foods;
+      recipes = latest.recipes;
+    }
     _portionField.currentState?._commitPendingInput();
     if (_saveProblem(foods, recipes) != null) return;
     setState(() => _busy = true);
@@ -851,6 +965,13 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
     );
     if (days == null || days.isEmpty || !mounted) return;
 
+    if (widget.initialRecipeId != null) {
+      final latest = _latestInitialRecipe();
+      foods = latest.foods;
+      recipes = latest.recipes;
+      if (_saveProblem(foods, recipes) != null) return;
+    }
+
     // Resolve the latest portion after the day choice, including any input
     // committed when the picker took focus. The save boundary also commits
     // pending input synchronously if focus has not moved yet.
@@ -952,10 +1073,11 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
+    final AsyncValue<List<Recipe>> recipeLibrary = ref.watch(
+      recipeLibraryProvider,
+    );
     final Map<String, Recipe> recipes = <String, Recipe>{
-      for (final Recipe r
-          in ref.watch(recipeLibraryProvider).value ?? const <Recipe>[])
-        r.id: r,
+      for (final Recipe r in recipeLibrary.value ?? const <Recipe>[]) r.id: r,
     };
     final Map<String, Food> foods = <String, Food>{
       for (final Food f
@@ -963,7 +1085,19 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
         f.id: f,
     };
 
-    final bool hasChoice = _isExisting || _recipe != null || _food != null;
+    // A usual opens the exact current recipe, never a stale copy or a
+    // different picker result. Continue following it while review is open.
+    if (widget.initialRecipeId case final String id) {
+      _recipe = recipes[id];
+      if (_recipe != null && ref.watch(foodLibraryProvider).hasValue) {
+        _initialRecipeBasis ??= _recipeBasis(_recipe!, foods);
+      }
+    }
+    final bool hasInitial = widget.initialRecipeId != null;
+    final bool initialUnavailable =
+        hasInitial && (_recipe == null || _recipe!.isDeleted);
+    final bool hasChoice =
+        hasInitial || _isExisting || _recipe != null || _food != null;
     final Macros perServing = _perServing(foods: foods, recipes: recipes);
 
     return Padding(
@@ -981,13 +1115,51 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
                   top: Radius.circular(HearthRadius.xl),
                 ),
               ),
-              child: hasChoice
+              child: initialUnavailable
+                  ? _initialRecipeStatus(controller, recipeLibrary)
+                  : hasChoice
                   ? _confirmView(controller, perServing, foods, recipes)
                   : _pickerView(controller, recipes, foods),
             ),
       ),
     );
   }
+
+  Widget _initialRecipeStatus(
+    ScrollController controller,
+    AsyncValue<List<Recipe>> library,
+  ) => SafeArea(
+    child: ListView(
+      controller: controller,
+      padding: const EdgeInsets.all(HearthSpacing.lg),
+      children: <Widget>[
+        Text('Review recipe', style: context.text.sectionHeader),
+        const SizedBox(height: HearthSpacing.md),
+        Text(
+          library.isLoading
+              ? 'Loading this recipe…'
+              : library.hasError
+              ? 'Could not load this recipe. Try again.'
+              : 'This recipe is no longer available. Close and choose a current recipe.',
+          style: context.text.body,
+        ),
+        if (library.isLoading) ...<Widget>[
+          const SizedBox(height: HearthSpacing.md),
+          const Center(child: CircularProgressIndicator()),
+        ],
+        const SizedBox(height: HearthSpacing.lg),
+        if (library.hasError)
+          OutlinedButton(
+            onPressed: () => ref.invalidate(recipeLibraryProvider),
+            child: const Text('Try again'),
+          ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
 
   Widget _primaryAction({
     required Map<String, Food> foods,
@@ -1304,7 +1476,10 @@ class _LogSheetState extends ConsumerState<_LogSheet> {
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
-                onPressed: _busy
+                onPressed:
+                    _busy ||
+                        (widget.initialRecipeId != null &&
+                            _saveProblem(foods, recipes) != null)
                     ? null
                     : () => _assignAcrossDays(
                         foods: foods,

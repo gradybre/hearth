@@ -97,11 +97,13 @@ void main() {
     bool ongoingTargets = false,
     bool loggedMeal = false,
     List<Object> extraOverrides = const <Object>[],
+    List<Recipe>? recipes,
+    List<Food>? foods,
   }) => pumpHearthApp(
     tester,
     size: size,
-    recipes: <Recipe>[chilli()],
-    foods: <Food>[yoghurt(), menuItem()],
+    recipes: recipes ?? <Recipe>[chilli()],
+    foods: foods ?? <Food>[yoghurt(), menuItem()],
     // A shopping list with something on it. The list screen has two shapes —
     // an empty one still leads with its setup — and `Manage list`, which is
     // what the sweep is here for, exists only in the other.
@@ -166,6 +168,8 @@ void main() {
             ongoingTargets: surface.withOngoingTargets,
             loggedMeal: surface.withLoggedMeal,
             extraOverrides: surface.createOverrides?.call() ?? const <Object>[],
+            recipes: surface.recipes,
+            foods: surface.foods,
           );
           final SweepTools tools = SweepTools(tester);
 

@@ -50,11 +50,24 @@ class RecipeRepository {
   /// incoming value would let a bug write a row this user could not then read
   /// back through RLS. Records arriving from sync bypass this and go straight
   /// to the store.
-  Future<void> save(Recipe recipe) {
+  /// A variation retry can leave the photo to the independent photo picker
+  /// and sync pass. Preserve that destination's current value in the same
+  /// transaction as the edit, including an explicit removal.
+  Future<void> save(Recipe recipe, {bool preserveExistingPhoto = false}) {
     final DateTime now = _now();
-    final Recipe owned = _withHousehold(recipe);
 
     return _db.transaction(() async {
+      final Recipe? existing = preserveExistingPhoto
+          ? await _store.byId(recipe.id)
+          : null;
+      final Recipe owned = _withHousehold(
+        existing == null
+            ? recipe
+            : recipe.copyWith(
+                photoUrl: existing.photoUrl,
+                clearPhotoUrl: existing.photoUrl == null,
+              ),
+      );
       await _store.upsert(owned, updatedAt: now);
       await _queue.enqueue(
         entityTable: entityTable,
@@ -74,11 +87,17 @@ class RecipeRepository {
   /// has no opinion about.
   ///
   /// Null clears it — the photo was removed.
-  Future<void> setPhotoUrl(String id, String? path) {
+  /// [onlyIfMissing] fills an inherited fallback without replacing an upload
+  /// that completed while the editor was retaining the variation's artwork.
+  Future<void> setPhotoUrl(
+    String id,
+    String? path, {
+    bool onlyIfMissing = false,
+  }) {
     final DateTime now = _now();
     return _db.transaction(() async {
       final Recipe? recipe = await _store.byId(id);
-      if (recipe == null) return;
+      if (recipe == null || (onlyIfMissing && recipe.photoUrl != null)) return;
       final Recipe owned = _withHousehold(
         recipe.copyWith(photoUrl: path, clearPhotoUrl: path == null),
       );
