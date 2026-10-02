@@ -866,6 +866,31 @@ void main() {
   );
 
   for (final Brightness brightness in Brightness.values) {
+    testWidgets('portion number stays together at 3x $brightness', (
+      tester,
+    ) async {
+      await _openMenu(
+        tester,
+        size: const Size(320, 568),
+        textScale: 3,
+        brightness: brightness,
+      );
+      await _tap(tester, find.byKey(const Key('usual-customize-saved-usual')));
+      await _reveal(tester, find.text('1.5×'));
+      final RenderParagraph count = tester.renderObject<RenderParagraph>(
+        find.descendant(of: find.text('1.5×'), matching: find.byType(RichText)),
+      );
+      expect(count.textScaler.scale(16), 48);
+      expect(
+        count.getBoxesForSelection(
+          const TextSelection(baseOffset: 0, extentOffset: 4),
+        ),
+        hasLength(1),
+        reason: 'A fractional portion must stay readable as one number, not appear as 5× on another line.',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets(
       'customization stays reachable at 320pt 3x $brightness with keyboard',
       (WidgetTester tester) async {
