@@ -12,6 +12,7 @@ import 'package:hearth/domain/planning/day_format.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/week.dart';
 import 'package:hearth/domain/units/unit.dart';
+import 'package:hearth/features/recipes/eat_out_screen.dart';
 import 'package:hearth/features/recipes/recipe_detail_screen.dart';
 import 'package:hearth/features/recipes/recipe_editor_screen.dart';
 
@@ -20,6 +21,198 @@ import '../../support/fixtures.dart';
 import 'restaurant_usual_fixtures.dart';
 
 void main() {
+  for (final String change in <String>[
+    'portion',
+    'removed',
+    'available',
+    'modifier',
+    'negative',
+  ]) {
+    testWidgets(
+      'variation handoff rechecks menu after component review ($change)',
+      (WidgetTester tester) async {
+        final StreamController<List<Food>> updates =
+            StreamController<List<Food>>.broadcast();
+        addTearDown(() => unawaited(updates.close()));
+        final HearthDatabase db = await _openMenu(
+          tester,
+          missing: true,
+          foodStream: () async* {
+            yield usualMenuFoods();
+            yield* updates.stream;
+          }(),
+        );
+        await _tap(
+          tester,
+          find.byKey(const Key('usual-customize-saved-usual')),
+        );
+        await _tap(tester, find.text('Lettuce wrap'));
+        await _tap(
+          tester,
+          find.byKey(const Key('usual-review-variation')),
+          scrollBy: -200,
+        );
+        expect(find.text('Review saved components'), findsOneWidget);
+        final List<Food> changed = usualMenuFoods();
+        switch (change) {
+          case 'portion':
+            changed[1] = aFood(
+              'Rice',
+              id: 'usual-rice',
+              brand: 'Corner Kitchen',
+              source: FoodSource.restaurant,
+              servingOptions: <ServingOption>[
+                aServing(
+                  amount: 200,
+                  unit: Units.gram,
+                  macros: const Macros(kcal: 200),
+                ),
+              ],
+            );
+          case 'removed':
+            changed.removeAt(1);
+          case 'available':
+            changed.add(
+              aFood(
+                'House sauce',
+                id: 'unavailable-sauce',
+                brand: 'Corner Kitchen',
+                source: FoodSource.restaurant,
+                servingOptions: <ServingOption>[
+                  aServing(
+                    amount: 30,
+                    unit: Units.gram,
+                    macros: const Macros(kcal: 50),
+                  ),
+                ],
+              ),
+            );
+          case 'modifier':
+            changed[1] = aFood(
+              'Rice',
+              id: 'usual-rice',
+              brand: 'Corner Kitchen',
+              source: FoodSource.restaurant,
+              isModifier: true,
+              servingOptions: <ServingOption>[
+                aServing(
+                  amount: 100,
+                  unit: Units.gram,
+                  macros: const Macros(kcal: 200),
+                ),
+              ],
+            );
+          case 'negative':
+            changed[3] = aFood(
+              'Lettuce wrap',
+              id: 'usual-wrap',
+              brand: 'Corner Kitchen',
+              source: FoodSource.restaurant,
+              isModifier: true,
+              servingOptions: <ServingOption>[
+                aServing(
+                  amount: 1,
+                  unit: Units.item,
+                  macros: const Macros(kcal: -2000),
+                ),
+              ],
+            );
+        }
+        updates.add(changed);
+        await pumpFrames(tester);
+        await _tap(tester, find.byKey(const Key('usual-continue-review')));
+        expect(
+          find.byType(RecipeEditorScreen),
+          findsNothing,
+          reason: 'Continue reviewed the previous menu facts, not these changed facts.',
+        );
+        expect(find.byType(EatOutScreen), findsOneWidget);
+        expect(
+          find.textContaining(
+            change == 'negative'
+                ? 'less than nothing'
+                : 'Menu portions changed',
+          ),
+          findsWidgets,
+        );
+        expect(await db.select(db.recipes).get(), hasLength(1));
+        expect(await db.select(db.mealPlanEntries).get(), isEmpty);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'held variation review rechecks an added item before the next frame',
+    (WidgetTester tester) async {
+      Food sauce(Unit unit) => aFood(
+        'Sauce',
+        id: 'added-sauce',
+        brand: 'Corner Kitchen',
+        source: FoodSource.restaurant,
+        menuOrder: 5,
+        servingOptions: <ServingOption>[
+          aServing(
+            id: 'added-sauce-serving',
+            amount: 1,
+            unit: unit,
+            macros: const Macros(kcal: 50),
+          ),
+        ],
+      );
+      final StreamController<List<Food>> updates =
+          StreamController<List<Food>>.broadcast();
+      addTearDown(() => unawaited(updates.close()));
+      final HearthDatabase db = await _openMenu(
+        tester,
+        foodStream: () async* {
+          yield <Food>[...usualMenuFoods(), sauce(Units.packet)];
+          yield* updates.stream;
+        }(),
+      );
+      await _tap(tester, find.byKey(const Key('usual-customize-saved-usual')));
+      await _tap(tester, find.text('Sauce'));
+      final Finder review = find.byKey(const Key('usual-review-variation'));
+      await _reveal(tester, review, scrollBy: -200);
+      final TestGesture held = await tester.startGesture(
+        tester.getCenter(review),
+      );
+      updates.add(<Food>[...usualMenuFoods(), sauce(Units.bottle)]);
+      await tester.idle();
+      await held.up();
+      await pumpFrames(tester);
+      expect(find.byType(RecipeEditorScreen), findsNothing);
+      expect(find.byType(EatOutScreen), findsOneWidget);
+      expect(find.textContaining('Menu portions changed'), findsWidgets);
+      expect(await db.select(db.recipes).get(), hasLength(1));
+      expect(await db.select(db.mealPlanEntries).get(), isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('system Back asks before discarding a customized usual', (
+    WidgetTester tester,
+  ) async {
+    final HearthDatabase db = await _openMenu(tester);
+    await _tap(tester, find.byKey(const Key('usual-customize-saved-usual')));
+    await _tap(tester, find.text('Lettuce wrap'));
+    await tester.binding.handlePopRoute();
+    await pumpFrames(tester);
+    expect(find.text('Leave these choices?'), findsOneWidget);
+    await _tap(tester, find.text('Keep choosing'));
+    await _reveal(tester, find.text('Added'), scrollBy: -200);
+    expect(find.text('Energy −180 kcal'), findsOneWidget);
+    expect(find.byType(EatOutScreen), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await pumpFrames(tester);
+    await _tap(tester, find.text('Discard choices'));
+    expect(find.byType(EatOutScreen), findsNothing);
+    expect(find.text('Add recipe'), findsOneWidget);
+    expect(await db.select(db.recipes).get(), hasLength(1));
+    expect(await db.select(db.mealPlanEntries).get(), isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('an added menu item changing its count unit requires Reset', (
     WidgetTester tester,
   ) async {
@@ -135,7 +328,7 @@ void main() {
         find.text('Dinner · ${weekdayName(date)} ${shortDate(date)}'),
         findsOneWidget,
       );
-      expect(find.textContaining('750 kcal'), findsOneWidget);
+      expect(find.textContaining('Your portion · 750 kcal'), findsOneWidget);
       expect(
         await db.select(db.mealPlanEntries).get(),
         isEmpty,
@@ -271,7 +464,10 @@ void main() {
         } else {
           await _tap(tester, find.text('Continue to review'));
           expect(find.text('Lunch · Tomorrow'), findsOneWidget);
-          expect(find.textContaining('694 kcal'), findsOneWidget);
+          expect(
+            find.textContaining('Your portion · 694 kcal'),
+            findsOneWidget,
+          );
         }
         expect(await db.select(db.mealPlanEntries).get(), isEmpty);
       },
@@ -558,7 +754,7 @@ void main() {
         }(),
       );
       await _tap(tester, find.byKey(const Key('usual-log-saved-usual')));
-      expect(find.textContaining('750 kcal'), findsOneWidget);
+      expect(find.textContaining('Your portion · 750 kcal'), findsOneWidget);
       updates.add(<Food>[
         for (final Food food in usualMenuFoods())
           if (food.id != 'usual-rice') food,
@@ -609,7 +805,7 @@ void main() {
         }(),
       );
       await _tap(tester, find.byKey(const Key('usual-log-saved-usual')));
-      expect(find.textContaining('420 kcal'), findsOneWidget);
+      expect(find.textContaining('Your portion · 420 kcal'), findsOneWidget);
       final List<Food> changed = usualMenuFoods();
       changed[0] = aFood(
         'Burger',

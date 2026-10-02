@@ -638,3 +638,21 @@ production-route tests are being prepared; editor integration remains queued
 behind Group 15's ownership. Group 19's snapshot-only receipt and guarded
 handoffs are independently clear and passed 57 coordinator-run checks; seven
 Today entry points are under implementation. Groups 20–22 remain unanswered.
+
+### Group 15 — final integration review corrections
+
+Fresh review reproduced changing-menu guards and system-Back discard behavior,
+then checked local-only artwork and failed-copy retries. The final photo
+regressions include an inherited image downloaded during a retry, a chosen
+variation photo uploaded before retry, and an in-flight download completing
+after local inheritance. Each failed before its correction. A variation now
+retains available local bytes before publishing any inherited URL fallback;
+retry preserves its own photo URL atomically and distinguishes a downloaded
+cache from an independent photo choice. The original recipe and photo remain
+unchanged. Source and section identities remain separate, and no AI is called.
+
+The coordinator's accessibility journeys also reproduced 40-point count
+controls; standard 48-point targets now pass those journeys. All 28 selected
+photo-retry and restaurant accessibility checks passed before the last sync
+ordering correction. Format and analysis are clean; the final complete UTC,
+render and New York gates and frozen-candidate review are running.

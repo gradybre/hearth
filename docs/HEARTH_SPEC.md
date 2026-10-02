@@ -219,7 +219,11 @@ belongs to the Nutrition section.
   remain in the recipe review, and ambiguous same-name food choices require
   distinct names rather than an overwritten match.
   **Save new variation** creates a separate reusable recipe while retaining
-  available artwork and leaving the original unchanged. From a diary visit,
+  available artwork and leaving the original unchanged. An available local
+  photo takes precedence over an older shared photo; failure to retain it
+  offers retry on the same saved variation. A photo explicitly chosen for
+  the variation takes precedence over inheritance from the usual.
+  From a diary visit,
   **Save new variation and review portion** saves that recipe first and then
   opens the existing portion review; only its explicit action adds the meal.
   Cancelling that second review keeps the saved variation and adds no diary

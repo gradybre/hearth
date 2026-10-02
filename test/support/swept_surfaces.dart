@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/data/local/cook_session_store.dart';
 import 'package:hearth/domain/cooking/cook_session.dart';
+import 'package:hearth/domain/models/food.dart';
+import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/features/foods/food_detail_screen.dart';
 import 'package:hearth/features/recipes/cook_along_screen.dart';
 import 'package:hearth/features/recipes/recipe_detail_screen.dart';
@@ -56,6 +58,8 @@ class SweptSurface {
     this.withOngoingTargets = false,
     this.withLoggedMeal = false,
     this.createOverrides,
+    this.recipes,
+    this.foods,
   });
 
   /// What it is, in the words the test failure will use.
@@ -76,6 +80,11 @@ class SweptSurface {
 
   /// A fresh synthetic failure for each walk, without sharing mutable fakes.
   final List<Object> Function()? createOverrides;
+
+  /// Synthetic library content needed by this particular journey. Supplied
+  /// through the harness so its existing providers are not overridden twice.
+  final List<Recipe>? recipes;
+  final List<Food>? foods;
 
   /// How to get there from a freshly opened app.
   final Future<void> Function(WidgetTester tester, SweepTools tools) open;
@@ -608,7 +617,8 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
   SweptSurface(
     name: 'choosing when a library usual was eaten',
     opensFrom: 'lib/features/recipes/usual_order_destination_sheet.dart',
-    createOverrides: _usualOverrides,
+    recipes: <Recipe>[savedUsual()],
+    foods: usualMenuFoods(),
     open: (WidgetTester tester, SweepTools tools) async {
       await _openUsual(tools);
       await tools.reach(find.byKey(const Key('usual-log-saved-usual')));
@@ -621,7 +631,8 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     name: 'the saved restaurant order customization receipt',
     opensFrom: 'lib/features/recipes/eat_out_screen.dart',
     isInline: true,
-    createOverrides: _usualOverrides,
+    recipes: <Recipe>[savedUsual()],
+    foods: usualMenuFoods(),
     open: (WidgetTester tester, SweepTools tools) async {
       await _openUsual(tools);
       await tools.reach(find.byKey(const Key('usual-customize-saved-usual')));
@@ -637,7 +648,8 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
   SweptSurface(
     name: 'leaving an unsaved restaurant variation',
     opensFrom: 'lib/features/recipes/eat_out_screen.dart',
-    createOverrides: _usualOverrides,
+    recipes: <Recipe>[savedUsual()],
+    foods: usualMenuFoods(),
     open: (WidgetTester tester, SweepTools tools) async {
       await _openUsual(tools);
       await tools.reach(find.byKey(const Key('usual-customize-saved-usual')));
@@ -649,7 +661,8 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
   SweptSurface(
     name: 'reviewing unavailable saved restaurant components',
     opensFrom: 'lib/features/recipes/eat_out_screen.dart',
-    createOverrides: () => _usualOverrides(missing: true),
+    recipes: <Recipe>[savedUsual(missing: true)],
+    foods: usualMenuFoods(),
     open: (WidgetTester tester, SweepTools tools) async {
       await _openUsual(tools);
       await tools.reach(find.byKey(const Key('usual-log-saved-usual')));
@@ -1002,13 +1015,6 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     // The last row, and the one a short screen loses first. The harness has
     // no label reader, so the middle row is not there to reach.
     farEnd: find.text('Enter it by hand'),
-  ),
-];
-
-List<Object> _usualOverrides({bool missing = false}) => <Object>[
-  foodLibraryProvider.overrideWith((ref) => Stream.value(usualMenuFoods())),
-  recipeLibraryProvider.overrideWith(
-    (ref) => Stream.value([savedUsual(missing: missing)]),
   ),
 ];
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +14,7 @@ import '../../app/widgets/unsaved_work_guard.dart';
 import '../../data/adapters/label_reader.dart';
 import '../../data/adapters/recipe_ai.dart';
 import '../../data/local/editor_draft_store.dart';
+import '../../data/local/recipe_photo_store.dart';
 import '../../data/repositories/ingredient_match_repository.dart';
 import '../../domain/foods/no_match_rule.dart';
 import '../../domain/format/quantity_format.dart';
@@ -58,6 +60,7 @@ class RecipeEditorScreen extends ConsumerStatefulWidget {
     this.intent,
     this.variationOf,
     this.variationPhotoUrl,
+    this.variationSourceRecipeId,
     super.key,
   });
 
@@ -74,6 +77,9 @@ class RecipeEditorScreen extends ConsumerStatefulWidget {
 
   /// The original order's hero photo; drafts already carry its sketch.
   final String? variationPhotoUrl;
+
+  /// The saved usual's identity, used only to retain its available artwork.
+  final String? variationSourceRecipeId;
 
   /// Null when creating.
   final String? recipeId;
@@ -117,6 +123,8 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   String? _existingId;
   bool _showErrors = false;
   bool _variationSaved = false;
+  bool _variationPhotoRetained = false;
+  bool _variationPhotoFailed = false;
 
   bool get _isVariation => widget.variationOf != null;
 
@@ -704,14 +712,18 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     }
     FocusScope.of(context).unfocus();
     _draftTimer?.cancel();
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _variationPhotoFailed = false;
+    });
     try {
       // Read before the await: the editor pops the moment the save lands, and
       // the drawing outlives it.
       final RecipeIconController icons = ref.read(recipeIconControllerProvider);
-      final Recipe drafted = _isVariation
-          ? draft.toRecipe().copyWith(photoUrl: widget.variationPhotoUrl)
-          : draft.toRecipe();
+      // Do not publish the inherited URL before local artwork is retained.
+      // A background pull could otherwise start downloading an older image
+      // and finish after the new local copy, replacing the photo just kept.
+      final Recipe drafted = draft.toRecipe();
       final bool redraw =
           !_isVariation &&
           RecipeIconController.needsDrawing(
@@ -731,7 +743,12 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       final Recipe saved = redraw
           ? drafted.copyWith(clearIconSvg: true)
           : drafted;
-      await ref.read(recipeRepositoryProvider).save(saved);
+      await ref
+          .read(recipeRepositoryProvider)
+          .save(
+            saved,
+            preserveExistingPhoto: _isVariation && draft.existingId != null,
+          );
 
       // Remembered before anything else can fail. The meal entry is written
       // after this, and if it throws the editor stays open with the button
@@ -741,6 +758,16 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       // offer retry without duplicating it).
       _existingId = saved.id;
       if (_isVariation) {
+        if (!mounted) return;
+        try {
+          await _retainVariationPhoto(saved.id);
+        } on Object {
+          if (mounted) setState(() => _variationPhotoFailed = true);
+          // The recipe already exists. Its retained identity makes the next
+          // Save a retry of this copy, not another reusable variation.
+          return;
+        }
+        if (!mounted) return;
         _variationSaved = true;
         _openedDraft = _draft;
       }
@@ -826,6 +853,54 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _retainVariationPhoto(String variationId) async {
+    if (_variationPhotoRetained) return;
+    final String? sourceId = widget.variationSourceRecipeId;
+    if (sourceId != null && sourceId != variationId) {
+      final RecipePhotoStore photos = ref.read(recipePhotoStoreProvider);
+      // A failed copy leaves the saved variation available for a photo choice.
+      // A local choice, or its subsequent upload, wins on retry. A downloaded
+      // cache of the inherited URL does not: it may be older than the usual's
+      // current local image that this retry is meant to retain.
+      final bool hasIndependentPhoto = await photos
+          .watchRow(variationId)
+          .map(
+            (row) =>
+                row?.fileName != null &&
+                (row!.remotePath == null ||
+                    row.remotePath != widget.variationPhotoUrl),
+          )
+          .first;
+      if (hasIndependentPhoto && await photos.fileFor(variationId) != null) {
+        _variationPhotoRetained = true;
+        return;
+      }
+      // A URL can describe an older uploaded image while a replacement is
+      // already visible on this device. Prefer those currently available
+      // bytes, independently owned by the new recipe. With no local file,
+      // the copied URL remains the ordinary download fallback.
+      if (await photos.fileNameFor(sourceId) != null) {
+        final File? source = await photos.fileFor(sourceId);
+        if (source != null) {
+          await photos.save(
+            recipeId: variationId,
+            bytes: await source.readAsBytes(),
+            extension: source.path.split('.').last,
+            now: DateTime.now(),
+          );
+          _variationPhotoRetained = true;
+          return;
+        }
+      }
+    }
+    if (widget.variationPhotoUrl case final String fallback) {
+      await ref
+          .read(recipeRepositoryProvider)
+          .setPhotoUrl(variationId, fallback, onlyIfMissing: true);
+    }
+    _variationPhotoRetained = true;
   }
 
   @override
@@ -977,7 +1052,12 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
               // A photo needs a recipe to belong to, so it is offered only once
               // there is one to attach it to (spec §5.2).
               if (_isVariation &&
-                  widget.variationPhotoUrl != null &&
+                  (widget.variationPhotoUrl != null ||
+                      (widget.variationSourceRecipeId != null &&
+                          hasRecipePhoto(
+                            ref,
+                            widget.variationSourceRecipeId!,
+                          ))) &&
                   _existingId == null)
                 Text(
                   'The photo from your saved usual will be kept.',
@@ -1227,6 +1307,13 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
                   style: text.body,
                 ),
                 const SizedBox(height: HearthSpacing.md),
+                if (_variationPhotoFailed) ...<Widget>[
+                  Text(
+                    'Saved the variation, but could not keep its photo. Try again.',
+                    style: text.body,
+                  ),
+                  const SizedBox(height: HearthSpacing.md),
+                ],
                 FilledButton(
                   key: const Key('variation-save'),
                   onPressed: _saving ? null : _save,

@@ -203,6 +203,7 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
           intent: args.intent,
           variationOf: args.variationOf,
           variationPhotoUrl: args.variationPhotoUrl,
+          variationSourceRecipeId: args.variationSourceRecipeId,
         );
       },
     ),

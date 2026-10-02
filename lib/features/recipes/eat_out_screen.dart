@@ -57,6 +57,8 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
   final Map<String, double> _picks = <String, double>{};
   UsualOrderProjection? _usual;
   final Map<String, Food> _pickBases = <String, Food>{};
+  bool _confirmingRouteExit = false;
+  bool _allowRouteExit = false;
 
   void _choose(String restaurant) => setState(() {
     _restaurant = restaurant;
@@ -110,6 +112,22 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
       _usual = null;
       _pickBases.clear();
     });
+  }
+
+  Future<void> _leaveRoute(Object? result) async {
+    if (_confirmingRouteExit) return;
+    _confirmingRouteExit = true;
+    try {
+      if (!await _confirmDiscard() || !mounted) return;
+      setState(() => _allowRouteExit = true);
+      // Let PopScope publish the approved answer before asking the navigator
+      // to leave. The app-bar arrow still returns to the restaurant list;
+      // a native Back request continues to leave this route after consent.
+      await WidgetsBinding.instance.endOfFrame;
+      if (mounted) Navigator.of(context).pop(result);
+    } finally {
+      _confirmingRouteExit = false;
+    }
   }
 
   void _restoreUsual(Recipe recipe) {
@@ -479,56 +497,75 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
   Future<void> _build(List<Food> menu) async {
     final UsualOrderProjection? usual = _usual;
     if (usual != null) {
-      final UsualOrderProjection current = UsualOrderProjection.resolve(
-        recipe: usual.recipe,
-        restaurant: _restaurant!,
-        foods: _currentFoods,
-      );
-      if (_needsReset(current, menu)) {
-        _say('Menu portions changed. Reset and review the current amounts.');
-        return;
-      }
-      final List<MenuPick> picks = _picked(menu);
-      final List<String> conflicts = usualOrderVariationConflicts(
-        base: current,
-        picks: picks,
-      );
-      if (conflicts.isNotEmpty) {
-        await _reviewConflictingNames(usual.recipe, conflicts);
-        return;
-      }
-      final bool deductions = picks.any(
-        (MenuPick p) => p.isRemoval || p.food.isModifier,
-      );
-      if (deductions && !_hasSomethingToApplyTo(menu)) {
-        _say('Keep a menu item for the adjustments to apply to.');
-        return;
-      }
-      final RecipeDraft draft = usualOrderVariation(
-        base: current,
-        picks: picks,
-      );
-      final RecipeMacros nutrition = MacroCalculator.forRecipe(
-        draft.toRecipe(),
-        foods: <String, Food>{for (final Food food in menu) food.id: food},
-      );
-      if (nutrition.total.isBelowNothing) {
-        _say(
-          'That comes to less than nothing. Take out less, or add what it is coming out of.',
+      bool reviewedComponents = false;
+      while (mounted && identical(_usual, usual)) {
+        // A held tap can still carry the previous frame's menu, and a
+        // component review can remain open while new menu facts arrive.
+        // Read one current map for every guard and the resulting draft.
+        final Map<String, Food> foods = _currentFoods;
+        final List<Food> currentMenu = RestaurantMenu.itemsFor(
+          _restaurant!,
+          foods.values,
+        );
+        final UsualOrderProjection current = UsualOrderProjection.resolve(
+          recipe: usual.recipe,
+          restaurant: _restaurant!,
+          foods: foods,
+        );
+        if (_needsReset(current, currentMenu)) {
+          _say('Menu portions changed. Reset and review the current amounts.');
+          return;
+        }
+        final List<MenuPick> picks = _picked(currentMenu);
+        final List<String> conflicts = usualOrderVariationConflicts(
+          base: current,
+          picks: picks,
+        );
+        if (conflicts.isNotEmpty) {
+          await _reviewConflictingNames(usual.recipe, conflicts);
+          return;
+        }
+        final bool deductions = picks.any(
+          (MenuPick p) => p.isRemoval || p.food.isModifier,
+        );
+        if (deductions && !_hasSomethingToApplyTo(currentMenu)) {
+          _say('Keep a menu item for the adjustments to apply to.');
+          return;
+        }
+        final RecipeDraft draft = usualOrderVariation(
+          base: current,
+          picks: picks,
+        );
+        final RecipeMacros nutrition = MacroCalculator.forRecipe(
+          draft.toRecipe(),
+          foods: <String, Food>{
+            for (final Food food in currentMenu) food.id: food,
+          },
+        );
+        if (nutrition.total.isBelowNothing) {
+          _say(
+            'That comes to less than nothing. Take out less, or add what it is coming out of.',
+          );
+          return;
+        }
+        if (!reviewedComponents) {
+          if (!await _reviewUnavailable(current)) return;
+          reviewedComponents = true;
+          continue;
+        }
+        FocusScope.of(context).unfocus();
+        context.pushReplacement(
+          '/recipe/new',
+          extra: RecipeEditorArgs(
+            draft: draft,
+            intent: widget.intent,
+            variationOf: usual.recipe.title,
+            variationPhotoUrl: usual.recipe.photoUrl,
+            variationSourceRecipeId: usual.recipe.id,
+          ),
         );
         return;
       }
-      if (!await _reviewUnavailable(current) || !mounted) return;
-      FocusScope.of(context).unfocus();
-      context.pushReplacement(
-        '/recipe/new',
-        extra: RecipeEditorArgs(
-          draft: draft,
-          intent: widget.intent,
-          variationOf: usual.recipe.title,
-          variationPhotoUrl: usual.recipe.photoUrl,
-        ),
-      );
       return;
     }
     final List<MenuPick> picks = _picked(menu);
@@ -584,94 +621,100 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      appBar: AppBar(
-        backgroundColor: colors.surface,
-        surfaceTintColor: Colors.transparent,
-        title: Text(chosen ?? 'Eat out', style: context.text.sectionHeader),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          // Back to the restaurants first, then out. Two stages in one screen
-          // means the system back gesture would otherwise skip the first.
-          tooltip: chosen == null ? 'Close' : 'Back to restaurants',
-          onPressed: () => chosen == null
-              ? Navigator.of(context).pop()
-              : _backToRestaurants(),
+    return PopScope<Object?>(
+      canPop: _usual == null || _allowRouteExit,
+      onPopInvokedWithResult: (bool didPop, Object? result) async {
+        if (!didPop && _usual != null) await _leaveRoute(result);
+      },
+      child: Scaffold(
+        backgroundColor: colors.background,
+        appBar: AppBar(
+          backgroundColor: colors.surface,
+          surfaceTintColor: Colors.transparent,
+          title: Text(chosen ?? 'Eat out', style: context.text.sectionHeader),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            // Back to the restaurants first, then out. Two stages in one screen
+            // means the system back gesture would otherwise skip the first.
+            tooltip: chosen == null ? 'Close' : 'Back to restaurants',
+            onPressed: () => chosen == null
+                ? Navigator.of(context).pop()
+                : _backToRestaurants(),
+          ),
         ),
-      ),
-      // A bar rather than a floating button. "Build (3)" was a count and a
-      // verb: it did not say what the three were, what they came to, or
-      // whether any of them was missing a figure — and it was the only
-      // persistent thing the selected state had, over a menu whose first
-      // pick is thirty rows above the fold by the time you make the third
-      // (review §7.6).
-      bottomNavigationBar: _picks.isEmpty || chosen == null || usual != null
-          ? null
-          : _SelectedBar(
-              picks: _picked(menu),
-              onReview: () => _build(menu),
-              onOpen: () => _showPicked(menu),
-            ),
-      body: SafeArea(
-        child: chosen == null
-            ? _Restaurants(
-                restaurants: restaurants,
-                provenance:
-                    ref.watch(menuProvenanceProvider).value ??
-                    const <String, MenuProvenance>{},
-                onPick: _choose,
-                gutter: gutter,
-              )
-            : _Menu(
-                key: ValueKey<String>(
-                  'menu-$chosen-${usual?.recipe.id ?? 'new'}',
-                ),
-                sections: RestaurantMenu.sectionsFor(chosen, library),
-                usualOrders: RestaurantMenu.usualOrders(
-                  restaurant: chosen,
-                  recipes:
-                      ref.watch(recipeLibraryProvider).value ??
-                      const <Recipe>[],
-                  foods: <String, Food>{
-                    for (final Food food in library) food.id: food,
-                  },
-                  favourites:
-                      ref.watch(favoriteRecipeIdsProvider).value ??
-                      const <String>{},
-                ),
-                picks: _picks,
-                onLogUsual: _logUsual,
-                onCustomizeUsual: _customize,
-                customization: usual == null
-                    ? null
-                    : UsualOrderReceipt(
-                        base: usual,
-                        picks: _picked(menu),
-                        needsReset: needsReset,
-                        onReset: () => _restoreUsual(usual.recipe),
-                        onReview: () => _build(menu),
-                      ),
-                lockedReasons: <String, String>{
-                  if (needsReset)
-                    for (final Food food in menu)
-                      food.id: 'Reset to review the changed menu portions.'
-                  else if (usual != null)
-                    for (final UsualOrderComponent component
-                        in usual.unresolved)
-                      if (component.food case final Food food)
-                        food.id:
-                            'Kept as a saved line. Review it in the recipe.',
-                },
-                hasSomethingToApplyTo: _hasSomethingToApplyTo(menu),
-                canRemove: (Food food) =>
-                    _hasSomethingToApplyTo(menu, excluding: food),
-                onToggle: (Food food) => _toggle(food, menu),
-                onRemove: (Food food) => _remove(food, menu),
-                onCount: (Food food, double count) =>
-                    _setCount(food, count, menu),
-                gutter: gutter,
+        // A bar rather than a floating button. "Build (3)" was a count and a
+        // verb: it did not say what the three were, what they came to, or
+        // whether any of them was missing a figure — and it was the only
+        // persistent thing the selected state had, over a menu whose first
+        // pick is thirty rows above the fold by the time you make the third
+        // (review §7.6).
+        bottomNavigationBar: _picks.isEmpty || chosen == null || usual != null
+            ? null
+            : _SelectedBar(
+                picks: _picked(menu),
+                onReview: () => _build(menu),
+                onOpen: () => _showPicked(menu),
               ),
+        body: SafeArea(
+          child: chosen == null
+              ? _Restaurants(
+                  restaurants: restaurants,
+                  provenance:
+                      ref.watch(menuProvenanceProvider).value ??
+                      const <String, MenuProvenance>{},
+                  onPick: _choose,
+                  gutter: gutter,
+                )
+              : _Menu(
+                  key: ValueKey<String>(
+                    'menu-$chosen-${usual?.recipe.id ?? 'new'}',
+                  ),
+                  sections: RestaurantMenu.sectionsFor(chosen, library),
+                  usualOrders: RestaurantMenu.usualOrders(
+                    restaurant: chosen,
+                    recipes:
+                        ref.watch(recipeLibraryProvider).value ??
+                        const <Recipe>[],
+                    foods: <String, Food>{
+                      for (final Food food in library) food.id: food,
+                    },
+                    favourites:
+                        ref.watch(favoriteRecipeIdsProvider).value ??
+                        const <String>{},
+                  ),
+                  picks: _picks,
+                  onLogUsual: _logUsual,
+                  onCustomizeUsual: _customize,
+                  customization: usual == null
+                      ? null
+                      : UsualOrderReceipt(
+                          base: usual,
+                          picks: _picked(menu),
+                          needsReset: needsReset,
+                          onReset: () => _restoreUsual(usual.recipe),
+                          onReview: () => _build(menu),
+                        ),
+                  lockedReasons: <String, String>{
+                    if (needsReset)
+                      for (final Food food in menu)
+                        food.id: 'Reset to review the changed menu portions.'
+                    else if (usual != null)
+                      for (final UsualOrderComponent component
+                          in usual.unresolved)
+                        if (component.food case final Food food)
+                          food.id:
+                              'Kept as a saved line. Review it in the recipe.',
+                  },
+                  hasSomethingToApplyTo: _hasSomethingToApplyTo(menu),
+                  canRemove: (Food food) =>
+                      _hasSomethingToApplyTo(menu, excluding: food),
+                  onToggle: (Food food) => _toggle(food, menu),
+                  onRemove: (Food food) => _remove(food, menu),
+                  onCount: (Food food, double count) =>
+                      _setCount(food, count, menu),
+                  gutter: gutter,
+                ),
+        ),
       ),
     );
   }
@@ -1676,7 +1719,7 @@ class _Stepper extends StatelessWidget {
         children: <Widget>[
           IconButton(
             onPressed: portions <= _step ? null : () => set(portions - _step),
-            visualDensity: VisualDensity.compact,
+            visualDensity: VisualDensity.standard,
             tooltip: removing ? 'Take out less' : 'One less',
             icon: const Icon(Icons.remove_circle_outline, size: 20),
           ),
@@ -1692,7 +1735,7 @@ class _Stepper extends StatelessWidget {
           ),
           IconButton(
             onPressed: portions >= _max ? null : () => set(portions + _step),
-            visualDensity: VisualDensity.compact,
+            visualDensity: VisualDensity.standard,
             tooltip: removing ? 'Take out more' : 'One more',
             icon: const Icon(Icons.add_circle_outline, size: 20),
           ),

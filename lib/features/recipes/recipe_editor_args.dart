@@ -21,6 +21,7 @@ class RecipeEditorArgs {
     this.intent,
     this.variationOf,
     this.variationPhotoUrl,
+    this.variationSourceRecipeId,
   });
 
   /// A copy already made, so it is reviewed and renamed before it is written.
@@ -37,6 +38,9 @@ class RecipeEditorArgs {
   /// This is review context, not authority to overwrite the original recipe.
   final String? variationOf;
 
-  /// Existing artwork reused by an explicit variation, without a new upload.
+  /// Existing artwork reused without requesting new AI artwork.
   final String? variationPhotoUrl;
+
+  /// The source whose currently available local hero photo should be retained.
+  final String? variationSourceRecipeId;
 }
