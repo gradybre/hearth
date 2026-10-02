@@ -876,14 +876,14 @@ void main() {
         brightness: brightness,
       );
       await _tap(tester, find.byKey(const Key('usual-customize-saved-usual')));
-      await _reveal(tester, find.text('1.5×'));
+      await _reveal(tester, find.text('1½×'));
       final RenderParagraph count = tester.renderObject<RenderParagraph>(
-        find.descendant(of: find.text('1.5×'), matching: find.byType(RichText)),
+        find.descendant(of: find.text('1½×'), matching: find.byType(RichText)),
       );
       expect(count.textScaler.scale(16), 48);
       expect(
         count.getBoxesForSelection(
-          const TextSelection(baseOffset: 0, extentOffset: 4),
+          const TextSelection(baseOffset: 0, extentOffset: 3),
         ),
         hasLength(1),
         reason: 'A fractional portion must stay readable as one number, not appear as 5× on another line.',

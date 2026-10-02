@@ -1704,9 +1704,7 @@ class _Stepper extends StatelessWidget {
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     final double portions = count.abs();
-    final String number = portions == portions.roundToDouble()
-        ? '${portions.round()}'
-        : '$portions';
+    final String number = QuantityFormat.count(portions);
     // The real minus again, in the text, so "−1×" cannot be mistaken for "1×"
     // by anybody reading or hearing it (§6.3).
     final String label = removing ? '−$number×' : '$number×';

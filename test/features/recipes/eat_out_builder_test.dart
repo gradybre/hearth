@@ -160,7 +160,7 @@ void main() {
 
     await tester.tap(find.byTooltip('One more'));
     await pumpFrames(tester, frames: 12);
-    expect(find.text('1.5×'), findsOneWidget);
+    expect(find.text('1½×'), findsOneWidget);
   });
 
   testWidgets('changing restaurant clears the picks', (
@@ -401,7 +401,7 @@ void main() {
       expect(find.text('−1×'), findsOneWidget);
       await tester.tap(find.byTooltip('Take out more'));
       await pumpFrames(tester, frames: 12);
-      expect(find.text('−1.5×'), findsOneWidget);
+      expect(find.text('−1½×'), findsOneWidget);
     });
 
     testWidgets('and it is still a deduction once it has been saved', (
@@ -521,12 +521,12 @@ void main() {
 
       await tester.tap(find.byTooltip('One less'));
       await pumpFrames(tester, frames: 12);
-      expect(find.text('0.5×'), findsOneWidget);
+      expect(find.text('½×'), findsOneWidget);
 
       await tester.tap(find.byTooltip('One less'));
       await pumpFrames(tester, frames: 12);
 
-      expect(find.text('0.5×'), findsOneWidget);
+      expect(find.text('½×'), findsOneWidget);
       expect(find.textContaining('1 item ·'), findsOneWidget);
     });
 
@@ -561,12 +561,12 @@ void main() {
 
       await tester.tap(find.byTooltip('Take out less'));
       await pumpFrames(tester, frames: 12);
-      expect(find.text('−0.5×'), findsOneWidget);
+      expect(find.text('−½×'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Take out less'));
       await pumpFrames(tester, frames: 12);
 
-      expect(find.text('−0.5×'), findsOneWidget);
+      expect(find.text('−½×'), findsOneWidget);
       expect(find.text('Taking it out'), findsOneWidget);
       expect(find.textContaining('2 items ·'), findsOneWidget);
     });

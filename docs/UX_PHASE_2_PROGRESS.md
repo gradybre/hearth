@@ -656,3 +656,13 @@ controls; standard 48-point targets now pass those journeys. All 28 selected
 photo-retry and restaurant accessibility checks passed before the last sync
 ordering correction. Format and analysis are clean; the final complete UTC,
 render and New York gates and frozen-candidate review are running.
+
+Direct inspection of the added 3× portion-control crop found a fixed-width
+counter splitting `1.5×` into misleading separate lines. Executed regressions
+cover both themes and a one-third portion that initially overflowed by 280
+pixels. Enlarged text now puts controls below the full-width menu label, keeps
+counts together, and uses Hearth's existing fraction display formatter. The
+one-third regression also verifies the unchanged 100 g draft amount and no
+recipe or diary writes. All 74 restaurant builder/variation checks pass after
+this last correction. The preceding full candidate passed 5,095 UTC tests,
+209 renders and 68 New York tests; the final gate is repeated after formatting.
