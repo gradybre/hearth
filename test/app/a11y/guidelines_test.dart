@@ -21,6 +21,7 @@ import 'package:hearth/domain/shopping/shopping_line.dart';
 import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
+import '../../features/foods/label_scan_test.dart' show FakeLabelReader;
 import '../../support/app_harness.dart';
 import '../../support/fake_auth.dart';
 import '../../support/fixtures.dart';
@@ -149,11 +150,13 @@ void main() {
     bool signedIn = false,
     bool ongoingTargets = false,
     bool loggedMeal = false,
+    bool labelReader = false,
     ThermostatGateway? thermostat,
     List<Object> extraOverrides = const <Object>[],
   }) => pumpHearthApp(
     tester,
     size: size,
+    labelReader: labelReader ? FakeLabelReader() : null,
     targetsAreOngoing: ongoingTargets,
     recipes: <Recipe>[chilli()],
     foods: <Food>[yoghurt(), menuItem()],
@@ -334,6 +337,7 @@ void main() {
             brightness,
             ongoingTargets: surface.withOngoingTargets,
             loggedMeal: surface.withLoggedMeal,
+            labelReader: surface.withLabelReader,
             extraOverrides: surface.createOverrides?.call() ?? const <Object>[],
           );
           await pumpFrames(tester);

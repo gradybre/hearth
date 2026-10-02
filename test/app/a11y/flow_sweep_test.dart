@@ -11,6 +11,7 @@ import 'package:hearth/domain/shopping/shopping_line.dart';
 import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
+import '../../features/foods/label_scan_test.dart' show FakeLabelReader;
 import '../../support/app_harness.dart';
 import '../../support/fixtures.dart';
 import '../../support/swept_surfaces.dart';
@@ -94,10 +95,12 @@ void main() {
     required double scale,
     bool ongoingTargets = false,
     bool loggedMeal = false,
+    bool labelReader = false,
     List<Object> extraOverrides = const <Object>[],
   }) => pumpHearthApp(
     tester,
     size: size,
+    labelReader: labelReader ? FakeLabelReader() : null,
     recipes: <Recipe>[chilli()],
     foods: <Food>[yoghurt(), menuItem()],
     // A shopping list with something on it. The list screen has two shapes —
@@ -163,6 +166,7 @@ void main() {
             scale: scale,
             ongoingTargets: surface.withOngoingTargets,
             loggedMeal: surface.withLoggedMeal,
+            labelReader: surface.withLabelReader,
             extraOverrides: surface.createOverrides?.call() ?? const <Object>[],
           );
           final SweepTools tools = SweepTools(tester);
