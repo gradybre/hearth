@@ -1481,6 +1481,7 @@ class _MenuRow extends StatelessWidget {
     final double? picked = count;
     final bool isPicked = picked != null;
     final bool isRemoved = (picked ?? 0) < 0;
+    final bool stacked = MediaQuery.textScalerOf(context).scale(16) > 20;
     final MenuPick pick = MenuPick(food: food, count: picked ?? 1);
     final ServingOption? serving = food.defaultServing;
     // What you are actually having, not the serving *and* what you are having
@@ -1525,9 +1526,15 @@ class _MenuRow extends StatelessWidget {
             ),
           ),
           padding: const EdgeInsets.all(HearthSpacing.md),
-          child: Row(
+          child: Flex(
+            direction: stacked ? Axis.vertical : Axis.horizontal,
+            crossAxisAlignment: stacked
+                ? CrossAxisAlignment.stretch
+                : CrossAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Expanded(
+              Flexible(
+                flex: stacked ? 0 : 1,
                 child: Semantics(
                   // One thing to a screen reader: a checkbox, a name and a
                   // portion read separately is three announcements for one
@@ -1629,7 +1636,10 @@ class _MenuRow extends StatelessWidget {
                   lockedReason == null &&
                   !isPicked &&
                   canRemove) ...<Widget>[
-                const SizedBox(width: HearthSpacing.sm),
+                SizedBox(
+                  width: stacked ? 0 : HearthSpacing.sm,
+                  height: stacked ? HearthSpacing.sm : 0,
+                ),
                 IconButton(
                   onPressed: onRemove,
                   visualDensity: VisualDensity.compact,
@@ -1648,7 +1658,10 @@ class _MenuRow extends StatelessWidget {
               if (isPicked &&
                   !food.isModifier &&
                   lockedReason == null) ...<Widget>[
-                const SizedBox(width: HearthSpacing.sm),
+                SizedBox(
+                  width: stacked ? 0 : HearthSpacing.sm,
+                  height: stacked ? HearthSpacing.sm : 0,
+                ),
                 _Stepper(
                   count: picked,
                   removing: isRemoved,
@@ -1723,10 +1736,11 @@ class _Stepper extends StatelessWidget {
             tooltip: removing ? 'Take out less' : 'One less',
             icon: const Icon(Icons.remove_circle_outline, size: 20),
           ),
-          SizedBox(
-            width: 34,
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 34),
             child: Text(
               label,
+              softWrap: false,
               textAlign: TextAlign.center,
               style: context.text.ingredient.copyWith(
                 color: colors.textPrimary,
