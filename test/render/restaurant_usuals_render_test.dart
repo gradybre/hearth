@@ -56,7 +56,7 @@ void main() {
       await _capture(tester, scene, 'removed');
       await tools.bring(find.byKey(const Key('usual-review-variation')));
       await _capture(tester, scene, 'review-actions');
-      await tools.bring(find.byTooltip('One more').first);
+      await tools.bring(find.byTooltip('One more'));
       await _capture(tester, scene, 'portion-controls');
       expect(tester.takeException(), isNull);
     }, skip: !renderingGallery);
