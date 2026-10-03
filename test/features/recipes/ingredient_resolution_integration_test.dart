@@ -145,6 +145,34 @@ Future<HearthDatabase> _openFlaggedIngredient(
 }
 
 void main() {
+  testWidgets('review includes the same wording across recipe sections', (
+    tester,
+  ) async {
+    final db = await _openEditor(tester, lines: '100 g olive oil, divided');
+    await _tap(tester, find.text('Add a section'));
+    await tester.enterText(_ingredientField.last, '2 tbsp olive oil, for sauce');
+    await pumpFrames(tester, frames: 20);
+    await _tap(tester, find.textContaining('Find nutrition for').last);
+    expect(find.text('Applies to 2 recipe lines'), findsOneWidget);
+    expect(find.text('100 g olive oil, divided'), findsOneWidget);
+    expect(find.text('2 tbsp olive oil, for sauce'), findsOneWidget);
+    await _tap(tester, _action(0, 'manual'));
+    final banner = tester.widget<IngredientFoodBanner>(
+      find.byType(IngredientFoodBanner),
+    );
+    expect(banner.capture.recipeLineCount, 2);
+    expect(banner.capture.authoredLine, contains('100 g olive oil, divided'));
+    expect(banner.capture.authoredLine, contains('2 tbsp olive oil, for sauce'));
+    await _tap(tester, find.text('Save'));
+    await _tap(tester, find.byKey(const Key('match-review-apply')));
+    final saved = await _saveRecipe(tester, db);
+    final food = (await _foods(db)).single;
+    expect(saved.sections, hasLength(2));
+    expect(saved.allIngredients.map((line) => line.foodId), [food.id, food.id]);
+    expect(await _remembered(db), isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('flagged ingredient repair choices remain reachable at 3x', (
     tester,
   ) async {
