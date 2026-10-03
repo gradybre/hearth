@@ -201,6 +201,9 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
           imported: args.imported,
           draft: args.draft,
           intent: args.intent,
+          variationOf: args.variationOf,
+          variationPhotoUrl: args.variationPhotoUrl,
+          variationSourceRecipeId: args.variationSourceRecipeId,
         );
       },
     ),

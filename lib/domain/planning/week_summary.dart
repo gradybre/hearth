@@ -4,10 +4,8 @@ import 'week.dart';
 /// What one day of a week amounts to, from the week's point of view
 /// (review §7.2).
 ///
-/// Four states rather than two, because "nothing" is three different facts
-/// and the week has to keep them apart. Somebody who fasted on Saturday
-/// logged their Saturday; somebody who forgot did not; and a Friday that has
-/// not happened yet is neither.
+/// Keeps genuine zero, missing saved history, an unlogged plan and an untouched
+/// day apart. None of those can substitute for another in a weekly average.
 enum DayLogState {
   /// Something was logged, and it came to something.
   logged,
@@ -19,6 +17,12 @@ enum DayLogState {
   /// denominator, which reported the other days' mean as the week's and was
   /// therefore higher than anybody ate.
   loggedAsNothing,
+
+  /// Some saved intake is known, but at least one log lost its snapshot.
+  loggedIncomplete,
+
+  /// Logged meals exist, but none has its saved nutrition available.
+  loggedUnavailable,
 
   /// On the plan, not yet eaten. A projection, not a result.
   plannedOnly,
@@ -35,12 +39,13 @@ class WeekDay {
     required this.planned,
     required this.loggedCount,
     required this.plannedCount,
+    this.missingSnapshotCount = 0,
   });
 
   final DateTime date;
 
-  /// What was logged. Zero both when nothing was logged and when what was
-  /// logged came to nothing — [state] is what tells those apart.
+  /// Known saved intake. Zero can be a real logged amount or an additive
+  /// placeholder for absent history — [state] is what tells those apart.
   final Macros eaten;
 
   /// What the unlogged plan would add if it were eaten as planned.
@@ -48,9 +53,14 @@ class WeekDay {
 
   final int loggedCount;
   final int plannedCount;
+  final int missingSnapshotCount;
 
   DayLogState get state {
     if (loggedCount > 0) {
+      if (missingSnapshotCount >= loggedCount) {
+        return DayLogState.loggedUnavailable;
+      }
+      if (missingSnapshotCount > 0) return DayLogState.loggedIncomplete;
       return eaten.isZero ? DayLogState.loggedAsNothing : DayLogState.logged;
     }
     return plannedCount > 0 ? DayLogState.plannedOnly : DayLogState.untouched;
@@ -58,10 +68,10 @@ class WeekDay {
 
   /// Whether this day belongs in the week's average.
   ///
-  /// Having logged is the test, not having eaten. A day nobody logged cannot
-  /// be averaged — there is no number — but a day logged as nothing has a
-  /// number, and it is zero.
-  bool get countsTowardAverage => loggedCount > 0;
+  /// A complete saved day counts, even when its amount is genuinely zero.
+  /// A missing snapshot leaves that day's intake unavailable or incomplete,
+  /// so neither it nor an untouched day belongs in the denominator.
+  bool get countsTowardAverage => loggedCount > 0 && missingSnapshotCount == 0;
 
   bool isToday(DateTime now) => isSameDay(date, now);
 }
@@ -81,10 +91,19 @@ class WeekSummary {
   /// it per call was three walks and three lists for one answer.
   final List<WeekDay> _counted;
 
-  /// How many days are in the average's denominator.
-  int get loggedDays => _counted.length;
+  /// How many days have logged meals, including unavailable saved history.
+  int get loggedDays => days.where((WeekDay day) => day.loggedCount > 0).length;
 
-  /// How many are not, and so are quietly missing from it.
+  /// Days with complete snapshot availability, including genuine logged zero.
+  int get averagedDays => _counted.length;
+
+  int get incompleteDays => days
+      .where(
+        (WeekDay day) => day.loggedCount > 0 && day.missingSnapshotCount > 0,
+      )
+      .length;
+
+  /// Days with no logs at all. Incomplete logged days have their own count.
   ///
   /// Disclosed rather than assumed (review §7.2): an average over five days
   /// of a seven-day week reads as an average over seven unless it says

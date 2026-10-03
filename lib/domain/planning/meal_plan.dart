@@ -322,7 +322,9 @@ class MealPlanEntry {
   /// live, which is why [plannedMacros] must be supplied for it.
   Macros contribution({Macros? plannedMacros}) {
     final MacroSnapshot? snapshot = macroSnapshot;
-    if (isLogged && snapshot != null) return snapshot.macros;
+    // Zero is the additive placeholder, not a claim about intake. Summary
+    // callers carry missing saved history separately and display unavailable.
+    if (isLogged) return snapshot?.macros ?? Macros.zero;
     if (plannedMacros == null) return Macros.zero;
     return plannedMacros.scaledBy(servings);
   }

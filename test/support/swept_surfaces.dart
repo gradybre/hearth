@@ -4,10 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/data/local/cook_session_store.dart';
 import 'package:hearth/domain/cooking/cook_session.dart';
+import 'package:hearth/domain/models/food.dart';
+import 'package:hearth/domain/models/recipe.dart';
 import 'package:hearth/features/foods/food_detail_screen.dart';
 import 'package:hearth/features/recipes/cook_along_screen.dart';
 import 'package:hearth/features/recipes/recipe_detail_screen.dart';
 
+import '../features/recipes/restaurant_usual_fixtures.dart';
 import 'app_harness.dart';
 import 'fake_kitchen.dart';
 
@@ -56,6 +59,8 @@ class SweptSurface {
     this.withLoggedMeal = false,
     this.withLabelReader = false,
     this.createOverrides,
+    this.recipes,
+    this.foods,
   });
 
   /// What it is, in the words the test failure will use.
@@ -79,6 +84,11 @@ class SweptSurface {
 
   /// A fresh synthetic failure for each walk, without sharing mutable fakes.
   final List<Object> Function()? createOverrides;
+
+  /// Synthetic library content needed by this particular journey. Supplied
+  /// through the harness so its existing providers are not overridden twice.
+  final List<Recipe>? recipes;
+  final List<Food>? foods;
 
   /// How to get there from a freshly opened app.
   final Future<void> Function(WidgetTester tester, SweepTools tools) open;
@@ -609,6 +619,63 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     farEnd: find.byTooltip('Drop Harvest Bowl'),
   ),
   SweptSurface(
+    name: 'choosing when a library usual was eaten',
+    opensFrom: 'lib/features/recipes/usual_order_destination_sheet.dart',
+    recipes: <Recipe>[savedUsual()],
+    foods: usualMenuFoods(),
+    open: (WidgetTester tester, SweepTools tools) async {
+      await _openUsual(tools);
+      await tools.reach(find.byKey(const Key('usual-log-saved-usual')));
+    },
+    arrived: find.text('Which day and meal?'),
+    waypoints: <Finder>[find.text('Dinner'), find.text('Review portion')],
+    farEnd: find.text('Cancel'),
+  ),
+  SweptSurface(
+    name: 'the saved restaurant order customization receipt',
+    opensFrom: 'lib/features/recipes/eat_out_screen.dart',
+    isInline: true,
+    recipes: <Recipe>[savedUsual()],
+    foods: usualMenuFoods(),
+    open: (WidgetTester tester, SweepTools tools) async {
+      await _openUsual(tools);
+      await tools.reach(find.byKey(const Key('usual-customize-saved-usual')));
+    },
+    arrived: find.text('Customize Our usual dinner'),
+    waypoints: <Finder>[
+      find.text('Base'),
+      find.text('Added'),
+      find.text('Removed'),
+    ],
+    farEnd: find.byKey(const Key('usual-review-variation')),
+  ),
+  SweptSurface(
+    name: 'leaving an unsaved restaurant variation',
+    opensFrom: 'lib/features/recipes/eat_out_screen.dart',
+    recipes: <Recipe>[savedUsual()],
+    foods: usualMenuFoods(),
+    open: (WidgetTester tester, SweepTools tools) async {
+      await _openUsual(tools);
+      await tools.reach(find.byKey(const Key('usual-customize-saved-usual')));
+      await tools.reach(find.byTooltip('Back to restaurants'));
+    },
+    arrived: find.text('Leave these choices?'),
+    farEnd: find.text('Discard choices'),
+  ),
+  SweptSurface(
+    name: 'reviewing unavailable saved restaurant components',
+    opensFrom: 'lib/features/recipes/eat_out_screen.dart',
+    recipes: <Recipe>[savedUsual(missing: true)],
+    foods: usualMenuFoods(),
+    open: (WidgetTester tester, SweepTools tools) async {
+      await _openUsual(tools);
+      await tools.reach(find.byKey(const Key('usual-log-saved-usual')));
+    },
+    arrived: find.text('Review saved components'),
+    waypoints: <Finder>[find.textContaining('House sauce')],
+    farEnd: find.text('Cancel'),
+  ),
+  SweptSurface(
     name: "the shopping list's setup",
     opensFrom: 'lib/features/shopping/shopping_screen.dart',
     open: (WidgetTester tester, SweepTools tools) async {
@@ -820,6 +887,77 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     arrived: find.text('Add to this meal'),
   ),
   SweptSurface(
+    name: 'the saved daily calorie contributors',
+    opensFrom: 'lib/features/plan/nutrient_contributors_flow.dart',
+    isInline: true,
+    withLoggedMeal: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Plan');
+      await tools.reach(find.byKey(const Key('macro-total-calories')));
+    },
+    arrived: find.text('Calories contributors'),
+    waypoints: <Finder>[
+      find.text('Logged meals'),
+      find.byKey(const Key('contributor-known-open-e1')),
+    ],
+    farEnd: find.byKey(const Key('contributor-known-improve-e1')),
+  ),
+  SweptSurface(
+    name: 'missing information in a daily nutrient receipt',
+    opensFrom: 'lib/features/plan/nutrient_contributors_screen.dart',
+    isInline: true,
+    withLoggedMeal: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Plan');
+      await tools.reach(find.byKey(const Key('minor-total-fiber')));
+    },
+    arrived: find.text('Fibre contributors'),
+    waypoints: <Finder>[
+      find.text('Missing information'),
+      find.byKey(const Key('contributor-missing-open-e1')),
+    ],
+    farEnd: find.byKey(const Key('contributor-missing-improve-e1')),
+  ),
+  SweptSurface(
+    name: 'frozen details from a daily nutrient contributor',
+    opensFrom: 'lib/features/plan/nutrient_contributors_flow.dart',
+    isInline: true,
+    withLoggedMeal: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Plan');
+      await tools.reach(find.byKey(const Key('macro-total-calories')));
+      await tools.reach(find.byKey(const Key('contributor-known-open-e1')));
+    },
+    arrived: find.text('Logged details'),
+    waypoints: <Finder>[
+      find.textContaining('Calories:'),
+      find.textContaining('Cholesterol:'),
+      find.text('Edit portion'),
+      find.text('View current recipe'),
+    ],
+    farEnd: find.text('Close'),
+  ),
+  SweptSurface(
+    name: 'improving the current recipe from a daily nutrient receipt',
+    opensFrom: 'lib/features/plan/nutrient_contributors_flow.dart',
+    isInline: true,
+    withLoggedMeal: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Plan');
+      await tools.reach(find.byKey(const Key('minor-total-fiber')));
+      await tools.reach(
+        find.byKey(const Key('contributor-missing-improve-e1')),
+      );
+      // The established editor loads the synthetic recipe asynchronously.
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+      });
+      await pumpFrames(tester, frames: 20);
+    },
+    arrived: find.text('Edit recipe'),
+    farEnd: find.text('Cancel'),
+  ),
+  SweptSurface(
     name: 'frozen logged nutrition and its actions',
     opensFrom: 'lib/features/plan/logged_details_sheet.dart',
     withLoggedMeal: true,
@@ -1012,6 +1150,13 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     farEnd: find.text('Enter it by hand'),
   ),
 ];
+
+Future<void> _openUsual(SweepTools tools) async {
+  await tools.tab('Recipes');
+  await tools.reach(find.text('Add recipe'));
+  await tools.reach(find.text('Eat out'));
+  await tools.reach(find.text('Corner Kitchen'));
+}
 
 class _InterruptedCookProgress extends FakeCookSessionStore {
   _InterruptedCookProgress({required this.reset});

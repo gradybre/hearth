@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/data/auth/local_auth_gateway.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
@@ -32,6 +33,7 @@ void main() {
 
   Recipe chilli() => aRecipe(
     id: 'r-chilli',
+    householdId: LocalAuthGateway.account.householdId,
     title: 'Slow chilli with all the trimmings',
     servings: 4,
     // A real contribution lets the detail → Shop review be reached; an
@@ -97,12 +99,14 @@ void main() {
     bool loggedMeal = false,
     bool labelReader = false,
     List<Object> extraOverrides = const <Object>[],
+    List<Recipe>? recipes,
+    List<Food>? foods,
   }) => pumpHearthApp(
     tester,
     size: size,
     labelReader: labelReader ? FakeLabelReader() : null,
-    recipes: <Recipe>[chilli()],
-    foods: <Food>[yoghurt(), menuItem()],
+    recipes: recipes ?? <Recipe>[chilli()],
+    foods: foods ?? <Food>[yoghurt(), menuItem()],
     // A shopping list with something on it. The list screen has two shapes —
     // an empty one still leads with its setup — and `Manage list`, which is
     // what the sweep is here for, exists only in the other.
@@ -168,6 +172,8 @@ void main() {
             loggedMeal: surface.withLoggedMeal,
             labelReader: surface.withLabelReader,
             extraOverrides: surface.createOverrides?.call() ?? const <Object>[],
+            recipes: surface.recipes,
+            foods: surface.foods,
           );
           final SweepTools tools = SweepTools(tester);
 

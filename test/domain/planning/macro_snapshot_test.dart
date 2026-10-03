@@ -23,6 +23,23 @@ void main() {
   );
 
   group('freezing (spec §4)', () {
+    test('a missing logged snapshot never falls back to current nutrition', () {
+      const MealPlanEntry missing = MealPlanEntry(
+        id: 'missing-log',
+        dayId: 'day-1',
+        slot: MealSlot.dinner,
+        refType: PlanRefType.recipe,
+        refId: 'recipe-1',
+        servings: 9,
+        isLogged: true,
+      );
+      expect(missing.macroSnapshot, isNull);
+      expect(
+        missing.contribution(plannedMacros: const Macros(kcal: 900)),
+        Macros.zero,
+      );
+    });
+
     test('logging captures macros, portion, and label', () {
       final MealPlanEntry logged = plannedDinner(servings: 1.5).log(
         liveMacros: const Macros(kcal: 400, proteinG: 30),

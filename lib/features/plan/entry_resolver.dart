@@ -54,10 +54,12 @@ class ResolvedEntry {
   /// numbers themselves come from. Editing a recipe changes what tonight's
   /// plan is expected to cover; it cannot change what last night's dinner did
   /// (spec §4).
-  NutrientCoverage get contributionCoverage =>
-      entry.isLogged && entry.macroSnapshot != null
-      ? entry.macroSnapshot!.coverage
+  NutrientCoverage get contributionCoverage => entry.isLogged
+      ? entry.macroSnapshot?.coverage ?? const NutrientCoverage.allUnknown()
       : liveCoverage;
+
+  bool get isSavedNutritionMissing =>
+      entry.isLogged && entry.macroSnapshot == null;
 
   /// True when this is on the plan but not yet eaten.
   bool get isPending => !entry.isLogged;
@@ -69,6 +71,10 @@ class ResolvedEntry {
 
 /// Turns plan entries into something displayable and totalable.
 abstract final class EntryResolver {
+  static int missingSnapshotCount(Iterable<ResolvedEntry> entries) => entries
+      .where((ResolvedEntry entry) => entry.isSavedNutritionMissing)
+      .length;
+
   /// Resolves one entry against the current library.
   static ResolvedEntry resolve(
     MealPlanEntry entry, {

@@ -18,12 +18,14 @@ void main() {
     Macros planned = Macros.zero,
     int loggedCount = 0,
     int plannedCount = 0,
+    int missingSnapshotCount = 0,
   }) => WeekDay(
     date: monday.add(Duration(days: offset)),
     eaten: eaten,
     planned: planned,
     loggedCount: loggedCount,
     plannedCount: plannedCount,
+    missingSnapshotCount: missingSnapshotCount,
   );
 
   const Macros aDay = Macros(kcal: 2000, proteinG: 150, carbG: 200, fatG: 70);
@@ -61,6 +63,49 @@ void main() {
   });
 
   group('the average', () {
+    test('missing history is neither a fast nor an unlogged day', () {
+      final WeekDay absent = day(0, loggedCount: 1, missingSnapshotCount: 1);
+      final WeekDay mixed = day(
+        1,
+        eaten: const Macros(kcal: 400),
+        loggedCount: 2,
+        missingSnapshotCount: 1,
+      );
+      expect(absent.state, DayLogState.loggedUnavailable);
+      expect(mixed.state, DayLogState.loggedIncomplete);
+      expect(absent.countsTowardAverage, isFalse);
+      expect(mixed.countsTowardAverage, isFalse);
+      final WeekSummary week = WeekSummary(<WeekDay>[absent, mixed, day(2)]);
+      expect(week.isEmpty, isFalse);
+      expect(week.loggedDays, 2);
+      expect(week.averagedDays, 0);
+      expect(week.incompleteDays, 2);
+      expect(week.daysNotLogged, 1);
+      expect(week.dailyAverage, isNull);
+    });
+
+    test(
+      'fully saved zero days still count while incomplete days are excluded',
+      () {
+        final WeekSummary week = WeekSummary(<WeekDay>[
+          day(0, eaten: aDay, loggedCount: 2),
+          day(1, loggedCount: 1),
+          day(
+            2,
+            eaten: const Macros(kcal: 400),
+            loggedCount: 2,
+            missingSnapshotCount: 1,
+          ),
+          day(3, loggedCount: 1, missingSnapshotCount: 1),
+          day(4),
+        ]);
+        expect(week.loggedDays, 4);
+        expect(week.averagedDays, 2);
+        expect(week.incompleteDays, 2);
+        expect(week.daysNotLogged, 1);
+        expect(week.dailyAverage!.kcal, 1000);
+      },
+    );
     test('divides by the days that were logged, fast included', () {
       final WeekSummary week = WeekSummary(<WeekDay>[
         for (int i = 0; i < 4; i++) day(i, eaten: aDay, loggedCount: 3),

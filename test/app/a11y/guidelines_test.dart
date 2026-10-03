@@ -9,6 +9,7 @@ import 'package:hearth/app/providers.dart';
 import 'package:hearth/app/shell/launch_target.dart';
 import 'package:hearth/app/shell/sections.dart';
 import 'package:hearth/data/adapters/thermostat.dart';
+import 'package:hearth/data/auth/local_auth_gateway.dart';
 import 'package:hearth/domain/house/thermostat.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
@@ -73,6 +74,7 @@ const String _recipeTitle = 'Slow chilli with all the trimmings';
 void main() {
   Recipe chilli() => aRecipe(
     id: 'r-chilli',
+    householdId: LocalAuthGateway.account.householdId,
     title: _recipeTitle,
     servings: 4,
     sections: <RecipeSection>[
@@ -153,13 +155,15 @@ void main() {
     bool labelReader = false,
     ThermostatGateway? thermostat,
     List<Object> extraOverrides = const <Object>[],
+    List<Recipe>? recipes,
+    List<Food>? foods,
   }) => pumpHearthApp(
     tester,
     size: size,
     labelReader: labelReader ? FakeLabelReader() : null,
     targetsAreOngoing: ongoingTargets,
-    recipes: <Recipe>[chilli()],
-    foods: <Food>[yoghurt(), menuItem()],
+    recipes: recipes ?? <Recipe>[chilli()],
+    foods: foods ?? <Food>[yoghurt(), menuItem()],
     // A shopping list with something on it: the list screen has two shapes,
     // and `Manage list` — which one of the swept surfaces opens — exists only
     // in the one that has something to shop for.
@@ -339,6 +343,8 @@ void main() {
             loggedMeal: surface.withLoggedMeal,
             labelReader: surface.withLabelReader,
             extraOverrides: surface.createOverrides?.call() ?? const <Object>[],
+            recipes: surface.recipes,
+            foods: surface.foods,
           );
           await pumpFrames(tester);
 

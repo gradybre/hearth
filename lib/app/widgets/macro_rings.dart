@@ -29,9 +29,10 @@ import '../theme/hearth_typography.dart';
 ///  * **On or over** says so with an icon and a word, because that is the
 ///    state worth interrupting for, and colour must never be carrying it.
 class MacroRings extends StatelessWidget {
-  const MacroRings({required this.progress, super.key});
+  const MacroRings({required this.progress, this.onSelect, super.key});
 
   final DayProgress progress;
+  final ValueChanged<MacroKind>? onSelect;
 
   static const Map<MacroKind, String> _labels = <MacroKind, String>{
     MacroKind.calories: 'kCal',
@@ -65,7 +66,11 @@ class MacroRings extends StatelessWidget {
             for (final MacroProgress macro in progress.all)
               SizedBox(
                 width: itemWidth,
-                child: _MacroRing(macro: macro, maxWidth: itemWidth),
+                child: _MacroRing(
+                  macro: macro,
+                  maxWidth: itemWidth,
+                  onTap: onSelect == null ? null : () => onSelect!(macro.kind),
+                ),
               ),
           ],
         );
@@ -75,10 +80,11 @@ class MacroRings extends StatelessWidget {
 }
 
 class _MacroRing extends StatelessWidget {
-  const _MacroRing({required this.macro, required this.maxWidth});
+  const _MacroRing({required this.macro, required this.maxWidth, this.onTap});
 
   final MacroProgress macro;
   final double maxWidth;
+  final VoidCallback? onTap;
 
   /// The ring's diameter at default text size.
   ///
@@ -92,23 +98,27 @@ class _MacroRing extends StatelessWidget {
     final HearthColors colors = context.colors;
     final HearthTextStyles text = context.text;
 
-    final String eaten = macro.consumed.round().toString();
-    if (!macro.hasTarget) {
-      return Semantics(
-        label:
-            '${MacroRings.labelFor(macro.kind)}: $eaten ${MacroRings.unitFor(macro.kind)} consumed.',
-        excludeSemantics: true,
+    final String eaten = macro.hasKnownIntake
+        ? macro.consumed.round().toString()
+        : '—';
+    if (!macro.canCompare) {
+      return _action(
+        context,
+        label: !macro.hasKnownIntake
+            ? '${MacroRings.labelFor(macro.kind)}: saved nutrition unavailable.'
+            : macro.availability == SavedNutritionAvailability.partial
+            ? '${MacroRings.labelFor(macro.kind)}: $eaten ${MacroRings.unitFor(macro.kind)} known subtotal. Incomplete saved nutrition.'
+            : '${MacroRings.labelFor(macro.kind)}: $eaten ${MacroRings.unitFor(macro.kind)} consumed.',
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Text(
-              MacroRings.labelFor(macro.kind),
-              style: text.metadata.copyWith(color: colors.textSecondary),
-            ),
+            Text(MacroRings.labelFor(macro.kind), style: _labelStyle(context)),
             const SizedBox(height: HearthSpacing.sm),
             Text(eaten, style: text.macroReadout, textAlign: TextAlign.center),
             Text(
-              MacroRings.unitFor(macro.kind),
+              !macro.hasKnownIntake
+                  ? 'Unavailable'
+                  : '${MacroRings.unitFor(macro.kind)}${macro.availability == SavedNutritionAvailability.partial ? ' known' : ''}',
               style: text.metadata.copyWith(color: colors.textMuted),
             ),
           ],
@@ -139,7 +149,7 @@ class _MacroRing extends StatelessWidget {
       MacroTone.good => TargetIndicator.forState(TargetState.met),
       MacroTone.over => TargetIndicator.forState(
         TargetState.over,
-        amount: macro.remaining.abs().round().toString(),
+        amount: macro.remaining!.abs().round().toString(),
       ),
     };
     final Color toneColor = switch (macro.tone) {
@@ -151,18 +161,15 @@ class _MacroRing extends StatelessWidget {
       MacroTone.over => colors.goodAccent,
     };
 
-    return Semantics(
+    return _action(
+      context,
       label:
           '${MacroRings._labels[macro.kind]}: $eaten $spokenTarget'
           '${indicator == null ? '' : '. ${indicator.semanticLabel}'}',
-      excludeSemantics: true,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Text(
-            MacroRings._labels[macro.kind]!,
-            style: text.metadata.copyWith(color: colors.textSecondary),
-          ),
+          Text(MacroRings._labels[macro.kind]!, style: _labelStyle(context)),
           const SizedBox(height: HearthSpacing.sm),
           SizedBox(
             width: diameter,
@@ -227,6 +234,37 @@ class _MacroRing extends StatelessWidget {
       ),
     );
   }
+
+  TextStyle _labelStyle(BuildContext context) => context.text.metadata.copyWith(
+    color: context.colors.textSecondary,
+    decoration: onTap == null ? null : TextDecoration.underline,
+  );
+
+  Widget _action(
+    BuildContext context, {
+    required String label,
+    required Widget child,
+  }) => Semantics(
+    key: onTap == null
+        ? null
+        : ValueKey<String>('macro-total-${macro.kind.name}'),
+    label: label,
+    hint: onTap == null ? null : 'Show logged meals contributing to this total',
+    button: onTap == null ? null : true,
+    onTap: onTap,
+    excludeSemantics: true,
+    child: onTap == null
+        ? child
+        : InkWell(
+            onTap: onTap,
+            excludeFromSemantics: true,
+            borderRadius: BorderRadius.circular(HearthRadius.sm),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              child: child,
+            ),
+          ),
+  );
 }
 
 /// The ring itself: a full track, and an arc over it from the top.

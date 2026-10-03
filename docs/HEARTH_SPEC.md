@@ -203,6 +203,33 @@ belongs to the Nutrition section.
   an unusable yield or a recipe with no shopping contribution is explained
   before any successful-looking add. *(Phase 2: UX-001.)*
 - **Structured ingredients:** free-typed or AI-imported ingredient lines are parsed into quantity / unit / item / prep-note fields — this is what makes scaling and shopping aggregation work.
+- **Repeat or customize a restaurant usual.** Saved restaurant orders offer
+  **Log this**, **Customize** and **Details**. Log this opens a personal portion
+  review using the captured diary date, meal and plan/log intent; from the
+  library, visibly choose a day and meal, starting at the opening Today and
+  Dinner. Opening either review writes nothing. Current menu portions are
+  checked again after the date/component review and before a held Save.
+  Missing or changed components require review rather than silently becoming
+  zero or acquiring a guessed portion. *(Phase 2: UX-029, UX-033.)*
+  Customization shows the saved base, additions, removals and all seven current
+  nutrition changes. Whole-recipe yield stays separate from the eventual
+  personal portion. **Reset customizations** returns to the saved order.
+  If a menu portion changes during the visit, Reset and review are required;
+  leaving unsaved choices asks before clearing them. Unresolved authored lines
+  remain in the recipe review, and ambiguous same-name food choices require
+  distinct names rather than an overwritten match.
+  **Save new variation** creates a separate reusable recipe while retaining
+  available artwork and leaving the original unchanged. An available local
+  photo takes precedence over an older shared photo; failure to retain it
+  offers retry on the same saved variation. A photo explicitly chosen for
+  the variation takes precedence over inheritance from the usual.
+  From a diary visit,
+  **Save new variation and review portion** saves that recipe first and then
+  opens the existing portion review; only its explicit action adds the meal.
+  Cancelling that second review keeps the saved variation and adds no diary
+  entry. Explicit variations do not request new AI artwork. Published signed
+  modifiers remain one-time adjustments to an ordinary item, and meals with
+  negative nutrient totals cannot be logged.
 - **Optional / to-taste ingredients:** ingredients can be flagged optional (salt to taste, garnish); optional ingredients are excluded from the shopping list and macro totals.
 - **Favorites:** any user can favorite recipes (personal, not shared) and filter to a favorites-only view.
 - **Organization at scale:** **collections** ("cookbooks", e.g., *Weeknight*, *Paella experiments*) that a recipe can belong to more than one of, plus **search** and **filter**. Search is **scoped per section** for v1 (recipe search lives in Recipes, food search in Foods; unified search later). Recipe filters are **combinable chips**: tag, cuisine, total time, calories/serving, protein/serving, collection, favorites.
@@ -545,6 +572,36 @@ belongs to the Nutrition section.
   an 844-point screen at ordinary text: on screen only in the sense that its
   heading is, with everything the heading labels below the fold.
 - Add individual foods or recipes (recipe added as N servings) to any slot on any day.
+- **Explain a daily nutrient total.** Each of the seven totals in compact and
+  expanded Day opens its captured date's **Logged meals** contribution list
+  and a separate **Missing information** section. Show the saved name,
+  logged portion, nutrient amount and package-approximation qualifier. Read
+  only frozen snapshots: current foods, servings and targets never re-cost
+  the receipt. Known zero, unknown, partial and older unrecorded coverage
+  remain distinct. A partially known meal may appear in both sections, but
+  its amount is counted once. *(Phase 2: UX-056.)*
+  If an older logged meal has no saved snapshot, neither Day nor Week may
+  substitute the current food's nutrition. Mixed days show the known saved
+  subtotal with an incomplete-history qualifier; days with no available
+  snapshots show **unavailable**, distinct from zero and **Nothing logged
+  yet**. Remaining amounts and target verdicts do not treat incomplete
+  intake as complete. Weekly averages exclude days with missing saved
+  history and disclose that exclusion; genuine logged-zero days still count.
+  Percentages describe the known sum only when it is finite and positive,
+  all contributions are nonnegative and coverage supports that statement.
+  Partial totals say **of known total**; unavailable, signed and legacy
+  coverage cannot support a percentage. Shortened numbers say **about** and
+  preserve tiny nonzero contributions. Empty days remain openable with an
+  explanation rather than fabricated nutrition.
+  A row opens **View logged details**. **Improve future logs** explicitly
+  opens the current household food or recipe; a global food opens the
+  existing reviewed copy flow. Editing current facts never changes history.
+  Missing sources keep saved details readable while explaining why a current
+  editor is unavailable. Changing account or household expires the receipt;
+  correction or current-source handoffs also verify the captured meal still
+  exists unchanged on that date. Deliberate editor/portion actions close the
+  receipt before entering the established flow. Target editing stays a
+  separate labelled action. No new nutrients, AI calls or schema are added.
 - **Week starts Monday.**
 - **Weekly summary view:** per-day totals for the four tracked macros — **calories, protein, carbohydrates, fat** — across the week. Tap a day to see slot-level detail.
 - **Minor nutrients (fibre, sodium, cholesterol).** *Lifted from §12 at Brendan's request, v0.9.* Three optional nutrients carried alongside the four macros, and unlike them **nullable — null means unknown, never zero**. Every source Hearth already reads gives all three (Open Food Facts and USDA return them in the payload the adapter is already fetching; a US nutrition label is legally required to print them), so they cost no extra call.
