@@ -151,12 +151,14 @@ void main() {
     bool loggedMeal = false,
     ThermostatGateway? thermostat,
     List<Object> extraOverrides = const <Object>[],
+    List<Recipe>? recipes,
+    List<Food>? foods,
   }) => pumpHearthApp(
     tester,
     size: size,
     targetsAreOngoing: ongoingTargets,
-    recipes: <Recipe>[chilli()],
-    foods: <Food>[yoghurt(), menuItem()],
+    recipes: recipes ?? <Recipe>[chilli()],
+    foods: foods ?? <Food>[yoghurt(), menuItem()],
     // A shopping list with something on it: the list screen has two shapes,
     // and `Manage list` — which one of the swept surfaces opens — exists only
     // in the one that has something to shop for.
@@ -335,6 +337,8 @@ void main() {
             ongoingTargets: surface.withOngoingTargets,
             loggedMeal: surface.withLoggedMeal,
             extraOverrides: surface.createOverrides?.call() ?? const <Object>[],
+            recipes: surface.recipes,
+            foods: surface.foods,
           );
           await pumpFrames(tester);
 

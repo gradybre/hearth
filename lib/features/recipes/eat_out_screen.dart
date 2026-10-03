@@ -8,14 +8,21 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../domain/foods/menu_provenance.dart';
 import '../../domain/foods/restaurant_menu.dart';
+import '../../domain/foods/usual_order_projection.dart';
+import '../../domain/format/quantity_format.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
+import '../../domain/parsing/amount_parser.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/text/text_normaliser.dart';
+import '../plan/log_sheet.dart';
 import '../plan/logging_intent.dart';
 import 'recipe_draft.dart';
 import 'recipe_editor_args.dart';
+import 'usual_order_destination_sheet.dart';
+import 'usual_order_receipt.dart';
+import 'usual_order_variation.dart';
 
 /// Building a meal from a restaurant's menu (spec §5.2).
 ///
@@ -48,11 +55,301 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
   /// menus at once is not a meal, it is a mistake, and clearing says so
   /// before a bowl arrives with somebody else's rice in it.
   final Map<String, double> _picks = <String, double>{};
+  UsualOrderProjection? _usual;
+  final Map<String, Food> _pickBases = <String, Food>{};
+  bool _confirmingRouteExit = false;
+  bool _allowRouteExit = false;
 
   void _choose(String restaurant) => setState(() {
     _restaurant = restaurant;
     _picks.clear();
+    _usual = null;
+    _pickBases.clear();
   });
+
+  Map<String, Food> get _currentFoods => <String, Food>{
+    for (final Food food in ref.read(foodLibraryProvider).value ?? <Food>[])
+      food.id: food,
+  };
+
+  Recipe? _currentOrder(String id) {
+    for (final Recipe recipe
+        in ref.read(recipeLibraryProvider).value ?? <Recipe>[]) {
+      if (recipe.id == id && !recipe.isDeleted) return recipe;
+    }
+    return null;
+  }
+
+  Future<bool> _confirmDiscard() async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) => AlertDialog(
+          title: const Text('Leave these choices?'),
+          content: const Text(
+            'The unsaved choices will be cleared. Your saved usual is unchanged.',
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Keep choosing'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Discard choices'),
+            ),
+          ],
+          scrollable: true,
+        ),
+      ) ??
+      false;
+
+  Future<void> _backToRestaurants() async {
+    if (_usual != null && !await _confirmDiscard()) return;
+    if (!mounted) return;
+    setState(() {
+      _restaurant = null;
+      _picks.clear();
+      _usual = null;
+      _pickBases.clear();
+    });
+  }
+
+  Future<void> _leaveRoute(Object? result) async {
+    if (_confirmingRouteExit) return;
+    _confirmingRouteExit = true;
+    try {
+      if (!await _confirmDiscard() || !mounted) return;
+      setState(() => _allowRouteExit = true);
+      // Let PopScope publish the approved answer before asking the navigator
+      // to leave. The app-bar arrow still returns to the restaurant list;
+      // a native Back request continues to leave this route after consent.
+      await WidgetsBinding.instance.endOfFrame;
+      if (mounted) Navigator.of(context).pop(result);
+    } finally {
+      _confirmingRouteExit = false;
+    }
+  }
+
+  void _restoreUsual(Recipe recipe) {
+    final UsualOrderProjection base = UsualOrderProjection.resolve(
+      recipe: recipe,
+      restaurant: _restaurant!,
+      foods: _currentFoods,
+    );
+    setState(() {
+      _usual = base;
+      _picks.clear();
+      _pickBases.clear();
+      for (final MenuPick pick in base.picks) {
+        _picks[pick.food.id] = pick.count;
+        _pickBases[pick.food.id] = pick.food;
+      }
+    });
+  }
+
+  Future<void> _customize(Recipe order) async {
+    if (_picks.isNotEmpty && !await _confirmDiscard()) return;
+    if (!mounted) return;
+    final Recipe? current = _currentOrder(order.id);
+    if (current == null) {
+      _say('This saved order is no longer available.');
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    _restoreUsual(current);
+  }
+
+  bool _needsReset(UsualOrderProjection current, List<Food> menu) {
+    if (!_usual!.hasSamePortionBasis(current)) return true;
+    final Map<String, Food> foods = <String, Food>{
+      for (final Food food in menu) food.id: food,
+    };
+    for (final String id in _picks.keys) {
+      final Food? before = _pickBases[id];
+      final Food? after = foods[id];
+      if (after == null ||
+          before?.isModifier != after.isModifier ||
+          before?.defaultServing?.amount != after.defaultServing?.amount ||
+          before?.defaultServing?.amount.preferredUnit !=
+              after.defaultServing?.amount.preferredUnit) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Future<bool> _reviewUnavailable(
+    UsualOrderProjection base, {
+    bool changed = false,
+  }) async {
+    if (!changed && base.unresolved.isEmpty) return true;
+    return await showModalBottomSheet<bool>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: context.colors.background,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+          ),
+          builder: (BuildContext context) => SafeArea(
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.all(HearthSpacing.lg),
+              children: <Widget>[
+                Text(
+                  changed ? 'Review current order' : 'Review saved components',
+                  style: context.text.sectionHeader,
+                ),
+                Text(
+                  changed
+                      ? 'This order or its menu portions changed while you were choosing. '
+                            'Check the current quantities before continuing.'
+                      : 'Current menu facts cannot restore every saved component. '
+                            'The original lines stay in the recipe; missing nutrition '
+                            'is not filled in.',
+                  style: context.text.body,
+                ),
+                if (changed)
+                  Text(
+                    'Whole order · ${writeAmount(base.recipe.servings)} '
+                    '${base.recipe.servings == 1 ? 'serving' : 'servings'}',
+                    style: context.text.metadata,
+                  ),
+                for (final UsualOrderComponent component
+                    in changed ? base.components : base.unresolved)
+                  Padding(
+                    padding: const EdgeInsets.only(top: HearthSpacing.md),
+                    child: Text(
+                      '${changed && component.ingredient.quantity != null ? '${QuantityFormat.formatAsAuthored(component.ingredient.quantity!)} ' : ''}'
+                      '${component.ingredient.name}'
+                      '${component.reason == null ? '' : ': ${component.reason}'}'
+                      '${changed && component.pick != null ? ' · ${writeAmount(component.pick!.count)} × current menu portion' : ''}',
+                      style: context.text.body,
+                    ),
+                  ),
+                const SizedBox(height: HearthSpacing.md),
+                FilledButton(
+                  key: const Key('usual-continue-review'),
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text(
+                    'Continue to review',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+              ],
+            ),
+          ),
+        ) ??
+        false;
+  }
+
+  Future<void> _logUsual(Recipe order) async {
+    FocusScope.of(context).unfocus();
+    final Recipe? current = _currentOrder(order.id);
+    if (current == null) {
+      _say('This saved order is no longer available.');
+      return;
+    }
+    UsualOrderProjection accepted = UsualOrderProjection.resolve(
+      recipe: current,
+      restaurant: _restaurant!,
+      foods: _currentFoods,
+    );
+    if (!_canLogUsual(accepted)) return;
+    if (!await _reviewUnavailable(accepted) || !mounted) return;
+    final LoggingIntent? intent =
+        widget.intent ?? await showUsualOrderDestination(context);
+    if (intent == null || !mounted) return;
+
+    // A chooser or review can stay open while another device changes the
+    // recipe/menu. Each accepted review covers only the evidence it showed.
+    // Recheck after every await; the portion sheet then owns its live guard.
+    while (mounted) {
+      final Recipe? latest = _currentOrder(order.id);
+      if (latest == null) {
+        _say('This saved order is no longer available.');
+        return;
+      }
+      final UsualOrderProjection now = UsualOrderProjection.resolve(
+        recipe: latest,
+        restaurant: _restaurant!,
+        foods: _currentFoods,
+      );
+      if (!_canLogUsual(now)) return;
+      if (!accepted.hasSamePortionBasis(now)) {
+        if (!await _reviewUnavailable(now, changed: true) || !mounted) return;
+        accepted = now;
+        continue;
+      }
+      await showLogSheet(
+        context,
+        date: intent.date,
+        slot: intent.slot,
+        initialRecipeId: latest.id,
+        initialIntent: intent,
+      );
+      return;
+    }
+  }
+
+  bool _canLogUsual(UsualOrderProjection base) {
+    if (base.nutrition.total.isBelowNothing) {
+      _say(
+        'That comes to less than nothing. Review the saved order in Details before logging.',
+      );
+      return false;
+    }
+    if (usualOrderModifierProblem(base.recipe, _currentFoods)
+        case final String problem) {
+      _say(problem);
+      return false;
+    }
+    if (base.picks.any((MenuPick p) => p.isRemoval || p.food.isModifier) &&
+        !base.picks.any((MenuPick p) => !p.food.isModifier && p.count > 0)) {
+      _say(
+        'Keep a menu item for the adjustments to apply to. Review this order in Details.',
+      );
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _reviewConflictingNames(
+    Recipe recipe,
+    List<String> names,
+  ) async {
+    final bool viewDetails =
+        await showDialog<bool>(
+          context: context,
+          builder: (BuildContext context) => AlertDialog(
+            title: const Text('Review ingredient names'),
+            content: Text(
+              '${names.join(', ')} refers to different foods or matching choices. '
+              'The recipe editor needs distinct names to keep those choices. '
+              'Review the saved ingredients, or keep customizing and remove the '
+              'conflicting choice. Your saved usual stays unchanged.',
+            ),
+            scrollable: true,
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Keep customizing'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('View saved details'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (viewDetails && mounted) {
+      await context.push<void>('/recipe/${recipe.id}');
+    }
+  }
 
   /// Whether anything real is picked for a deduction to come off.
   ///
@@ -73,6 +370,7 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
   );
 
   void _toggle(Food food, List<Food> menu) => setState(() {
+    _pickBases[food.id] = food;
     if (_picks.remove(food.id) != null) {
       // Unpicking the last real thing takes the deductions with it. Left
       // behind, they would be a meal of minus 180 calories, and the rule
@@ -110,7 +408,10 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
       _say('Pick something for ${food.name} to come out of first.');
       return;
     }
-    setState(() => _picks[food.id] = -1);
+    setState(() {
+      _pickBases[food.id] = food;
+      _picks[food.id] = -1;
+    });
   }
 
   /// What is in the meal, without scrolling the menu to find out.
@@ -154,6 +455,7 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
   }
 
   void _setCount(Food food, double count, List<Food> menu) => setState(() {
+    _pickBases[food.id] = food;
     if (count != 0) {
       _picks[food.id] = count;
       return;
@@ -192,7 +494,80 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
         MacroCalculator.forServings(serving, pick.count),
   ]);
 
-  void _build(List<Food> menu) {
+  Future<void> _build(List<Food> menu) async {
+    final UsualOrderProjection? usual = _usual;
+    if (usual != null) {
+      bool reviewedComponents = false;
+      while (mounted && identical(_usual, usual)) {
+        // A held tap can still carry the previous frame's menu, and a
+        // component review can remain open while new menu facts arrive.
+        // Read one current map for every guard and the resulting draft.
+        final Map<String, Food> foods = _currentFoods;
+        final List<Food> currentMenu = RestaurantMenu.itemsFor(
+          _restaurant!,
+          foods.values,
+        );
+        final UsualOrderProjection current = UsualOrderProjection.resolve(
+          recipe: usual.recipe,
+          restaurant: _restaurant!,
+          foods: foods,
+        );
+        if (_needsReset(current, currentMenu)) {
+          _say('Menu portions changed. Reset and review the current amounts.');
+          return;
+        }
+        final List<MenuPick> picks = _picked(currentMenu);
+        final List<String> conflicts = usualOrderVariationConflicts(
+          base: current,
+          picks: picks,
+        );
+        if (conflicts.isNotEmpty) {
+          await _reviewConflictingNames(usual.recipe, conflicts);
+          return;
+        }
+        final bool deductions = picks.any(
+          (MenuPick p) => p.isRemoval || p.food.isModifier,
+        );
+        if (deductions && !_hasSomethingToApplyTo(currentMenu)) {
+          _say('Keep a menu item for the adjustments to apply to.');
+          return;
+        }
+        final RecipeDraft draft = usualOrderVariation(
+          base: current,
+          picks: picks,
+        );
+        final RecipeMacros nutrition = MacroCalculator.forRecipe(
+          draft.toRecipe(),
+          foods: <String, Food>{
+            for (final Food food in currentMenu) food.id: food,
+          },
+        );
+        if (nutrition.total.isBelowNothing) {
+          _say(
+            'That comes to less than nothing. Take out less, or add what it is coming out of.',
+          );
+          return;
+        }
+        if (!reviewedComponents) {
+          if (!await _reviewUnavailable(current)) return;
+          reviewedComponents = true;
+          continue;
+        }
+        FocusScope.of(context).unfocus();
+        context.pushReplacement(
+          '/recipe/new',
+          extra: RecipeEditorArgs(
+            draft: draft,
+            intent: widget.intent,
+            variationOf: usual.recipe.title,
+            variationPhotoUrl: usual.recipe.photoUrl,
+            variationSourceRecipeId: usual.recipe.id,
+          ),
+        );
+        return;
+      }
+      return;
+    }
     final List<MenuPick> picks = _picked(menu);
     if (picks.isEmpty) return;
     // The menu is watched and the picks are not, so a partner deleting the
@@ -232,76 +607,114 @@ class _EatOutScreenState extends ConsumerState<EatOutScreen> {
     final List<Food> menu = chosen == null
         ? const <Food>[]
         : RestaurantMenu.itemsFor(chosen, library);
+    final UsualOrderProjection? usual = _usual == null
+        ? null
+        : UsualOrderProjection.resolve(
+            recipe: _usual!.recipe,
+            restaurant: chosen!,
+            foods: <String, Food>{
+              for (final Food food in library) food.id: food,
+            },
+          );
+    final bool needsReset = usual != null && _needsReset(usual, menu);
     final double gutter = MediaQuery.sizeOf(context).width >= 840
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      appBar: AppBar(
-        backgroundColor: colors.surface,
-        surfaceTintColor: Colors.transparent,
-        title: Text(chosen ?? 'Eat out', style: context.text.sectionHeader),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          // Back to the restaurants first, then out. Two stages in one screen
-          // means the system back gesture would otherwise skip the first.
-          tooltip: chosen == null ? 'Close' : 'Back to restaurants',
-          onPressed: () => chosen == null
-              ? Navigator.of(context).pop()
-              : setState(() {
-                  _restaurant = null;
-                  _picks.clear();
-                }),
+    return PopScope<Object?>(
+      canPop: _usual == null || _allowRouteExit,
+      onPopInvokedWithResult: (bool didPop, Object? result) async {
+        if (!didPop && _usual != null) await _leaveRoute(result);
+      },
+      child: Scaffold(
+        backgroundColor: colors.background,
+        appBar: AppBar(
+          backgroundColor: colors.surface,
+          surfaceTintColor: Colors.transparent,
+          title: Text(chosen ?? 'Eat out', style: context.text.sectionHeader),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            // Back to the restaurants first, then out. Two stages in one screen
+            // means the system back gesture would otherwise skip the first.
+            tooltip: chosen == null ? 'Close' : 'Back to restaurants',
+            onPressed: () => chosen == null
+                ? Navigator.of(context).pop()
+                : _backToRestaurants(),
+          ),
         ),
-      ),
-      // A bar rather than a floating button. "Build (3)" was a count and a
-      // verb: it did not say what the three were, what they came to, or
-      // whether any of them was missing a figure — and it was the only
-      // persistent thing the selected state had, over a menu whose first
-      // pick is thirty rows above the fold by the time you make the third
-      // (review §7.6).
-      bottomNavigationBar: _picks.isEmpty || chosen == null
-          ? null
-          : _SelectedBar(
-              picks: _picked(menu),
-              onReview: () => _build(menu),
-              onOpen: () => _showPicked(menu),
-            ),
-      body: SafeArea(
-        child: chosen == null
-            ? _Restaurants(
-                restaurants: restaurants,
-                provenance:
-                    ref.watch(menuProvenanceProvider).value ??
-                    const <String, MenuProvenance>{},
-                onPick: _choose,
-                gutter: gutter,
-              )
-            : _Menu(
-                sections: RestaurantMenu.sectionsFor(chosen, library),
-                usualOrders: RestaurantMenu.usualOrders(
-                  restaurant: chosen,
-                  recipes:
-                      ref.watch(recipeLibraryProvider).value ??
-                      const <Recipe>[],
-                  foods: <String, Food>{
-                    for (final Food food in library) food.id: food,
-                  },
-                  favourites:
-                      ref.watch(favoriteRecipeIdsProvider).value ??
-                      const <String>{},
-                ),
-                picks: _picks,
-                hasSomethingToApplyTo: _hasSomethingToApplyTo(menu),
-                canRemove: (Food food) =>
-                    _hasSomethingToApplyTo(menu, excluding: food),
-                onToggle: (Food food) => _toggle(food, menu),
-                onRemove: (Food food) => _remove(food, menu),
-                onCount: (Food food, double count) =>
-                    _setCount(food, count, menu),
-                gutter: gutter,
+        // A bar rather than a floating button. "Build (3)" was a count and a
+        // verb: it did not say what the three were, what they came to, or
+        // whether any of them was missing a figure — and it was the only
+        // persistent thing the selected state had, over a menu whose first
+        // pick is thirty rows above the fold by the time you make the third
+        // (review §7.6).
+        bottomNavigationBar: _picks.isEmpty || chosen == null || usual != null
+            ? null
+            : _SelectedBar(
+                picks: _picked(menu),
+                onReview: () => _build(menu),
+                onOpen: () => _showPicked(menu),
               ),
+        body: SafeArea(
+          child: chosen == null
+              ? _Restaurants(
+                  restaurants: restaurants,
+                  provenance:
+                      ref.watch(menuProvenanceProvider).value ??
+                      const <String, MenuProvenance>{},
+                  onPick: _choose,
+                  gutter: gutter,
+                )
+              : _Menu(
+                  key: ValueKey<String>(
+                    'menu-$chosen-${usual?.recipe.id ?? 'new'}',
+                  ),
+                  sections: RestaurantMenu.sectionsFor(chosen, library),
+                  usualOrders: RestaurantMenu.usualOrders(
+                    restaurant: chosen,
+                    recipes:
+                        ref.watch(recipeLibraryProvider).value ??
+                        const <Recipe>[],
+                    foods: <String, Food>{
+                      for (final Food food in library) food.id: food,
+                    },
+                    favourites:
+                        ref.watch(favoriteRecipeIdsProvider).value ??
+                        const <String>{},
+                  ),
+                  picks: _picks,
+                  onLogUsual: _logUsual,
+                  onCustomizeUsual: _customize,
+                  customization: usual == null
+                      ? null
+                      : UsualOrderReceipt(
+                          base: usual,
+                          picks: _picked(menu),
+                          needsReset: needsReset,
+                          onReset: () => _restoreUsual(usual.recipe),
+                          onReview: () => _build(menu),
+                        ),
+                  lockedReasons: <String, String>{
+                    if (needsReset)
+                      for (final Food food in menu)
+                        food.id: 'Reset to review the changed menu portions.'
+                    else if (usual != null)
+                      for (final UsualOrderComponent component
+                          in usual.unresolved)
+                        if (component.food case final Food food)
+                          food.id:
+                              'Kept as a saved line. Review it in the recipe.',
+                  },
+                  hasSomethingToApplyTo: _hasSomethingToApplyTo(menu),
+                  canRemove: (Food food) =>
+                      _hasSomethingToApplyTo(menu, excluding: food),
+                  onToggle: (Food food) => _toggle(food, menu),
+                  onRemove: (Food food) => _remove(food, menu),
+                  onCount: (Food food, double count) =>
+                      _setCount(food, count, menu),
+                  gutter: gutter,
+                ),
+        ),
       ),
     );
   }
@@ -447,6 +860,10 @@ class _Menu extends StatefulWidget {
   const _Menu({
     required this.sections,
     required this.usualOrders,
+    required this.onLogUsual,
+    required this.onCustomizeUsual,
+    required this.lockedReasons,
+    this.customization,
     required this.picks,
     required this.onToggle,
     required this.onRemove,
@@ -454,6 +871,7 @@ class _Menu extends StatefulWidget {
     required this.hasSomethingToApplyTo,
     required this.canRemove,
     required this.gutter,
+    super.key,
   });
 
   final List<MenuSection> sections;
@@ -464,6 +882,10 @@ class _Menu extends StatefulWidget {
   /// a library you have to remember the name of. Empty is the common first
   /// case and shows nothing at all.
   final List<Recipe> usualOrders;
+  final ValueChanged<Recipe> onLogUsual;
+  final ValueChanged<Recipe> onCustomizeUsual;
+  final Widget? customization;
+  final Map<String, String> lockedReasons;
 
   final Map<String, double> picks;
 
@@ -525,7 +947,7 @@ class _MenuState extends State<_Menu> {
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     final double gutter = widget.gutter;
-    if (widget.sections.isEmpty) {
+    if (widget.sections.isEmpty && widget.customization == null) {
       return Padding(
         padding: EdgeInsets.all(gutter * 2),
         child: Center(
@@ -554,6 +976,11 @@ class _MenuState extends State<_Menu> {
       key: const Key('menu-list'),
       padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, gutter * 3),
       children: <Widget>[
+        if (widget.customization case final Widget receipt) ...<Widget>[
+          receipt,
+          const SizedBox(height: HearthSpacing.lg),
+          Text('Adjust menu items', style: context.text.sectionHeader),
+        ],
         TextField(
           controller: _query,
           onChanged: (String _) => setState(() {}),
@@ -623,9 +1050,14 @@ class _MenuState extends State<_Menu> {
       // list, where a block of recipes between the query and its results
       // would be in the way of the thing being looked for.
       if (widget.usualOrders.isNotEmpty &&
+          widget.customization == null &&
           _query.text.trim().isEmpty &&
           _only == null) ...<Widget>[
-        _UsualOrders(orders: widget.usualOrders),
+        _UsualOrders(
+          orders: widget.usualOrders,
+          onLog: widget.onLogUsual,
+          onCustomize: widget.onCustomizeUsual,
+        ),
         const SizedBox(height: HearthSpacing.md),
       ],
       for (final MenuSection section in sections) ...<Widget>[
@@ -650,6 +1082,7 @@ class _MenuState extends State<_Menu> {
         for (final Food food in section.items) ...<Widget>[
           _MenuRow(
             food: food,
+            lockedReason: widget.lockedReasons[food.id],
             count: widget.picks[food.id],
             canPick: !food.isModifier || widget.hasSomethingToApplyTo,
             canRemove: widget.canRemove(food),
@@ -666,13 +1099,18 @@ class _MenuState extends State<_Menu> {
 
 /// The orders this household already has here (review N03).
 ///
-/// Opens the recipe it already is, rather than rebuilding it from the menu:
-/// same id, same frozen-log rules, and adjusting one makes a new recipe the
-/// way `RecipeDraft.again` already does for "my usual bowl, but no rice".
+/// Logging reviews a personal portion; customizing creates a new variation;
+/// Details keeps the saved recipe available without entering either flow.
 class _UsualOrders extends StatelessWidget {
-  const _UsualOrders({required this.orders});
+  const _UsualOrders({
+    required this.orders,
+    required this.onLog,
+    required this.onCustomize,
+  });
 
   final List<Recipe> orders;
+  final ValueChanged<Recipe> onLog;
+  final ValueChanged<Recipe> onCustomize;
 
   @override
   Widget build(BuildContext context) {
@@ -694,26 +1132,45 @@ class _UsualOrders extends StatelessWidget {
               child: Material(
                 color: colors.surface,
                 borderRadius: BorderRadius.circular(HearthRadius.sm),
-                child: InkWell(
-                  onTap: () => context.push('/recipe/${order.id}'),
-                  borderRadius: BorderRadius.circular(HearthRadius.sm),
-                  child: Padding(
-                    padding: const EdgeInsets.all(HearthSpacing.md),
-                    child: Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: Text(
-                            order.title,
-                            style: context.text.ingredient,
+                child: Padding(
+                  padding: const EdgeInsets.all(HearthSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      Text(order.title, style: context.text.ingredient),
+                      const SizedBox(height: HearthSpacing.sm),
+                      Wrap(
+                        spacing: HearthSpacing.sm,
+                        runSpacing: HearthSpacing.sm,
+                        children: <Widget>[
+                          Semantics(
+                            label: order.title,
+                            child: FilledButton(
+                              key: Key('usual-log-${order.id}'),
+                              onPressed: () => onLog(order),
+                              child: const Text('Log this'),
+                            ),
                           ),
-                        ),
-                        Icon(
-                          Icons.chevron_right,
-                          size: 18,
-                          color: colors.textMuted,
-                        ),
-                      ],
-                    ),
+                          Semantics(
+                            label: order.title,
+                            child: OutlinedButton(
+                              key: Key('usual-customize-${order.id}'),
+                              onPressed: () => onCustomize(order),
+                              child: const Text('Customize'),
+                            ),
+                          ),
+                          Semantics(
+                            label: order.title,
+                            child: TextButton(
+                              key: Key('usual-details-${order.id}'),
+                              onPressed: () =>
+                                  context.push('/recipe/${order.id}'),
+                              child: const Text('Details'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -995,9 +1452,11 @@ class _MenuRow extends StatelessWidget {
     required this.onToggle,
     required this.onRemove,
     required this.onCount,
+    this.lockedReason,
   });
 
   final Food food;
+  final String? lockedReason;
 
   /// Null when this one is not picked. Negative when it is being taken out of
   /// the meal rather than put in (spec §5.2).
@@ -1022,6 +1481,7 @@ class _MenuRow extends StatelessWidget {
     final double? picked = count;
     final bool isPicked = picked != null;
     final bool isRemoved = (picked ?? 0) < 0;
+    final bool stacked = MediaQuery.textScalerOf(context).scale(16) > 20;
     final MenuPick pick = MenuPick(food: food, count: picked ?? 1);
     final ServingOption? serving = food.defaultServing;
     // What you are actually having, not the serving *and* what you are having
@@ -1056,7 +1516,7 @@ class _MenuRow extends StatelessWidget {
         // nothing left to apply to — the menu is watched and the picks are
         // not, so a partner can delete the burger out from under it — and a
         // row that cannot be tapped would leave no way out of that.
-        onTap: canPick || isPicked ? onToggle : null,
+        onTap: lockedReason == null && (canPick || isPicked) ? onToggle : null,
         borderRadius: BorderRadius.circular(HearthRadius.md),
         child: Container(
           decoration: BoxDecoration(
@@ -1066,9 +1526,15 @@ class _MenuRow extends StatelessWidget {
             ),
           ),
           padding: const EdgeInsets.all(HearthSpacing.md),
-          child: Row(
+          child: Flex(
+            direction: stacked ? Axis.vertical : Axis.horizontal,
+            crossAxisAlignment: stacked
+                ? CrossAxisAlignment.stretch
+                : CrossAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Expanded(
+              Flexible(
+                flex: stacked ? 0 : 1,
                 child: Semantics(
                   // One thing to a screen reader: a checkbox, a name and a
                   // portion read separately is three announcements for one
@@ -1086,7 +1552,9 @@ class _MenuRow extends StatelessWidget {
                   // be activated tells a screen-reader user they made the
                   // mistake (§6.3). Unselectable, it is a line of text
                   // saying what it is waiting for, which is the truth.
-                  selected: canPick || isPicked ? isPicked : null,
+                  selected: lockedReason == null && (canPick || isPicked)
+                      ? isPicked
+                      : null,
                   excludeSemantics: true,
                   child: Row(
                     children: <Widget>[
@@ -1135,6 +1603,8 @@ class _MenuRow extends StatelessWidget {
                                 ),
                               ),
                             ],
+                            if (lockedReason case final String reason)
+                              Text(reason, style: context.text.metadata),
                           ],
                         ),
                       ),
@@ -1163,9 +1633,13 @@ class _MenuRow extends StatelessWidget {
               // did have was width: at 2x text it took enough to wrap a
               // three-word item name onto three lines (review §7.6).
               if (RestaurantMenu.canBeTakenOut(food) &&
+                  lockedReason == null &&
                   !isPicked &&
                   canRemove) ...<Widget>[
-                const SizedBox(width: HearthSpacing.sm),
+                SizedBox(
+                  width: stacked ? 0 : HearthSpacing.sm,
+                  height: stacked ? HearthSpacing.sm : 0,
+                ),
                 IconButton(
                   onPressed: onRemove,
                   visualDensity: VisualDensity.compact,
@@ -1181,8 +1655,13 @@ class _MenuRow extends StatelessWidget {
               // And never for a modifier, which is one or none: the
               // deduction is for taking the bun off, and there is only one
               // bun.
-              if (isPicked && !food.isModifier) ...<Widget>[
-                const SizedBox(width: HearthSpacing.sm),
+              if (isPicked &&
+                  !food.isModifier &&
+                  lockedReason == null) ...<Widget>[
+                SizedBox(
+                  width: stacked ? 0 : HearthSpacing.sm,
+                  height: stacked ? HearthSpacing.sm : 0,
+                ),
                 _Stepper(
                   count: picked,
                   removing: isRemoved,
@@ -1225,9 +1704,7 @@ class _Stepper extends StatelessWidget {
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     final double portions = count.abs();
-    final String number = portions == portions.roundToDouble()
-        ? '${portions.round()}'
-        : '$portions';
+    final String number = QuantityFormat.count(portions);
     // The real minus again, in the text, so "−1×" cannot be mistaken for "1×"
     // by anybody reading or hearing it (§6.3).
     final String label = removing ? '−$number×' : '$number×';
@@ -1253,14 +1730,15 @@ class _Stepper extends StatelessWidget {
         children: <Widget>[
           IconButton(
             onPressed: portions <= _step ? null : () => set(portions - _step),
-            visualDensity: VisualDensity.compact,
+            visualDensity: VisualDensity.standard,
             tooltip: removing ? 'Take out less' : 'One less',
             icon: const Icon(Icons.remove_circle_outline, size: 20),
           ),
-          SizedBox(
-            width: 34,
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 34),
             child: Text(
               label,
+              softWrap: false,
               textAlign: TextAlign.center,
               style: context.text.ingredient.copyWith(
                 color: colors.textPrimary,
@@ -1269,7 +1747,7 @@ class _Stepper extends StatelessWidget {
           ),
           IconButton(
             onPressed: portions >= _max ? null : () => set(portions + _step),
-            visualDensity: VisualDensity.compact,
+            visualDensity: VisualDensity.standard,
             tooltip: removing ? 'Take out more' : 'One more',
             icon: const Icon(Icons.add_circle_outline, size: 20),
           ),

@@ -605,3 +605,64 @@ gates. Native device acceptance has not been performed.
 The reviewed source for those groups is already included in the validation above.
 Final published-head review and CI still govern release; this checkpoint does
 not claim any of Groups 14/17/18 merged. Groups 20–22 remain unanswered.
+
+
+## Groups 14, 18 and 17 released — 2026-10-01
+
+All local gates, independent source/design reviews and every CI check passed
+before each merge. The exact published heads were rechecked and the merged
+trees matched their tested candidates:
+
+| Group | Pull request | Reviewed head | Merge | Final local validation |
+|---|---|---|---|---|
+| 14 — Recipe nutrition receipt | [#130](https://github.com/gradybre/hearth/pull/130) | `8f29830` | `4fa7496` | 4,910 UTC; 45 New York; 190 render checks |
+| 18 — Walmart package review | [#131](https://github.com/gradybre/hearth/pull/131) | `833c2f3` | `e7bd71a` | 4,955 UTC; 194 render checks |
+| 17 — Meals across the week | [#132](https://github.com/gradybre/hearth/pull/132) | `5f1d1c2` | `23250c9` | 5,009 UTC; 37 New York; 200 render checks |
+
+These releases used merge commits so the tested dependency commits remained
+ancestors of the following change. Retargeting the next PR to main did not
+change its reviewed source. Native-device and live assistive-technology
+acceptance remain unperformed.
+
+Group 15's explicit variation editor now saves a new reusable recipe before
+reviewing the personal portion, preserves the original and its available
+artwork, and makes no automatic AI drawing request. Cancellation of the
+portion review keeps the variation but adds no meal. The bounded editor
+handoff passed 74 focused/adjacent tests and produced 30 renders; the combined
+whole-app gate and final fresh-context review are in progress.
+
+Group 16's duplicate wording, camera layout and old-account draft-dialog
+findings have observed failing regressions and reviewed fixes. The coordinator
+reran 121 focused checks successfully against the released base. Actual
+production-route tests are being prepared; editor integration remains queued
+behind Group 15's ownership. Group 19's snapshot-only receipt and guarded
+handoffs are independently clear and passed 57 coordinator-run checks; seven
+Today entry points are under implementation. Groups 20–22 remain unanswered.
+
+### Group 15 — final integration review corrections
+
+Fresh review reproduced changing-menu guards and system-Back discard behavior,
+then checked local-only artwork and failed-copy retries. The final photo
+regressions include an inherited image downloaded during a retry, a chosen
+variation photo uploaded before retry, and an in-flight download completing
+after local inheritance. Each failed before its correction. A variation now
+retains available local bytes before publishing any inherited URL fallback;
+retry preserves its own photo URL atomically and distinguishes a downloaded
+cache from an independent photo choice. The original recipe and photo remain
+unchanged. Source and section identities remain separate, and no AI is called.
+
+The coordinator's accessibility journeys also reproduced 40-point count
+controls; standard 48-point targets now pass those journeys. All 28 selected
+photo-retry and restaurant accessibility checks passed before the last sync
+ordering correction. Format and analysis are clean; the final complete UTC,
+render and New York gates and frozen-candidate review are running.
+
+Direct inspection of the added 3× portion-control crop found a fixed-width
+counter splitting `1.5×` into misleading separate lines. Executed regressions
+cover both themes and a one-third portion that initially overflowed by 280
+pixels. Enlarged text now puts controls below the full-width menu label, keeps
+counts together, and uses Hearth's existing fraction display formatter. The
+one-third regression also verifies the unchanged 100 g draft amount and no
+recipe or diary writes. All 74 restaurant builder/variation checks pass after
+this last correction. The preceding full candidate passed 5,095 UTC tests,
+209 renders and 68 New York tests; the final gate is repeated after formatting.

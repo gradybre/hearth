@@ -15,7 +15,14 @@ import 'recipe_import_controller.dart';
 /// others.
 @immutable
 class RecipeEditorArgs {
-  const RecipeEditorArgs({this.draft, this.imported, this.intent});
+  const RecipeEditorArgs({
+    this.draft,
+    this.imported,
+    this.intent,
+    this.variationOf,
+    this.variationPhotoUrl,
+    this.variationSourceRecipeId,
+  });
 
   /// A copy already made, so it is reviewed and renamed before it is written.
   final RecipeDraft? draft;
@@ -26,4 +33,14 @@ class RecipeEditorArgs {
 
   /// The meal this build belongs to, if it began in one.
   final LoggingIntent? intent;
+
+  /// The original usual's display name, for an explicitly new variation.
+  /// This is review context, not authority to overwrite the original recipe.
+  final String? variationOf;
+
+  /// Existing artwork reused without requesting new AI artwork.
+  final String? variationPhotoUrl;
+
+  /// The source whose currently available local hero photo should be retained.
+  final String? variationSourceRecipeId;
 }
