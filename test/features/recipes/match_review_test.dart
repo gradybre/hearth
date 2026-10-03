@@ -165,7 +165,29 @@ void main() {
       find.text('Nothing found. Match it yourself, or leave it.'),
       findsOneWidget,
     );
-    expect(find.text('Use these'), findsOneWidget);
+    expect(find.text('Apply reviewed 0 together'), findsOneWidget);
+  });
+
+  testWidgets('a recipe still saves after all unmatched lines are skipped', (
+    tester,
+  ) async {
+    await openEditorWith(tester, '1 pinch asafoetida');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Braised short ribs'),
+      'Incomplete spice recipe',
+    );
+    await tester.tap(find.text('Find nutrition for 1 ingredient'));
+    await pumpFrames(tester, frames: 20);
+    await tester.ensureVisible(find.byKey(const Key('match-0-skip')));
+    await tester.tap(find.byKey(const Key('match-0-skip')));
+    await pumpFrames(tester, frames: 20);
+    await tester.ensureVisible(find.byKey(const Key('match-review-apply')));
+    await tester.tap(find.byKey(const Key('match-review-apply')));
+    await pumpFrames(tester, frames: 20);
+    await tester.tap(find.text('Save'));
+    await pumpFrames(tester, frames: 20);
+    expect(find.widgetWithText(TextField, 'Braised short ribs'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('accepted matches come back and attach to the line', (
@@ -181,7 +203,8 @@ void main() {
 
     await tester.tap(find.text('Find nutrition for 1 ingredient'));
     await pumpFrames(tester, frames: 20);
-    await tester.tap(find.text('Use these'));
+    await tester.ensureVisible(find.byKey(const Key('match-review-apply')));
+    await tester.tap(find.byKey(const Key('match-review-apply')));
     await pumpFrames(tester, frames: 20);
 
     // Back in the editor, matched — and with nothing left to look up.

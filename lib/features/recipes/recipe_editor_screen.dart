@@ -26,7 +26,9 @@ import '../../domain/planning/meal_plan.dart';
 import '../../domain/recipes/ingredient_matcher.dart';
 import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/text/text_normaliser.dart';
+import '../foods/food_capture_guard.dart';
 import '../foods/food_picker.dart';
+import '../foods/ingredient_food_capture.dart';
 import '../foods/read_label_sheet.dart';
 import '../plan/log_sheet.dart';
 import '../plan/logging_intent.dart';
@@ -303,13 +305,44 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
             ingredient,
       ];
 
-  /// Searches every unmatched line, then hands the results to the review
-  /// screen before any of it counts (spec §5.3).
+  /// A name-keyed match applies across sections, so every review/capture
+  /// shows the same nonoptional lines that decision will affect.
+  List<ParsedIngredient> _matchingLines(Set<String> names) =>
+      <ParsedIngredient>[
+        for (final ParsedIngredient ingredient in _draft.parsedIngredients)
+          if (!ingredient.isOptional &&
+              names.contains(normaliseKey(ingredient.name)))
+            ingredient,
+      ];
+
+  IngredientFoodCapture _captureFor(ParsedIngredient ingredient) {
+    final String key = normaliseKey(ingredient.name);
+    final List<ParsedIngredient> lines = _matchingLines(<String>{key});
+    // Optional-only wording can still be opened in the ordinary picker;
+    // it is never added to another line's counted review group.
+    if (lines.isEmpty) lines.add(ingredient);
+    return IngredientFoodCapture(
+      ingredientName: key,
+      authoredLine: <String>[
+        for (final ParsedIngredient line in lines)
+          line.raw.trim().isEmpty ? line.name : line.raw,
+      ].join('\n'),
+      recipeLineCount: lines.length,
+    );
+  }
+
+  /// Searches the selected unresolved names across the whole recipe, then
+  /// hands the results to review before any of it counts (spec §5.3).
   Future<void> _findMatches(List<ParsedIngredient> unmatched) async {
+    final Set<String> names = <String>{
+      for (final ParsedIngredient ingredient in unmatched)
+        if (!ingredient.isOptional && ingredient.name.trim().isNotEmpty)
+          normaliseKey(ingredient.name),
+    };
     ref.read(matchReviewProvider.notifier).reset();
-    final Map<String, String>? applied = await showMatchReview(
+    final ReviewedIngredientMatches? applied = await showMatchReview(
       context,
-      ingredients: unmatched,
+      ingredients: _matchingLines(names),
       // Only a generated recipe carries these, and only the lines the real
       // chain cannot match will ever see them (spec §5.4).
       estimates: widget.imported?.estimates ?? const <AiEstimate>[],
@@ -326,14 +359,22 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       _matches = next;
     });
 
-    // Remembered like any other correction, so the same ingredient string is
-    // never looked up twice (spec §5.3).
-    for (final MapEntry<String, String> entry in applied.entries) {
-      await ref
-          .read(ingredientMatchRepositoryProvider)
-          .remember(ingredientString: entry.key, foodId: entry.value);
+    // Applying this recipe's choices is separate from remembering wording
+    // for the household. Review remembers only the explicitly checked groups.
+    if (applied.rememberIngredientNames.isNotEmpty) {
+      final IngredientMatchRepository repository = ref.read(
+        ingredientMatchRepositoryProvider,
+      );
+      for (final MapEntry<String, String> entry in applied.entries) {
+        if (applied.rememberIngredientNames.contains(entry.key)) {
+          await repository.remember(
+            ingredientString: entry.key,
+            foodId: entry.value,
+          );
+        }
+      }
+      ref.invalidate(rememberedMatchesProvider);
     }
-    ref.invalidate(rememberedMatchesProvider);
   }
 
   /// Opens the matched food's editor, for a line whose problem is the food
@@ -343,8 +384,14 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   /// sending the user to the food *picker* instead, as tapping the row used
   /// to, offers to solve it by choosing a different food, which is not what
   /// went wrong.
-  Future<void> _fixFood(String foodId) async {
-    await context.push<void>('/food/$foodId');
+  Future<void> _fixFood(
+    String foodId, {
+    required IngredientFoodCapture capture,
+  }) async {
+    await context.push<void>(
+      '/food/$foodId',
+      extra: IngredientFoodRouteExtra(capture: capture),
+    );
   }
 
   /// Reads the packet and opens the matched food's editor with it merged in.
@@ -354,10 +401,24 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   /// states, which for a US panel is usually a weight *and* a volume — the
   /// pair that lets a line measured in cups resolve against a food sold by
   /// weight. Still saved by hand from there (CLAUDE.md rule 4).
-  Future<void> _readLabelFor(Food food) async {
-    final LabelReading? reading = await showReadLabelSheet(context);
-    if (reading == null || !mounted) return;
-    await context.push<void>('/food/${food.id}', extra: reading);
+  Future<void> _readLabelFor(
+    Food food, {
+    required IngredientFoodCapture capture,
+  }) async {
+    final FoodCaptureGuard guard = FoodCaptureGuard.capture(context);
+    try {
+      final LabelReading? reading = await showReadLabelSheet(
+        context,
+        capture: capture,
+      );
+      if (reading == null || !mounted || !guard.canContinue(context)) return;
+      await context.push<void>(
+        '/food/${food.id}',
+        extra: IngredientFoodRouteExtra(capture: capture, label: reading),
+      );
+    } finally {
+      guard.close();
+    }
   }
 
   Future<void> _matchIngredient(ParsedIngredient ingredient) async {
@@ -390,9 +451,12 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
             kind: _kind,
           );
 
+    final IngredientFoodCapture capture = _captureFor(ingredient);
     final String? chosen = await showFoodPicker(
       context,
       ingredientName: ingredient.name,
+      authoredLine: capture.authoredLine,
+      capture: capture,
       currentFoodId: current ?? suggestion?.foodId,
       defaults: defaults.length > 1 ? defaults : const <Food>[],
       // The same guard the row's own grass icon has carried all along
@@ -495,64 +559,68 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   /// all. Going straight to the food editor assumed the first and quietly
   /// removed the other three.
   Future<void> _showFixOptions(ParsedIngredient ingredient, Food food) async {
+    final IngredientFoodCapture capture = _captureFor(ingredient);
     final String unit =
         ingredient.quantity?.preferredUnit?.label ?? 'that unit';
 
     final _FixChoice? choice = await showModalBottomSheet<_FixChoice>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: context.colors.surface,
       builder: (BuildContext context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.all(HearthSpacing.lg),
-              child: Text(
-                '${food.name} has no serving in $unit',
-                style: context.text.sectionHeader,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.all(HearthSpacing.lg),
+                child: Text(
+                  '${food.name} has no serving in $unit',
+                  style: context.text.sectionHeader,
+                ),
               ),
-            ),
-            for (final (_FixChoice value, IconData icon, String label)
-                in <(_FixChoice, IconData, String)>[
-                  (
-                    _FixChoice.addServing,
-                    Icons.straighten,
-                    'Add a serving in $unit',
-                  ),
-                  // Above picking a different food, because the usual reason
-                  // a line is flagged is not that the match is wrong — it is
-                  // that the food only knows one unit, and the packet's own
-                  // panel is the thing that states both.
-                  if (canReadLabels(ref))
+              for (final (_FixChoice value, IconData icon, String label)
+                  in <(_FixChoice, IconData, String)>[
                     (
-                      _FixChoice.readLabel,
-                      Icons.document_scanner_outlined,
-                      "Read the packet's label",
+                      _FixChoice.addServing,
+                      Icons.straighten,
+                      'Add a serving in $unit',
                     ),
-                  (
-                    _FixChoice.pickAnother,
-                    Icons.search,
-                    'Match a different food',
-                  ),
-                  (
-                    _FixChoice.scan,
-                    Icons.qr_code_scanner,
-                    'Scan the packet instead',
-                  ),
-                  (_FixChoice.unmatch, Icons.link_off, 'Unmatch this line'),
-                  (
-                    _FixChoice.noMatch,
-                    Icons.grass_outlined,
-                    "Nothing to match — it's a seasoning",
-                  ),
-                ])
-              ListTile(
-                leading: Icon(icon, color: context.colors.textSecondary),
-                title: Text(label, style: context.text.body),
-                onTap: () => Navigator.of(context).pop(value),
-              ),
-            const SizedBox(height: HearthSpacing.sm),
-          ],
+                    // Above picking a different food, because the usual reason
+                    // a line is flagged is not that the match is wrong — it is
+                    // that the food only knows one unit, and the packet's own
+                    // panel is the thing that states both.
+                    if (canReadLabels(ref))
+                      (
+                        _FixChoice.readLabel,
+                        Icons.document_scanner_outlined,
+                        "Read the packet's label",
+                      ),
+                    (
+                      _FixChoice.pickAnother,
+                      Icons.search,
+                      'Match a different food',
+                    ),
+                    (
+                      _FixChoice.scan,
+                      Icons.qr_code_scanner,
+                      'Scan the packet instead',
+                    ),
+                    (_FixChoice.unmatch, Icons.link_off, 'Unmatch this line'),
+                    (
+                      _FixChoice.noMatch,
+                      Icons.grass_outlined,
+                      "Nothing to match — it's a seasoning",
+                    ),
+                  ])
+                ListTile(
+                  leading: Icon(icon, color: context.colors.textSecondary),
+                  title: Text(label, style: context.text.body),
+                  onTap: () => Navigator.of(context).pop(value),
+                ),
+              const SizedBox(height: HearthSpacing.sm),
+            ],
+          ),
         ),
       ),
     );
@@ -560,15 +628,18 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
 
     switch (choice) {
       case _FixChoice.addServing:
-        await _fixFood(food.id);
+        await _fixFood(food.id, capture: capture);
       case _FixChoice.readLabel:
-        await _readLabelFor(food);
+        await _readLabelFor(food, capture: capture);
       case _FixChoice.pickAnother:
         await _matchIngredient(ingredient);
       case _FixChoice.scan:
         await _applyMatch(
           ingredient,
-          await context.push<String>('/food/scan?pick=1'),
+          await context.push<String>(
+            '/food/scan?pick=1',
+            extra: IngredientFoodRouteExtra(capture: capture),
+          ),
         );
       case _FixChoice.unmatch:
         await _applyMatch(ingredient, clearFoodSentinel);

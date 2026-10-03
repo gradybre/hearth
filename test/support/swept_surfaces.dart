@@ -57,6 +57,7 @@ class SweptSurface {
     this.isInline = false,
     this.withOngoingTargets = false,
     this.withLoggedMeal = false,
+    this.withLabelReader = false,
     this.createOverrides,
     this.recipes,
     this.foods,
@@ -77,6 +78,9 @@ class SweptSurface {
 
   /// History surfaces need a saved snapshot, not the plan fixture.
   final bool withLoggedMeal;
+
+  /// Enables the deliberate label-reading path with a synthetic reader.
+  final bool withLabelReader;
 
   /// A fresh synthetic failure for each walk, without sharing mutable fakes.
   final List<Object> Function()? createOverrides;
@@ -816,6 +820,64 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     farEnd: find.byKey(const Key('paste-items-save')),
   ),
   SweptSurface(
+    name: 'reviewing unresolved recipe ingredient groups',
+    withLabelReader: true,
+    opensFrom: 'lib/features/recipes/match_review_screen.dart',
+    isInline: true,
+    open: _openIngredientReview,
+    arrived: find.text('Matches'),
+    waypoints: <Finder>[
+      find.text('2 tbsp olive oil, divided'),
+      find.byKey(const Key('match-0-search')),
+      find.byKey(const Key('match-0-scan')),
+      find.byKey(const Key('match-0-label')),
+      find.byKey(const Key('match-0-manual')),
+      find.byKey(const Key('match-0-skip')),
+      find.text('200 g cottage cheese, well drained'),
+    ],
+    farEnd: find.byKey(const Key('match-review-apply')),
+  ),
+  SweptSurface(
+    name: 'searching with an authored recipe ingredient',
+    withLabelReader: true,
+    opensFrom: 'lib/features/foods/food_picker.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await _openIngredientReview(tester, tools);
+      await tools.reach(find.byKey(const Key('match-0-search')));
+    },
+    arrived: find.text('For this ingredient'),
+    waypoints: <Finder>[find.byKey(const Key('ingredient-picker-label'))],
+    farEnd: find.byKey(const Key('ingredient-picker-manual')),
+  ),
+  SweptSurface(
+    name: 'reading a label for an authored recipe ingredient',
+    withLabelReader: true,
+    opensFrom: 'lib/features/foods/read_label_sheet.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await _openIngredientReview(tester, tools);
+      await tools.reach(find.byKey(const Key('match-0-label')));
+    },
+    arrived: find.text('Read the label'),
+    waypoints: <Finder>[
+      find.text('For this ingredient'),
+      find.text('Nutrition label (back)'),
+      find.text('Package size (front)'),
+    ],
+    farEnd: find.text('Enter it manually instead'),
+  ),
+  SweptSurface(
+    name: 'entering nutrition for an authored recipe ingredient',
+    opensFrom: 'lib/features/foods/ingredient_food_capture.dart',
+    isInline: true,
+    open: (WidgetTester tester, SweepTools tools) async {
+      await _openIngredientReview(tester, tools);
+      await tools.reach(find.byKey(const Key('match-0-manual')));
+    },
+    arrived: find.text('For this ingredient'),
+    waypoints: <Finder>[find.text('2 tbsp olive oil, divided')],
+    farEnd: find.text('Save'),
+  ),
+  SweptSurface(
     name: 'choosing something to log',
     opensFrom: 'lib/features/plan/log_sheet.dart',
     open: (WidgetTester tester, SweepTools tools) async {
@@ -1123,6 +1185,30 @@ class _InterruptedCookProgress extends FakeCookSessionStore {
   }
 }
 
+Future<void> _openIngredientReview(
+  WidgetTester tester,
+  SweepTools tools,
+) async {
+  await tools.tab('Recipes');
+  await tools.reach(find.text('Add recipe'));
+  await tools.reach(find.text('Write a recipe'));
+  await tester.enterText(
+    await tools.bring(find.widgetWithText(TextField, 'Braised short ribs')),
+    'Ingredient review supper',
+  );
+  final Finder ingredients = find.byWidgetPredicate(
+    (Widget widget) =>
+        widget is TextField &&
+        (widget.decoration?.hintText ?? '').startsWith('2 tbsp olive oil'),
+  );
+  await tester.enterText(
+    await tools.bring(ingredients),
+    '2 tbsp olive oil, divided\n200 g cottage cheese, well drained',
+  );
+  await pumpFrames(tester, frames: 12);
+  await tools.reach(find.textContaining('Find nutrition for'));
+}
+
 /// Surfaces that open a sheet or a dialog and are **not** swept yet.
 ///
 /// Each needs a reason, and the reason is meant to be uncomfortable to write.
@@ -1156,16 +1242,10 @@ const Map<String, String> notSweptYet = <String, String>{
       'merge_screen_test.dart instead — it needs two foods that look '
       'alike in the library, which the sweep fixture has no reason to '
       'carry, and the flow sweep cannot make one up.',
-  'lib/features/foods/food_picker.dart':
-      'Opened from the recipe editor while matching an ingredient — several '
-      'screens in, and needs a library with an unmatched line in it.',
   'lib/features/foods/read_walmart_link_sheet.dart':
       'Dedicated walmart_link_sheet_test.dart and walmart_link_render_test.dart '
       'exercise picker, read, cancel, miss and retry with synthetic responses, '
       'including 320px at 200% and 300%; the general sweep has no reader.',
-  'lib/features/foods/read_label_sheet.dart':
-      'Needs a photo picker and a label-reading response to get past its '
-      'first frame.',
   'lib/features/plan/week_template_sheet.dart':
       'Saving and applying a week both need a week with something in it.',
   'lib/features/recipes/collections_sheet.dart':

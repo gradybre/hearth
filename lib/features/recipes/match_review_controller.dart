@@ -9,17 +9,29 @@ import '../../domain/parsing/ingredient_parser.dart';
 import '../../domain/recipes/ingredient_matcher.dart';
 import '../../domain/text/text_normaliser.dart';
 
-/// One ingredient line and what the search made of it (spec §5.3).
+/// One normalized ingredient wording and every authored line it applies to.
+/// The recipe contract attaches one food to all lines with this wording.
 @immutable
 class IngredientMatchRow {
   const IngredientMatchRow({
     required this.ingredient,
     required this.guess,
+    this.additionalIngredients = const [],
     this.estimate,
     this.accepted = true,
+    this.skipped = false,
+    this.remember = false,
+    this.fromLibrary = false,
   });
 
   final ParsedIngredient ingredient;
+  final List<ParsedIngredient> additionalIngredients;
+
+  List<ParsedIngredient> get ingredients => [
+    ingredient,
+    ...additionalIngredients,
+  ];
+  int get lineCount => 1 + additionalIngredients.length;
 
   /// Null when nothing came close enough to be worth offering.
   final CandidateGuess? guess;
@@ -37,18 +49,45 @@ class IngredientMatchRow {
   /// of rather than having to notice and opt out.
   final bool accepted;
 
+  /// A deliberate decision to leave this line incomplete for now.
+  final bool skipped;
+
+  /// Explicit opt-in to remember the wording for this household.
+  final bool remember;
+
+  /// Library ownership is separate from the food's original source.
+  final bool fromLibrary;
+
+  bool get resolved => accepted && (hasGuess || estimate != null);
+
+  List<String> get authoredLines => [
+    for (final line in ingredients)
+      line.raw.trim().isEmpty ? line.name : line.raw.trim(),
+  ];
+
+  String get authoredLine => authoredLines.join('\n');
+
   bool get hasGuess => guess != null;
   bool get isAmbiguous => guess?.isAmbiguous ?? false;
 
   Food? get food => guess?.food;
 
-  IngredientMatchRow copyWith({bool? accepted, CandidateGuess? guess}) =>
-      IngredientMatchRow(
-        ingredient: ingredient,
-        guess: guess ?? this.guess,
-        estimate: estimate,
-        accepted: accepted ?? this.accepted,
-      );
+  IngredientMatchRow copyWith({
+    bool? accepted,
+    CandidateGuess? guess,
+    bool? skipped,
+    bool? remember,
+    bool? fromLibrary,
+  }) => IngredientMatchRow(
+    ingredient: ingredient,
+    additionalIngredients: additionalIngredients,
+    guess: guess ?? this.guess,
+    estimate: estimate,
+    accepted: accepted ?? this.accepted,
+    skipped: skipped ?? this.skipped,
+    remember: remember ?? this.remember,
+    fromLibrary: fromLibrary ?? this.fromLibrary,
+  );
 }
 
 @immutable
@@ -70,9 +109,21 @@ class MatchReviewReady extends MatchReviewState {
   const MatchReviewReady(this.rows);
   final List<IngredientMatchRow> rows;
 
-  Iterable<IngredientMatchRow> get accepted => rows.where(
-    (IngredientMatchRow r) => r.accepted && (r.hasGuess || r.estimate != null),
-  );
+  Iterable<IngredientMatchRow> get accepted =>
+      rows.where((IngredientMatchRow r) => r.resolved);
+
+  int get resolvedCount => accepted.length;
+  int get skippedCount => rows.where((row) => row.skipped).length;
+
+  int? nextUnresolvedAfter(int index) {
+    for (int offset = 1; offset <= rows.length; offset++) {
+      final int candidate = (index + offset) % rows.length;
+      if (!rows[candidate].resolved && !rows[candidate].skipped) {
+        return candidate;
+      }
+    }
+    return null;
+  }
 
   int get foundCount => rows
       .where((IngredientMatchRow r) => r.hasGuess || r.estimate != null)
@@ -88,7 +139,13 @@ class MatchReviewReady extends MatchReviewState {
 /// confidence before any of it counts toward a recipe.
 class MatchReviewController extends Notifier<MatchReviewState> {
   @override
-  MatchReviewState build() => const MatchReviewIdle();
+  MatchReviewState build() {
+    ref.watch(currentHouseholdIdProvider);
+    ref.watch(currentUserIdProvider);
+    _run++;
+    ref.onDispose(() => _run++);
+    return const MatchReviewIdle();
+  }
 
   /// Guards against a second run landing on top of the first.
   int _run = 0;
@@ -98,13 +155,15 @@ class MatchReviewController extends Notifier<MatchReviewState> {
     List<AiEstimate> estimates = const <AiEstimate>[],
   }) async {
     final int run = ++_run;
-    final List<ParsedIngredient> wanted = <ParsedIngredient>[
-      // An optional line is a deliberate exclusion, not a gap (§5.2), so
-      // there is nothing to look up and nothing to review.
-      for (final ParsedIngredient ingredient in ingredients)
-        if (!ingredient.isOptional && ingredient.name.trim().isNotEmpty)
-          ingredient,
-    ];
+    final grouped = <String, List<ParsedIngredient>>{};
+    for (final ingredient in ingredients) {
+      // Optional lines are deliberate exclusions, not gaps (§5.2).
+      if (ingredient.isOptional || ingredient.name.trim().isEmpty) continue;
+      grouped
+          .putIfAbsent(normaliseKey(ingredient.name), () => [])
+          .add(ingredient);
+    }
+    final wanted = grouped.values.toList();
 
     if (wanted.isEmpty) {
       state = const MatchReviewReady(<IngredientMatchRow>[]);
@@ -118,7 +177,7 @@ class MatchReviewController extends Notifier<MatchReviewState> {
     // together is a dozen simultaneous calls to services that are free to
     // rate-limit us, and the progress count is honest this way.
     for (int i = 0; i < wanted.length; i++) {
-      final ParsedIngredient ingredient = wanted[i];
+      final ParsedIngredient ingredient = wanted[i].first;
       final List<NutritionMatch> found = await ref
           .read(nutritionLookupProvider)
           .search(ingredient.name, limit: 8);
@@ -142,12 +201,18 @@ class MatchReviewController extends Notifier<MatchReviewState> {
       rows.add(
         IngredientMatchRow(
           ingredient: ingredient,
+          additionalIngredients: List.unmodifiable(wanted[i].skip(1)),
           guess: guess,
           estimate: estimate,
           // Only what is clearly right is applied without asking. An
           // ambiguous match, a mediocre lone candidate, and an estimate are
           // all offered unticked — opted into rather than out of.
           accepted: guess?.isConfident ?? false,
+          fromLibrary:
+              guess != null &&
+              found.any(
+                (match) => match.fromLibrary && match.food.id == guess.food.id,
+              ),
         ),
       );
       state = MatchReviewSearching(i + 1, wanted.length);
@@ -164,9 +229,45 @@ class MatchReviewController extends Notifier<MatchReviewState> {
     state = MatchReviewReady(<IngredientMatchRow>[
       for (int i = 0; i < current.rows.length; i++)
         if (i == index)
-          current.rows[i].copyWith(accepted: accepted)
+          current.rows[i].copyWith(accepted: accepted, skipped: false)
         else
           current.rows[i],
+    ]);
+  }
+
+  void replaceWithSavedFood(int index, Food food) {
+    _change(
+      index,
+      (row) => row.copyWith(
+        guess: CandidateGuess(food: food, score: 1, isAmbiguous: false),
+        accepted: true,
+        skipped: false,
+        fromLibrary: true,
+      ),
+    );
+  }
+
+  void skip(int index) => _change(
+    index,
+    (row) => row.copyWith(accepted: false, skipped: true, remember: false),
+  );
+
+  void setRemember(int index, {required bool remember}) =>
+      _change(index, (row) => row.copyWith(remember: remember));
+
+  void _change(
+    int index,
+    IngredientMatchRow Function(IngredientMatchRow) change,
+  ) {
+    final current = state;
+    if (current is! MatchReviewReady ||
+        index < 0 ||
+        index >= current.rows.length) {
+      return;
+    }
+    state = MatchReviewReady([
+      for (int i = 0; i < current.rows.length; i++)
+        if (i == index) change(current.rows[i]) else current.rows[i],
     ]);
   }
 

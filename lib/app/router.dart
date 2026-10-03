@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../data/adapters/label_reader.dart';
 import '../data/adapters/shared_content.dart';
 import '../features/account/food_profile_screen.dart';
 import '../features/account/settings_screen.dart';
 import '../features/foods/barcode_scan_screen.dart';
-import '../features/foods/food_draft.dart';
 import '../features/foods/food_editor_screen.dart';
+import '../features/foods/ingredient_food_capture.dart';
 import '../features/foods/menu_import_screen.dart';
 import '../features/foods/merge_screen.dart';
 import '../features/foods/pack_size_screen.dart';
@@ -238,33 +237,40 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
     ),
     GoRoute(
       path: '/food/scan',
-      builder: (BuildContext context, GoRouterState state) => BarcodeScanScreen(
-        // Opened from a recipe ingredient rather than the food library: the
-        // scan ends by handing back the food it settled on (spec §5.5).
-        pickFood: state.uri.queryParameters['pick'] == '1',
-      ),
+      builder: (BuildContext context, GoRouterState state) =>
+          IngredientFoodRouteExtra.wrapRoute(
+            state.extra,
+            BarcodeScanScreen(
+              // Opened from a recipe ingredient rather than the food library:
+              // return the food it settled on (spec §5.5).
+              pickFood: state.uri.queryParameters['pick'] == '1',
+            ),
+          ),
     ),
     GoRoute(
       path: '/food/new',
-      builder: (BuildContext context, GoRouterState state) => FoodEditorScreen(
-        // A barcode scan pushes here with the food already filled in — the
-        // review step before anything is written (CLAUDE.md rule 4).
-        initialDraft: state.extra is FoodDraft
-            ? state.extra! as FoodDraft
-            : null,
-      ),
+      builder: (BuildContext context, GoRouterState state) =>
+          IngredientFoodRouteExtra.wrapRoute(
+            state.extra,
+            FoodEditorScreen(
+              // Typed ingredient capture and standalone scans both keep their
+              // draft for review before anything is written (CLAUDE.md rule 4).
+              initialDraft: IngredientFoodRouteExtra.draftFrom(state.extra),
+            ),
+          ),
     ),
     GoRoute(
       path: '/food/:id',
-      builder: (BuildContext context, GoRouterState state) => FoodEditorScreen(
-        foodId: state.pathParameters['id'],
-        // A label read on the way here, merged in on top of the food's own
-        // values rather than instead of them — the flagged-ingredient path,
-        // where the food has grams and the recipe wants cups.
-        initialLabel: state.extra is LabelReading
-            ? state.extra! as LabelReading
-            : null,
-      ),
+      builder: (BuildContext context, GoRouterState state) =>
+          IngredientFoodRouteExtra.wrapRoute(
+            state.extra,
+            FoodEditorScreen(
+              foodId: state.pathParameters['id'],
+              // Keep the food's existing servings beside the captured label,
+              // whether the caller supplies a wrapped or legacy bare reading.
+              initialLabel: IngredientFoodRouteExtra.labelFrom(state.extra),
+            ),
+          ),
     ),
     GoRoute(
       path: '/:section',

@@ -299,7 +299,35 @@ belongs to the Nutrition section.
 - Runs server-side (Edge Function → Claude API). Extracts into the standardized two-section format (ingredients + directions) plus detectable metadata (servings, times).
 - **Mandatory review screen** before saving: user confirms/edits extracted ingredients, steps, and metadata. **Low-confidence fields are highlighted** (e.g., an ambiguous "1/2 vs 12 tsp") so the user knows exactly what to double-check rather than scanning everything flat.
 - **Ingredient → nutrition matching (order):** first check **remembered matches** (`ingredient_match`), then **previously-used** foods, then a **best-guess automatch across all** OFF/USDA results. Chosen match is shown with its source and is one tap to change; genuinely ambiguous ones are flagged for review.
-- **Match review screen (the workhorse UI):** each ingredient row shows, compactly — matched food name, **source badge** (OFF / USDA / personal / manual), serving used, resulting macros, and a **confidence flag**. "Doesn't match anything" offers **inline lightweight manual entry** (promotable to a full food later). Correcting a match is **remembered** (`ingredient_match`) so the same string (e.g., "evoo") never needs fixing twice.
+- **Match review screen (the workhorse UI):** each ingredient row shows the
+  authored wording and amount, matched food, **source badge** (OFF / USDA /
+  personal / manual / AI estimate), serving basis, nutrition contribution and
+  confidence. **Search**, **Scan barcode**, explicit **Read label**, **Enter
+  nutrition** and **Skip for now** retain that context and return to the same
+  review with earlier decisions intact. Successful resolution advances to the
+  next unresolved group. *(Phase 2: UX-014, bounded UX-028.)*
+  Repeated normalized ingredient wording has one clearly labelled decision
+  group: show every authored line and amount and **Applies to N recipe lines**.
+  Choose, skip and remember apply to all those lines together, matching the
+  existing name-keyed recipe contract. Optional lines remain excluded.
+  **Apply reviewed N together** returns the selected recipe matches together.
+  **Remember for the household** is separate and unchecked by default for
+  each reviewed group; only checked wording is persisted in `ingredient_match`.
+  The ordinary single-ingredient picker retains its explicit explanation that
+  choosing remembers that wording. AI estimates remain deliberate opt-ins and
+  keep their provenance.
+  Capture context scrolls with the search/editor/scanner so full-size text does
+  not consume a fixed camera area. Cancelling capture returns to the unfinished
+  review. Failed manual saves and partial Apply failures retain entered values
+  and stable food identities for retry. A retry rechecks previously saved
+  foods and refuses deleted or modifier-only records without resurrecting them.
+  Label-read handoffs retain their originating person and household: an
+  identity change expires the continuation before another editor can open or
+  an old food can be written into the new household.
+  A food explicitly saved during capture
+  stays in the shared library if recipe review is later cancelled; Apply is
+  not a new atomic transaction across all those food saves. This adds no paid
+  AI operation beyond the existing user-selected Read label action.
 - **Missing data never blocks:** an ingredient with no nutrition match is included with what's known; the recipe is flagged as having **incomplete data** rather than blocking the save.
 - **Fail-soft:** on AI or network failure mid-import, input is preserved (saved as a draft) with a clear message and a retry — nothing the user entered/captured is lost.
 - **Image handling:** screenshots/photos are **resized/compressed before** being sent to the API (cheaper, faster); originals are **discarded after successful extraction**.

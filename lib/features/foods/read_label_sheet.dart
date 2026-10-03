@@ -7,6 +7,7 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../data/adapters/label_reader.dart';
 import '../../data/adapters/photo_picker.dart';
+import 'ingredient_food_capture.dart';
 import 'label_scan_controller.dart';
 
 /// Reads a nutrition label and/or a package size off up to two photos and
@@ -17,14 +18,24 @@ import 'label_scan_controller.dart';
 ///
 /// Nothing is saved here. The reading goes back to whoever asked, and lands
 /// in the food editor to be checked (CLAUDE.md rule 4).
-Future<LabelReading?> showReadLabelSheet(BuildContext context) =>
-    showModalBottomSheet<LabelReading>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      isDismissible: true,
-      builder: (BuildContext context) => const _ReadLabelSheet(),
-    );
+Future<LabelReading?> showReadLabelSheet(
+  BuildContext context, {
+  IngredientFoodCapture? capture,
+}) {
+  capture ??= IngredientFoodCaptureScope.of(context);
+  return showModalBottomSheet<LabelReading>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    isDismissible: true,
+    builder: (BuildContext context) => capture == null
+        ? const _ReadLabelSheet()
+        : IngredientFoodCaptureScope(
+            capture: capture,
+            child: const _ReadLabelSheet(),
+          ),
+  );
+}
 
 /// Whether this build can read labels at all.
 bool canReadLabels(WidgetRef ref) => ref.watch(labelReaderProvider) != null;
@@ -93,6 +104,11 @@ class _ReadLabelSheetState extends ConsumerState<_ReadLabelSheet> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
+                  if (IngredientFoodCaptureScope.of(context)
+                      case final capture?) ...[
+                    IngredientFoodBanner(capture: capture),
+                    const SizedBox(height: HearthSpacing.md),
+                  ],
                   Text('Read the label', style: context.text.sectionHeader),
                   const SizedBox(height: HearthSpacing.xs),
                   Text(

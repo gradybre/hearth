@@ -10,6 +10,7 @@ import '../../domain/format/serving_format.dart';
 import '../../domain/models/food.dart';
 import 'food_draft.dart';
 import 'food_search_controller.dart';
+import 'ingredient_food_capture.dart';
 
 /// Foods found beyond the household's own library (spec §5.5).
 ///
@@ -141,9 +142,12 @@ class _ExternalFood extends StatelessWidget {
   Future<void> _choose(BuildContext context) async {
     final String? saved = await context.push<String>(
       '/food/new',
-      extra: FoodDraft.fromLookup(match.food),
+      extra: IngredientFoodCaptureScope.routeExtra(
+        context,
+        draft: FoodDraft.fromLookup(match.food),
+      ),
     );
-    if (saved != null) onSaved?.call(saved);
+    if (context.mounted && saved != null) onSaved?.call(saved);
   }
 
   @override
@@ -195,7 +199,8 @@ class _ExternalFood extends StatelessWidget {
                         style: context.text.ingredient,
                       ),
                       const SizedBox(height: HearthSpacing.xxs),
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: <Widget>[
                           Text(
                             macros,
@@ -222,16 +227,27 @@ class _ExternalFood extends StatelessWidget {
                           ],
                         ],
                       ),
+                      if (MediaQuery.textScalerOf(context).scale(14) > 20) ...[
+                        const SizedBox(height: HearthSpacing.xs),
+                        Text(
+                          _sourceLabel,
+                          style: context.text.metadata.copyWith(
+                            color: colors.textMuted,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                const SizedBox(width: HearthSpacing.sm),
-                Text(
-                  _sourceLabel,
-                  style: context.text.metadata.copyWith(
-                    color: colors.textMuted,
+                if (MediaQuery.textScalerOf(context).scale(14) <= 20) ...[
+                  const SizedBox(width: HearthSpacing.sm),
+                  Text(
+                    _sourceLabel,
+                    style: context.text.metadata.copyWith(
+                      color: colors.textMuted,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
