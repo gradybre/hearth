@@ -32,9 +32,10 @@ import '../theme/hearth_typography.dart';
 /// What it will not do is print a zero. "0 of 28 g" claims the day had no
 /// fibre, when the truth is that nothing eaten was ever asked.
 class MinorNutrientBars extends StatelessWidget {
-  const MinorNutrientBars({required this.progress, super.key});
+  const MinorNutrientBars({required this.progress, this.onSelect, super.key});
 
   final DayProgress progress;
+  final ValueChanged<MinorNutrient>? onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +45,10 @@ class MinorNutrientBars extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         for (final MinorProgress nutrient in all) ...<Widget>[
-          _Bar(nutrient: nutrient),
+          _Bar(
+            nutrient: nutrient,
+            onTap: onSelect == null ? null : () => onSelect!(nutrient.nutrient),
+          ),
           if (nutrient != all.last) const SizedBox(height: HearthSpacing.sm),
         ],
       ],
@@ -53,9 +57,10 @@ class MinorNutrientBars extends StatelessWidget {
 }
 
 class _Bar extends StatelessWidget {
-  const _Bar({required this.nutrient});
+  const _Bar({required this.nutrient, this.onTap});
 
   final MinorProgress nutrient;
+  final VoidCallback? onTap;
 
   /// Thinner than a macro's. The difference in weight is the point.
   static const double _height = 4;
@@ -103,7 +108,10 @@ class _Bar extends StatelessWidget {
     // "— of 28 g" rather than "0 of 28 g". The dash is the honest character
     // for a number nobody has stated, and it keeps the target visible so the
     // row still says what it is for.
-    final String amounts = !nutrient.hasTarget
+    final String amounts =
+        nutrient.availability == SavedNutritionAvailability.unavailable
+        ? 'Unavailable'
+        : !nutrient.canCompare
         ? (nutrient.isKnown
               ? '${_number(nutrient.consumed!)} ${kind.unit}'
               : '—')
@@ -122,7 +130,9 @@ class _Bar extends StatelessWidget {
     // missing an ingredient's worth — and "1 of 2 did not say" on its own
     // implies the other fully did (spec §5.6).
     String? coverage;
-    if (nutrient.countedParts == 0) {
+    if (nutrient.availability == SavedNutritionAvailability.unavailable) {
+      coverage = 'saved nutrition unavailable';
+    } else if (nutrient.countedParts == 0) {
       coverage = 'nothing logged yet';
     } else if (!nutrient.isKnown) {
       coverage = nutrient.countedParts == 1
@@ -148,7 +158,60 @@ class _Bar extends StatelessWidget {
       coverage = coverage.isEmpty ? null : coverage;
     }
 
+    final Widget contents = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Wrap(
+          spacing: HearthSpacing.md,
+          runSpacing: HearthSpacing.xxs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: <Widget>[
+            Text(
+              kind.label,
+              style: text.metadata.copyWith(
+                color: colors.textSecondary,
+                decoration: onTap == null ? null : TextDecoration.underline,
+              ),
+            ),
+            Text(
+              amounts,
+              style: text.metadata.copyWith(color: colors.textMuted),
+            ),
+            if (indicator case final TargetIndicator flag)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(flag.icon, size: 12, color: fill),
+                  const SizedBox(width: HearthSpacing.xxs),
+                  Text(
+                    flag.shortLabel,
+                    style: text.metadata.copyWith(color: fill),
+                  ),
+                ],
+              ),
+          ],
+        ),
+        if (nutrient.canCompare) ...<Widget>[
+          const SizedBox(height: HearthSpacing.xxs),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(_height),
+            child: LinearProgressIndicator(
+              value: nutrient.barFill,
+              minHeight: _height,
+              backgroundColor: colors.progressTrack,
+              valueColor: AlwaysStoppedAnimation<Color>(fill),
+            ),
+          ),
+        ],
+        if (coverage case final String note) ...<Widget>[
+          const SizedBox(height: HearthSpacing.xxs),
+          Text(note, style: text.metadata.copyWith(color: colors.textMuted)),
+        ],
+      ],
+    );
+
     return Semantics(
+      key: onTap == null ? null : ValueKey<String>('minor-total-${kind.name}'),
       // One sentence for the row, so a screen reader is not read a label, a
       // number and a bar as three separate things.
       // A dash is punctuation, and most screen readers pass over it at
@@ -156,58 +219,26 @@ class _Bar extends StatelessWidget {
       // silent about the thing that matters. The word carries it instead.
       label:
           '${kind.label}, '
-          '${nutrient.isKnown ? amounts : 'not stated${nutrient.hasTarget ? ', of ${_number(nutrient.target)} ${kind.unit}' : ''}'}.'
+          '${nutrient.isKnown ? amounts : 'not stated${nutrient.canCompare ? ', of ${_number(nutrient.target)} ${kind.unit}' : ''}'}.'
           '${coverage == null ? '' : ' $coverage.'}'
           '${indicator == null ? '' : ' ${indicator.semanticLabel}'}',
+      hint: onTap == null
+          ? null
+          : 'Show logged meals contributing to this total',
+      button: onTap == null ? null : true,
+      onTap: onTap,
       excludeSemantics: true,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Wrap(
-            spacing: HearthSpacing.md,
-            runSpacing: HearthSpacing.xxs,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: <Widget>[
-              Text(
-                kind.label,
-                style: text.metadata.copyWith(color: colors.textSecondary),
-              ),
-              Text(
-                amounts,
-                style: text.metadata.copyWith(color: colors.textMuted),
-              ),
-              if (indicator case final TargetIndicator flag)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Icon(flag.icon, size: 12, color: fill),
-                    const SizedBox(width: HearthSpacing.xxs),
-                    Text(
-                      flag.shortLabel,
-                      style: text.metadata.copyWith(color: fill),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-          if (nutrient.hasTarget) ...<Widget>[
-            const SizedBox(height: HearthSpacing.xxs),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(_height),
-              child: LinearProgressIndicator(
-                value: nutrient.barFill,
-                minHeight: _height,
-                backgroundColor: colors.progressTrack,
-                valueColor: AlwaysStoppedAnimation<Color>(fill),
+      child: onTap == null
+          ? contents
+          : InkWell(
+              onTap: onTap,
+              excludeFromSemantics: true,
+              borderRadius: BorderRadius.circular(HearthRadius.sm),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                child: contents,
               ),
             ),
-          ],
-          if (coverage case final String note) ...<Widget>[
-            const SizedBox(height: HearthSpacing.xxs),
-            Text(note, style: text.metadata.copyWith(color: colors.textMuted)),
-          ],
-        ],
-      ),
     );
   }
 }

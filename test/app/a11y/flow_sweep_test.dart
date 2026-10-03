@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth/data/auth/local_auth_gateway.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
@@ -31,6 +32,7 @@ void main() {
 
   Recipe chilli() => aRecipe(
     id: 'r-chilli',
+    householdId: LocalAuthGateway.account.householdId,
     title: 'Slow chilli with all the trimmings',
     servings: 4,
     // A real contribution lets the detail → Shop review be reached; an

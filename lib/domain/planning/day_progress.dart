@@ -98,6 +98,10 @@ enum MacroTone {
   over,
 }
 
+/// Whether all logged meals still have their frozen nutrition. This is
+/// separate from an individual nutrient being unknown within a saved meal.
+enum SavedNutritionAvailability { complete, partial, unavailable }
+
 /// One macro's progress for a day.
 @immutable
 class MacroProgress {
@@ -106,27 +110,35 @@ class MacroProgress {
     required this.consumed,
     required this.target,
     required this.state,
+    this.availability = SavedNutritionAvailability.complete,
   });
 
   final MacroKind kind;
   final double consumed;
   final double target;
   final MacroProgressState state;
+  final SavedNutritionAvailability availability;
 
   bool get hasTarget => target > 0;
+  bool get hasKnownIntake =>
+      availability != SavedNutritionAvailability.unavailable;
+  bool get canCompare =>
+      hasTarget && availability == SavedNutritionAvailability.complete;
 
   /// What's left for the day. Negative once the target is passed, which is how
   /// the "142 g protein left" readout gets its over/under sign (spec §5.6).
-  double get remaining => target - consumed;
+  double? get remaining => availability == SavedNutritionAvailability.complete
+      ? target - consumed
+      : null;
 
   /// How far into the target, unclamped: 1.2 means 20% over.
-  double get fraction => target > 0 ? consumed / target : 0;
+  double get fraction => canCompare ? consumed / target : 0;
 
   /// Progress-bar fill, clamped to the bar's length. Use [fraction] and
   /// [state] to say anything about overshoot — a full bar alone can't.
   double get barFill => fraction.clamp(0.0, 1.0).toDouble();
 
-  bool get isOver => state == MacroProgressState.over;
+  bool get isOver => canCompare && state == MacroProgressState.over;
 
   /// Macros you are trying to *reach* rather than stay under.
   ///
@@ -147,7 +159,7 @@ class MacroProgress {
   /// [MacroProgressState] does the arithmetic; this does the judgement, and
   /// the two differ on protein — see [MacroTone].
   MacroTone get tone {
-    if (target <= 0 || fraction < goodFrom) return MacroTone.neutral;
+    if (!canCompare || fraction < goodFrom) return MacroTone.neutral;
     if (floors.contains(kind)) return MacroTone.good;
     return state == MacroProgressState.over ? MacroTone.over : MacroTone.good;
   }
@@ -171,6 +183,7 @@ class MinorProgress {
     this.unknownCount = 0,
     this.countedParts = 0,
     this.coverage = MinorCoverage.notRecorded,
+    this.availability = SavedNutritionAvailability.complete,
   });
 
   final MinorNutrient nutrient;
@@ -185,8 +198,11 @@ class MinorProgress {
 
   final double target;
   final MacroProgressState state;
+  final SavedNutritionAvailability availability;
 
   bool get hasTarget => target > 0;
+  bool get canCompare =>
+      hasTarget && availability == SavedNutritionAvailability.complete;
 
   /// How many of the things that counted said nothing about this nutrient.
   ///
@@ -219,14 +235,17 @@ class MinorProgress {
   /// **Null when nothing has said**, rather than the whole target. "2,300 mg
   /// left" on a day nobody asked about sodium is a number this cannot know,
   /// and returning one would be a `?? 0` wearing a different hat.
-  double? get remaining => consumed == null ? null : target - consumed!;
+  double? get remaining =>
+      consumed == null || availability != SavedNutritionAvailability.complete
+      ? null
+      : target - consumed!;
 
   double get fraction =>
-      target > 0 && consumed != null ? consumed! / target : 0;
+      canCompare && consumed != null ? consumed! / target : 0;
 
   double get barFill => fraction.clamp(0.0, 1.0).toDouble();
 
-  bool get isOver => state == MacroProgressState.over;
+  bool get isOver => canCompare && state == MacroProgressState.over;
 
   /// How this number should read, as against merely where it sits.
   ///
@@ -247,7 +266,7 @@ class MinorProgress {
   /// thing the budget exists to discourage.
   MacroTone get tone {
     // Nothing has said, so there is nothing to say about it either.
-    if (target <= 0 || consumed == null) return MacroTone.neutral;
+    if (!canCompare || consumed == null) return MacroTone.neutral;
     if (!nutrient.isFloor) {
       return state == MacroProgressState.over
           ? MacroTone.over
@@ -273,6 +292,7 @@ class DayProgress {
     required this.fat,
     this.unknownCounts = const <MinorNutrient, int>{},
     this.countedParts = 0,
+    this.missingSnapshotCount = 0,
     this.coverage = const NutrientCoverage.notRecorded(),
   });
 
@@ -287,10 +307,12 @@ class DayProgress {
     double tolerance = 0,
     Map<MinorNutrient, int> unknownCounts = const <MinorNutrient, int>{},
     int countedParts = 0,
+    int missingSnapshotCount = 0,
     NutrientCoverage coverage = const NutrientCoverage.notRecorded(),
   }) => DayProgress(
     unknownCounts: unknownCounts,
     countedParts: countedParts,
+    missingSnapshotCount: missingSnapshotCount,
     coverage: coverage,
     consumed: consumed,
     targets: targets,
@@ -299,20 +321,29 @@ class DayProgress {
       consumed.kcal,
       targets?.kcal ?? 0,
       tolerance,
+      _availability(countedParts, missingSnapshotCount),
     ),
     protein: _progress(
       MacroKind.protein,
       consumed.proteinG,
       targets?.proteinG ?? 0,
       tolerance,
+      _availability(countedParts, missingSnapshotCount),
     ),
     carbs: _progress(
       MacroKind.carbs,
       consumed.carbG,
       targets?.carbG ?? 0,
       tolerance,
+      _availability(countedParts, missingSnapshotCount),
     ),
-    fat: _progress(MacroKind.fat, consumed.fatG, targets?.fatG ?? 0, tolerance),
+    fat: _progress(
+      MacroKind.fat,
+      consumed.fatG,
+      targets?.fatG ?? 0,
+      tolerance,
+      _availability(countedParts, missingSnapshotCount),
+    ),
   );
 
   /// The same, from the parts rather than the total, so each bar can say how
@@ -325,8 +356,10 @@ class DayProgress {
     MacroTargets? targets,
     double tolerance = 0,
     Iterable<NutrientCoverage>? coverage,
+    int missingSnapshotCount = 0,
   }) {
     final List<Macros> all = parts.toList(growable: false);
+    assert(missingSnapshotCount >= 0 && missingSnapshotCount <= all.length);
     final List<NutrientCoverage> covers =
         coverage?.toList(growable: false) ??
         <NutrientCoverage>[
@@ -338,6 +371,7 @@ class DayProgress {
       targets: targets,
       tolerance: tolerance,
       countedParts: all.length,
+      missingSnapshotCount: missingSnapshotCount,
       // What each meal *contains* — an entry that said nothing at all.
       unknownCounts: <MinorNutrient, int>{
         for (final MinorNutrient nutrient in MinorNutrient.values)
@@ -364,6 +398,19 @@ class DayProgress {
   /// How many things counted towards the day, or zero when it was built from
   /// a total. Distinguishes "nothing logged" from "nothing knew".
   final int countedParts;
+
+  /// Logged entries whose entire frozen snapshot is unavailable. Their zero
+  /// contribution is only additive bookkeeping, never evidence of zero intake.
+  final int missingSnapshotCount;
+  SavedNutritionAvailability get availability =>
+      _availability(countedParts, missingSnapshotCount);
+
+  static SavedNutritionAvailability _availability(int count, int missing) =>
+      missing == 0
+      ? SavedNutritionAvailability.complete
+      : count > missing
+      ? SavedNutritionAvailability.partial
+      : SavedNutritionAvailability.unavailable;
 
   /// How much of the day's minor-nutrient totals those numbers speak for.
   ///
@@ -395,7 +442,9 @@ class DayProgress {
     // does not opt somebody into comparisons or nutrition judgments.
     final double target = targets?.forNutrient(nutrient) ?? 0;
     final MacroProgressState state;
-    if (eaten == null || target <= 0) {
+    if (eaten == null ||
+        target <= 0 ||
+        availability != SavedNutritionAvailability.complete) {
       state = MacroProgressState.under;
     } else if (eaten > target) {
       state = MacroProgressState.over;
@@ -413,6 +462,7 @@ class DayProgress {
       unknownCount: unknownCounts[nutrient] ?? 0,
       countedParts: countedParts,
       coverage: coverage.of(nutrient),
+      availability: availability,
     );
   }
 
@@ -438,10 +488,11 @@ class DayProgress {
     double consumed,
     double target,
     double tolerance,
+    SavedNutritionAvailability availability,
   ) {
     final double band = (target * tolerance).abs();
     final MacroProgressState state;
-    if (target <= 0) {
+    if (target <= 0 || availability != SavedNutritionAvailability.complete) {
       // No target set for this macro: report the number, claim nothing.
       state = MacroProgressState.under;
     } else if (consumed > target + band) {
@@ -456,6 +507,7 @@ class DayProgress {
       consumed: consumed,
       target: target,
       state: state,
+      availability: availability,
     );
   }
 }
