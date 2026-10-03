@@ -319,7 +319,12 @@ belongs to the Nutrition section.
   Capture context scrolls with the search/editor/scanner so full-size text does
   not consume a fixed camera area. Cancelling capture returns to the unfinished
   review. Failed manual saves and partial Apply failures retain entered values
-  and stable food identities for retry. A food explicitly saved during capture
+  and stable food identities for retry. A retry rechecks previously saved
+  foods and refuses deleted or modifier-only records without resurrecting them.
+  Label-read handoffs retain their originating person and household: an
+  identity change expires the continuation before another editor can open or
+  an old food can be written into the new household.
+  A food explicitly saved during capture
   stays in the shared library if recipe review is later cancelled; Apply is
   not a new atomic transaction across all those food saves. This adds no paid
   AI operation beyond the existing user-selected Read label action.

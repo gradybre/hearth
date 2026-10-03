@@ -666,3 +666,62 @@ one-third regression also verifies the unchanged 100 g draft amount and no
 recipe or diary writes. All 74 restaurant builder/variation checks pass after
 this last correction. The preceding full candidate passed 5,095 UTC tests,
 209 renders and 68 New York tests; the final gate is repeated after formatting.
+
+## Groups 15 and 19 merged — 2026-10-03
+
+The user explicitly requested that all approved changes be merged. This also
+resolved the public-repository publication approval. No feature approval for
+Groups 20–22 was inferred.
+
+Group 15 merged through [PR #133](https://github.com/gradybre/hearth/pull/133)
+as `2fbb96426267b28e4de6832b7bb23bebac1636b5`. The published head
+`83c24a5773c8d56e94b215eed99c55545bbb1546` was independently confirmed to
+match the cleared source and design review. Root's final checks passed: 5,096
+UTC tests, 209 render checks, 69 New York tests, clean formatting and analysis.
+Every GitHub check passed before merge. The merged tree is exactly the tested
+`5766c61a5d582d1b954fad341eb29f9f9ba9b575`.
+
+Group 19 merged through [PR #134](https://github.com/gradybre/hearth/pull/134)
+as `192a1307beb5b473c1e36ff7f38e8a309813d68d`. It was initially stacked
+on Group 15, then retargeted to main without changing reviewed head
+`1a0df30ae9b17e5c69e768da100f39b2bd818c63`. The published incremental
+diff matched the independent review. Root's final checks passed: 5,220 UTC
+tests, 263 render checks, 85 New York tests, clean formatting and analysis.
+Every GitHub check passed before merge. The merged tree is exactly the tested
+`fee16c3110e8aa1f998925debe9489c3e88985ab`.
+
+An independent merge audit verified that Groups 1–14, 17 and 18, the original
+UX review and the complete approval queue were already present in main,
+including branches delivered through squash merges. Group 16 remains the
+last approved implementation requiring integration and final release. The
+original workspace and its untracked research notes remain untouched.
+Native-device acceptance has not been performed.
+
+## Group 16 — production integration and review corrections
+
+The recipe editor now keeps the authored ingredient and amount through search,
+barcode capture, explicit label reading and manual entry, including the
+flagged-food repair paths. Review expands repeated normalized wording across
+recipe sections, explains every affected line, and remembers household wording
+only for explicitly checked groups. Existing standalone food-route payloads
+and the merged restaurant-variation behavior remain supported. The repair
+sheet scrolls at large text sizes with all six choices reachable.
+
+Executed production-route regressions established the integration gaps before
+their corrections, including cross-section grouping and the small-screen
+3× repair menu. Fresh independent source review then identified two further
+capture/retry boundaries. The coordinator independently reproduced six failing
+cases with five passing controls before their fixes: four pending-label
+handoffs after an identity change and two partial-Apply retries after a saved
+food became unavailable. Four additional away-and-back identity cases also
+failed before the correction. A capture continuation now expires permanently
+when its person, household or repository changes; a retry rechecks saved food
+IDs without recreating deleted foods. The corrected production and identity/
+retry set passes all 27 focused checks, and all 227 adjacent match, capture,
+router and restaurant-variation checks pass. Independent source review closes
+both findings. Five coordinator-run visual checks also verify every repair
+choice across phone, desktop and light/dark 3× layouts.
+
+Final source/design clearance and complete coordinator-run gates are recorded
+with the release pull request. No native camera, photo permission, live AI or
+physical-device acceptance is claimed. Groups 20–22 remain unanswered.

@@ -150,7 +150,10 @@ void main() {
   ) async {
     final db = await _openEditor(tester, lines: '100 g olive oil, divided');
     await _tap(tester, find.text('Add a section'));
-    await tester.enterText(_ingredientField.last, '2 tbsp olive oil, for sauce');
+    await tester.enterText(
+      _ingredientField.last,
+      '2 tbsp olive oil, for sauce',
+    );
     await pumpFrames(tester, frames: 20);
     await _tap(tester, find.textContaining('Find nutrition for').last);
     expect(find.text('Applies to 2 recipe lines'), findsOneWidget);
@@ -162,7 +165,10 @@ void main() {
     );
     expect(banner.capture.recipeLineCount, 2);
     expect(banner.capture.authoredLine, contains('100 g olive oil, divided'));
-    expect(banner.capture.authoredLine, contains('2 tbsp olive oil, for sauce'));
+    expect(
+      banner.capture.authoredLine,
+      contains('2 tbsp olive oil, for sauce'),
+    );
     await _tap(tester, find.text('Save'));
     await _tap(tester, find.byKey(const Key('match-review-apply')));
     final saved = await _saveRecipe(tester, db);

@@ -18,6 +18,7 @@ import '../../domain/foods/produce_plu.dart';
 import '../../domain/models/food.dart';
 import 'barcode_lookup_controller.dart';
 import 'external_food_results.dart';
+import 'food_capture_guard.dart';
 import 'food_draft.dart';
 import 'food_search_controller.dart';
 import 'ingredient_food_capture.dart';
@@ -133,31 +134,36 @@ class _BarcodeScanScreenState extends ConsumerState<BarcodeScanScreen> {
   /// the typing removed, and it lands in the same editor to be checked
   /// (CLAUDE.md rule 4).
   Future<void> _readLabelWithNoBarcode() async {
-    // The system camera is about to take over the screen, and two cameras
-    // competing for the device is a stall the user reads as a freeze.
-    await _pauseCamera();
-    if (!mounted) return;
+    final FoodCaptureGuard guard = FoodCaptureGuard.capture(context);
+    try {
+      // The system camera is about to take over the screen, and two cameras
+      // competing for the device is a stall the user reads as a freeze.
+      await _pauseCamera();
+      if (!mounted || !guard.canContinue(context)) return;
 
-    final LabelReading? reading = await showReadLabelSheet(context);
-    if (!mounted) return;
-    if (reading == null) {
+      final LabelReading? reading = await showReadLabelSheet(context);
+      if (!mounted || !guard.canContinue(context)) return;
+      if (reading == null) {
+        await _resumeCamera();
+        return;
+      }
+
+      final String? saved = await context.push<String>(
+        '/food/new',
+        extra: IngredientFoodCaptureScope.routeExtra(
+          context,
+          draft: FoodDraft.blank().withLabel(reading),
+        ),
+      );
+      if (!mounted || !guard.canContinue(context)) return;
+      if (widget.pickFood && saved != null) {
+        Navigator.of(context).pop(saved);
+        return;
+      }
       await _resumeCamera();
-      return;
+    } finally {
+      guard.close();
     }
-
-    final String? saved = await context.push<String>(
-      '/food/new',
-      extra: IngredientFoodCaptureScope.routeExtra(
-        context,
-        draft: FoodDraft.blank().withLabel(reading),
-      ),
-    );
-    if (!mounted) return;
-    if (widget.pickFood && saved != null) {
-      Navigator.of(context).pop(saved);
-      return;
-    }
-    await _resumeCamera();
   }
 
   Future<void> _pauseCamera() async {
@@ -830,22 +836,29 @@ class _ResultPanel extends ConsumerWidget {
     WidgetRef ref,
     String barcode,
   ) async {
-    final LabelReading? reading = await showReadLabelSheet(context);
-    if (reading == null || !context.mounted) return;
+    final FoodCaptureGuard guard = FoodCaptureGuard.capture(context);
+    try {
+      final LabelReading? reading = await showReadLabelSheet(context);
+      if (reading == null || !context.mounted || !guard.canContinue(context)) {
+        return;
+      }
 
-    final String? saved = await context.push<String>(
-      '/food/new',
-      extra: IngredientFoodCaptureScope.routeExtra(
-        context,
-        draft: FoodDraft.forBarcode(barcode).withLabel(reading),
-      ),
-    );
-    if (!context.mounted) return;
-    if (pickFood && saved != null) {
-      Navigator.of(context).pop(saved);
-      return;
+      final String? saved = await context.push<String>(
+        '/food/new',
+        extra: IngredientFoodCaptureScope.routeExtra(
+          context,
+          draft: FoodDraft.forBarcode(barcode).withLabel(reading),
+        ),
+      );
+      if (!context.mounted || !guard.canContinue(context)) return;
+      if (pickFood && saved != null) {
+        Navigator.of(context).pop(saved);
+        return;
+      }
+      onClear();
+    } finally {
+      guard.close();
     }
-    onClear();
   }
 
   Future<void> _addByHand(BuildContext context, String barcode) async {
@@ -1174,26 +1187,45 @@ class _Found extends ConsumerWidget {
   /// not. [FoodDraft.withLabel] fills blanks only, so nothing the database
   /// knew is overwritten by the photo.
   Future<void> _readLabel(BuildContext context) async {
-    final LabelReading? reading = await showReadLabelSheet(context);
-    if (reading == null || !context.mounted) return;
-    await _review(context, reading: reading);
+    final FoodCaptureGuard guard = FoodCaptureGuard.capture(context);
+    try {
+      final LabelReading? reading = await showReadLabelSheet(context);
+      if (reading == null || !context.mounted || !guard.canContinue(context)) {
+        return;
+      }
+      await _review(context, reading: reading, captureGuard: guard);
+    } finally {
+      guard.close();
+    }
   }
 
-  Future<void> _review(BuildContext context, {LabelReading? reading}) async {
-    final FoodDraft draft = FoodDraft.fromLookup(match.food);
-    final String? saved = await context.push<String>(
-      '/food/new',
-      extra: IngredientFoodCaptureScope.routeExtra(
-        context,
-        draft: reading == null ? draft : draft.withLabel(reading),
-      ),
-    );
-    if (!context.mounted) return;
-    if (pickFood && saved != null) {
-      Navigator.of(context).pop(saved);
-      return;
+  Future<void> _review(
+    BuildContext context, {
+    LabelReading? reading,
+    FoodCaptureGuard? captureGuard,
+  }) async {
+    // Label review must keep the scope captured before reading the photos.
+    final FoodCaptureGuard guard =
+        captureGuard ?? FoodCaptureGuard.capture(context);
+    try {
+      if (!context.mounted || !guard.canContinue(context)) return;
+      final FoodDraft draft = FoodDraft.fromLookup(match.food);
+      final String? saved = await context.push<String>(
+        '/food/new',
+        extra: IngredientFoodCaptureScope.routeExtra(
+          context,
+          draft: reading == null ? draft : draft.withLabel(reading),
+        ),
+      );
+      if (!context.mounted || !guard.canContinue(context)) return;
+      if (pickFood && saved != null) {
+        Navigator.of(context).pop(saved);
+        return;
+      }
+      onReviewed();
+    } finally {
+      guard.close();
     }
-    onReviewed();
   }
 }
 

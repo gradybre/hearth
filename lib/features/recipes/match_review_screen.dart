@@ -219,15 +219,26 @@ class _MatchReviewScreenState extends ConsumerState<_MatchReviewScreen> {
           food = existing;
         } else {
           final key = '$i:${row.food?.id ?? 'estimate'}';
-          food = _prepared.putIfAbsent(
+          final Food prepared = _prepared.putIfAbsent(
             key,
             () => row.food != null
                 ? FoodDraft.fromLookup(row.food!).toFood()
                 : _foodFromEstimate(row),
           );
-          if (!_saved.contains(food.id)) {
-            await repository.save(food);
-            _saved.add(food.id);
+          if (_saved.contains(prepared.id)) {
+            // A partial Apply can wait here through a deletion or correction
+            // elsewhere. Keep its stable ID, but never treat the cached draft
+            // as proof that the saved food is still usable or save it again.
+            final Food? existing = await repository.byId(prepared.id);
+            if (!mounted || !_canDeliver) return;
+            if (existing == null || existing.isDeleted || existing.isModifier) {
+              throw StateError('The selected food is no longer available.');
+            }
+            food = existing;
+          } else {
+            await repository.save(prepared);
+            _saved.add(prepared.id);
+            food = prepared;
           }
         }
         if (!mounted || !_canDeliver) return;
