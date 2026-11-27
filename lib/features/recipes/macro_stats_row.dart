@@ -92,11 +92,11 @@ class MacroStatsLine extends StatelessWidget {
 /// The three minor nutrients as one quiet line, or nothing at all.
 ///
 /// Nothing at all is the common case and the right one: a food nobody has
-/// told Hearth about has no fibre to report, and an empty "Fibre —" would be
+/// told Hearth about has no fiber to report, and an empty "Fiber —" would be
 /// a row of dashes on most recipes (spec §5.6).
 ///
 /// [partialFor] names, per nutrient, how much of the total was actually seen.
-/// A partial total looks exactly like a whole one, which is how "12 g fibre"
+/// A partial total looks exactly like a whole one, which is how "12 g fiber"
 /// off half a recipe becomes a number somebody trusts.
 class MinorNutrientsLine extends StatelessWidget {
   const MinorNutrientsLine({required this.macros, this.partialFor, super.key});
@@ -145,7 +145,7 @@ class MinorNutrientsLine extends StatelessWidget {
   /// Whole numbers, except where rounding would erase the value entirely.
   ///
   /// The four macros round flat, which is fine at their magnitudes. Half a
-  /// gram of fibre rounding to "0 g" would report the opposite of the truth,
+  /// gram of fiber rounding to "0 g" would report the opposite of the truth,
   /// so anything under ten keeps a decimal.
   static String _number(double value) {
     if (value >= 10 || value == value.roundToDouble()) {

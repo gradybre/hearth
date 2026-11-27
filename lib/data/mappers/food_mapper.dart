@@ -76,7 +76,7 @@ abstract final class FoodMapper {
             proteinG: row.proteinG,
             carbG: row.carbG,
             fatG: row.fatG,
-            // No `?? 0`. A serving that has never been told its fibre says so
+            // No `?? 0`. A serving that has never been told its fiber says so
             // by staying null all the way back out (spec §5.6).
             fiberG: row.fiberG,
             sodiumMg: row.sodiumMg,

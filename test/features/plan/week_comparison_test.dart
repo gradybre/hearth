@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/shell/launch_target.dart';
+import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/planning/day_progress.dart';
 import 'package:hearth/domain/planning/meal_plan.dart';
 import 'package:hearth/domain/planning/week.dart';
+import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/app_harness.dart';
+import '../../support/fixtures.dart';
 import '../../support/swept_surfaces.dart';
 
 /// The week as a comparison rather than a day selector (review §7.2).
@@ -63,17 +66,33 @@ void main() {
     };
   }
 
+  /// A food a plan can actually project from, so "+600 planned" is a figure
+  /// the screen computed rather than one the test asserted into being.
+  Food chili() => aFood(
+    'Chili',
+    id: 'f-chili',
+    servingOptions: <ServingOption>[
+      aServing(
+        amount: 1,
+        unit: Units.item,
+        macros: const Macros(kcal: 600, proteinG: 40, carbG: 50, fatG: 20),
+      ),
+    ],
+  );
+
   Future<void> openWeek(
     WidgetTester tester, {
     Size size = const Size(390, 844),
     double scale = 1,
     Map<DateTime, List<MealPlanEntry>>? week,
+    List<Food> foods = const <Food>[],
   }) async {
     await pumpHearthApp(
       tester,
       size: size,
       textScale: scale,
       launchTarget: LaunchTarget.today,
+      foods: foods,
       weekEntries: week ?? weekWithAFast(),
       targets: const MacroTargets(
         kcal: 2200,
@@ -95,6 +114,200 @@ void main() {
       find.byKey(const ValueKey<String>('week-content-nutrition')),
     );
   }
+
+  group('every row carries its figures, logged or not', () {
+    /// Brendan's report: the week's figures only appeared once something had
+    /// been logged. An untouched day drew a dash where its calories go and
+    /// dropped its protein figure entirely, so on a Monday the column the
+    /// week exists to be read down was seven dashes, filling in a day at a
+    /// time as the week went on.
+    ///
+    /// A zero *is* a claim — that reasoning was right, and it is answered by
+    /// saying which kind of day it was in words rather than by withholding
+    /// the number. The same rule §6.3 applies to colour.
+    testWidgets('an untouched week still shows its calories', (
+      WidgetTester tester,
+    ) async {
+      await openWeek(tester, week: const <DateTime, List<MealPlanEntry>>{});
+
+      expect(find.text('0 / 2200 kcal'), findsNWidgets(7));
+      expect(find.text('—'), findsNothing);
+    });
+
+    testWidgets('and says the protein out loud, not only on screen', (
+      WidgetTester tester,
+    ) async {
+      // The row hand-builds one semantics label and excludes its children,
+      // so a figure that is not named in it is a figure a screen reader
+      // cannot reach. §6.3 asks for labels on data, not only on controls —
+      // and protein went from appearing on logged days alone to appearing on
+      // most of the column, which is a lot of newly silent numbers.
+      await openWeek(tester, week: const <DateTime, List<MealPlanEntry>>{});
+
+      expect(
+        find.bySemanticsLabel(RegExp('Protein 0 of 150 grams[.]')),
+        findsNWidgets(7),
+      );
+    });
+
+    testWidgets('and its protein, which is the number this house steers by', (
+      WidgetTester tester,
+    ) async {
+      await openWeek(tester, week: const <DateTime, List<MealPlanEntry>>{});
+
+      expect(find.text('P 0/150'), findsNWidgets(7));
+    });
+
+    testWidgets('and still tells a day not eaten yet from a fast', (
+      WidgetTester tester,
+    ) async {
+      // The figures being equal is the whole reason the words have to carry
+      // the difference: 0 of 2,200 is what both days show.
+      final List<DateTime> days = weekOf(monday);
+      await openWeek(
+        tester,
+        week: <DateTime, List<MealPlanEntry>>{
+          days[0]: <MealPlanEntry>[logged(days[0], 'e-fast', Macros.zero)],
+        },
+      );
+
+      expect(find.text('0 / 2200 kcal'), findsNWidgets(7));
+      expect(find.text('logged as nothing'), findsOneWidget);
+      expect(find.text('nothing logged'), findsNWidgets(6));
+    });
+
+    testWidgets(
+      'and a planned day says what it has eaten and what is left to',
+      (WidgetTester tester) async {
+        // A day that has been logged *and* still has a plan on it. That is
+        // the case this change actually repairs: a planned-only day showed
+        // its projection before, but a logged day with a dinner still to come
+        // showed no projection at all, and asserting on the planned-only
+        // state would have passed against the old code.
+        final List<DateTime> days = weekOf(monday);
+        await openWeek(
+          tester,
+          foods: <Food>[chili()],
+          week: <DateTime, List<MealPlanEntry>>{
+            days[0]: <MealPlanEntry>[
+              logged(
+                days[0],
+                'e-breakfast',
+                const Macros(kcal: 500, proteinG: 30, carbG: 60, fatG: 15),
+              ),
+              MealPlanEntry(
+                id: 'e-planned',
+                dayId: 'day-${days[0].day}',
+                slot: MealSlot.dinner,
+                refType: PlanRefType.food,
+                refId: 'f-chili',
+                servings: 1,
+              ),
+            ],
+          },
+        );
+
+        // The breakfast is not lost to the plan, and the plan is not lost to
+        // the breakfast.
+        expect(find.text('500 / 2200 kcal'), findsOneWidget);
+        expect(find.text('P 30/150'), findsOneWidget);
+        expect(find.text('+600 planned'), findsOneWidget);
+        expect(find.text('1 logged'), findsOneWidget);
+      },
+    );
+
+    testWidgets('and a planned-only day shows the plan beside a zero', (
+      WidgetTester tester,
+    ) async {
+      final List<DateTime> days = weekOf(monday);
+      await openWeek(
+        tester,
+        foods: <Food>[chili()],
+        week: <DateTime, List<MealPlanEntry>>{
+          days[0]: <MealPlanEntry>[
+            MealPlanEntry(
+              id: 'e-planned',
+              dayId: 'day-${days[0].day}',
+              slot: MealSlot.dinner,
+              refType: PlanRefType.food,
+              refId: 'f-chili',
+              servings: 1,
+            ),
+          ],
+        },
+      );
+
+      expect(find.text('0 / 2200 kcal'), findsNWidgets(7));
+      expect(find.text('+600 planned'), findsOneWidget);
+      expect(find.text('nothing logged yet'), findsOneWidget);
+    });
+
+    testWidgets('and a day with no saved nutrition still says what is '
+        'planned, without inventing what was eaten', (
+      WidgetTester tester,
+    ) async {
+      // The one row that shows a figure next to "unavailable". The plan is
+      // knowable even when the history is not, so the projection stays —
+      // but nothing fabricates an intake or a protein figure to sit with it.
+      final List<DateTime> days = weekOf(monday);
+      await openWeek(
+        tester,
+        foods: <Food>[chili()],
+        week: <DateTime, List<MealPlanEntry>>{
+          days[0]: <MealPlanEntry>[
+            MealPlanEntry(
+              id: 'e-no-snapshot',
+              dayId: 'day-${days[0].day}',
+              slot: MealSlot.breakfast,
+              refType: PlanRefType.food,
+              refId: 'f-chili',
+              servings: 1,
+              isPlanned: false,
+              isLogged: true,
+              loggedAt: days[0],
+            ),
+            MealPlanEntry(
+              id: 'e-planned',
+              dayId: 'day-${days[0].day}',
+              slot: MealSlot.dinner,
+              refType: PlanRefType.food,
+              refId: 'f-chili',
+              servings: 1,
+            ),
+          ],
+        },
+      );
+
+      expect(find.text('Saved nutrition unavailable'), findsOneWidget);
+      expect(find.text('+600 planned'), findsOneWidget);
+      // No intake figure and no protein figure on that row: six other rows
+      // carry theirs, and this one has nothing to put against a target.
+      expect(find.text('0 / 2200 kcal'), findsNWidgets(6));
+      expect(find.text('P 0/150'), findsNWidgets(6));
+    });
+
+    testWidgets('but with no target at all a zero is still withheld', (
+      WidgetTester tester,
+    ) async {
+      // The corner the old dash was right about. "0 / 2200 kcal" is progress
+      // against something; a bare "0 kcal" on a day nobody has touched is an
+      // assertion about the food, with nothing to frame it.
+      await pumpHearthApp(
+        tester,
+        launchTarget: LaunchTarget.today,
+        weekEntries: const <DateTime, List<MealPlanEntry>>{},
+        selectedDate: thursday,
+      );
+      await pumpFrames(tester, frames: 12);
+      await SweepTools(tester).planView('Week');
+      await SweepTools(tester)
+          .reach(find.byKey(const ValueKey<String>('week-content-nutrition')));
+
+      expect(find.text('—'), findsNWidgets(7));
+      expect(find.textContaining('0 kcal'), findsNothing);
+      expect(find.text('nothing logged'), findsNWidgets(7));
+    });
+  });
 
   group('a day logged as nothing is a logged day', () {
     testWidgets('it counts in the denominator', (WidgetTester tester) async {
@@ -226,6 +439,12 @@ void main() {
         },
       );
 
+      // '+0 planned', not 'planned 0 kcal': the projection moved beside the
+      // eaten figure and took its wording with it. Left as the old string
+      // this assertion could not fail, and the regression it was written for
+      // — dropping the `> 0` guard in `_plannedText` — would have walked
+      // straight through it.
+      expect(find.textContaining('+0 planned'), findsNothing);
       expect(find.textContaining('planned 0'), findsNothing);
       expect(find.textContaining('nothing logged yet'), findsOneWidget);
     });

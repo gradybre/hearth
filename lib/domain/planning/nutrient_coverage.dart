@@ -5,7 +5,7 @@ import '../models/macros.dart';
 /// How much of a total a nutrient's number actually speaks for (spec §5.6).
 ///
 /// A subtotal looks the same however much of the meal it covers. Five grams
-/// of fibre from a recipe whose every ingredient stated its fibre, and five
+/// of fiber from a recipe whose every ingredient stated its fiber, and five
 /// grams from one whose second ingredient never said, are the same number and
 /// a different fact — and only one of them supports "you have had five grams".
 ///
@@ -165,7 +165,7 @@ class NutrientCoverage {
       // What this reader could not make sense of, kept so writing back cannot
       // erase it. Reading tolerantly and then rewriting `{}` would be a
       // slower way of destroying the same thing: a newer client saying
-      // "estimated" for the fibre, plus a sodium this version *can* read,
+      // "estimated" for the fiber, plus a sodium this version *can* read,
       // would come back with both gone (§4).
       <String, Object?>{
         // Any key that is not one of this version's three, whatever its

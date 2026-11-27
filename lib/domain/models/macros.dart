@@ -3,9 +3,9 @@ import 'package:meta/meta.dart';
 /// The four tracked macros (spec §5.6): calories, protein, carbohydrate, fat,
 /// plus three optional minor nutrients.
 ///
-/// The four are always known and default to zero. Fibre, sodium and
-/// cholesterol are **nullable, and null means unknown** — a food with no fibre
-/// data is not a food with no fibre. Everything below that treats them
+/// The four are always known and default to zero. Fiber, sodium and
+/// cholesterol are **nullable, and null means unknown** — a food with no fiber
+/// data is not a food with no fiber. Everything below that treats them
 /// differently from the four follows from that one distinction, and a careless
 /// `?? 0` anywhere in a mapper turns a missing number into a wrong one.
 ///
@@ -32,7 +32,7 @@ class Macros {
   final double carbG;
   final double fatG;
 
-  /// Grams of dietary fibre, or null when the source did not say.
+  /// Grams of dietary fiber, or null when the source did not say.
   final double? fiberG;
 
   /// **Milligrams** of sodium, or null. Open Food Facts reports sodium in
@@ -90,7 +90,7 @@ class Macros {
   /// Adds two values where **either** side knows one.
   ///
   /// Null only when neither did. The alternative — one unmatched ingredient
-  /// poisoning a whole recipe's fibre to null — would leave these blank
+  /// poisoning a whole recipe's fiber to null — would leave these blank
   /// essentially always, which is the same as not having them. §4's standing
   /// rule is that incomplete data flags rather than blocks, and a partial
   /// total that says it is partial is the useful shape of that here.
@@ -175,12 +175,12 @@ enum MacroKind { calories, protein, carbs, fat }
 /// nullable, and [dailyValue] below is the fallback when nobody has set one.
 ///
 /// They stay separate because they do not behave like the four. [isFloor]
-/// is the reason: fibre is something to reach and the other two are budgets
+/// is the reason: fiber is something to reach and the other two are budgets
 /// to stay under, where every member of [MacroKind] fills the same way. An
 /// enum that mixed them would make that distinction somebody's job to
 /// remember.
 enum MinorNutrient {
-  fiber('Fibre', 'g'),
+  fiber('Fiber', 'g'),
   sodium('Sodium', 'mg'),
   cholesterol('Cholesterol', 'mg');
 
@@ -189,7 +189,7 @@ enum MinorNutrient {
   /// What the nutrient is called on screen.
   final String label;
 
-  /// The unit it is stored and displayed in — grams for fibre, milligrams for
+  /// The unit it is stored and displayed in — grams for fiber, milligrams for
   /// the other two. Shown always, because "200 sodium" means nothing.
   final String unit;
 
@@ -197,7 +197,7 @@ enum MinorNutrient {
   /// under (spec §5.6).
   ///
   /// The three do not point the same way, and a screen that treated them
-  /// alike would be wrong about two of them. Fibre is something to get to —
+  /// alike would be wrong about two of them. Fiber is something to get to —
   /// 28 g is an achievement. Sodium and cholesterol are budgets, and passing
   /// one is the thing you were trying not to do. Same distinction the four
   /// macros already make between protein and the rest.

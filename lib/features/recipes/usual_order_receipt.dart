@@ -246,7 +246,7 @@ class UsualOrderNutrients extends StatelessWidget {
       ('Protein', m?.proteinG, 'g'),
       ('Carbs', m?.carbG, 'g'),
       ('Fat', m?.fatG, 'g'),
-      ('Fibre', m?.fiberG, 'g'),
+      ('Fiber', m?.fiberG, 'g'),
       ('Sodium', m?.sodiumMg, 'mg'),
       ('Cholesterol', m?.cholesterolMg, 'mg'),
     ];
@@ -276,7 +276,7 @@ String _number(double value) =>
     value.toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '');
 
 Set<String> _partial(RecipeMacros nutrition) => <String>{
-  if (nutrition.unknownCountFor(MinorNutrient.fiber) > 0) 'Fibre',
+  if (nutrition.unknownCountFor(MinorNutrient.fiber) > 0) 'Fiber',
   if (nutrition.unknownCountFor(MinorNutrient.sodium) > 0) 'Sodium',
   if (nutrition.unknownCountFor(MinorNutrient.cholesterol) > 0) 'Cholesterol',
 };

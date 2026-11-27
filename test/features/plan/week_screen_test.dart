@@ -114,6 +114,14 @@ void main() {
       // logged anything. A day logged as nothing would read differently.
       expect(find.text('nothing logged'), findsNWidgets(7));
       expect(find.text('logged as nothing'), findsNothing);
+      // The zeros the title is about. This harness sets no targets, and a
+      // zero with nothing to measure it against is the claim the dash exists
+      // to avoid — so the dash stays here even though a week *with* targets
+      // now carries its figures on every row. Asserted rather than assumed:
+      // the title said "rather than showing zeros" while nothing in the test
+      // would have noticed seven of them appearing.
+      expect(find.text('—'), findsNWidgets(7));
+      expect(find.textContaining('kcal'), findsNothing);
     });
 
     testWidgets('tapping a day selects it without leaving the week', (

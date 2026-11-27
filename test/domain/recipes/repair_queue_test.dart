@@ -129,7 +129,7 @@ void main() {
 
       expect(queue.recipes, isEmpty);
       expect(queue.outstanding, 0);
-      // Not `isEmpty`: the flour states no fibre, sodium or cholesterol, so
+      // Not `isEmpty`: the flour states no fiber, sodium or cholesterol, so
       // it is on the quiet list. Nothing is *wrong* with this recipe, which
       // is what `outstanding` is for.
       expect(queue.silent, hasLength(1));

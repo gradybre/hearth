@@ -102,7 +102,7 @@ abstract final class PlanMapper {
         carbG: _double(decoded['carb_g']),
         fatG: _double(decoded['fat_g']),
         // No `_double`, which answers 0 for a missing key. An older snapshot
-        // written before this carried them says nothing about fibre, and
+        // written before this carried them says nothing about fiber, and
         // nothing is not none — a zero here would put a claim into history
         // that nobody ever made.
         fiberG: _nullableDouble(decoded['fiber_g']),
@@ -325,7 +325,7 @@ abstract final class PlanMapper {
   /// Null for anything that is not a number, including a key that is not
   /// there. The four above fall back to zero because a snapshot without
   /// calories is a broken snapshot; the minor three do not, because a
-  /// snapshot without fibre is an ordinary one (spec §5.6).
+  /// snapshot without fiber is an ordinary one (spec §5.6).
   static double? _nullableDouble(Object? value) =>
       value is num ? value.toDouble() : null;
 

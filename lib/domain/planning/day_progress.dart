@@ -191,7 +191,7 @@ class MinorProgress {
   /// **Null when nothing that counted has stated a value.**
   ///
   /// Not zero, and the difference is the whole of §5.6: a bar reading "0 of
-  /// 28 g" claims the day had no fibre, when the truth is that nothing eaten
+  /// 28 g" claims the day had no fiber, when the truth is that nothing eaten
   /// has ever been asked. Those are different statements and only one of them
   /// is true.
   final double? consumed;
@@ -207,7 +207,7 @@ class MinorProgress {
   /// How many of the things that counted said nothing about this nutrient.
   ///
   /// A running total is only as good as its coverage, and a partial one looks
-  /// exactly like a whole one on screen — which is how "12 g of fibre" from
+  /// exactly like a whole one on screen — which is how "12 g of fiber" from
   /// two foods out of six becomes a number somebody trusts.
   final int unknownCount;
 
@@ -229,7 +229,7 @@ class MinorProgress {
   /// True when the number is real but does not account for everything eaten.
   bool get isPartial => isKnown && coverage == MinorCoverage.partial;
 
-  /// What is left. For fibre that is what remains to get; for sodium and
+  /// What is left. For fiber that is what remains to get; for sodium and
   /// cholesterol it is what remains to spend.
   ///
   /// **Null when nothing has said**, rather than the whole target. "2,300 mg
@@ -380,7 +380,7 @@ class DayProgress {
               .length,
       },
       // And what each meal *covers*, which is the finer question. An entry can
-      // state a fibre total and still be missing an ingredient's worth of it;
+      // state a fiber total and still be missing an ingredient's worth of it;
       // counting entries could never see that (R06).
       coverage: NutrientCoverage.sum(covers),
     );
@@ -415,7 +415,7 @@ class DayProgress {
   /// How much of the day's minor-nutrient totals those numbers speak for.
   ///
   /// Finer than [unknownCounts], which can only see a meal that said nothing
-  /// at all. A recipe missing one ingredient's fibre sums to a real number and
+  /// at all. A recipe missing one ingredient's fiber sums to a real number and
   /// reads as knowing; only its coverage says the total is a floor.
   final NutrientCoverage coverage;
 

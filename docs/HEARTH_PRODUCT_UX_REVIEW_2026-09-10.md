@@ -203,7 +203,7 @@ Today · Thu 10 Sep                    [Calendar] [More]
 [Day | Week]
 2,100 kcal left                       100 / 2,200 kcal
 Protein …       Carbs …       Fat …
-Fibre …         Sodium …      Cholesterol …    [Details]
+Fiber …         Sodium …      Cholesterol …    [Details]
 
 Breakfast                                  [+ Add]
 Greek yogurt · 170 g                  100 kcal  [⋯]

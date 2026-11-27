@@ -4,8 +4,8 @@ import 'package:test/test.dart';
 
 /// Where the three minor nutrients stand against their targets (spec §5.6).
 ///
-/// The distinction the whole thing turns on: **fibre is a floor and the other
-/// two are ceilings.** Reaching 28 g of fibre is an achievement; reaching
+/// The distinction the whole thing turns on: **fiber is a floor and the other
+/// two are ceilings.** Reaching 28 g of fiber is an achievement; reaching
 /// 2,300 mg of sodium is the thing you were trying not to do. A screen that
 /// treated them alike would be wrong about two of the three.
 void main() {
@@ -21,11 +21,11 @@ void main() {
 
   group('which target it measures against', () {
     test('the Daily Value, when nobody has set one', () {
-      final MinorProgress fibre = dayOf(const Macros(fiberG: 14))
+      final MinorProgress fiber = dayOf(const Macros(fiberG: 14))
           .minor(MinorNutrient.fiber);
 
-      expect(fibre.target, 28);
-      expect(fibre.fraction, closeTo(0.5, 1e-9));
+      expect(fiber.target, 28);
+      expect(fiber.fraction, closeTo(0.5, 1e-9));
     });
 
     test('and the household\'s own, when they have', () {
@@ -46,14 +46,14 @@ void main() {
 
   group('a nutrient nobody knows about', () {
     test('has no number, rather than a number of zero', () {
-      // A bar reading "0 of 28 g" would say the day had no fibre. The truth
+      // A bar reading "0 of 28 g" would say the day had no fiber. The truth
       // is that nothing logged has ever been asked, and those are different
       // claims (spec §5.6).
-      final MinorProgress fibre = dayOf(const Macros(kcal: 500))
+      final MinorProgress fiber = dayOf(const Macros(kcal: 500))
           .minor(MinorNutrient.fiber);
 
-      expect(fibre.consumed, isNull);
-      expect(fibre.isKnown, isFalse);
+      expect(fiber.consumed, isNull);
+      expect(fiber.isKnown, isFalse);
       expect(dayOf(const Macros(kcal: 500)).knownMinor, isEmpty);
     });
 
@@ -66,7 +66,7 @@ void main() {
     });
 
     test('and a day built from its parts counts what did not say', () {
-      // A total says nothing about its own coverage: 4 g of fibre reads the
+      // A total says nothing about its own coverage: 4 g of fiber reads the
       // same whether it came from everything eaten or from one food of three.
       final DayProgress day = DayProgress.fromParts(
         parts: const <Macros>[
@@ -104,7 +104,7 @@ void main() {
     });
   });
 
-  group('fibre is a floor', () {
+  group('fiber is a floor', () {
     test('most of the way there is neutral, not a warning', () {
       expect(
         dayOf(const Macros(fiberG: 14)).minor(MinorNutrient.fiber).tone,
@@ -113,13 +113,13 @@ void main() {
     });
 
     test('and reaching it is good, not over', () {
-      final MinorProgress fibre = dayOf(const Macros(fiberG: 30))
+      final MinorProgress fiber = dayOf(const Macros(fiberG: 30))
           .minor(MinorNutrient.fiber);
 
-      expect(fibre.state, MacroProgressState.over);
+      expect(fiber.state, MacroProgressState.over);
       // The arithmetic says over; the judgement says well done. Same split the
       // four macros already make for protein.
-      expect(fibre.tone, MacroTone.good);
+      expect(fiber.tone, MacroTone.good);
     });
   });
 
@@ -142,7 +142,7 @@ void main() {
       );
     });
 
-    test('and past it reads over, unlike fibre at the same fraction', () {
+    test('and past it reads over, unlike fiber at the same fraction', () {
       final MinorProgress sodium = dayOf(const Macros(sodiumMg: 2600))
           .minor(MinorNutrient.sodium);
       final MinorProgress cholesterol = dayOf(const Macros(cholesterolMg: 340))

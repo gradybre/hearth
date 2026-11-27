@@ -402,7 +402,7 @@ const LABEL_TOOL = {
             // would be Hearth asserting a fact the label never stated.
             fiber_g: {
               type: 'number',
-              description: 'Dietary fibre in grams. Omit if not printed.',
+              description: 'Dietary fiber in grams. Omit if not printed.',
             },
             sodium_mg: {
               type: 'number',
@@ -663,7 +663,7 @@ row — a value that belongs to the item above reads perfectly and is wrong
 forever. Work across each row and check the column headings as you go.
 
 The columns you want are the item, its serving size, calories, protein, total
-carbohydrate, total fat, dietary fibre, sodium and cholesterol. Ignore
+carbohydrate, total fat, dietary fiber, sodium and cholesterol. Ignore
 calories-from-fat, saturated and trans fat, sugars, vitamins and allergens.
 
 Transcribe. Never compute: do not derive calories from macros, do not scale a
@@ -682,7 +682,7 @@ at all, use "1 serving" rather than inventing a weight.
 Calories, protein, carbohydrate and fat are always required. Where one of the
 four is printed as "< 1", give 0.
 
-Fibre, sodium and cholesterol are different: omit one the table does not print
+Fiber, sodium and cholesterol are different: omit one the table does not print
 rather than writing 0 — a column that is not there is unknown, and zero is a
 claim. "< 1" in those three is also unknown; omit it.
 
@@ -691,7 +691,7 @@ a lettuce wrap", "no cheese" — and a sheet prints those as deductions, with
 minus signs. Transcribe them exactly as printed, minus signs and all. Do not
 skip them and do not turn them positive: the app records a deduction as a
 deduction, and a sign dropped here becomes 180 calories added to a meal
-instead of taken off it. A row can be mixed — fibre up while everything else
+instead of taken off it. A row can be mixed — fiber up while everything else
 goes down — so copy each column's own sign.
 
 Skip drinks and kids' menus.
@@ -726,7 +726,7 @@ recorded. A cup entry and a gram entry for one serving are one portion
 described twice, which is exactly what the app needs.
 
 A panel printing "1/2 cup (125g)", 70 calories, 3g protein, 12g total
-carbohydrate, 1g total fat, 2g dietary fibre, 40mg sodium, 5mg cholesterol,
+carbohydrate, 1g total fat, 2g dietary fiber, 40mg sodium, 5mg cholesterol,
 and "about 4 servings per container", on a package marked NET WT 16 OZ, comes
 back as:
 

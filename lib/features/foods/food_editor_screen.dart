@@ -1294,8 +1294,8 @@ class _ServingRowState extends State<_ServingRow> {
                 IconButton(
                   onPressed: () => setState(() => _minorOpen = !_minorOpen),
                   tooltip: _minorOpen
-                      ? 'Hide fibre, sodium and cholesterol'
-                      : 'Add fibre, sodium and cholesterol',
+                      ? 'Hide fiber, sodium and cholesterol'
+                      : 'Add fiber, sodium and cholesterol',
                   icon: Icon(
                     _minorOpen ? Icons.expand_less : Icons.expand_more,
                     color: _hasMinor ? colors.accent : colors.textMuted,
@@ -1362,7 +1362,7 @@ class _ServingRowState extends State<_ServingRow> {
                 children: <Widget>[
                   Expanded(
                     child: _TextField(
-                      label: 'Fibre (g)',
+                      label: 'Fiber (g)',
                       value: serving.fiber,
                       keyboardType: _decimal,
                       onChanged: (String v) =>

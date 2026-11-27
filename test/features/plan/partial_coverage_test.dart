@@ -17,7 +17,7 @@ import '../../support/fixtures.dart';
 
 /// A partial total stays qualified all the way to the day (spec §5.6, R06).
 ///
-/// A recipe with five grams of known fibre and one ingredient that never
+/// A recipe with five grams of known fiber and one ingredient that never
 /// stated any sums, by `Macros._add`, to a non-null five grams. The number is
 /// real and it is a **floor** — and every screen between the recipe and the
 /// day used to lose that distinction, because a non-null subtotal is
@@ -131,12 +131,12 @@ void main() {
   test('and the day says so once it is logged', () {
     // The failure this whole change is about: 5 g rendered as a complete
     // total, with the qualification stranded on the recipe page.
-    final MinorProgress fibre = dayOf(entryFor(logged: true))
+    final MinorProgress fiber = dayOf(entryFor(logged: true))
         .minor(MinorNutrient.fiber);
 
-    expect(fibre.consumed, 5);
-    expect(fibre.isKnown, isTrue);
-    expect(fibre.isPartial, isTrue, reason: 'the total is a floor, not a sum');
+    expect(fiber.consumed, 5);
+    expect(fiber.isKnown, isTrue);
+    expect(fiber.isPartial, isTrue, reason: 'the total is a floor, not a sum');
   });
 
   test('a planned meal is qualified the same way, from live coverage', () {

@@ -93,7 +93,7 @@ void main() {
     });
 
     test('a deduction keeps its sign through the round trip', () {
-      // Freddy's lettuce wrap: −180 kcal with a *positive* half gram of fibre
+      // Freddy's lettuce wrap: −180 kcal with a *positive* half gram of fiber
       // (spec §5.2). The mixed signs are what a "negate everything" reading
       // gets backwards, and −0.5 is exactly the shape that used to be written
       // as an unreadable "-1 1/2".
@@ -180,7 +180,7 @@ void main() {
       final FoodDraft draft = draftWith(protein: 'lots', fiber: 'some');
 
       expect(draft.macrosError, contains('protein'));
-      expect(draft.macrosError, contains('fibre'));
+      expect(draft.macrosError, contains('fiber'));
     });
 
     test('but blank is an answer, not a mistake', () {

@@ -4,12 +4,12 @@ import 'package:hearth/domain/models/macros.dart';
 /// The three minor nutrients (spec §5.6), and the one distinction the whole
 /// feature rests on: **null is unknown, not zero.**
 ///
-/// A food with no fibre data showing "0 g fibre" is a wrong number where no
+/// A food with no fiber data showing "0 g fiber" is a wrong number where no
 /// number was the honest answer, and every arithmetic operator below is a
 /// place that mistake would fit.
 void main() {
   group('unknown is not zero', () {
-    test('a food that says nothing about fibre says null, not 0', () {
+    test('a food that says nothing about fiber says null, not 0', () {
       const Macros m = Macros(kcal: 100, proteinG: 10);
       expect(m.fiberG, isNull);
       expect(m.sodiumMg, isNull);
@@ -157,7 +157,7 @@ void main() {
     });
 
     test('and on a minor nutrient, which nobody watches', () {
-      // A deduction can leave the calories standing while the fibre goes
+      // A deduction can leave the calories standing while the fiber goes
       // under. Checking kcal alone would log a negative macro in silence.
       expect(const Macros(kcal: 10, fiberG: -1).isBelowNothing, isTrue);
       expect(const Macros(kcal: 10, sodiumMg: -1).isBelowNothing, isTrue);

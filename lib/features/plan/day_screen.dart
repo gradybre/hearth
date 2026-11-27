@@ -538,7 +538,7 @@ class _CompactSummary extends StatelessWidget {
             ? '${kind.label} —/$target'
             : '${kind.label} —',
         // The word, not the dash: most screen readers pass over punctuation
-        // at default verbosity, so "Fibre, of 28 g" would be both
+        // at default verbosity, so "Fiber, of 28 g" would be both
         // ungrammatical and silent about the thing that matters.
         spoken:
             '${kind.label}, not stated${nutrient.canCompare ? ', of ${nutrient.target.round()} ${kind.unit}' : ''}.'
@@ -551,7 +551,7 @@ class _CompactSummary extends StatelessWidget {
     return _Readout(
       nutrient: _supportedMinor(kind),
       // "≥" rather than a bare number: at a glance it is the difference
-      // between "you have had 14 g of fibre" and "you have had at least 14 g,
+      // between "you have had 14 g of fiber" and "you have had at least 14 g,
       // and something you ate never said".
       text:
           '${kind.label} ${floor ? '≥' : ''}$amount${nutrient.canCompare ? '/$target' : kind.unit}',

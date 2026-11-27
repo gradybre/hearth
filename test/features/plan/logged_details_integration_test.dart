@@ -205,7 +205,7 @@ void main() {
         'Protein: 25 g',
         'Carbohydrate: 50 g',
         'Fat: 12.5 g',
-        'Fibre: 5 g',
+        'Fiber: 5 g',
         'Sodium: 100 mg',
         'Cholesterol: 10 mg',
       ]) {

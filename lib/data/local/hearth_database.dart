@@ -218,7 +218,7 @@ class HearthDatabase extends _$HearthDatabase {
         await _addColumnIfMissing(m, foods, foods.packKind);
         await _addColumnIfMissing(m, foods, foods.packUnit);
       }
-      // v19 carries fibre, sodium and cholesterol on a serving (spec §5.6).
+      // v19 carries fiber, sodium and cholesterol on a serving (spec §5.6).
       // Additive, and nullable — an existing serving has never been asked
       // about them, which is exactly what null says.
       if (from < 19) {
@@ -251,7 +251,7 @@ class HearthDatabase extends _$HearthDatabase {
         await _addColumnIfMissing(m, foods, foods.menuGroup);
         await _addColumnIfMissing(m, foods, foods.menuOrder);
       }
-      // v22 lets a week carry targets for fibre, sodium and cholesterol
+      // v22 lets a week carry targets for fiber, sodium and cholesterol
       // (spec §5.6). Additive and nullable — a week with none falls back to
       // the Daily Value, which is what every existing week now does.
       if (from < 22) {

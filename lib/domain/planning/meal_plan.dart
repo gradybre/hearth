@@ -66,7 +66,7 @@ class MacroSnapshot {
   /// Frozen with everything else, and for the same reason: once a meal is
   /// eaten its ingredients are no longer reachable, so a partial total can
   /// never be re-qualified from today's library. Editing the recipe tomorrow
-  /// must not make yesterday's fibre look complete.
+  /// must not make yesterday's fiber look complete.
   ///
   /// Defaults to [MinorCoverage.notRecorded] so that every snapshot frozen
   /// before this existed says so, rather than claiming a completeness nothing
@@ -275,7 +275,7 @@ class MealPlanEntry {
         // caller that has not thought about coverage cannot compile.
         //
         // Scaling a portion cannot change what was known: half a recipe whose
-        // fibre was partial is still partial.
+        // fiber was partial is still partial.
         coverage: previous?.coverage ?? coverage,
         // Scaling a portion cannot make an approximate basis exact, so this
         // survives a correction untouched.

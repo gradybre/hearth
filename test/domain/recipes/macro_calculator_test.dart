@@ -87,8 +87,8 @@ void main() {
       expect(result.isDataGap, isFalse);
     });
 
-    test('a partial fibre total says how much of it was guessed at', () {
-      // Two ingredients count; one of their foods knows its fibre. The total
+    test('a partial fiber total says how much of it was guessed at', () {
+      // Two ingredients count; one of their foods knows its fiber. The total
       // is real as far as it goes, and saying so is the difference between a
       // useful number and one somebody trusts too far (spec §5.6).
       final Food known = aFood(

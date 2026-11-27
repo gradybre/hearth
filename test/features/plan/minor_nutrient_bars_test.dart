@@ -14,7 +14,7 @@ import '../../support/app_harness.dart';
 import '../../support/fixtures.dart';
 import '../../support/swept_surfaces.dart';
 
-/// Fibre, sodium and cholesterol on the plan (spec §5.6).
+/// Fiber, sodium and cholesterol on the plan (spec §5.6).
 void main() {
   const MacroTargets targets = MacroTargets(
     kcal: 2000,
@@ -75,11 +75,11 @@ void main() {
     // feature that was never built look the same from the sofa.
     await openDay(tester, eaten: const Macros(kcal: 400, proteinG: 20));
 
-    expect(find.text('Fibre'), findsOneWidget);
+    expect(find.text('Fiber'), findsOneWidget);
     expect(find.text('Sodium'), findsOneWidget);
     expect(find.text('Cholesterol'), findsOneWidget);
 
-    // A dash, never a zero. "0 of 28 g" would claim the day had no fibre,
+    // A dash, never a zero. "0 of 28 g" would claim the day had no fiber,
     // when the truth is that nothing eaten was ever asked.
     expect(find.text('— of 28 g'), findsOneWidget);
     expect(find.textContaining('0 of 28 g'), findsNothing);
@@ -98,7 +98,7 @@ void main() {
     expect(find.text('0.4 of 28 g'), findsOneWidget);
   });
 
-  testWidgets('one that knows fibre shows it against the Daily Value', (
+  testWidgets('one that knows fiber shows it against the Daily Value', (
     WidgetTester tester,
   ) async {
     await openDay(
@@ -106,7 +106,7 @@ void main() {
       eaten: const Macros(kcal: 400, proteinG: 20, fiberG: 14),
     );
 
-    expect(find.text('Fibre'), findsOneWidget);
+    expect(find.text('Fiber'), findsOneWidget);
     expect(find.text('14 of 28 g'), findsOneWidget);
     // Sodium is there too, and says nobody has stated one — a dash rather
     // than a zero, because "0 of 2300 mg" would be a claim the day never
@@ -117,7 +117,7 @@ void main() {
     expect(find.text('0 of 2300 mg'), findsNothing);
   });
 
-  testWidgets('fibre reaching its target reads as done, not as over', (
+  testWidgets('fiber reaching its target reads as done, not as over', (
     WidgetTester tester,
   ) async {
     // The distinction the whole feature turns on. Passing a floor is an
@@ -186,7 +186,7 @@ void main() {
     await tester.tap(change);
     await pumpFrames(tester, frames: 12);
 
-    expect(find.text('Fibre g'), findsOneWidget);
+    expect(find.text('Fiber g'), findsOneWidget);
     expect(
       find.textContaining('Leave blank for the Daily Values'),
       findsOneWidget,
@@ -223,7 +223,7 @@ void main() {
       await tester.tap(find.bySemanticsLabel(RegExp(', today[.]')));
       await pumpFrames(tester, frames: 12);
 
-      expect(find.text('Fibre'), findsOneWidget);
+      expect(find.text('Fiber'), findsOneWidget);
       expect(find.text('Sodium'), findsOneWidget);
       expect(find.text('Cholesterol'), findsOneWidget);
 

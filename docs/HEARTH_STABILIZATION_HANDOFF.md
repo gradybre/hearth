@@ -106,7 +106,7 @@ Update each relevant section in the PR implementing it. Do not rewrite the whole
 |---|---|
 | Header / end note | Replace stale “pre-build / phase-1 next” status with an accurate version and implementation status |
 | §4, §5.6 | Describe snapshot coverage metadata and retain approved minor targets/bars; remove “Never a target / no progress bars” |
-| §5.6 | Keep fibre as a floor and sodium/cholesterol as ceilings; preserve numeric amounts and unit spacing; distinguish reference defaults from personal targets |
+| §5.6 | Keep fiber as a floor and sodium/cholesterol as ceilings; preserve numeric amounts and unit spacing; distinguish reference defaults from personal targets |
 | §5.7, §12 | Remove the old “no public Walmart cart API” assertion; document the implemented reviewed cart-link and optional pack-size behavior, verified against current official documentation before changing integration claims |
 | §5.7 | Make inclusive seven-calendar-day range and saved-list range ownership explicit; distinguish checked state from on-hand quantity according to current approved behavior |
 | §5.0, §6.2 | Add Today launch and session navigation restoration if adopting WP4; preserve existing URLs and only-built-section rules |
@@ -163,7 +163,7 @@ Introduce a small pure-domain representation that carries a nutrient's known sum
 
 **Requirements**
 
-- A recipe with 5 g known fibre and a second required ingredient with unknown fibre remains a partial 5 g total when planned and logged.
+- A recipe with 5 g known fiber and a second required ingredient with unknown fiber remains a partial 5 g total when planned and logged.
 - Planned totals use live coverage; logged totals use frozen coverage. Editing the recipe cannot make yesterday's coverage look complete.
 - Use a consistent counting basis. If the UI counts meal entries with missing data, label it that way; do not display an ingredient count as a meal count. Count only contributors that participate in nutrition under existing optional/seasoning rules.
 - All-unknown is “Not available”; known zero is `0 g`; mixed known/unknown is a known subtotal with a partial indicator. Keep uncertainty visible in compact and expanded summaries and screen-reader output.
@@ -275,7 +275,7 @@ Proposed phone layout, not a pixel-exact mockup:
 Today · date                         [Log food]
 Calories: amount left / over · target
 Protein …       Carbs …       Fat …
-Fibre …     Sodium …     Cholesterol …   [Details]
+Fiber …     Sodium …     Cholesterol …   [Details]
 Breakfast                             [+ Add]
   Meal · portion · nutrition          [Edit] [Log]
 ...

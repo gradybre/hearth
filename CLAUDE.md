@@ -115,7 +115,7 @@ task seems to require breaking one.
 - **Deferred is deferred.** §12 lists what is explicitly out of scope for v1 — don't
   helpfully add micronutrients, sub-recipes, voice control, weight tracking, etc.
   Two things have been lifted from it deliberately, and are in scope: pantry
-  quantity subtraction (phase 4), and **fibre, sodium and cholesterol** as optional
+  quantity subtraction (phase 4), and **fiber, sodium and cholesterol** as optional
   nullable nutrients (§5.6). Lifting one is Brendan's call and amends the spec in
   the same change — never a quiet addition.
 - **Open decisions are Brendan's** (§12). Surface them, don't quietly decide them.

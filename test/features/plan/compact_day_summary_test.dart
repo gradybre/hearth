@@ -32,6 +32,12 @@ void main() {
     WidgetTester tester, {
     Macros eaten = const Macros(kcal: 400, proteinG: 20),
     Size size = const Size(390, 844),
+
+    /// Whether anything has been logged into the day at all.
+    ///
+    /// False is the ordinary state of a morning, and it is the one the
+    /// summary used to have nothing to say about.
+    bool logged = true,
   }) async {
     final HearthDatabase db = await pumpHearthApp(
       tester,
@@ -46,19 +52,20 @@ void main() {
         ),
       ],
       entries: <MealPlanEntry>[
-        const MealPlanEntry(
-          id: 'e-oats',
-          dayId: 'day-1',
-          slot: MealSlot.breakfast,
-          refType: PlanRefType.food,
-          refId: 'f-oats',
-          servings: 1,
-        ).log(
-          liveMacros: eaten,
-          at: DateTime.utc(2026, 9, 7, 8),
-          label: 'Oats',
-          coverage: NutrientCoverage.ofOne(eaten),
-        ),
+        if (logged)
+          const MealPlanEntry(
+            id: 'e-oats',
+            dayId: 'day-1',
+            slot: MealSlot.breakfast,
+            refType: PlanRefType.food,
+            refId: 'f-oats',
+            servings: 1,
+          ).log(
+            liveMacros: eaten,
+            at: DateTime.utc(2026, 9, 7, 8),
+            label: 'Oats',
+            coverage: NutrientCoverage.ofOne(eaten),
+          ),
       ],
       targets: targets,
     );
@@ -89,6 +96,25 @@ void main() {
     );
   });
 
+  testWidgets('the day\u2019s figures are there before anything is logged', (
+    WidgetTester tester,
+  ) async {
+    // Brendan's report: the daily macros only turned up once you had logged
+    // something. A morning is the ordinary state of a day and the summary has
+    // plenty to say about it — what the targets are, and that all of each one
+    // is still to go.
+    //
+    // "Nothing logged yet" carries the claim a bare zero would otherwise
+    // make, so the figures do not have to be withheld to stay honest.
+    await openDay(tester, logged: false);
+
+    expect(find.text('Nothing logged yet'), findsOneWidget);
+    expect(find.text('0 of 2000 kcal'), findsOneWidget);
+    expect(find.textContaining('Protein 0/150'), findsOneWidget);
+    expect(find.textContaining('Carbs 0/200'), findsOneWidget);
+    expect(find.textContaining('Fat 0/70'), findsOneWidget);
+  });
+
   testWidgets('says all three minor nutrients, dash and all', (
     WidgetTester tester,
   ) async {
@@ -97,12 +123,12 @@ void main() {
     // how this was reported the first time.
     await openDay(tester);
 
-    expect(find.textContaining('Fibre'), findsWidgets);
+    expect(find.textContaining('Fiber'), findsWidgets);
     expect(find.textContaining('Sodium'), findsWidgets);
     expect(find.textContaining('Cholesterol'), findsWidgets);
 
-    // A dash, never a zero: nothing eaten was ever asked about fibre.
-    expect(find.textContaining('Fibre —'), findsOneWidget);
+    // A dash, never a zero: nothing eaten was ever asked about fiber.
+    expect(find.textContaining('Fiber —'), findsOneWidget);
   });
 
   testWidgets('and the calories, with the word as well as the arrow', (
@@ -128,7 +154,7 @@ void main() {
     // away rather than in the way.
     await openDay(tester);
     expect(
-      find.text('Fibre'),
+      find.text('Fiber'),
       findsNothing,
       reason: 'the bars are the expanded view',
     );
@@ -136,7 +162,7 @@ void main() {
     await tester.tap(find.text('Details'));
     await pumpFrames(tester, frames: 12);
 
-    expect(find.text('Fibre'), findsOneWidget);
+    expect(find.text('Fiber'), findsOneWidget);
     expect(find.text('Less'), findsOneWidget);
 
     await tester.tap(find.text('Less'));
@@ -222,7 +248,7 @@ void main() {
     await pumpFrames(tester, frames: 12);
 
     expect(
-      find.text('Fibre ≥14/28g'),
+      find.text('Fiber ≥14/28g'),
       findsOneWidget,
       reason:
           'a floor printed bare reads exactly like a complete total, which '

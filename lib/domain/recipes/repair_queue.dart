@@ -52,7 +52,7 @@ enum FoodRepairKind {
   /// has not been marked zero-calorie. [Food.needsAttention].
   cannotBeLogged,
 
-  /// It states none of fibre, sodium or cholesterol.
+  /// It states none of fiber, sodium or cholesterol.
   ///
   /// **Not a fault.** §5.6 has these as optional and nullable, and a food
   /// that never said is being honest rather than broken — the bars already
@@ -158,7 +158,7 @@ class RepairQueue {
     return RepairQueue(recipes: broken, foods: foodRepairs);
   }
 
-  /// True when not one of this food's servings names fibre, sodium or
+  /// True when not one of this food's servings names fiber, sodium or
   /// cholesterol.
   ///
   /// One serving stating one of them is enough to keep it off the list: the

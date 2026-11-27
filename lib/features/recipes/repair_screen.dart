@@ -121,7 +121,7 @@ class _Queue extends StatelessWidget {
         if (queue.silent.isNotEmpty) ...<Widget>[
           const SizedBox(height: HearthSpacing.lg),
           _Section(
-            title: 'Foods that never said fibre, sodium or cholesterol',
+            title: 'Foods that never said fiber, sodium or cholesterol',
             // The one blurb that survives, because it changes what the
             // section *means*: §5.6 has the three as optional and nullable,
             // so a food that never stated them is being honest. Without this
@@ -132,7 +132,7 @@ class _Queue extends StatelessWidget {
                 _FoodRow(
                   name: food.food.name,
                   brand: food.food.brand,
-                  detail: 'no fibre, sodium or cholesterol',
+                  detail: 'no fiber, sodium or cholesterol',
                   id: food.food.id,
                 ),
             ],

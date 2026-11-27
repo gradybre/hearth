@@ -36,7 +36,7 @@ void main() {
     servingOptions:
         servings ??
         <ServingOption>[
-          // States fibre; the selected row does not.
+          // States fiber; the selected row does not.
           cup('cup-a', kcal: 200, fiberG: 7),
           cup('cup-b', kcal: selectedKcal),
         ],
@@ -120,7 +120,7 @@ void main() {
         servings: 6,
       )!;
 
-      // Not cup-a, which reads identically and states fibre. Whoever freezes
+      // Not cup-a, which reads identically and states fiber. Whoever freezes
       // these macros has to freeze that row's coverage beside them.
       expect(portion.serving.id, 'cup-b');
       expect(portion.macros.fiberG, isNull);

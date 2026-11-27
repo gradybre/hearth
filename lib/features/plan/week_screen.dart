@@ -470,10 +470,32 @@ class _DayRow extends StatelessWidget {
     DayLogState.untouched => 'nothing logged',
   };
 
-  /// The eaten figure, or a dash where there is no figure to give.
+  /// The eaten figure, on every day that has one to give.
   ///
-  /// A planned day shows what the plan would come to, marked as a plan. An
-  /// untouched one shows nothing at all, because zero is a claim.
+  /// Every day carries its figures now, logged or not. This used to show a
+  /// dash for an untouched day on the reasoning that a zero is a claim — and
+  /// it is one, but a dash turned out to be the worse claim: on a Monday the
+  /// column the week exists to be read down was seven dashes, and it filled
+  /// in a day at a time as the week went on. Brendan's report.
+  ///
+  /// The claim is answered by [_state] rather than by withholding the number.
+  /// "0 / 2200 kcal · nothing logged" and "0 / 2200 kcal · logged as nothing"
+  /// are two different days and say so in words — the same rule §6.3 applies
+  /// to colour, applied to a dash.
+  ///
+  /// The two states that genuinely have no figure keep their own words. A day
+  /// whose saved nutrition is missing does not know what it ate, and "0" or
+  /// "1,400 of 2,200" would both be inventions; an incomplete one knows a
+  /// subtotal and says that it is one.
+  ///
+  /// **A zero still needs a target to mean anything.** With one, "0 / 2200
+  /// kcal" reads as none of the day's allowance spent yet — the target is
+  /// what makes it progress rather than an assertion about the food. With no
+  /// target at all there is nothing to frame it, and a bare "0 kcal" on a day
+  /// nobody has touched is the claim this used to be careful about. So the
+  /// dash survives in exactly that corner: no targets, and nothing logged.
+  /// A day that *has* been logged keeps its figure either way, because then
+  /// the number is something somebody actually said.
   String _eatenText() => switch (day.state) {
     DayLogState.loggedUnavailable => 'Saved nutrition unavailable',
     DayLogState.loggedIncomplete =>
@@ -482,13 +504,33 @@ class _DayRow extends StatelessWidget {
       targets?.kcal == null
           ? '${day.eaten.kcal.round()} kcal'
           : '${day.eaten.kcal.round()} / ${targets!.kcal.round()} kcal',
-    // Only when the plan actually projects something. An entry whose food
-    // was never matched contributes no calories, and "planned 0 kcal" says
-    // the plan comes to nothing — which is a claim, and a different one.
-    DayLogState.plannedOnly =>
-      day.planned.kcal > 0 ? 'planned ${day.planned.kcal.round()} kcal' : '—',
-    DayLogState.untouched => '—',
+    DayLogState.plannedOnly || DayLogState.untouched =>
+      targets?.kcal == null
+          ? '—'
+          : '${day.eaten.kcal.round()} / ${targets!.kcal.round()} kcal',
   };
+
+  /// What the rest of the day's plan would add, where it would add anything.
+  ///
+  /// Beside the eaten figure rather than instead of it, which is how the day
+  /// view says it too: a day with a breakfast in it and a dinner planned used
+  /// to read as a plan and lose the breakfast.
+  ///
+  /// Only when the plan actually projects something. An entry whose food was
+  /// never matched contributes no calories, and "+0 planned" would say the
+  /// plan comes to nothing — which is a claim, and a different one.
+  String? _plannedText() =>
+      day.planned.kcal > 0 ? '+${day.planned.kcal.round()} planned' : null;
+
+  /// Whether this day has figures to put against a target at all.
+  ///
+  /// An exclusion rather than a switch because its two neighbours above are
+  /// exhaustive switches on the same enum: a seventh [DayLogState] should
+  /// fail to compile there and be *thought about* here, rather than silently
+  /// inheriting whichever answer a wildcard gave it.
+  bool get _hasFigures =>
+      day.state != DayLogState.loggedUnavailable &&
+      day.state != DayLogState.loggedIncomplete;
 
   @override
   Widget build(BuildContext context) {
@@ -500,11 +542,25 @@ class _DayRow extends StatelessWidget {
     final bool compact =
         MediaQuery.sizeOf(context).width < 372 ||
         MediaQuery.textScalerOf(context).scale(16) > 20;
-    final bool reflowCalories =
-        compact &&
-        targets?.kcal != null &&
-        (day.state == DayLogState.logged ||
-            day.state == DayLogState.loggedAsNothing);
+    // The compact split applies wherever the row shows "eaten of target",
+    // which is now every day but the two that have no figure. Left as
+    // logged-only, an untouched day's figure would stop reflowing the moment
+    // it started being shown at all.
+    final bool reflowCalories = compact && targets?.kcal != null && _hasFigures;
+    final String? planned = _plannedText();
+    // Spoken as well as drawn. The row excludes its children's semantics and
+    // hand-builds one label, so a figure that is not named here is a figure a
+    // screen reader cannot reach — and §6.3 asks for labels on data, not only
+    // on controls. It mattered less when protein appeared on logged days
+    // alone; it is now on most of the column.
+    final String? proteinSpoken = _hasFigures
+        ? switch (targets?.proteinG) {
+            final double target =>
+              'Protein ${day.eaten.proteinG.round()} of '
+                  '${target.round()} grams.',
+            null => null,
+          }
+        : null;
     final TextStyle caloriesStyle = context.text.body.copyWith(
       fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
     );
@@ -527,7 +583,10 @@ class _DayRow extends StatelessWidget {
           label:
               '${weekdayName(day.date)} ${shortDate(day.date)}'
               '${today ? ', today' : ''}. '
-              '${_eatenText()}. $_state',
+              '${_eatenText()}.'
+              '${proteinSpoken == null ? '' : ' $proteinSpoken'}'
+              '${planned == null ? '' : ' $planned.'} '
+              '$_state',
           onTap: onSelect,
           container: true,
           excludeSemantics: true,
@@ -588,7 +647,15 @@ class _DayRow extends StatelessWidget {
                       // carries: it is the number this household steers by,
                       // and the one a day can miss while its calories look
                       // right.
-                      if (day.state == DayLogState.logged)
+                      //
+                      // On every day that has a figure, not only a logged
+                      // one. A row that drops its protein until something is
+                      // logged makes the column jagged exactly when it is
+                      // most worth reading down, and [_state] already says
+                      // which days have been eaten. Still withheld where
+                      // there is nothing to put against the target: a day
+                      // with no saved nutrition does not know its protein.
+                      if (_hasFigures)
                         if (targets?.proteinG case final double protein)
                           Text(
                             'P ${day.eaten.proteinG.round()}/'
@@ -600,6 +667,13 @@ class _DayRow extends StatelessWidget {
                               ],
                             ),
                           ),
+                      if (planned != null)
+                        Text(
+                          planned,
+                          style: context.text.metadata.copyWith(
+                            color: colors.textMuted,
+                          ),
+                        ),
                       Text(
                         _state,
                         style: context.text.metadata.copyWith(
@@ -667,6 +741,17 @@ class _DayDetail extends StatelessWidget {
             'no saved nutrition. Target comparisons are unavailable.',
             style: context.text.metadata.copyWith(color: colors.textMuted),
           ),
+        // Still a sentence rather than rings when nothing applies. The day
+        // view's card draws regardless, and matching it here was tried and
+        // reverted: rings and three bars against a target of zero are 400
+        // points of nothing, and they pushed `Open this day` — the only way
+        // from this row into logging — off the bottom of a phone.
+        //
+        // "for this week", not "yet". `resolveTargetsForWeek` matches an
+        // exact week on its own Monday and ignores an ongoing boundary that
+        // starts later, and an ongoing setting can be stopped outright — so
+        // null here means none apply to *this* week, which is not at all the
+        // same as none ever having been set.
         if (targets == null)
           Text(
             'No targets set for this week.',

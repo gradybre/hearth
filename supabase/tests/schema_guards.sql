@@ -488,7 +488,7 @@ begin
   select fiber_g into v_value
   from public.food_serving_options where id = v_stated;
   if v_value is distinct from 10 then
-    raise exception 'upsert_food lost a stated fibre: %', v_value;
+    raise exception 'upsert_food lost a stated fiber: %', v_value;
   end if;
 
   -- A stated zero is a fact — water really has no sodium — and must survive.
@@ -501,7 +501,7 @@ begin
   select fiber_g into v_value
   from public.food_serving_options where id = v_silent;
   if v_value is not null then
-    raise exception 'upsert_food invented a fibre of % for a silent serving',
+    raise exception 'upsert_food invented a fiber of % for a silent serving',
       v_value;
   end if;
 
@@ -701,9 +701,9 @@ $$;
 -- ── A deduction is signed, and only a modifier may be (spec §5.2) ───────────
 --
 -- Freddy's publishes "Make any Sandwich a Lettuce Wrap" as -180 kcal with
--- +1 g of fibre. The mixed signs are the point: a "negate everything"
--- implementation would store the fibre as -1 and nothing but a test that
--- looks at the fibre specifically would notice.
+-- +1 g of fiber. The mixed signs are the point: a "negate everything"
+-- implementation would store the fiber as -1 and nothing but a test that
+-- looks at the fiber specifically would notice.
 --
 -- The flag is denormalised onto `food_serving_options` so the checks can see
 -- it, and a composite foreign key keeps the copy honest. What is asserted
@@ -759,7 +759,7 @@ begin
     end;
   end loop;
 
-  -- 2. A modifier may, and the fibre keeps its own sign.
+  -- 2. A modifier may, and the fiber keeps its own sign.
   perform public.upsert_food(jsonb_build_object(
     'id', v_modifier, 'name', 'Guard lettuce wrap', 'source', 'restaurant',
     'brand', 'Guard Diner', 'menu_group', 'Modifications', 'menu_order', 0,
@@ -778,7 +778,7 @@ begin
 
   select fiber_g into v_value from public.food_serving_options where id = v_serving;
   if v_value is distinct from 1 then
-    raise exception 'a modifier had its fibre flipped to %', v_value;
+    raise exception 'a modifier had its fiber flipped to %', v_value;
   end if;
 
   -- 3. A serving cannot claim a flag its food does not have, either way.

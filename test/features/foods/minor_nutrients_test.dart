@@ -8,7 +8,7 @@ import 'package:hearth/domain/units/unit.dart';
 import '../../support/app_harness.dart';
 import '../../support/fixtures.dart';
 
-/// Fibre, sodium and cholesterol on a food, and on a day (spec §5.6).
+/// Fiber, sodium and cholesterol on a food, and on a day (spec §5.6).
 ///
 /// Lifted from §12's deferred list deliberately; the spec was amended in the
 /// same change. The whole feature rests on one distinction — **blank means
@@ -77,15 +77,15 @@ void main() {
     await pumpHearthApp(tester);
     await openNewFood(tester);
 
-    expect(find.text('Fibre (g)'), findsNothing);
-    expect(find.byTooltip('Add fibre, sodium and cholesterol'), findsOneWidget);
+    expect(find.text('Fiber (g)'), findsNothing);
+    expect(find.byTooltip('Add fiber, sodium and cholesterol'), findsOneWidget);
 
     // By icon rather than by tooltip: `find.byTooltip` can resolve to the
     // tooltip's own overlay entry once the list has been scrolled, and a tap
     // on that hit-tests through to nothing.
     await tapVisible(tester, find.byIcon(Icons.expand_more));
 
-    expect(find.text('Fibre (g)'), findsOneWidget);
+    expect(find.text('Fiber (g)'), findsOneWidget);
     expect(find.text('Sodium (mg)'), findsOneWidget);
     expect(find.text('Cholesterol (mg)'), findsOneWidget);
   });
@@ -106,7 +106,7 @@ void main() {
     // on that hit-tests through to nothing.
     await tapVisible(tester, find.byIcon(Icons.expand_more));
 
-    await tester.enterText(await field(tester, 'Fibre (g)'), '10');
+    await tester.enterText(await field(tester, 'Fiber (g)'), '10');
     // Cholesterol left blank on purpose: nobody has said, and Hearth must not
     // decide that means none.
     await tester.enterText(await field(tester, 'Sodium (mg)'), '0');
@@ -128,7 +128,7 @@ void main() {
     WidgetTester tester,
   ) async {
     // Never hiding real data behind a tap is the other half of the rule. A
-    // food that already knows its fibre shows it the moment it is opened, so
+    // food that already knows its fiber shows it the moment it is opened, so
     // the closed default can never bury a number somebody entered.
     await pumpHearthApp(
       tester,
@@ -150,7 +150,7 @@ void main() {
     await tester.tap(find.text('Oats').first);
     await pumpFrames(tester, frames: 12);
 
-    expect(find.text('Fibre (g)'), findsOneWidget);
+    expect(find.text('Fiber (g)'), findsOneWidget);
     expect(find.byIcon(Icons.expand_less), findsOneWidget);
   });
 }

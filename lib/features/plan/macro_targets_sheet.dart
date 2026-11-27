@@ -94,7 +94,7 @@ class _MacroTargetsSheetState extends ConsumerState<_MacroTargetsSheet> {
   final TextEditingController _fat = TextEditingController();
 
   // Blank means the Daily Value, not zero and not a prefilled daily value.
-  final TextEditingController _fibre = TextEditingController();
+  final TextEditingController _fiber = TextEditingController();
   final TextEditingController _sodium = TextEditingController();
   final TextEditingController _cholesterol = TextEditingController();
 
@@ -113,7 +113,7 @@ class _MacroTargetsSheetState extends ConsumerState<_MacroTargetsSheet> {
     _protein,
     _carbs,
     _fat,
-    _fibre,
+    _fiber,
     _sodium,
     _cholesterol,
   ];
@@ -188,7 +188,7 @@ class _MacroTargetsSheetState extends ConsumerState<_MacroTargetsSheet> {
     proteinG: double.tryParse(_protein.text.trim()) ?? 0,
     carbG: double.tryParse(_carbs.text.trim()) ?? 0,
     fatG: double.tryParse(_fat.text.trim()) ?? 0,
-    fiberG: double.tryParse(_fibre.text.trim()),
+    fiberG: double.tryParse(_fiber.text.trim()),
     sodiumMg: double.tryParse(_sodium.text.trim()),
     cholesterolMg: double.tryParse(_cholesterol.text.trim()),
   );
@@ -390,18 +390,18 @@ class _MacroTargetsSheetState extends ConsumerState<_MacroTargetsSheet> {
                   (_fat, 'Fat'),
                 ], editable: editable),
                 const SizedBox(height: HearthSpacing.lg),
-                Text('Fibre, sodium, cholesterol', style: context.text.body),
+                Text('Fiber, sodium, cholesterol', style: context.text.body),
                 const SizedBox(height: HearthSpacing.xxs),
                 Text(
                   'Leave blank for the Daily Values — 28 g, 2,300 mg and '
-                  '300 mg. Fibre is one to reach; the other two are budgets.',
+                  '300 mg. Fiber is one to reach; the other two are budgets.',
                   style: context.text.metadata.copyWith(
                     color: colors.textMuted,
                   ),
                 ),
                 const SizedBox(height: HearthSpacing.sm),
                 _fields(<(TextEditingController, String)>[
-                  (_fibre, 'Fibre g'),
+                  (_fiber, 'Fiber g'),
                   (_sodium, 'Sodium mg'),
                   (_cholesterol, 'Chol. mg'),
                 ], editable: editable),

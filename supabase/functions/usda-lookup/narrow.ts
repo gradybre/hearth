@@ -12,7 +12,7 @@ export const CARB = '205';
 export const FAT = '204';
 
 /// The three minor nutrients (spec §5.6). USDA reports sodium and cholesterol
-/// in milligrams and fibre in grams, which is exactly how Hearth stores them,
+/// in milligrams and fiber in grams, which is exactly how Hearth stores them,
 /// so nothing is converted here.
 export const FIBER = '291';
 export const SODIUM = '307';
@@ -35,7 +35,7 @@ export interface Macros {
   carb_g: number;
   fat_g: number;
   /// Null when USDA did not report it. Deliberately not defaulted to 0 — a
-  /// food nobody measured for fibre is not a food with no fibre (spec §5.6).
+  /// food nobody measured for fiber is not a food with no fiber (spec §5.6).
   fiber_g: number | null;
   sodium_mg: number | null;
   cholesterol_mg: number | null;

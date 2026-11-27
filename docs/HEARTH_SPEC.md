@@ -284,7 +284,7 @@ belongs to the Nutrition section.
     - **A guide is read in batches, and never called more than it is.** Every page rendered is an image sent to the model, so a long PDF is read a few pages at a time rather than whole — that is a cost decision and a sound one. What it must never become is a *silent* one: choosing the file says how many pages it has, each read says which pages it looked at, and the pages nobody has paid for yet are offered rather than discarded. Six pages of eighteen is a fine offer. Six pages of eighteen described as "the menu" is a wrong answer with no way to notice, and the person reading it has no reason to go looking for a section they were never told existed.
     - **A page that will not render is named.** It is not dropped from the batch, and it does not count as read: it is said out loud, by number, and offered again on the next read. A guide missing a page looks exactly like a guide that never had one.
     - **Choosing costs nothing and changes nothing.** Opening the file dialog and backing out of it is not an error and must not disturb what is already on the review screen — a doubt belongs to the rows it arrived with, and clearing it on the way to a picker leaves rows standing with their warnings gone.
-  - **Modifiers.** A chain also publishes rows that are *modifications* rather than things you order — "make any sandwich a lettuce wrap", −180 kcal. Those are stored as genuinely signed macros on a food flagged as a modifier, and the signs are per-column: taking the bun off adds a gram of fibre while it removes everything else, so a single "negate" flag would state the opposite of the truth. **The minus sign is the declaration** — a pasted or transcribed row carrying any negative is a modifier, with no extra syntax to remember.
+  - **Modifiers.** A chain also publishes rows that are *modifications* rather than things you order — "make any sandwich a lettuce wrap", −180 kcal. Those are stored as genuinely signed macros on a food flagged as a modifier, and the signs are per-column: taking the bun off adds a gram of fiber while it removes everything else, so a single "negate" flag would state the opposite of the truth. **The minus sign is the declaration** — a pasted or transcribed row carrying any negative is a modifier, with no extra syntax to remember.
     - A modifier is what you log *against*, never what you log. It is kept out of ingredient matching, out of the food picker and out of the log sheet; the only place it can be chosen is the eat-out builder, once something real is picked for it to apply to, and then only once — you do not lettuce-wrap a burger three times.
     - Nothing but a modifier may hold a negative. That is enforced in the database rather than in the app, and a modifier cannot be un-flagged while a deduction remains under it.
   - **Taking a component out.** The same menus list the parts as well as the whole — a cheeseburger *and* the lettuce on it — and a published figure counts what came on the plate. So an **ordinary** component can be picked in either direction: added, or **taken out**, subtracting its macros for the thing you asked them to leave off. This is not the modifier mechanism and does not replace it: a modifier is a row the chain itself publishes as a deduction, with per-column signs of its own, while this is a positive row the person eating chose to subtract. Both stay.
@@ -389,6 +389,29 @@ belongs to the Nutrition section.
   Copy/move date choices, title and count can scroll at large text, while
   Cancel and the confirmation action wrap within the sheet and stay reachable.
   *(Phase 2: UX-087.)*
+- **Every row of the week carries its figures, logged or not.** A day that
+  has not been eaten yet shows `0 / <target> kcal` and its protein against
+  target, not a dash. The week exists to be read down, and figures that
+  arrive a day at a time give a Monday seven dashes and no column at all.
+  A zero *is* a claim, and it is answered in words rather than by
+  withholding the number: `nothing logged`, `nothing logged yet` and
+  `logged as nothing` are three different days and say so — the §6.3 rule
+  about never carrying meaning in colour alone, applied to punctuation.
+  - **A zero needs a target to mean anything.** With one, `0 / 2200 kcal`
+    is none of the day's allowance spent yet. With no target at all there is
+    nothing to frame it, so an untouched day keeps its dash and a logged one
+    still shows its own figure without a denominator (UX-053).
+  - **Two states have no figure and must not be given one.** A logged day
+    whose saved nutrition is missing does not know what it ate, and a
+    partially covered one knows a subtotal and says that it is one. Neither
+    gets an invented intake or protein figure; both still show what the rest
+    of the day's plan would add, because a plan is knowable when history is
+    not.
+  - This is a deliberate reading of the two halves of the UX review that
+    pull against each other here — "always show consumed kcal" (UX-053)
+    against "treating an empty day as zero intake" (A.1 item 8, UX-054).
+    The display shows the zero; the weekly *arithmetic* does not change, and
+    `WeekSummary` still excludes untouched days from an average.
 - **Meal slots:** breakfast, lunch, dinner, snack.
 - **The destination determines the primary action.** A new meal on a future
   calendar day defaults to **Add to plan**; logging it as eaten is an explicit
@@ -609,11 +632,11 @@ belongs to the Nutrition section.
   separate labelled action. No new nutrients, AI calls or schema are added.
 - **Week starts Monday.**
 - **Weekly summary view:** per-day totals for the four tracked macros — **calories, protein, carbohydrates, fat** — across the week. Tap a day to see slot-level detail.
-- **Minor nutrients (fibre, sodium, cholesterol).** *Lifted from §12 at Brendan's request, v0.9.* Three optional nutrients carried alongside the four macros, and unlike them **nullable — null means unknown, never zero**. Every source Hearth already reads gives all three (Open Food Facts and USDA return them in the payload the adapter is already fetching; a US nutrition label is legally required to print them), so they cost no extra call.
-  - **Optional targets, and not members of `MacroKind`.** *Amended v1.1 — the original text said "never a target", which stopped being true at schema v22.* `macro_targets` carries a nullable `fiber_g`, `sodium_mg` and `cholesterol_mg`, and the day and week screens show progress against them. They stay out of `MacroKind`, which drives the four macros' own progress, because these three do not behave like those four: **fibre is a floor to reach, sodium and cholesterol are ceilings to stay under**, and a screen treating all three alike would be wrong about two of them. Calories stay the primary focus and the four macros stay secondary; these sit below both.
-  - **A blank target means the Daily Value, not "no target".** 28 g fibre, 2,300 mg sodium, 300 mg cholesterol — the FDA's figures for a 2,000-calorie diet, in the code as `MinorNutrient.dailyValue`. They are a **default to measure against, never personalised advice**: "612 mg sodium" means nothing until it sits beside 2,300. A household that sets its own number overrides them; nothing here recommends a number to anybody. If these figures are ever changed, check current authoritative guidance rather than carrying an old reference value forward.
-  - **Partial totals are reported as partial.** A recipe where five of eight ingredients know their fibre reports the fibre it can see and says how many it could not — §4's "incomplete data flags, never blocks", not a new rule. The alternative, null unless every ingredient knows, would render them blank essentially always.
-  - **Unknown never renders as zero.** A food with no fibre data showing "0 g" is a wrong number where no number was the honest answer.
+- **Minor nutrients (fiber, sodium, cholesterol).** *Lifted from §12 at Brendan's request, v0.9.* Three optional nutrients carried alongside the four macros, and unlike them **nullable — null means unknown, never zero**. Every source Hearth already reads gives all three (Open Food Facts and USDA return them in the payload the adapter is already fetching; a US nutrition label is legally required to print them), so they cost no extra call.
+  - **Optional targets, and not members of `MacroKind`.** *Amended v1.1 — the original text said "never a target", which stopped being true at schema v22.* `macro_targets` carries a nullable `fiber_g`, `sodium_mg` and `cholesterol_mg`, and the day and week screens show progress against them. They stay out of `MacroKind`, which drives the four macros' own progress, because these three do not behave like those four: **fiber is a floor to reach, sodium and cholesterol are ceilings to stay under**, and a screen treating all three alike would be wrong about two of them. Calories stay the primary focus and the four macros stay secondary; these sit below both.
+  - **A blank target means the Daily Value, not "no target".** 28 g fiber, 2,300 mg sodium, 300 mg cholesterol — the FDA's figures for a 2,000-calorie diet, in the code as `MinorNutrient.dailyValue`. They are a **default to measure against, never personalised advice**: "612 mg sodium" means nothing until it sits beside 2,300. A household that sets its own number overrides them; nothing here recommends a number to anybody. If these figures are ever changed, check current authoritative guidance rather than carrying an old reference value forward.
+  - **Partial totals are reported as partial.** A recipe where five of eight ingredients know their fiber reports the fiber it can see and says how many it could not — §4's "incomplete data flags, never blocks", not a new rule. The alternative, null unless every ingredient knows, would render them blank essentially always.
+  - **Unknown never renders as zero.** A food with no fiber data showing "0 g" is a wrong number where no number was the honest answer.
 - **Macro targets:** manually authored daily targets, private to each person.
   On a reviewed Save for the current week, **Use these targets each new week**
   defaults on. Once enabled, choose **This week only** or **From this week

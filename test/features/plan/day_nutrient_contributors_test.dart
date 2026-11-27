@@ -269,7 +269,18 @@ void main() {
         await _open(tester, expanded: expanded);
         await _tap(tester, find.text('This week’s targets · Change'));
         expect(find.byType(NutrientContributorsScreen), findsNothing);
-        expect(find.text('Use these targets each new week'), findsOneWidget);
+        // The sheet's own key, not a control inside it. This asserted the
+        // "Use these targets each new week" checkbox, which the sheet only
+        // draws when the week on screen *is* the current week — and `_date`
+        // is pinned to 30 September while the sheet reads the real clock, so
+        // the assertion rotted the moment that week passed and took a test
+        // about something else down with it. What this test is actually about
+        // is that the targets action opens the targets editor rather than a
+        // contributors receipt, and the key says that on any date.
+        expect(
+          find.byKey(const ValueKey<String>('macro-targets-editor')),
+          findsOneWidget,
+        );
         await tester.binding.handlePopRoute();
         await pumpFrames(tester, frames: 16);
         await _tap(tester, find.text(expanded ? 'Less' : 'Details'));

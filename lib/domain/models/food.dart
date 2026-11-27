@@ -189,11 +189,11 @@ class Food {
   /// something you order (spec §5.2).
   ///
   /// Freddy's prints "Make any Sandwich a Lettuce Wrap" as −180 kcal, −25 g
-  /// carbohydrate — and **+1 g of fibre**, because the bun is what was
+  /// carbohydrate — and **+1 g of fiber**, because the bun is what was
   /// carrying the deficit. The mixed signs are why this is a flag on a food
   /// with genuinely signed macros rather than a positive amount that gets
   /// negated somewhere: negating everything would state that a lettuce wrap
-  /// costs you a gram of fibre, which is the opposite of true.
+  /// costs you a gram of fiber, which is the opposite of true.
   ///
   /// A modifier is what you log *against*, never what you log. It is kept out
   /// of ingredient matching, out of the food picker and out of the log sheet;

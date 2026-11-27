@@ -518,7 +518,7 @@ void main() {
       await _tap(tester, find.text('Lettuce wrap'));
       await _reveal(tester, find.text('Added'), scrollBy: -200);
       expect(find.text('Energy −180 kcal'), findsOneWidget);
-      expect(find.text('Fibre +1 g'), findsOneWidget);
+      expect(find.text('Fiber +1 g'), findsOneWidget);
       expect(find.text('Published menu adjustment'), findsOneWidget);
       await _tap(tester, find.byKey(const Key('usual-reset')), scrollBy: -200);
       expect(find.text('No additions'), findsOneWidget);

@@ -185,12 +185,12 @@ void main() {
       await _reveal(
         tester,
         find.text(
-          'Some fibre information was missing when this meal was logged.',
+          'Some fiber information was missing when this meal was logged.',
         ),
       );
       await _reveal(
         tester,
-        find.text('No fibre value was saved for this meal.'),
+        find.text('No fiber value was saved for this meal.'),
       );
     },
   );
@@ -210,7 +210,7 @@ void main() {
     expect(find.textContaining('%'), findsNothing);
     await _reveal(
       tester,
-      find.text('Fibre coverage was not recorded for this meal.'),
+      find.text('Fiber coverage was not recorded for this meal.'),
     );
   });
 
@@ -218,7 +218,7 @@ void main() {
     'missing snapshot explains absence and does not fabricate a name or amount',
     (WidgetTester tester) async {
       await _pump(tester, entries: <MealPlanEntry>[_entry(snapshot: false)]);
-      expect(find.text('No saved fibre values'), findsOneWidget);
+      expect(find.text('No saved fiber values'), findsOneWidget);
       await _reveal(
         tester,
         find.text('Saved nutrition is unavailable for this meal.'),
@@ -240,7 +240,7 @@ void main() {
           _entry(fiber: 0, coverage: MinorCoverage.unknown),
         ],
       );
-      expect(find.text('No saved fibre values'), findsOneWidget);
+      expect(find.text('No saved fiber values'), findsOneWidget);
       expect(find.text('0 g'), findsNothing);
     },
   );

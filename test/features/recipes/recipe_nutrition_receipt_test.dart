@@ -297,7 +297,7 @@ void main() {
     expect(inIngredient(0, 'Calculation amount: 2 × 1 can'), findsOneWidget);
     expect(inIngredient(0, 'Included · Per serving'), findsOneWidget);
     expect(inIngredient(0, '200 kcal'), findsOneWidget);
-    expect(inIngredient(0, 'Fibre: 0 g'), findsOneWidget);
+    expect(inIngredient(0, 'Fiber: 0 g'), findsOneWidget);
     expect(inIngredient(0, 'Sodium: not stated'), findsOneWidget);
     await pressReceiptTarget(tester, find.byKey(_backKey));
     expect(find.byType(RecipeDetailScreen), findsOneWidget);
