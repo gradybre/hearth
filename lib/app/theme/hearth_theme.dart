@@ -15,6 +15,22 @@ abstract final class HearthTheme {
 
   static ThemeData dark() => _build(HearthColors.dark(), Brightness.dark);
 
+  /// The theme inside an ink surface (see [HearthColors.ink]).
+  ///
+  /// Not a theme the app is ever set to — it is handed to one subtree, the
+  /// day's summary card, so that everything drawn in there picks up cream
+  /// text and the lifted amber without being told. A `TextButton`'s
+  /// foreground, a progress bar's track and the macro rings all read the
+  /// ambient theme, and none of them has to learn what ink is.
+  ///
+  /// Built as [Brightness.dark] in both app themes, which is not a sleight of
+  /// hand: brightness here means "is the ground dark", and on ink it is.
+  /// [HearthTypography.serifHeaderWeight] draws a serif a step lighter on a
+  /// dark ground because light-on-dark blooms — and a cream headline on cocoa
+  /// blooms in light mode exactly as it does in dark. Asking for the light
+  /// weight would be asking for the bloom.
+  static ThemeData ink() => _build(HearthColors.ink(), Brightness.dark);
+
   static ThemeData _build(HearthColors c, Brightness brightness) {
     final bool isDark = brightness == Brightness.dark;
     final TextTheme textTheme = HearthTypography.materialTextTheme(

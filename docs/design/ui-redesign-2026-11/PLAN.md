@@ -124,12 +124,30 @@ against a near-black ground), plus the serif hero-readout role and the accent
 slot-label role. Rebuild `_RemainingCard` as the template's card: "N kcal left"
 as the headline, progress bar, "X of Y kcal logged", "Nutrition details ›".
 
-Watch: the compact/expanded summary split (`daySummaryExpandedProvider`, the
-`< 372pt or 16pt → >20pt` compact rule) has to survive, and the contrast sweep
-in `guidelines_test.dart` reads real painted pixels, so the new ground is
-checked for free in both themes — which is the right gate for an inverted card.
+**Done.** It landed as `HearthColors.ink()` — a whole palette rather than two
+tokens, handed to the card's subtree through `HearthTheme.ink()` so the rings,
+the bars and the buttons inside recolour without an `onInk` flag threaded
+through widgets that are also drawn on paper. `contrast_test.dart` runs the
+ink palette through every assertion it runs the other two through.
 
-*Depends on PR #136 landing first; it touches the same card.*
+Four things the build turned up that the survey had not:
+
+- **The hero is the collapsed view only.** Expanded is §5.6's approved rings,
+  and the calories ring is one of them, so a headline above it would be the
+  same figure twice under the same `macro-total-calories` key — two controls
+  for one fact. Collapsed is the default and the state the templates draw.
+- **At three times the text the headline is abandoned, not shrunk.** 34pt is
+  102pt there; even dropping it to the section-header role left the day's
+  figures off the bottom of a 320×568 phone, which
+  `readable_plan_integration_test` exists to catch. Past the card's own
+  compact rule it falls back to the one-line readout §5.6 approved.
+- **The §6.3 contrast sweep caught a real bug and then a real gap.** The bug:
+  text built above the card's theme took paper tokens onto cocoa — "Nothing
+  logged yet" at 2.09:1. The gap: the sweep sampled a label's whole box
+  including the part a scroll viewport clips away, so a cream ring label
+  correctly drawn on cocoa was measured against the cream page behind the
+  fixed chrome. It now measures only the painted part.
+- PR #136 merged while this was in flight; the branch is rebased onto it.
 
 ### PR 2 — Today: logging speed
 Primary `+ Log food`, meal-slot rows in the template's shape, Day/Week beside

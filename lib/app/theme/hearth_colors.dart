@@ -116,6 +116,55 @@ class HearthColors extends ThemeExtension<HearthColors> {
     onError: Color(0xFF241109),
   );
 
+  /// Ink: the one surface that is dark in both themes.
+  ///
+  /// The day's summary is the loudest thing on the logging screen and the
+  /// November 2026 templates draw it as a cocoa card with cream on it —
+  /// inverted against the paper in light mode, lifted above the near-black in
+  /// dark mode. It is a *surface*, not a theme, so it is a whole
+  /// [HearthColors] rather than two more tokens bolted onto the other two:
+  /// everything drawn inside it — the rings, the minor bars, a text button,
+  /// a progress bar — already reads its colours from the ambient extension,
+  /// and handing that subtree a different one is the only way to recolour all
+  /// of them without an `onInk` flag threaded through widgets that are also
+  /// used on paper.
+  ///
+  /// **One palette, not one per theme, and that is deliberate.** Against the
+  /// light ground it reads 10.9:1, which is the inversion the template is
+  /// about; against the dark ground it reads 1.34:1 lighter, which is a
+  /// lifted card and is what a hero should be when everything around it has
+  /// dimmed. Two palettes would be two things to keep in contrast, to look at
+  /// and to break, for a difference nobody asked for.
+  ///
+  /// It is a full ramp rather than a single fill because the things drawn on
+  /// it have grounds of their own, and `contrast_test.dart` runs this through
+  /// every assertion it runs the other two through — so a tone darkened here
+  /// fails there rather than in a kitchen. The tightest pair is the accent as
+  /// link text on [surfaceElevated], at 5.2:1.
+  ///
+  /// No new hue: the text is the cream already in the palette, and the accent
+  /// is the dark theme's lifted amber, because terracotta on cocoa is not a
+  /// colour anybody can read.
+  factory HearthColors.ink() => const HearthColors(
+    background: Color(0xFF332A22),
+    surface: Color(0xFF3C322A),
+    surfaceElevated: Color(0xFF413730),
+    surfaceSunken: Color(0xFF261F19),
+    outline: Color(0xFF5A4C40),
+    outlineStrong: Color(0xFFA2907E),
+    textPrimary: Color(0xFFF6EFE1),
+    textSecondary: Color(0xFFDCCDBA),
+    textMuted: Color(0xFFBCAA97),
+    accent: Color(0xFFEE9B63),
+    accentPressed: Color(0xFFF3B183),
+    onAccent: Color(0xFF241109),
+    goodAccent: Color(0xFF8FB86A),
+    overAccent: Color(0xFFFF7A7A),
+    progressTrack: Color(0xFF5A4C40),
+    error: Color(0xFFF2A08F),
+    onError: Color(0xFF241109),
+  );
+
   /// The page ground.
   final Color background;
 

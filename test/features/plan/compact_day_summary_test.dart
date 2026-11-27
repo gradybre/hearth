@@ -136,14 +136,17 @@ void main() {
   ) async {
     await openDay(tester);
 
+    // The pair of numbers sits under the headline the pair was worked out
+    // from, and the headline carries the unit: "1600 left" at 34pt, with no
+    // kcal on it, reads as a quantity of nothing in particular.
     expect(find.text('400 of 2000 kcal'), findsOneWidget);
-    expect(find.text('1600 left'), findsOneWidget);
+    expect(find.text('1600 kcal left'), findsOneWidget);
   });
 
   testWidgets('over target says over, not left', (WidgetTester tester) async {
     await openDay(tester, eaten: const Macros(kcal: 2400, proteinG: 20));
 
-    expect(find.text('400 over'), findsOneWidget);
+    expect(find.text('400 kcal over'), findsOneWidget);
     expect(find.textContaining('left'), findsNothing);
   });
 
@@ -159,12 +162,20 @@ void main() {
       reason: 'the bars are the expanded view',
     );
 
+    await tester.ensureVisible(find.text('Details'));
     await tester.tap(find.text('Details'));
     await pumpFrames(tester, frames: 12);
 
     expect(find.text('Fiber'), findsOneWidget);
     expect(find.text('Less'), findsOneWidget);
 
+    // Scrolled to before it is pressed, because the expanded card is taller
+    // than the window: three rings, three bars and the calorie headline
+    // above them put this control below the fold on a 844pt phone. A tap at
+    // a point outside the view hits nothing and throws nothing, so without
+    // this the card stayed open and the failure was reported against the
+    // *next* line — "Details not found" — which is not where the fault was.
+    await tester.ensureVisible(find.text('Less'));
     await tester.tap(find.text('Less'));
     await pumpFrames(tester, frames: 12);
 
