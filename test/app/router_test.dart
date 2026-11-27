@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hearth/app/shell/launch_target.dart';
+import 'package:hearth/app/shell/sections.dart';
 
 import '../support/app_harness.dart';
 
@@ -21,15 +22,15 @@ void main() {
 
   /// The home screen, by the two things only it says.
   ///
-  /// The second used to be the "Still being built" footer, which is gone now
-  /// that every section has its tabs — a home screen with nothing unbuilt to
-  /// name says nothing there, correctly. The tagline is the durable half.
+  /// The second used to be the "Still being built" footer, which went when
+  /// every section got its tabs, and then the tagline under the wordmark,
+  /// which went when the first room became a hero that says what it is for
+  /// directly below it. What is durable is the way into that room: only the
+  /// home screen offers one, and taking the name from the registry means
+  /// renaming a section does not quietly make this assert nothing.
   void expectHome() {
     expect(find.text('Hearth'), findsOneWidget);
-    expect(
-      find.textContaining('Everything the house keeps track of'),
-      findsOneWidget,
-    );
+    expect(find.text('Open ${builtSections.first.label}'), findsOneWidget);
   }
 
   testWidgets('a path that names no section goes home', (

@@ -169,6 +169,30 @@ Nutrition as a hero, the other sections as compact rows, the italic footer.
 Last because it is the least load-bearing for the success bar and because it
 needs the §3.1 answer.
 
+**Done.** §3.1 was settled as "hero plus Log food, amend §6.2", and §6.2 is
+amended in the same change: the first built section leads, a section may
+declare one primary action, and the footer is italic.
+
+What the build turned up:
+
+- **The coupling §6.2 worried about never happened.** `SectionAction` is a
+  label, an icon and a tear-off of a top-level function, which is the only
+  callback a const list can hold — so the registry declares the action and
+  the home screen draws it without knowing what logging is or which room
+  does it. The screen still reads no Nutrition provider.
+- **A route would have been the wrong shape.** The action opens the meal
+  chooser over the home screen rather than going to Plan first, which is the
+  tap it exists to save, and it would have meant threading a query
+  parameter through `PlanScreen` — the one file PR 2b had just rewritten.
+- **The hero is not one big button.** The way in is the "Open Nutrition"
+  link under the action, not the whole block: nesting a tap target inside
+  another is how a press meant for "log a meal" lands on "open the room".
+- **Two markers of the home screen went with the restyle.** The tagline
+  under the wordmark was the one `router_test` used to recognise home, and
+  the "Still being built" footer had been the one before that. It identifies
+  home by the way into the leading room now, taken from the registry, so a
+  rename cannot quietly make it assert nothing.
+
 ### Optional PR 6 — the illustrations, once the art question is settled.
 
 ## 7. Gates, every PR

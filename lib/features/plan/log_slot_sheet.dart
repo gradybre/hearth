@@ -23,6 +23,18 @@ import 'log_sheet.dart';
 /// It does not replace the `+` on each meal: that one already knows where it
 /// is going and stays the shorter path for somebody who has scrolled to the
 /// meal they mean.
+/// Log something into today, from outside the Plan section.
+///
+/// The home screen's primary action for Nutrition (spec §6.2). A top-level
+/// function with one argument, because the section registry is const data
+/// and a tear-off is the only callback a const list can hold — which is also
+/// what keeps the home screen from knowing what logging is.
+///
+/// Today, because this is reached from a screen with no date on it. Logging
+/// a past day is what the Plan section's own stepper is for.
+Future<void> logFoodToday(BuildContext context) =>
+    showLogSlotSheet(context, date: DateTime.now());
+
 Future<void> showLogSlotSheet(BuildContext context, {required DateTime date}) =>
     showModalBottomSheet<void>(
       context: context,

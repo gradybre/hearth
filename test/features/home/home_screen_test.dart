@@ -66,14 +66,18 @@ void main() {
       await pumpHome(tester);
       await pumpFrames(tester);
 
-      expect(find.textContaining('Still being built'), findsOneWidget);
+      expect(find.textContaining('In development'), findsOneWidget);
       for (final AppSection section in appSections) {
+        // The room that leads is named twice on purpose — once as the hero's
+        // heading and once in the link that opens it — so it is counted
+        // against where it sits rather than against whether it is finished.
+        final bool leads = section.id == builtSections.first.id;
         expect(
           find.textContaining(section.label),
-          section.isFurnished ? findsOneWidget : findsNWidgets(2),
+          leads || !section.isFurnished ? findsNWidgets(2) : findsOneWidget,
           reason: section.isFurnished
               ? '${section.label} is furnished and should be named once'
-              : '${section.label} should be on a card and in the footer',
+              : '${section.label} should be on a row and in the footer',
         );
       }
     });
@@ -99,7 +103,11 @@ void main() {
       await pumpHome(tester);
       await pumpFrames(tester);
 
-      await tester.tap(find.text('Nutrition'));
+      // The link, not the heading. The hero is not one big button: the only
+      // thing on this screen louder than "open the room" is "log a meal",
+      // and nesting one tap target inside another is how a press lands on
+      // the wrong one.
+      await tester.tap(find.text('Open Nutrition'));
       await pumpFrames(tester);
 
       // Landed on the section's first tab, with its own tabs under it.

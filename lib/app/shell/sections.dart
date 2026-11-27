@@ -1,7 +1,37 @@
 import 'package:flutter/material.dart';
 
+import '../../features/plan/log_slot_sheet.dart';
 import 'destinations.dart';
 import 'unbuilt_screen.dart';
+
+/// The one thing a room offers without being entered (spec §6.2).
+///
+/// The home screen draws it on the section it leads with, so that logging a
+/// meal is one tap from the front door rather than three — and §5.6's whole
+/// argument is that every extra tap is a tax paid three times a day.
+///
+/// Declared here rather than written into the home screen, which is the
+/// difference between a registry and a special case. The home screen knows
+/// that a section may have an action and how to draw one; it does not know
+/// what logging is, or that Nutrition is the room that does it.
+///
+/// [onTap] is a plain function rather than a closure or a route, because
+/// [appSections] is a const list and a tear-off of a top-level function is
+/// the only callback that can go in one. A route would not do: the action
+/// opens a sheet over wherever you are, and going somewhere first is the
+/// tap this exists to save.
+@immutable
+class SectionAction {
+  const SectionAction({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final Future<void> Function(BuildContext context) onTap;
+}
 
 /// A room in the house (spec §6.2).
 ///
@@ -86,10 +116,18 @@ final class BuiltSection extends AppSection {
     required super.blurb,
     required super.icon,
     required this.destinations,
+    this.primaryAction,
   });
 
   @override
   final List<AppDestination> destinations;
+
+  /// What this room offers from the front door, if anything.
+  ///
+  /// Null for a room with nothing worth doing from outside it, which is
+  /// most of them: an action on every card is a row of buttons, and a row
+  /// of buttons has no primary.
+  final SectionAction? primaryAction;
 
   /// Where entering the section lands. Its first tab — Hearth opens on the
   /// recipe library today and this keeps it that way.
@@ -125,6 +163,14 @@ const List<AppSection> appSections = <AppSection>[
     blurb: 'Recipes, meal plans, shopping lists, and nutrition logs.',
     icon: Icons.soup_kitchen_outlined,
     destinations: foodDestinations,
+    // The one Hearth is judged on: replacing MacrosFirst for daily logging.
+    // From here it is one tap to the meal chooser and a second to the food,
+    // without entering the room at all.
+    primaryAction: SectionAction(
+      label: 'Log food',
+      icon: Icons.add,
+      onTap: logFoodToday,
+    ),
   ),
   // Walkable before they are furnished (spec §11): each has its tabs, and
   // each tab says what will live behind it. `isBuilt` is derived from having

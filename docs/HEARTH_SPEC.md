@@ -859,18 +859,33 @@ Hearth should feel like a home, not a calorie cop — deliberately counter to th
 - *Reference direction:* warm brown/cream recipe-app aesthetics (cream grounds, cocoa text, terracotta accent, serif titles).
 
 ### 6.2 Navigation & screens
-- **Home screen** at the root: the way into the house. It lists the sections of §5.0 as cards
-  — name, icon, and the sentence saying what is inside — over a masthead carrying the app's
-  name and the way to Settings, which belong to the app rather than to any one section.
-  - **Only built sections get a card.** The ones that are named but empty appear as a single
-    muted sentence at the foot of the list, generated from the registry. A grid holding one
-    live tile reads as a screen that failed to load; a grid padded out with dead tiles teaches
-    people that tapping does nothing, and they carry that lesson into the tiles that work. The
-    sentence is not a control, so it cannot disappoint — and when the last section is built it
-    stops rendering.
-  - **No live data on the home screen.** A card showing today's remaining calories would wire
+- **Home screen** at the root: the way into the house. It lists the sections of §5.0 — name,
+  icon, and the sentence saying what is inside — over a masthead carrying the app's name and
+  the way to Settings, which belong to the app rather than to any one section.
+  - **The first built section leads; the rest are rows.** *(Amended November 2026, with the
+    redesign templates.)* It was four cards of equal size, and that said something untrue
+    about the house: the rooms are not equal, one of them is the reason the app exists, and
+    the screen read as a menu of four equivalent choices. The leading section gets its name
+    in the serif, its sentence, and the way in; every other built section gets a row with the
+    same parts in less space. Which section leads is registry order, not a name written into
+    the screen. A row is still a door — none of them may stop being one.
+  - **A section may declare one primary action.** *(Added November 2026.)* It is drawn on the
+    section that leads, above the way in, and it acts where you are rather than going
+    somewhere first — Nutrition's is "Log food", which opens the meal chooser over the home
+    screen. It is declared in the registry as a label, an icon and a function, so the home
+    screen knows that a section may have an action and how to draw one, and does not know
+    what logging is or which room does it. One action, on one section: a button on every room
+    is a row of buttons, and a row of buttons has no primary.
+  - **Only built sections get a way in.** The ones that are named but empty appear as a single
+    muted italic sentence at the foot of the list, generated from the registry. A grid holding
+    one live tile reads as a screen that failed to load; a grid padded out with dead tiles
+    teaches people that tapping does nothing, and they carry that lesson into the tiles that
+    work. The sentence is not a control, so it cannot disappoint — and when the last section
+    is built it stops rendering.
+  - **No live data on the home screen.** A hero showing today's remaining calories would wire
     the home screen to Nutrition's providers, which is the exact coupling §5.0 exists to
-    avoid. If a section is to say something here, it says it through the registry.
+    avoid. A declared action is not live data: it reads nothing and shows nothing. If a
+    section is to *say* something here, it says it through the registry.
   - A single centred column, capped in width, rather than a grid: it reads as deliberate at
     one section and still reads as deliberate at four, on a phone and on a Mac.
 - **App shell** with section-level navigation (tabs or sidebar; desktop uses sidebar, phone
