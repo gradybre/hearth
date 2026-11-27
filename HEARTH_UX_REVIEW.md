@@ -1361,6 +1361,11 @@ The current unknown/partial-nutrient model is careful and worth showing clearly.
 - **User problem:** I logged breakfast successfully, but the app withholds the obvious payoff until I configure a goal. A partner interested only in awareness receives unnecessary homework.
 - **Recommendation:** Always show consumed kcal and P/C/F with known minor totals. With no target, omit denominator/progress judgments and put one quiet Set targets action after the readout. Preserve Details. With partial targets, compare only explicitly positive targets; never turn a blank target into a red zero-budget warning. Empty day stays `Nothing logged yet`, not an implied fasting result.
 - **Comparable reference:** **Researched:** [MacroFactor's intake averages](https://help.macrofactorapp.com/en/articles/18-view-weekly-nutrition-averages) and [Cronometer diary overview](https://support.cronometer.com/hc/en-us/articles/360018171731-Diary-Overview) make intake itself legible. This is Hearth's design inference, not a claim that those apps have identical no-target behavior.
+- **Partly delivered:** the Day summary no longer becomes a setup prompt
+  without targets, and the week's rows now carry their figures too. "Omit
+  denominator/progress judgments" with no target is honoured on both: an
+  untouched day keeps a dash rather than a bare zero, and a logged one shows
+  its consumed figure with no denominator. See §5.6 of the spec.
 - **Connects to:** Onboarding, partial goal setup, partner participation, totals.
 - **Impact:** High
 - **Effort:** S
@@ -1376,6 +1381,14 @@ The current unknown/partial-nutrient model is careful and worth showing clearly.
 - **User problem:** A coffee-only Monday lowers my weekly intake average as if it were my whole day. Future empty dates look like missing work.
 - **Recommendation:** Introduce optional `Done logging today` near day end; default stays In progress rather than auto-complete. Week labels distinguish Future, No logs, Some logged and Complete. Reports default to completed past days once the user has opted into completion, otherwise clearly say `average of N days with entries`; show denominator and a selectable include-today option. Do not reward low totals or infer fasting from absence.
 - **Comparable reference:** **Researched:** [Cronometer Nutrition Report](https://support.cronometer.com/hc/en-us/articles/360018569691-Nutrition-Report) explicitly filters complete/nonempty days and today. This adds interpretation to Hearth's already-correct logged-day arithmetic.
+- **Decided:** "Do not reward low totals or infer fasting from absence" governs
+  the weekly *arithmetic*, which is unchanged — `WeekSummary` still excludes
+  untouched days from an average. It does **not** withhold a day's figures
+  from its own row: an untouched day shows `0 / <target> kcal` with "nothing
+  logged" beside it, and the distinction between that and a recorded fast is
+  carried in words. Brendan's call; see §5.6 of the spec. The rest of this
+  entry — `Done logging today`, Future / No logs / Some logged / Complete
+  labels, report denominators — is untouched and still open.
 - **Connects to:** Daily logging, weekly averages, longer trends, trust.
 - **Impact:** High
 - **Effort:** M

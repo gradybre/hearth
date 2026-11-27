@@ -389,6 +389,29 @@ belongs to the Nutrition section.
   Copy/move date choices, title and count can scroll at large text, while
   Cancel and the confirmation action wrap within the sheet and stay reachable.
   *(Phase 2: UX-087.)*
+- **Every row of the week carries its figures, logged or not.** A day that
+  has not been eaten yet shows `0 / <target> kcal` and its protein against
+  target, not a dash. The week exists to be read down, and figures that
+  arrive a day at a time give a Monday seven dashes and no column at all.
+  A zero *is* a claim, and it is answered in words rather than by
+  withholding the number: `nothing logged`, `nothing logged yet` and
+  `logged as nothing` are three different days and say so — the §6.3 rule
+  about never carrying meaning in colour alone, applied to punctuation.
+  - **A zero needs a target to mean anything.** With one, `0 / 2200 kcal`
+    is none of the day's allowance spent yet. With no target at all there is
+    nothing to frame it, so an untouched day keeps its dash and a logged one
+    still shows its own figure without a denominator (UX-053).
+  - **Two states have no figure and must not be given one.** A logged day
+    whose saved nutrition is missing does not know what it ate, and a
+    partially covered one knows a subtotal and says that it is one. Neither
+    gets an invented intake or protein figure; both still show what the rest
+    of the day's plan would add, because a plan is knowable when history is
+    not.
+  - This is a deliberate reading of the two halves of the UX review that
+    pull against each other here — "always show consumed kcal" (UX-053)
+    against "treating an empty day as zero intake" (A.1 item 8, UX-054).
+    The display shows the zero; the weekly *arithmetic* does not change, and
+    `WeekSummary` still excludes untouched days from an average.
 - **Meal slots:** breakfast, lunch, dinner, snack.
 - **The destination determines the primary action.** A new meal on a future
   calendar day defaults to **Add to plan**; logging it as eaten is an explicit
