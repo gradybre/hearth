@@ -12,6 +12,12 @@ void main() {
   final Map<String, HearthColors> themes = <String, HearthColors>{
     'light': HearthColors.light(),
     'dark': HearthColors.dark(),
+    // The day summary's ground, which is a palette rather than two tokens
+    // precisely so that it can be put through the same assertions as the
+    // other two instead of being taken on trust. Everything the card draws
+    // resolves against this set, so every pair below is one the card
+    // actually composes.
+    'ink': HearthColors.ink(),
   };
 
   for (final MapEntry<String, HearthColors> entry in themes.entries) {
@@ -234,6 +240,71 @@ void main() {
         lessThan(2),
       );
       expect(Contrast.ratio(c.textPrimary, c.background), greaterThan(12));
+    });
+  });
+
+  /// Ink has a job the other two do not: to be *the dark one* against both
+  /// of them.
+  ///
+  /// Every assertion above is about text on ink, and all of them would pass
+  /// just as well if ink were quietly lightened into another cream — at
+  /// which point the day's summary stops being a card you can see from the
+  /// door, which is the whole of what it is for.
+  group('ink is the dark surface in both themes', () {
+    final HearthColors ink = HearthColors.ink();
+
+    test('it inverts against the light page, rather than tinting it', () {
+      final double ratio = Contrast.ratio(
+        ink.background,
+        HearthColors.light().background,
+      );
+      expect(
+        ratio,
+        greaterThanOrEqualTo(7.0),
+        reason:
+            'ink on the light ground is ${ratio.toStringAsFixed(2)}:1 and '
+            'has to read as an inversion, not a shade',
+      );
+    });
+
+    test(
+      'and still lifts off the dark page, rather than vanishing into it',
+      () {
+        // Not an inversion here — in dark mode this is the raised card, and
+        // the number to beat is the one the light theme accepts between a card
+        // and its ground. Below it the hero is a smudge with a border.
+        final double ratio = Contrast.ratio(
+          ink.background,
+          HearthColors.dark().background,
+        );
+        expect(
+          ratio,
+          greaterThan(1.1),
+          reason:
+              'ink on the dark ground is ${ratio.toStringAsFixed(2)}:1 and '
+              'has to read as a card above it',
+        );
+      },
+    );
+
+    test("the light page's cocoa text is not legible on it", () {
+      // The trap this records, because it is one the palette cannot prevent
+      // and only a reviewer can: `context.colors` read *above* the card's
+      // theme hands paper tokens to text drawn on cocoa. The §6.3 sweep
+      // caught "Nothing logged yet" that way at 2.09:1. Stated here so that
+      // anyone tempted to "just use the ambient colours" sees the number.
+      final double ratio = Contrast.ratio(
+        HearthColors.light().textPrimary,
+        ink.background,
+      );
+      expect(
+        ratio,
+        lessThan(3.0),
+        reason:
+            'light textPrimary on ink is ${ratio.toStringAsFixed(2)}:1 — if '
+            'this ever passes AA, the two palettes have converged and the '
+            'card has stopped being ink',
+      );
     });
   });
 

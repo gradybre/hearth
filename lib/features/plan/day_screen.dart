@@ -7,6 +7,7 @@ import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
+import '../../app/widgets/ink_card.dart';
 import '../../app/widgets/macro_rings.dart';
 import '../../app/widgets/minor_nutrient_bars.dart';
 import '../../app/widgets/reading_column.dart';
@@ -228,7 +229,14 @@ class _RemainingCardState extends ConsumerState<_RemainingCard> {
     final _RemainingCard rendered = widget;
     final List<ResolvedEntry> entries = rendered.entries;
     final MacroTargets? targets = rendered.targets;
-    final HearthColors colors = context.colors;
+    // Ink, not `context.colors`, because everything this method builds is
+    // drawn inside the [InkCard] below — and `context` here is *above* the
+    // theme that card installs. Reading the ambient palette would hand
+    // paper-cream tokens to text on a cocoa ground, which is not a subtle
+    // failure: the §6.3 contrast sweep caught "Nothing logged yet" at
+    // #6b5849 on #332a22, 2.09:1. Widgets built further down (the hero, the
+    // compact summary, the rings) sit below the swap and read it correctly.
+    final HearthColors colors = HearthColors.ink();
     final Macros planned = EntryResolver.stillPlanned(entries);
 
     final DayProgress progress = DayProgress.fromParts(
@@ -254,7 +262,7 @@ class _RemainingCardState extends ConsumerState<_RemainingCard> {
       entries: rendered.rawEntries,
     );
 
-    return _Card(
+    return InkCard(
       child: Semantics(
         label: compact ? 'Daily totals' : null,
         container: compact,
@@ -272,7 +280,25 @@ class _RemainingCardState extends ConsumerState<_RemainingCard> {
                   if (!planned.isZero) plannedLabel,
                 ],
               ),
+              const SizedBox(height: HearthSpacing.sm),
             ],
+            // The headline, above everything including the "nothing logged"
+            // and "incomplete" notes below it. Calories are what the screen
+            // is opened to find out, and in the templates they are the one
+            // thing readable from across a kitchen.
+            //
+            // **Collapsed only, and that is not a compromise.** Expanded is
+            // §5.6's approved rings, and the calories ring is one of them —
+            // so a headline above it would be the same figure twice, by two
+            // controls, both answering to `macro-total-calories`. Collapsed
+            // is also the default and the state the templates draw, so the
+            // hero is what the day screen opens on.
+            if (!expanded)
+              _DayHero(
+                progress: progress,
+                compact: compact,
+                onSelect: showContributors,
+              ),
             if (progress.countedParts == 0) ...<Widget>[
               const SizedBox(height: HearthSpacing.xs),
               Text(
@@ -298,6 +324,11 @@ class _RemainingCardState extends ConsumerState<_RemainingCard> {
             if (!compact || progress.countedParts == 0)
               SizedBox(height: compact ? HearthSpacing.xs : HearthSpacing.md),
             if (expanded) ...<Widget>[
+              // All four rings, calories included, although the headline
+              // above has already said the calories. The rings are §5.6's
+              // approved expanded presentation and dropping one of them is
+              // a decision about that presentation rather than about this
+              // card's ground — Brendan's call, not a side effect.
               MacroRings(
                 progress: progress,
                 onSelect: (MacroKind kind) =>
@@ -320,11 +351,7 @@ class _RemainingCardState extends ConsumerState<_RemainingCard> {
                     showContributors(_supportedMinor(kind)),
               ),
             ] else
-              _CompactSummary(
-                progress: progress,
-                reflowCalories: compact,
-                onSelect: showContributors,
-              ),
+              _CompactSummary(progress: progress, onSelect: showContributors),
             if (compact && !planned.isZero) ...<Widget>[
               const SizedBox(height: HearthSpacing.sm),
               plannedLabel,
@@ -354,33 +381,58 @@ class _RemainingCardState extends ConsumerState<_RemainingCard> {
   }
 }
 
-/// The day in four lines, for the top of a screen whose subject is the meals
-/// below it (spec §5.6).
+/// The one figure the day screen is opened to find out (spec §5.6, and the
+/// November 2026 templates).
 ///
-/// Same numbers, same words, same three minor nutrients — including the ones
-/// nothing has stated, which read as a dash. What it drops is the drawing:
-/// the rings are the better picture of a day and the worse first screen,
-/// because at ordinary text they push the first meal below the fold.
-class _CompactSummary extends StatelessWidget {
-  const _CompactSummary({
+/// Calories, as a sentence rather than a column: "1600 kcal left" in the
+/// serif headline, a bar under it, and the totals it was worked out from
+/// below that. It is the loudest thing on the loudest card because logging
+/// speed is what Hearth is judged on, and the question people open this
+/// screen with is how much is left.
+///
+/// **The word is the signal and the colour is the decoration** (spec §6.3).
+/// "left", "over" and "on target" are in the headline itself, the arrow or
+/// check repeats them, and the bar's colour is the third thing to say it
+/// rather than the first.
+///
+/// It takes the calorie readout's judgement from [MacroProgress.tone] rather
+/// than forming its own. Mapping "met" onto "under" is how a day landing
+/// exactly on target came to read "0 left" with a down arrow beside a ring
+/// that said "on target" — one day, contradicted by two views of itself.
+class _DayHero extends StatelessWidget {
+  const _DayHero({
     required this.progress,
-    required this.reflowCalories,
+    required this.compact,
     required this.onSelect,
   });
 
   final DayProgress progress;
-  final bool reflowCalories;
+
+  /// The card's own narrow-or-enlarged rule, not a second one.
+  ///
+  /// Past it the headline is not shrunk, it is **abandoned**: the card goes
+  /// back to the one-line readout §5.6 approved, and the bar goes away with
+  /// it. A 34pt headline is 102pt at three times the text, and the gentler
+  /// fix of dropping it to the section-header role still left 60pt of
+  /// "1400 kcal left" above a bar above the figures — which put the day's
+  /// actual numbers off the bottom of a 320x568 phone. The integration
+  /// sweep says so in as many words: a nutrition fact has to be above the
+  /// initial fold.
+  ///
+  /// So the template's hero is the design for ordinary text, and this is
+  /// what the same card does when the room runs out. Neither caps anything:
+  /// both reflow, and both scale with the setting (spec §6.3).
+  final bool compact;
+
   final ValueChanged<SupportedNutrient> onSelect;
 
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
     final MacroProgress kcal = progress.forKind(MacroKind.calories);
-    // The ring's own judgement, not a fresh one. Mapping "met" onto "under"
-    // made a day landing exactly on its target read "0 left" with a down
-    // arrow here while the ring beside it said "on target" — the same day,
-    // contradicted by two views of itself.
-    final TargetIndicator? calories = !kcal.canCompare
+    final int eaten = kcal.consumed.round();
+
+    final TargetIndicator? indicator = !kcal.canCompare
         ? null
         : switch (kcal.tone) {
             MacroTone.over => TargetIndicator.forState(
@@ -389,75 +441,187 @@ class _CompactSummary extends StatelessWidget {
             ),
             MacroTone.good when kcal.state == MacroProgressState.met =>
               TargetIndicator.forState(TargetState.met),
-            // Neutral is the untouched day: still "left", and the honest amount.
             MacroTone.good || MacroTone.neutral => TargetIndicator.forState(
               TargetState.under,
               amount: kcal.remaining!.round().toString(),
             ),
           };
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        // Calories loudest, as everywhere else.
-        _TotalAction(
-          nutrient: SupportedNutrient.calories,
-          onSelect: onSelect,
-          label: !kcal.hasKnownIntake
-              ? 'Calories, saved nutrition unavailable.'
-              : kcal.availability == SavedNutritionAvailability.partial
-              ? '${kcal.consumed.round()} calories known subtotal. Incomplete saved nutrition.'
-              : kcal.canCompare
-              ? '${kcal.consumed.round()} of ${kcal.target.round()} calories. ${calories!.semanticLabel}'
-              : '${kcal.consumed.round()} calories consumed.',
-          child: Wrap(
-            spacing: HearthSpacing.md,
-            runSpacing: HearthSpacing.xxs,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: <Widget>[
-              // Keep the consumed amount and its unit together before the
-              // target wraps onto another line at enlarged text.
-              Text(
-                !kcal.hasKnownIntake
-                    ? 'Calories —'
-                    : kcal.availability == SavedNutritionAvailability.partial
-                    ? '${kcal.consumed.round()} kcal known'
-                    : kcal.canCompare && !reflowCalories
-                    ? '${kcal.consumed.round()} of ${kcal.target.round()} kcal'
-                    : '${kcal.consumed.round()} kcal',
-                style: context.text.body.copyWith(
-                  decoration: TextDecoration.underline,
-                ),
+    final String spoken = !kcal.hasKnownIntake
+        ? 'Calories, saved nutrition unavailable.'
+        : kcal.availability == SavedNutritionAvailability.partial
+        ? '$eaten calories known subtotal. Incomplete saved nutrition.'
+        : kcal.canCompare
+        ? '$eaten of ${kcal.target.round()} calories. '
+              '${indicator!.semanticLabel}'
+        : '$eaten calories consumed.';
+
+    if (compact) {
+      // The readout as it was before the headline existed, word for word:
+      // the amount and its unit together, the target wrapping to its own
+      // line, and the state as an icon and a word under them.
+      return _TotalAction(
+        nutrient: SupportedNutrient.calories,
+        onSelect: onSelect,
+        label: spoken,
+        child: Wrap(
+          spacing: HearthSpacing.md,
+          runSpacing: HearthSpacing.xxs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: <Widget>[
+            Text(
+              !kcal.hasKnownIntake
+                  ? 'Calories —'
+                  : kcal.availability == SavedNutritionAvailability.partial
+                  ? '$eaten kcal known'
+                  : '$eaten kcal',
+              style: context.text.body.copyWith(
+                decoration: TextDecoration.underline,
               ),
-              if (kcal.canCompare && reflowCalories)
-                Text(
-                  'of ${kcal.target.round()} kcal',
-                  style: context.text.body,
-                ),
-              if (calories != null)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Icon(
-                      calories.icon,
-                      size: 16,
+            ),
+            if (kcal.canCompare)
+              Text('of ${kcal.target.round()} kcal', style: context.text.body),
+            if (indicator != null)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(
+                    indicator.icon,
+                    size: 16,
+                    color: kcal.isOver ? colors.overAccent : colors.textMuted,
+                  ),
+                  const SizedBox(width: HearthSpacing.xxs),
+                  Text(
+                    indicator.shortLabel,
+                    style: context.text.metadata.copyWith(
                       color: kcal.isOver ? colors.overAccent : colors.textMuted,
                     ),
-                    const SizedBox(width: HearthSpacing.xxs),
-                    Text(
-                      calories.shortLabel,
-                      style: context.text.metadata.copyWith(
-                        color: kcal.isOver
-                            ? colors.overAccent
-                            : colors.textMuted,
-                      ),
-                    ),
-                  ],
+                  ),
+                ],
+              ),
+          ],
+        ),
+      );
+    }
+
+    // The headline, and whether there is anything to put under it. Only a day
+    // with a target has a state to report; the other three cases are the
+    // total itself, and a bar with nothing to fill against would be a
+    // drawing of a number we do not have.
+    final String headline;
+    final String? totals;
+    if (!kcal.hasKnownIntake) {
+      headline = 'Calories —';
+      totals = null;
+    } else if (kcal.availability == SavedNutritionAvailability.partial) {
+      headline = '$eaten kcal known';
+      totals = null;
+    } else if (indicator == null) {
+      headline = '$eaten kcal';
+      totals = null;
+    } else {
+      headline = switch (kcal.tone) {
+        MacroTone.over => '${kcal.remaining!.abs().round()} kcal over',
+        MacroTone.good when kcal.state == MacroProgressState.met => 'On target',
+        // Neutral is the untouched day: still "left", and the honest amount.
+        MacroTone.good ||
+        MacroTone.neutral => '${kcal.remaining!.round()} kcal left',
+      };
+      // Unchanged wording, and deliberately: this is the line that used to be
+      // the whole readout, and it is still the pair of numbers the headline
+      // was worked out from.
+      totals = '$eaten of ${kcal.target.round()} kcal';
+    }
+
+    final Color tone = kcal.isOver ? colors.overAccent : colors.accent;
+
+    return Semantics(
+      key: const ValueKey<String>('macro-total-calories'),
+      label: spoken,
+      hint: 'Show logged meals contributing to this total',
+      button: true,
+      onTap: () => onSelect(SupportedNutrient.calories),
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: () => onSelect(SupportedNutrient.calories),
+        excludeFromSemantics: true,
+        borderRadius: BorderRadius.circular(HearthRadius.md),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            minHeight: HearthTouch.androidTarget,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              // Wrap rather than Row: at three times the text "1600 kcal
+              // left" is wider than a 320pt phone on its own, and the arrow
+              // beside it has to drop to the next line rather than squeeze
+              // the words it is repeating.
+              Wrap(
+                spacing: HearthSpacing.sm,
+                runSpacing: HearthSpacing.xxs,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: <Widget>[
+                  Text(headline, style: context.text.heroReadout),
+                  if (indicator != null)
+                    Icon(indicator.icon, size: 20, color: tone),
+                ],
+              ),
+              if (totals != null) ...<Widget>[
+                const SizedBox(height: HearthSpacing.sm),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(HearthRadius.sm),
+                  child: LinearProgressIndicator(
+                    value: kcal.barFill,
+                    minHeight: 10,
+                    backgroundColor: colors.progressTrack,
+                    valueColor: AlwaysStoppedAnimation<Color>(tone),
+                    // The headline above already says the number and the
+                    // state; a bar repeating it is the same fact a third
+                    // time, in a voice that cannot say "left".
+                    semanticsLabel: null,
+                  ),
                 ),
+                const SizedBox(height: HearthSpacing.sm),
+                Text(
+                  totals,
+                  style: context.text.metadata.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
-        const SizedBox(height: HearthSpacing.xs),
+      ),
+    );
+  }
+}
+
+/// The rest of the day in two lines, under the calorie headline
+/// (spec §5.6).
+///
+/// Same numbers, same words, same three minor nutrients — including the ones
+/// nothing has stated, which read as a dash. What it drops is the drawing:
+/// the rings are the better picture of a day and the worse first screen,
+/// because at ordinary text they push the first meal below the fold.
+///
+/// Calories are not here. They are [_DayHero], above this and above the
+/// rings both, so that the figure the screen is read for is in one place
+/// whichever view is open.
+class _CompactSummary extends StatelessWidget {
+  const _CompactSummary({required this.progress, required this.onSelect});
+
+  final DayProgress progress;
+  final ValueChanged<SupportedNutrient> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
         _CompactRow(
           onSelect: onSelect,
           readouts: <_Readout>[
@@ -1283,26 +1447,3 @@ class _EntryRow extends ConsumerWidget {
 
 /// What a long press offers.
 enum _EntryAction { loggedDetails, editPortion, move, planAgain, remove }
-
-class _Card extends StatelessWidget {
-  const _Card({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    return Material(
-      color: colors.surface,
-      borderRadius: BorderRadius.circular(HearthRadius.lg),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(HearthRadius.lg),
-          border: Border.all(color: colors.outline),
-        ),
-        padding: const EdgeInsets.all(HearthSpacing.lg),
-        child: child,
-      ),
-    );
-  }
-}

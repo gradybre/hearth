@@ -512,6 +512,19 @@ Future<void> expectTextContrast(WidgetTester tester, String where) async {
       text.box.paintBounds,
     );
     if (!_isUncovered(tester, text.box, logical)) continue;
+    // Only the part an ancestor has not clipped away. A paragraph's box is
+    // its whole line box wherever the layout put it, and a list scrolled
+    // under fixed chrome leaves that box straddling the viewport's edge —
+    // so the pixels above the edge belong to the chrome, not to the text.
+    // Sampling them is how a cream ring label, correctly drawn on the day
+    // card's cocoa, came back measured against the cream page behind the
+    // Day/Week control: 1.21:1, for a label nothing was wrong with.
+    //
+    // This narrows what is measured to what is painted, so it cannot hide a
+    // real failure — the visible part is still read, and a text with no
+    // visible part is one nobody can fail to see.
+    final Rect painted = _paintedPart(text.box, logical);
+    if (painted.isEmpty) continue;
     // Contained by a disabled control, not merely touching one. The rule is
     // "a disabled control's own text", and a box that overlaps a disabled
     // rect at one corner is a *neighbouring* label — which `overlaps` would
@@ -527,10 +540,10 @@ Future<void> expectTextContrast(WidgetTester tester, String where) async {
       continue;
     }
     final Rect bounds = Rect.fromLTRB(
-      logical.left * scale,
-      logical.top * scale,
-      logical.right * scale,
-      logical.bottom * scale,
+      painted.left * scale,
+      painted.top * scale,
+      painted.right * scale,
+      painted.bottom * scale,
     );
 
     final Map<int, int> histogram = <int, int>{};
@@ -677,6 +690,30 @@ class _PaintedText {
 /// offers only the delete icon), so every chip in the app — the thermostat's
 /// mode row among them, cream on terracotta — is invisible to that question
 /// while being perfectly visible on screen.
+/// [logical], less whatever this box's ancestors clip away.
+///
+/// A render object's paint bounds say where it was laid out, not where it
+/// survived to the screen: a scroll viewport clips its children, and a child
+/// half out of the viewport keeps its full box. The clips are asked for
+/// rather than guessed — every ancestor is given the chance to describe what
+/// it cuts off its child, which covers viewports, `ClipRect`, `ClipRRect`
+/// and anything else that trims, without this knowing their names.
+Rect _paintedPart(RenderBox box, Rect logical) {
+  Rect painted = logical;
+  RenderObject child = box;
+  for (RenderObject? node = box.parent; node != null; node = node.parent) {
+    final Rect? clip = node.describeApproximatePaintClip(child);
+    if (clip != null) {
+      painted = painted.intersect(
+        MatrixUtils.transformRect(node.getTransformTo(null), clip),
+      );
+      if (painted.isEmpty) return Rect.zero;
+    }
+    child = node;
+  }
+  return painted;
+}
+
 bool _isUncovered(WidgetTester tester, RenderBox box, Rect logical) {
   if (!box.attached || !box.hasSize || box.size.isEmpty) return false;
   if (logical.isEmpty || logical.hasNaN) return false;

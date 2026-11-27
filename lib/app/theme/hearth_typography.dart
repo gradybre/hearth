@@ -61,6 +61,23 @@ abstract final class HearthTypography {
   static TextStyle recipeTitle({required bool isDark}) =>
       _serifHeader(isDark: isDark, size: 32, height: 1.1);
 
+  /// The one figure a screen is read for — "850 kcal left" on the day.
+  ///
+  /// Serif rather than [macroReadout]'s sans, because this is a headline and
+  /// not a column of data: it is read once, from across a kitchen, and the
+  /// templates draw it in the same face as a recipe title. Tabular figures
+  /// all the same — it counts down as the day is logged, and a headline that
+  /// shifts sideways on every entry is worse than a small one that does.
+  ///
+  /// A shade smaller than [recipeTitle]: a recipe's name is the subject of
+  /// its screen, and this is the subject of one card on a screen whose
+  /// subject is the meals below it.
+  static TextStyle heroReadout({required bool isDark}) => _serifHeader(
+    isDark: isDark,
+    size: 34,
+    height: 1.05,
+  ).copyWith(fontFeatures: const <FontFeature>[FontFeature.tabularFigures()]);
+
   static TextStyle sectionHeader({required bool isDark}) =>
       _serifHeader(isDark: isDark, size: 20, height: 1.2);
 
@@ -166,6 +183,7 @@ abstract final class HearthTypography {
 class HearthTextStyles extends ThemeExtension<HearthTextStyles> {
   const HearthTextStyles({
     required this.recipeTitle,
+    required this.heroReadout,
     required this.sectionHeader,
     required this.body,
     required this.ingredient,
@@ -176,6 +194,7 @@ class HearthTextStyles extends ThemeExtension<HearthTextStyles> {
 
   factory HearthTextStyles.of({required bool isDark}) => HearthTextStyles(
     recipeTitle: HearthTypography.recipeTitle(isDark: isDark),
+    heroReadout: HearthTypography.heroReadout(isDark: isDark),
     sectionHeader: HearthTypography.sectionHeader(isDark: isDark),
     body: HearthTypography.body(),
     ingredient: HearthTypography.ingredient(),
@@ -185,6 +204,7 @@ class HearthTextStyles extends ThemeExtension<HearthTextStyles> {
   );
 
   final TextStyle recipeTitle;
+  final TextStyle heroReadout;
   final TextStyle sectionHeader;
   final TextStyle body;
   final TextStyle ingredient;
@@ -195,6 +215,7 @@ class HearthTextStyles extends ThemeExtension<HearthTextStyles> {
   @override
   HearthTextStyles copyWith({
     TextStyle? recipeTitle,
+    TextStyle? heroReadout,
     TextStyle? sectionHeader,
     TextStyle? body,
     TextStyle? ingredient,
@@ -203,6 +224,7 @@ class HearthTextStyles extends ThemeExtension<HearthTextStyles> {
     TextStyle? label,
   }) => HearthTextStyles(
     recipeTitle: recipeTitle ?? this.recipeTitle,
+    heroReadout: heroReadout ?? this.heroReadout,
     sectionHeader: sectionHeader ?? this.sectionHeader,
     body: body ?? this.body,
     ingredient: ingredient ?? this.ingredient,
@@ -216,6 +238,7 @@ class HearthTextStyles extends ThemeExtension<HearthTextStyles> {
     if (other is! HearthTextStyles) return this;
     return HearthTextStyles(
       recipeTitle: TextStyle.lerp(recipeTitle, other.recipeTitle, t)!,
+      heroReadout: TextStyle.lerp(heroReadout, other.heroReadout, t)!,
       sectionHeader: TextStyle.lerp(sectionHeader, other.sectionHeader, t)!,
       body: TextStyle.lerp(body, other.body, t)!,
       ingredient: TextStyle.lerp(ingredient, other.ingredient, t)!,
