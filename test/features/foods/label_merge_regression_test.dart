@@ -10,7 +10,7 @@ import 'package:hearth/features/foods/food_draft.dart';
 ///
 /// The numbers are transcribed from a printed package: Great Value Chopped
 /// Onions, NET WT 10 OZ (284 g), "about 3.5 servings per container", serving
-/// 2/3 cup (85 g), 35 kcal, 1 g protein, 8 g carbohydrate, 0 g fat, 1 g fibre,
+/// 2/3 cup (85 g), 35 kcal, 1 g protein, 8 g carbohydrate, 0 g fat, 1 g fiber,
 /// 0 mg sodium, 0 mg cholesterol. No photograph is stored in the repository
 /// and nothing below reads one — these are synthetic readings carrying those
 /// numbers, and where a reading states something the front of a package could

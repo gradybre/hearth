@@ -21,7 +21,7 @@ extension SupportedNutrientDetails on SupportedNutrient {
     SupportedNutrient.protein => 'Protein',
     SupportedNutrient.carbs => 'Carbohydrate',
     SupportedNutrient.fat => 'Fat',
-    SupportedNutrient.fiber => 'Fibre',
+    SupportedNutrient.fiber => 'Fiber',
     SupportedNutrient.sodium => 'Sodium',
     SupportedNutrient.cholesterol => 'Cholesterol',
   };

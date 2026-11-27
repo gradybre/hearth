@@ -209,7 +209,7 @@ class ServingDraft {
     carbG: _field(carbs) ?? 0,
     fatG: _field(fat) ?? 0,
     // No `?? 0`: an empty field is a question nobody answered, and there is a
-    // difference between a food with no fibre and a food nobody asked.
+    // difference between a food with no fiber and a food nobody asked.
     fiberG: _field(fiber),
     sodiumMg: _field(sodium),
     cholesterolMg: _field(cholesterol),
@@ -233,7 +233,7 @@ class ServingDraft {
       ('protein', protein),
       ('carbs', carbs),
       ('fat', fat),
-      ('fibre', fiber),
+      ('fiber', fiber),
       ('sodium', sodium),
       ('cholesterol', cholesterol),
     ]) {

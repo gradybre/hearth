@@ -137,7 +137,7 @@ void main() {
 
   group('the three minor nutrients (spec §5.6)', () {
     test('arrive in Hearth\'s own units, unconverted', () async {
-      // USDA reports fibre in grams and the other two in milligrams, which is
+      // USDA reports fiber in grams and the other two in milligrams, which is
       // exactly how Hearth stores them — unlike Open Food Facts, which sends
       // grams for all three. Nothing is scaled here, and this says so.
       final UsdaNutritionSource usda = sourceReturning(
@@ -148,7 +148,7 @@ void main() {
 
       expect(per100g.sodiumMg, 653);
       expect(per100g.cholesterolMg, 105);
-      // Cheddar genuinely has no fibre, and USDA says so with a zero.
+      // Cheddar genuinely has no fiber, and USDA says so with a zero.
       expect(per100g.fiberG, 0);
     });
 

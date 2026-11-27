@@ -911,7 +911,7 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
       await tools.tab('Plan');
       await tools.reach(find.byKey(const Key('minor-total-fiber')));
     },
-    arrived: find.text('Fibre contributors'),
+    arrived: find.text('Fiber contributors'),
     waypoints: <Finder>[
       find.text('Missing information'),
       find.byKey(const Key('contributor-missing-open-e1')),
@@ -974,7 +974,7 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
       find.textContaining('Protein:'),
       find.textContaining('Carbohydrate:'),
       find.textContaining('Fat:'),
-      find.textContaining('Fibre:'),
+      find.textContaining('Fiber:'),
       find.textContaining('Sodium:'),
       find.textContaining('Cholesterol:'),
       find.text('Edit portion'),

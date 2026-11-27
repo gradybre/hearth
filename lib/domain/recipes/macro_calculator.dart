@@ -152,7 +152,7 @@ class RecipeMacros {
   /// [nutrient] (spec §5.6).
   ///
   /// Only the resolved ones are asked. An ingredient excluded as optional, or
-  /// marked as a seasoning, is not a gap in the fibre total any more than it
+  /// marked as a seasoning, is not a gap in the fiber total any more than it
   /// is a gap in the calories — it was never going to contribute.
   int unknownCountFor(MinorNutrient nutrient) => ingredients
       .where((IngredientMacros i) => i.isResolved && !i.macros.knows(nutrient))
@@ -161,7 +161,7 @@ class RecipeMacros {
   /// How much of this recipe's total each minor nutrient speaks for.
   ///
   /// Only the ingredients that actually *counted* are asked. One excluded as
-  /// optional, or marked as a seasoning, is no more a gap in the fibre total
+  /// optional, or marked as a seasoning, is no more a gap in the fiber total
   /// than it is in the calories — it was never going to contribute, so its
   /// silence is not a hole in what the rest add up to.
   ///
@@ -205,7 +205,7 @@ class RecipeMacros {
   /// when every counted ingredient knew it.
   ///
   /// A partial total looks exactly like a whole one on screen, which is how
-  /// "12 g fibre" from half a recipe becomes a number somebody trusts. §4's
+  /// "12 g fiber" from half a recipe becomes a number somebody trusts. §4's
   /// rule is that incomplete data flags rather than blocks; this is the flag.
   String? partialNoteFor(MinorNutrient nutrient) {
     if (total.minor(nutrient) == null) return null;

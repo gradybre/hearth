@@ -595,7 +595,7 @@ class _MenuImportScreenState extends ConsumerState<MenuImportScreen> {
             const SizedBox(height: HearthSpacing.lg),
             Text(
               'One item per line: name, portion, calories, protein, carbs, '
-              'fat — then fibre, sodium and cholesterol if the sheet gives '
+              'fat — then fiber, sodium and cholesterol if the sheet gives '
               'them. Commas, tabs or a couple of spaces all separate, so a '
               'row copied out of a table works as it lands.\n\n'
               'A line with no numbers on it is read as a section — paste the '

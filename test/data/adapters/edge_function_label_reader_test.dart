@@ -260,7 +260,7 @@ void main() {
 
       expect(reading.servings.single.sodiumMg, 180);
       expect(reading.servings.single.cholesterolMg, 30);
-      // Cheddar has no fibre and the panel prints a 0. That is a reading, not
+      // Cheddar has no fiber and the panel prints a 0. That is a reading, not
       // a gap, and it has to arrive as one.
       expect(reading.servings.single.fiberG, 0);
     });

@@ -17,7 +17,7 @@ import '../../support/fixtures.dart';
 ///
 /// The numbers are transcribed from a printed package: Great Value Chopped
 /// Onions, NET WT 10 OZ, 2/3 cup (85 g), 35 kcal, 1 g protein, 8 g
-/// carbohydrate, 0 g fat, 1 g fibre, 0 mg sodium, 0 mg cholesterol. No
+/// carbohydrate, 0 g fat, 1 g fiber, 0 mg sodium, 0 mg cholesterol. No
 /// photograph is stored in the repository and nothing here reads one.
 void main() {
   /// The front of the package and nothing else: net contents, no panel, so no

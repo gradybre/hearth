@@ -372,8 +372,8 @@ void main() {
       'a payload from before these existed decodes as unknown, not zero',
       () {
         // The guard that matters most. Every food already in the hosted
-        // database was written by a client that had never heard of fibre, and
-        // reading those back as "0 g fibre" would put a wrong number on every
+        // database was written by a client that had never heard of fiber, and
+        // reading those back as "0 g fiber" would put a wrong number on every
         // one of them (spec §5.6, and §4's frozen history by extension).
         final Map<String, Object?> json = FoodMapper.toJson(
           withNutrients(),

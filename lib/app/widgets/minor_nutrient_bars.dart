@@ -9,14 +9,14 @@ import '../theme/hearth_spacing.dart';
 import '../theme/hearth_theme.dart';
 import '../theme/hearth_typography.dart';
 
-/// Fibre, sodium and cholesterol against their targets (spec §5.6).
+/// Fiber, sodium and cholesterol against their targets (spec §5.6).
 ///
 /// Bars rather than rings, and deliberately quieter than the four above them.
 /// Rings are for the macros, calories loudest of all; giving these the same
 /// weight would say they matter as much, which is not what Brendan asked for
 /// and not what the spec says.
 ///
-/// **The three do not point the same way, and the bars say so.** Fibre fills
+/// **The three do not point the same way, and the bars say so.** Fiber fills
 /// towards something worth reaching. Sodium and cholesterol fill a budget, and
 /// filling one is the thing you were trying not to do. That is
 /// [MinorNutrient.isFloor], and it is the whole reason this is not four more
@@ -30,7 +30,7 @@ import '../theme/hearth_typography.dart';
 /// missing one is a thing you report as broken.
 ///
 /// What it will not do is print a zero. "0 of 28 g" claims the day had no
-/// fibre, when the truth is that nothing eaten was ever asked.
+/// fiber, when the truth is that nothing eaten was ever asked.
 class MinorNutrientBars extends StatelessWidget {
   const MinorNutrientBars({required this.progress, this.onSelect, super.key});
 
@@ -67,7 +67,7 @@ class _Bar extends StatelessWidget {
 
   /// Keeps a decimal below ten, the same rule the recipe card uses.
   ///
-  /// Half a gram of stated fibre rounding to "0 g" would report the opposite
+  /// Half a gram of stated fiber rounding to "0 g" would report the opposite
   /// of the truth — and would be indistinguishable from the stated zero this
   /// whole widget exists to tell apart from silence.
   static String _number(double value) =>

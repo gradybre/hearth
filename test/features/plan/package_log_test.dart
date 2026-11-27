@@ -33,7 +33,7 @@ void main() {
       );
 
   // Two rows reading '1 cup'; the relationship is anchored to the second.
-  // The default row states fibre and the selected one does not, so macros
+  // The default row states fiber and the selected one does not, so macros
   // and coverage taken from different rows disagree visibly.
   final Food cheese = Food(
     id: 'food-cheese',

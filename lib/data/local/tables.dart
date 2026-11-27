@@ -202,7 +202,7 @@ class FoodServingOptions extends Table {
 
   /// The three minor nutrients (spec §5.6). Nullable and **no default**: null
   /// is unknown, and a `withDefault(0)` here would quietly turn every food
-  /// that has never heard of fibre into one that claims to have none.
+  /// that has never heard of fiber into one that claims to have none.
   RealColumn get fiberG => real().nullable()();
   RealColumn get sodiumMg => real().nullable()();
   RealColumn get cholesterolMg => real().nullable()();

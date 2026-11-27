@@ -203,7 +203,7 @@ void main() {
         'Protein: 17.6 g',
         'Carbohydrate: 21.2 g',
         'Fat: 8 g',
-        'Fibre: 3.6 g',
+        'Fiber: 3.6 g',
         'Sodium: 1235 mg',
         'Cholesterol: 18 mg',
       ]) {
@@ -241,10 +241,10 @@ void main() {
           ),
         );
         await _reveal(tester, find.text('Uses approximate package servings'));
-        await _reveal(tester, find.text('Fibre: At least 2.7 g'));
+        await _reveal(tester, find.text('Fiber: At least 2.7 g'));
         expect(
           find.bySemanticsLabel(
-            'Fibre: At least 2.7 g. Partial nutrition recorded',
+            'Fiber: At least 2.7 g. Partial nutrition recorded',
           ),
           findsOneWidget,
         );
@@ -277,7 +277,7 @@ void main() {
         ),
       ),
     );
-    for (final String nutrient in <String>['Fibre', 'Sodium', 'Cholesterol']) {
+    for (final String nutrient in <String>['Fiber', 'Sodium', 'Cholesterol']) {
       await _reveal(tester, find.text('$nutrient: Unknown'));
       expect(find.textContaining('$nutrient: 0'), findsNothing);
     }

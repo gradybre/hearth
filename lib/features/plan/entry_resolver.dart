@@ -180,7 +180,7 @@ abstract final class EntryResolver {
 
   /// The same contributions, unsummed.
   ///
-  /// A total says nothing about its own coverage: "12 g of fibre" looks
+  /// A total says nothing about its own coverage: "12 g of fiber" looks
   /// identical whether it came from everything eaten or from one food out of
   /// six, and only one of those is worth reading (spec §5.6).
   static List<Macros> eatenParts(Iterable<ResolvedEntry> entries) => <Macros>[
@@ -192,7 +192,7 @@ abstract final class EntryResolver {
   ///
   /// Counting entries told you how many meals said nothing at all. It could
   /// not see inside one: a recipe whose second ingredient never stated its
-  /// fibre summed to a non-null number, so the entry read as knowing, and the
+  /// fiber summed to a non-null number, so the entry read as knowing, and the
   /// day showed a partial total as though it were whole (R06).
   static List<NutrientCoverage> eatenCoverage(
     Iterable<ResolvedEntry> entries,

@@ -4,10 +4,10 @@ import 'package:test/test.dart';
 
 /// How much of a total a nutrient's number speaks for (spec §5.6, R06).
 ///
-/// Five grams of fibre from a recipe whose every ingredient stated its fibre,
+/// Five grams of fiber from a recipe whose every ingredient stated its fiber,
 /// and five grams from one whose second ingredient never said, are the same
 /// number and a different fact. Only one of them supports "you have had five
-/// grams of fibre today".
+/// grams of fiber today".
 void main() {
   const NutrientCoverage nothingRecorded = NutrientCoverage.notRecorded();
 
@@ -102,7 +102,7 @@ void main() {
     });
 
     test('and it poisons a sum rather than being ignored', () {
-      // A day containing one old meal cannot claim its fibre is complete,
+      // A day containing one old meal cannot claim its fiber is complete,
       // however well the newer meals are covered.
       expect(
         NutrientCoverage.sum(<NutrientCoverage>[one(fiber: 4), nothingRecorded])
@@ -147,7 +147,7 @@ void main() {
   group('coverage a newer version wrote', () {
     test('survives a word this one does not know', () {
       // Reading tolerantly and then writing `{}` back would be a slower way
-      // of destroying the same thing: the unreadable fibre *and* a sodium
+      // of destroying the same thing: the unreadable fiber *and* a sodium
       // this version can read would both be gone (§4).
       final NutrientCoverage read = NutrientCoverage.fromJson(<String, Object?>{
         'fiber': 'estimated',

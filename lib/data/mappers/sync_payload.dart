@@ -149,7 +149,7 @@ abstract final class SyncPayload {
             fatG: _double(o['fat_g']) ?? 0,
             // The four fall back to zero because they are always known and a
             // missing one is a broken payload. These three do not: a payload
-            // silent about fibre is a food nobody has told us about, and this
+            // silent about fiber is a food nobody has told us about, and this
             // is the last place that could be lost (spec §5.6).
             fiberG: _double(o['fiber_g']),
             sodiumMg: _double(o['sodium_mg']),

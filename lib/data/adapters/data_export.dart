@@ -480,7 +480,7 @@ class DataExport {
             'protein_g': row.proteinG,
             'carb_g': row.carbG,
             'fat_g': row.fatG,
-            // All seven. Fibre, sodium and cholesterol were lifted out of the
+            // All seven. Fiber, sodium and cholesterol were lifted out of the
             // deferred list deliberately (§5.6), and dropping them here loses
             // a decision somebody made — silently, and only noticeably later.
             // Null is a real answer: it means the Daily Value, not "no

@@ -47,7 +47,7 @@ const List<String> _labels = <String>[
   'Protein',
   'Carbs',
   'Fat',
-  'Fibre g',
+  'Fiber g',
   'Sodium mg',
   'Chol. mg',
 ];

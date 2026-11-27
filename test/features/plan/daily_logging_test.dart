@@ -243,7 +243,7 @@ void main() {
     expect(find.textContaining('left'), findsNothing);
     expect(find.textContaining('over'), findsNothing);
     // A configured target set still gets the specified minor Daily Values.
-    expect(find.text('Fibre 4/28g'), findsOneWidget);
+    expect(find.text('Fiber 4/28g'), findsOneWidget);
     await _tap(tester, find.text('Details'));
     expect(find.text('of 0'), findsNothing);
     expect(find.text('of 50'), findsOneWidget);
@@ -347,7 +347,7 @@ void main() {
       ],
     );
     await _day(tester);
-    expect(find.text('Fibre ≥4g'), findsOneWidget);
+    expect(find.text('Fiber ≥4g'), findsOneWidget);
     await _tap(tester, find.text('Details'));
     expect(find.textContaining('1 of 2 did not say'), findsOneWidget);
     expect(find.textContaining('tracked how complete it was'), findsWidgets);
@@ -365,7 +365,7 @@ void main() {
     await _day(tester);
     expect(find.text('400 kcal'), findsNWidgets(3));
     expect(find.text('Protein 20g'), findsOneWidget);
-    expect(find.text('Fibre 4g'), findsOneWidget);
+    expect(find.text('Fiber 4g'), findsOneWidget);
     expect(find.text('Sodium —'), findsOneWidget);
     expect(find.text('Set targets'), findsOneWidget);
     expect(find.textContaining('left'), findsNothing);

@@ -241,10 +241,10 @@ void main() {
     );
   });
 
-  testWidgets('a food nothing says fibre about is listed, but not as a fault', (
+  testWidgets('a food nothing says fiber about is listed, but not as a fault', (
     WidgetTester tester,
   ) async {
-    // §5.6 has fibre, sodium and cholesterol as optional and nullable, so a
+    // §5.6 has fiber, sodium and cholesterol as optional and nullable, so a
     // food that never stated them is being honest rather than broken. Listed
     // for somebody who wants those totals; not counted as something wrong.
     await openRepair(
@@ -254,7 +254,7 @@ void main() {
     );
 
     expect(
-      find.text('Foods that never said fibre, sodium or cholesterol'),
+      find.text('Foods that never said fiber, sodium or cholesterol'),
       findsOneWidget,
     );
     expect(find.textContaining('Plain flour'), findsOneWidget);

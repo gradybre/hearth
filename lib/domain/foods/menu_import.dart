@@ -61,7 +61,7 @@ class MenuImportLine {
   /// -25  -6" and the transcription stays a faithful copy of it.
   ///
   /// Any negative among the seven, not all of them — Freddy's wrap adds a
-  /// gram of fibre while it takes away everything else, because the bun is
+  /// gram of fiber while it takes away everything else, because the bun is
   /// what was carrying the deficit.
   bool get isModifier =>
       macros.kcal < 0 ||
@@ -113,7 +113,7 @@ class MenuRow {
 /// Chicken, 4 oz, 180, 32, 0, 7
 /// ```
 ///
-/// name, portion, kcal, protein, carbs, fat, and optionally fibre, sodium and
+/// name, portion, kcal, protein, carbs, fat, and optionally fiber, sodium and
 /// cholesterol. Tabs and runs of spaces separate as well as commas, so a row
 /// copied straight out of a web table lands the same way.
 abstract final class MenuImport {
@@ -187,9 +187,9 @@ abstract final class MenuImport {
   ///  * **Trailing** unknowns are simply absent. A short line is how this
   ///    format already says the sheet did not print those columns, and a 0
   ///    there would be a claim (spec §5.6).
-  ///  * A **gap** — no fibre but a known sodium — is written as `-`, which
+  ///  * A **gap** — no fiber but a known sodium — is written as `-`, which
   ///    [_number] reads back as unknown. Leaving it empty instead would slide
-  ///    the sodium into the fibre column and every later value with it, and
+  ///    the sodium into the fiber column and every later value with it, and
   ///    nothing downstream could tell.
   static List<String> _minor(Macros macros) {
     final List<double?> values = <double?>[

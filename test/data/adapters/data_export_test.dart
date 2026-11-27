@@ -342,7 +342,7 @@ void main() {
     });
 
     test('all seven targets, not the four that fit on a ring', () async {
-      // Fibre, sodium and cholesterol were lifted out of the deferred list
+      // Fiber, sodium and cholesterol were lifted out of the deferred list
       // deliberately (§5.6). An export that drops them loses a decision
       // somebody made, silently.
       await db

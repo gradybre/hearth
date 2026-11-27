@@ -180,7 +180,7 @@ void main() {
 
   group('a sheet that declined to be precise', () {
     test('"< 1" is unknown, not zero and not one', () {
-      // Chipotle's own sheet prints this for the taco tortilla's fibre.
+      // Chipotle's own sheet prints this for the taco tortilla's fiber.
       final MenuImportLine line = one(
         'Flour Tortilla, 1 ea, 80, 2, 13, 2.5, < 1, 160, 0',
       );
@@ -359,8 +359,8 @@ void main() {
     });
 
     test('a gap in the middle does not slide the columns along', () {
-      // The failure this format cannot otherwise detect: no fibre but a known
-      // sodium. Written empty, the sodium would land in the fibre column and
+      // The failure this format cannot otherwise detect: no fiber but a known
+      // sodium. Written empty, the sodium would land in the fiber column and
       // everything after it would follow.
       final MenuImportLine line = roundTrip(<MenuRow>[
         const MenuRow(
@@ -406,9 +406,9 @@ void main() {
       expect(line.macros.kcal, -180);
     });
 
-    test('and the fibre keeps its own sign', () {
+    test('and the fiber keeps its own sign', () {
       // The whole reason this is signed storage rather than a "negate
-      // everything" flag: taking the bun off adds a gram of fibre.
+      // everything" flag: taking the bun off adds a gram of fiber.
       expect(
         one('Lettuce Wrap, 1, -180, -3, -25, -6, 1, -270').macros.fiberG,
         1,
