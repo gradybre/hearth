@@ -10,14 +10,20 @@ import '../../data/local/collection_store.dart';
 import '../../domain/recipes/recipe_query.dart';
 import 'recipe_filters_sheet.dart';
 
-/// Search box, four controls, and what is currently applied (spec §5.2).
+/// Search box, the library's tabs, and what is currently applied (spec §5.2,
+/// and the November 2026 templates).
 ///
-/// The four are the whole rail: sort, the two toggles worth a tap on the way
-/// past, and the way into everything else. It used to be sort, the toggles,
+/// All, Favourites, Filters, and the sort. It used to be sort, two toggles,
 /// two times, protein, calories, **and one chip per collection, per cuisine
 /// and per tag** — all in a horizontal scroll view, so it ran off the side of
 /// a desktop window, was a scroll inside a scroll on a phone, and grew
 /// longest for exactly the person with the most to sift through (review P6).
+///
+/// The templates draw the row that survived that as underlined tabs, and add
+/// the "All" the rail never had. Eaten out moved behind Filters with the
+/// other narrowings — it is one, and the tabs are a scope, not a set of
+/// switches. Nothing it did was taken away: it is a chip in the sheet, it
+/// still combines with Favourites, and the strip below still names it.
 ///
 /// What is applied is a strip of named chips below, each removable on its
 /// own. The rail before this could only say what was on by being scrolled
@@ -93,18 +99,51 @@ class _RecipeFilterBarState extends ConsumerState<RecipeFilterBar> {
         const SizedBox(height: HearthSpacing.md),
         Padding(
           padding: EdgeInsets.symmetric(horizontal: widget.gutter),
-          // A Wrap, not a horizontal scroll view. Four controls fit on one
-          // line on any ordinary phone and wrap onto a second at large text,
-          // which is what dynamic type asks for — and nothing here is ever
-          // off the right-hand edge waiting to be found (spec §6.3).
+          // A Wrap, not a horizontal scroll view. The tabs and the sort
+          // fit on one line on any ordinary phone and wrap onto a second at
+          // large text, which is what dynamic type asks for — and nothing
+          // here is ever off the right-hand edge waiting to be found
+          // (spec §6.3).
           child: Wrap(
             key: const ValueKey<String>('recipe-filter-controls'),
+            crossAxisAlignment: WrapCrossAlignment.center,
             // Zero, because every child carries its own trailing gap: the
             // sort button's is inside `SortButton`, out of reach from here.
             runSpacing: HearthSpacing.sm,
             children: <Widget>[
-              // Sort leads the row: it is always on and always relevant,
-              // unlike the chips beside it, which are each off until chosen.
+              // All and Favourites are two states of one control, so they
+              // are drawn as tabs rather than as a chip that happens to be
+              // off. The old rail had no "everything" to press: turning a
+              // narrowing off meant finding the lit chip and tapping it
+              // again, which is a different gesture from choosing a scope.
+              _FilterTab(
+                label: 'All',
+                selected: !filter.favoritesOnly,
+                onTap: () => control.setFavoritesOnly(false),
+              ),
+              _FilterTab(
+                label: 'Favourites',
+                selected: filter.favoritesOnly,
+                onTap: () => control.setFavoritesOnly(true),
+              ),
+              // Not a tab: it opens a sheet rather than selecting a scope,
+              // so it is never underlined and never announces itself as
+              // selected. The count is in the words, not in the fill — a lit
+              // control and an unlit one differ by colour, and colour alone
+              // is never the meaning (spec §6.3).
+              _FilterTab(
+                label: behindTheButton == 0
+                    ? 'Filters'
+                    : 'Filters ($behindTheButton)',
+                selected: false,
+                isTab: false,
+                onTap: () => showRecipeFiltersSheet(context),
+              ),
+              // Sort stays on the screen rather than moving behind Filters
+              // with the narrowings. It is not one: it hides nothing and
+              // excludes nothing, and burying it would leave the order the
+              // list is in — the thing it exists to state — invisible until
+              // somebody opened a sheet called Filters to look for it.
               SortButton<RecipeSort>(
                 value: filter.sort,
                 choices: <SortChoice<RecipeSort>>[
@@ -112,37 +151,6 @@ class _RecipeFilterBarState extends ConsumerState<RecipeFilterBar> {
                     SortChoice<RecipeSort>(value: sort, label: sort.label),
                 ],
                 onChanged: control.setSort,
-              ),
-              RecipeFilterChip(
-                label: 'Favourites',
-                icon: Icons.favorite,
-                selected: filter.favoritesOnly,
-                onTap: control.toggleFavoritesOnly,
-              ),
-              // Narrows to meals eaten out; it never hides them. They live in
-              // this library like anything else, and a tab that quietly
-              // omitted a third of what you eat would be worse than useless
-              // (spec §5.2).
-              RecipeFilterChip(
-                label: 'Eaten out',
-                icon: Icons.storefront,
-                selected: filter.eatenOutOnly,
-                onTap: control.toggleEatenOutOnly,
-              ),
-              // The count is in the words, not in the fill: a lit chip and an
-              // unlit one differ by colour, and colour alone is never the
-              // meaning (spec §6.3). It counts only what is behind it — the
-              // two toggles are right here, lit, and counting them twice
-              // would make "Filters (2)" mean nothing you could act on.
-              RecipeFilterChip(
-                label: behindTheButton == 0
-                    ? 'Filters'
-                    : 'Filters ($behindTheButton)',
-                icon: Icons.tune,
-                activeIcon: Icons.tune,
-                isToggle: false,
-                selected: behindTheButton > 0,
-                onTap: () => showRecipeFiltersSheet(context),
               ),
             ],
           ),
@@ -183,9 +191,10 @@ class _RecipeFilterBarState extends ConsumerState<RecipeFilterBar> {
   /// How many of the filters the sheet holds are on.
   ///
   /// Deliberately not [RecipeFilter.activeCount]: that counts the favourites
-  /// and eaten-out toggles too, and they are in the rail rather than behind
-  /// the button.
+  /// tab too, and it is on the screen rather than behind the button, so
+  /// counting it would be counting the same narrowing twice.
   static int _countBehindTheButton(RecipeFilter filter) =>
+      (filter.eatenOutOnly ? 1 : 0) +
       filter.tags.length +
       filter.cuisines.length +
       filter.collectionIds.length +
@@ -195,10 +204,10 @@ class _RecipeFilterBarState extends ConsumerState<RecipeFilterBar> {
 
   /// Everything narrowing the list right now, in the words the strip uses.
   ///
-  /// The two toggles are in here as well as in the rail. The rail is where
-  /// you switch things on; this strip answers "what is narrowing this list",
-  /// and an answer that left two of them out — while the Clear all beside it
-  /// cleared them — would be the wrong answer.
+  /// The favourites tab is in here as well as in the row above. The tabs are
+  /// where you choose a scope; this strip answers "what is narrowing this
+  /// list", and an answer that left the scope out — while the Clear filters
+  /// beside it cleared it — would be the wrong answer.
   ///
   /// The search box is not: it has its own × inside it, and a chip saying
   /// what is already legible in the field above is noise.
@@ -312,6 +321,109 @@ class _AppliedChip extends StatelessWidget {
                   const SizedBox(width: HearthSpacing.xs),
                   Icon(Icons.close, size: 16, color: colors.textSecondary),
                 ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One of the library's tabs, or the button that sits beside them.
+///
+/// **The underline is the state, and the weight repeats it.** A tab that said
+/// which one was chosen by colouring its word would be saying it in colour
+/// alone, which §6.3 does not allow anywhere in the app — so the chosen tab
+/// carries a 2pt accent rule under it and is drawn at the label weight while
+/// the others are drawn at the body weight. Both survive a greyscale print
+/// and a simulation for deuteranopia.
+///
+/// Same type size either way, deliberately: a tab that grew when it was
+/// chosen would shuffle the tabs beside it every time the scope changed.
+class _FilterTab extends StatelessWidget {
+  const _FilterTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.isTab = true,
+  });
+
+  final String label;
+
+  /// Whether this is the scope the library is showing.
+  final bool selected;
+
+  /// Whether to announce a selected state at all.
+  ///
+  /// "Filters (3)" is in the row but is not one of the scopes: it opens a
+  /// sheet. Announcing it as unselected would invite somebody to look for
+  /// the state it does not have.
+  final bool isTab;
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final HearthColors colors = context.colors;
+    final TextStyle style = selected
+        ? context.text.label.copyWith(color: colors.textPrimary)
+        : context.text.label.copyWith(
+            color: colors.textSecondary,
+            fontWeight: FontWeight.w400,
+            fontVariations: const <FontVariation>[FontVariation('wght', 400)],
+          );
+
+    return Padding(
+      padding: const EdgeInsets.only(right: HearthSpacing.md),
+      child: Semantics(
+        button: true,
+        selected: isTab ? selected : null,
+        label: label,
+        onTap: onTap,
+        excludeSemantics: true,
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(HearthRadius.sm),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(HearthRadius.sm),
+            child: ConstrainedBox(
+              // A floor on both axes, never a fixed size: "All" is three
+              // characters and its word is narrower than a fingertip, and
+              // the §6.3 sweep measures width as well as height.
+              //
+              // A `Container` with an `alignment` would have been shorter
+              // and was wrong: given a loose width it takes the *maximum*,
+              // so every tab was as wide as the bar and each one wrapped
+              // onto a line of its own. `Center` with both factors at one
+              // sizes to its child, and the floor is applied over that.
+              constraints: const BoxConstraints(
+                minWidth: HearthTouch.androidTarget,
+                minHeight: HearthTouch.androidTarget,
+              ),
+              child: Center(
+                widthFactor: 1,
+                heightFactor: 1,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: HearthSpacing.xs,
+                  ),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: selected ? colors.accent : Colors.transparent,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: HearthSpacing.xs),
+                      child: Text(label, style: style),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

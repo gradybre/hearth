@@ -121,6 +121,28 @@ class _RecipeFiltersSheet extends ConsumerWidget {
                     horizontal: HearthSpacing.lg,
                   ),
                   children: <Widget>[
+                    // First, because it is the one narrowing that changes
+                    // what kind of thing the list is about rather than how
+                    // much of it there is. It used to sit in the rail beside
+                    // Favourites; the templates' tabs are a scope, and a
+                    // switch among them would have read as a third scope
+                    // while behaving as a filter (spec §5.2).
+                    //
+                    // It narrows to meals eaten out; it never hides them.
+                    // They live in this library like anything else, and a
+                    // tab that quietly omitted a third of what you eat would
+                    // be worse than useless.
+                    _Group(
+                      heading: 'Where it came from',
+                      children: <Widget>[
+                        RecipeFilterChip(
+                          label: 'Eaten out',
+                          icon: Icons.storefront,
+                          selected: filter.eatenOutOnly,
+                          onTap: control.toggleEatenOutOnly,
+                        ),
+                      ],
+                    ),
                     _Group(
                       heading: 'Time',
                       children: <Widget>[
