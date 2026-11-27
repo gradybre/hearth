@@ -53,13 +53,18 @@ class Unit {
   /// Whether this unit names the *container* a food is sold in rather than a
   /// piece of the food itself — a can, a packet, a bottle.
   ///
-  /// Load-bearing in one place: a recipe line reading "2 cans" asks for two
-  /// of whatever one package holds, and the only statement of that is the
-  /// food's reviewed package relationship, which records how many of its
-  /// nutrition serving one package contains (spec R9, R10). No density can
-  /// answer a count, so without this the line was flagged "no serving in
-  /// can" while the food's own label sat there saying "about 3.5 servings
-  /// per container".
+  /// Load-bearing twice over. A recipe line reading "2 cans" asks for two of
+  /// whatever one package holds, and the only statement of that is the food's
+  /// reviewed package relationship, which records how many of its nutrition
+  /// serving one package contains (spec R9, R10). No density can answer a
+  /// count, so without this the line was flagged "no serving in can" while
+  /// the food's own label sat there saying "about 3.5 servings per
+  /// container".
+  ///
+  /// And when nothing answers, this is what keeps the line a gap instead of
+  /// two of whatever portion row came first — see `Food.servingForPackageUnit`,
+  /// named in prose rather than linked because `lib/domain/units` is below
+  /// `lib/domain/models` and does not import it.
   ///
   /// Deliberately not every count unit. A bar, a slice, a patty, a scoop and
   /// a tortilla are *portions out of* a package, so reading "2 bars" as two

@@ -428,6 +428,20 @@ class Food {
     return null;
   }
 
+  /// The first serving measured in any unit that names the whole container.
+  ///
+  /// The five container words are interchangeable by construction — each one
+  /// can mean nothing but the thing the food is sold in — so a tub's own row
+  /// answers a line written in cans. What a container word must never reach
+  /// is a *portion* row: a pinch is not a packet, and [servingForKind] hands
+  /// one over regardless, because the two share [UnitKind.count].
+  ServingOption? get servingForPackageUnit {
+    for (final ServingOption option in servingOptions) {
+      if (option.amount.preferredUnit?.namesAPackage ?? false) return option;
+    }
+    return null;
+  }
+
   @override
   bool operator ==(Object other) => other is Food && other.id == id;
 

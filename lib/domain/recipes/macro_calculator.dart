@@ -311,6 +311,8 @@ abstract final class MacroCalculator {
     // tub's "1 scoop" among them. The loose same-kind match is still tried,
     // below, so a line in cloves still reaches a food served by the item.
     final bool isCount = quantity.kind == UnitKind.count;
+    final bool namesPackage =
+        isCount && (quantity.preferredUnit?.namesAPackage ?? false);
     if (isCount) {
       final IngredientMacros? sameUnit = _scaleToServing(
         ingredient,
@@ -334,10 +336,20 @@ abstract final class MacroCalculator {
       if (viaPackageCount != null) return viaPackageCount;
     }
 
+    // The loose same-kind match, which is what lets "3 cloves" reach a food
+    // served by the item. A container word is held back from it: having just
+    // declined to read "2 cans" through a package, the one thing left to
+    // decline is reading it as two of whatever portion row came first. A
+    // pinch is not a packet, the number that came back was wrong by a
+    // hundredfold, and it wore `resolved` — so it never reached the repair
+    // queue, which a gap does. Another container word is still fair game:
+    // all five mean the whole thing the food is sold in.
     final IngredientMacros? direct = _scaleToServing(
       ingredient,
       quantity,
-      food.servingForKind(quantity.kind),
+      namesPackage
+          ? food.servingForPackageUnit
+          : food.servingForKind(quantity.kind),
     );
     if (direct != null) return direct;
 
@@ -350,6 +362,7 @@ abstract final class MacroCalculator {
         quantity,
         food,
         ownDensity,
+        namesPackage: namesPackage,
       );
       if (resolved != null) return resolved;
     }
@@ -391,6 +404,7 @@ abstract final class MacroCalculator {
       quantity,
       food,
       null,
+      namesPackage: namesPackage,
     );
     if (viaGenericTable != null) return viaGenericTable;
 
@@ -467,14 +481,33 @@ abstract final class MacroCalculator {
   /// Tries every serving option on [food] against [density] — or, when
   /// [density] is null, the generic table looked up by [food]'s name —
   /// returning the first exact match.
+  ///
+  /// "Cross kind" undersells it: a request for the kind the quantity already
+  /// is comes back exact and unchanged, so for a count this loop is a second
+  /// same-kind match over *every* row rather than the first. [namesPackage]
+  /// says the line is written in a container word, which has already been
+  /// answered properly above and must not be answered loosely here.
   static IngredientMacros? _tryCrossKind(
     RecipeIngredient ingredient,
     Quantity quantity,
     Food food,
-    double? density,
-  ) {
+    double? density, {
+    bool namesPackage = false,
+  }) {
     for (final ServingOption option in food.servingOptions) {
       if (option.amount.canonicalAmount == 0) continue;
+      // A container word has already had its say, through the relationship
+      // and then through [Food.servingForPackageUnit]. It must not get a
+      // second, looser one here: [UnitConverter.crossKind] answers a
+      // same-kind request with an exact *identity* conversion, so this loop
+      // is also a same-kind match for anything counted — and without this it
+      // handed "2 cans" whichever portion row came first, the same
+      // hundredfold-wrong `resolved` by a different door.
+      if (namesPackage &&
+          option.amount.kind == UnitKind.count &&
+          !(option.amount.preferredUnit?.namesAPackage ?? false)) {
+        continue;
+      }
       final ConversionResult converted = UnitConverter.crossKind(
         quantity,
         option.amount.kind,

@@ -187,6 +187,101 @@ void main() {
       );
     });
 
+    test('a container word never borrows a portion row instead', () {
+      // The sharp edge of the same rule. "1 packet" against a food served by
+      // the pinch came back `resolved` at a hundredth of the truth: the
+      // package route declined, and the loose same-kind match below it took
+      // the first count row it saw. A pinch is not a packet, and a wrong
+      // number wearing the resolved badge is worse than a gap, which at
+      // least reaches the repair queue.
+      final Food seasoning = aFood(
+        'Taco seasoning',
+        servingOptions: <ServingOption>[
+          aServing(amount: 1, unit: Units.pinch, macros: const Macros(kcal: 1)),
+        ],
+      );
+      final IngredientMacros result = resolve(1, Units.packet, seasoning);
+      expect(result.status, IngredientMacroStatus.unconvertible);
+      expect(result.macros.kcal, 0);
+    });
+
+    test('nor one when the relationship has gone stale', () {
+      // Staleness and a portion row in the same food, which is the whole bug
+      // at once: the relationship declines because the pack moved, and the
+      // scoop must not step in behind it.
+      final Food moved = cannedBeans(
+        packSize: Quantity.of(28, Units.ounce),
+        reviewedPack: Quantity.of(15, Units.ounce),
+        servingOptions: <ServingOption>[
+          halfCup(),
+          aServing(
+            amount: 1,
+            unit: Units.scoop,
+            macros: const Macros(kcal: 90),
+          ),
+        ],
+      );
+      expect(moved.hasStalePackageNutrition, isTrue);
+      expect(
+        resolve(2, Units.can, moved).status,
+        IngredientMacroStatus.unconvertible,
+      );
+    });
+
+    test('nor one by way of the density attempt, which also matches a '
+        'count exactly', () {
+      // The same refusal at the other door, and the one the first fix
+      // missed. `UnitConverter.crossKind` returns an exact *identity*
+      // conversion when the kind asked for is the kind already in hand, so
+      // the density loop is a second same-kind match for anything counted --
+      // over every row, not just the first. This food reaches that loop with
+      // a real density (the cup and the gram row state one), which is the
+      // path the generic-table tests above never touch.
+      final Food moved = cannedBeans(
+        packSize: Quantity.of(28, Units.ounce),
+        reviewedPack: Quantity.of(15, Units.ounce),
+        servingOptions: <ServingOption>[
+          halfCup(),
+          aServing(amount: 130, unit: Units.gram, macros: perServing),
+          aServing(
+            amount: 1,
+            unit: Units.scoop,
+            macros: const Macros(kcal: 90),
+          ),
+        ],
+      );
+      expect(
+        moved.ownGramsPerMillilitre,
+        isNotNull,
+        reason: 'the cup and the gram row state a density between them',
+      );
+      expect(
+        resolve(2, Units.can, moved).status,
+        IngredientMacroStatus.unconvertible,
+      );
+    });
+
+    test('but one container word still reaches a row in another', () {
+      // The narrowing above stops at the container words themselves. All five
+      // are interchangeable by construction -- each can mean nothing but the
+      // whole thing the food is sold in -- so a tub's own row answers a line
+      // written in cans.
+      final Food yoghurt = aFood(
+        'Greek yoghurt',
+        servingOptions: <ServingOption>[
+          aServing(
+            amount: 1,
+            unit: Units.container,
+            macros: const Macros(kcal: 220, proteinG: 20),
+          ),
+        ],
+      );
+      final IngredientMacros result = resolve(2, Units.can, yoghurt);
+      expect(result.status, IngredientMacroStatus.resolved);
+      expect(result.servingCount, closeTo(2, 1e-9));
+      expect(result.macros.kcal, closeTo(440, 1e-9));
+    });
+
     test('a relationship gone stale against a changed pack size', () {
       // The reviewed pack was 15 oz; the food now says 28 oz. R10's rule is
       // that the saved count no longer describes anything real, so the line
