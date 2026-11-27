@@ -582,3 +582,30 @@ class _FixedDate extends SelectedDate {
   @override
   DateTime build() => dayKey(day);
 }
+
+/// Scrolls the screen's list well past the fold, rather than just enough.
+///
+/// `ensureVisible` does the *minimum* scroll, which parks the widget flush
+/// against the bottom edge of the viewport — where, on the section screens,
+/// the shell's tab bar is drawn over it. A tap then lands on a tab instead:
+/// four of these tests were opening the Foods tab and asserting about a log
+/// sheet that had never been asked for, which is the quietest kind of green.
+///
+/// The day screen grew a primary "Log food" button between the summary and
+/// the meals, so the later meals are the ones this matters for. Dragging
+/// past the fold leaves the target in the middle of the screen, where a tap
+/// is a tap.
+Future<void> scrollPastFold(WidgetTester tester, {double by = 300}) async {
+  final Finder scroller = find
+      .byWidgetPredicate(
+        (Widget widget) =>
+            widget is Scrollable &&
+            widget.restorationId != 'editable' &&
+            widget.physics?.allowUserScrolling != false &&
+            (widget.axisDirection == AxisDirection.down ||
+                widget.axisDirection == AxisDirection.up),
+      )
+      .last;
+  await tester.drag(scroller, Offset(0, -by));
+  await pumpFrames(tester, frames: 6);
+}

@@ -42,6 +42,11 @@ void main() {
       );
       await tester.tap(find.text('Plan').last);
       await pumpFrames(tester);
+      // Scrolled to first: the day screen's primary "Log food" button sits
+      // between the summary and the meals, so a meal near the bottom of
+      // the list is past the fold on a 844pt phone. A tap at a point
+      // outside the view hits nothing and throws nothing.
+      await scrollPastFold(tester);
       await tester.tap(find.byTooltip('Add to dinner'));
       await pumpFrames(tester);
       await tester.tap(find.text('Plan a restaurant meal'));

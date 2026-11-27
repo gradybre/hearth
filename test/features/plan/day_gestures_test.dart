@@ -145,6 +145,10 @@ void main() {
     /// every other list in the app uses, so a sleeve brushing the screen
     /// cannot lose a meal.
     Future<void> swipeOpen(WidgetTester tester) async {
+      // On screen before it is dragged: the primary "Log food" button
+      // above the meals pushes a dinner row past the fold, and a drag that
+      // starts under the tab bar swipes a tab instead.
+      await scrollPastFold(tester);
       await tester.drag(find.text('Greek yogurt'), const Offset(-400, 0));
       await pumpFrames(tester, frames: 12);
     }
@@ -231,6 +235,10 @@ void main() {
     await tester.tap(find.text('Plan').last);
     await pumpFrames(tester, frames: 12);
 
+    // On screen before it is dragged: the primary "Log food" button
+    // above the meals pushes a dinner row past the fold, and a drag that
+    // starts under the tab bar swipes a tab instead.
+    await scrollPastFold(tester);
     await tester.drag(find.text('Guard stew'), const Offset(-400, 0));
     await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Delete'));
