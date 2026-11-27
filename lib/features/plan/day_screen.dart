@@ -37,6 +37,7 @@ import 'macro_targets_sheet.dart';
 import 'meal_source_actions.dart';
 import 'nutrient_contributors_flow.dart';
 import 'plan_date_header.dart';
+import 'plan_view_control.dart';
 
 /// The day view: plan and track in one place (spec §5.6).
 ///
@@ -186,6 +187,13 @@ class _DayHeader extends ConsumerWidget {
     onToday: () => ref.read(selectedDateProvider.notifier).today(),
     onNext: () => ref.read(selectedDateProvider.notifier).shiftDays(1),
     onCopy: () => _copyDay(context, ref, date),
+    // Beside the title rather than in a band above the screen, which is
+    // where [PlanScreen] used to draw it (the November 2026 templates).
+    viewControl: PlanViewControl(
+      value: PlanView.day,
+      onChanged: (PlanView selection) =>
+          ref.read(planViewProvider.notifier).show(selection),
+    ),
   );
 
   /// Copies this day onto any number of others (spec §5.6).

@@ -33,6 +33,11 @@ class PlanViewControl extends StatelessWidget {
           MediaQuery.textScalerOf(context).scale(16) > 20;
       return Align(
         alignment: Alignment.centerLeft,
+        // Sized to the control, not to the row. It sits in the header's
+        // title row now, and an `Align` with no factor takes the whole width
+        // it is offered — which pushed the heading beside it onto a line of
+        // its own and left the control looking left-aligned under it.
+        widthFactor: 1,
         child: compact
             ? value == PlanView.week &&
                       weekContent != null &&
@@ -148,19 +153,18 @@ class PlanViewControl extends StatelessWidget {
     ),
   );
 
+  /// Two words, no icons — as the templates draw it.
+  ///
+  /// The icons were decorative: both segments are labelled, and a sun beside
+  /// "Day" says nothing the word does not. They were also 44 points of the
+  /// control's width, which is the difference between this sitting beside
+  /// the day's heading and dropping onto a line of its own under it — on a
+  /// 390pt phone "Wednesday" and the control with icons do not fit together.
   Widget _segments(BuildContext context) => SegmentedButton<PlanView>(
     key: const ValueKey<String>('plan-view-control'),
     segments: const <ButtonSegment<PlanView>>[
-      ButtonSegment<PlanView>(
-        value: PlanView.day,
-        label: Text('Day'),
-        icon: Icon(Icons.wb_sunny_outlined, size: 18),
-      ),
-      ButtonSegment<PlanView>(
-        value: PlanView.week,
-        label: Text('Week'),
-        icon: Icon(Icons.view_week_outlined, size: 18),
-      ),
+      ButtonSegment<PlanView>(value: PlanView.day, label: Text('Day')),
+      ButtonSegment<PlanView>(value: PlanView.week, label: Text('Week')),
     ],
     selected: <PlanView>{value},
     showSelectedIcon: false,
