@@ -5,6 +5,7 @@ import '../models/macros.dart';
 import '../models/recipe.dart';
 import '../planning/nutrient_coverage.dart';
 import '../units/quantity.dart';
+import '../units/unit.dart';
 import '../units/unit_converter.dart';
 
 /// Why an ingredient did or did not contribute to a recipe's macros.
@@ -302,18 +303,43 @@ abstract final class MacroCalculator {
 
     // Prefer a serving measured the same way the ingredient is — no
     // conversion, no assumptions.
-    final ServingOption? direct = food.servingForKind(quantity.kind);
-    if (direct != null && direct.amount.canonicalAmount != 0) {
-      final double ratio =
-          quantity.canonicalAmount / direct.amount.canonicalAmount;
-      return IngredientMacros(
-        ingredient: ingredient,
-        macros: direct.macros.scaledBy(ratio),
-        status: IngredientMacroStatus.resolved,
-        serving: direct,
-        servingCount: ratio,
+    //
+    // For a count, "the same way" means the same *unit* first and not merely
+    // the same kind. Every mass reaches every other mass, but a scoop, a bar
+    // and a can are three unrelated things sharing one [UnitKind], so asking
+    // by kind answered "2 cans" with whichever count row came first — a
+    // tub's "1 scoop" among them. The loose same-kind match is still tried,
+    // below, so a line in cloves still reaches a food served by the item.
+    final bool isCount = quantity.kind == UnitKind.count;
+    if (isCount) {
+      final IngredientMacros? sameUnit = _scaleToServing(
+        ingredient,
+        quantity,
+        food.servingForUnit(quantity.preferredUnit),
       );
+      if (sameUnit != null) return sameUnit;
+
+      // A count naming a container — "2 cans", "1 packet" — is answered by
+      // the package's own reviewed serving count (spec R9, R10). Tried
+      // before the loose same-kind match, and regardless of whether the food
+      // has a density of its own: a density is the wrong tool entirely here,
+      // because no conversion crosses into a count. R12's precedence is
+      // about which figure bridges mass and volume, and says nothing about
+      // this, which is the only thing that can answer at all.
+      final IngredientMacros? viaPackageCount = _tryPackageCount(
+        ingredient,
+        quantity,
+        food,
+      );
+      if (viaPackageCount != null) return viaPackageCount;
     }
+
+    final IngredientMacros? direct = _scaleToServing(
+      ingredient,
+      quantity,
+      food.servingForKind(quantity.kind),
+    );
+    if (direct != null) return direct;
 
     // Otherwise try to cross volume <-> weight. The food's own density —
     // stated, or inferred from its own servings — always answers first.
@@ -372,6 +398,69 @@ abstract final class MacroCalculator {
       ingredient: ingredient,
       macros: Macros.zero,
       status: IngredientMacroStatus.unconvertible,
+    );
+  }
+
+  /// [quantity] as a multiple of [serving], or null when there is no serving
+  /// or it has no size to divide by.
+  ///
+  /// Both are already canonical in the same kind, so this is a ratio and
+  /// needs no unit arithmetic. A serving of zero is left to fall through to
+  /// the conversion attempts rather than dividing by it.
+  static IngredientMacros? _scaleToServing(
+    RecipeIngredient ingredient,
+    Quantity quantity,
+    ServingOption? serving,
+  ) {
+    if (serving == null || serving.amount.canonicalAmount == 0) return null;
+    final double ratio =
+        quantity.canonicalAmount / serving.amount.canonicalAmount;
+    return IngredientMacros(
+      ingredient: ingredient,
+      macros: serving.macros.scaledBy(ratio),
+      status: IngredientMacroStatus.resolved,
+      serving: serving,
+      servingCount: ratio,
+    );
+  }
+
+  /// A count of whole packages — "2 cans" — read through the food's reviewed
+  /// package relationship (spec R9, R10). Null in every other case.
+  ///
+  /// Nothing is inferred here that the food does not already state. The
+  /// relationship records how many of one nutrition serving a single package
+  /// holds, a human confirmed it in the editor, and [Food.activePackageServing]
+  /// has already refused it if the pack size or the serving has moved since.
+  /// Two packages are twice that count of that row, which is arithmetic on
+  /// the label rather than a guess about it.
+  ///
+  /// The unit has to name the container and not a portion out of it, or a box
+  /// of twelve bars would read "2 bars" as two boxes — see
+  /// [Unit.namesAPackage]. The relationship's own `asPackaged` basis is what
+  /// keeps a drained or as-prepared panel out of this, exactly as it keeps it
+  /// out of the density route.
+  static IngredientMacros? _tryPackageCount(
+    RecipeIngredient ingredient,
+    Quantity quantity,
+    Food food,
+  ) {
+    final Unit? unit = quantity.preferredUnit;
+    if (unit == null || !unit.namesAPackage) return null;
+
+    final ServingOption? serving = food.activePackageServing;
+    final double? perPackage = food.servingsPerActivePackage;
+    if (serving == null || perPackage == null) return null;
+
+    final double count = quantity.canonicalAmount * perPackage;
+    if (!count.isFinite) return null;
+
+    return IngredientMacros(
+      ingredient: ingredient,
+      macros: serving.macros.scaledBy(count),
+      status: IngredientMacroStatus.resolved,
+      serving: serving,
+      servingCount: count,
+      usesApproximatePackage: food.packageNutrition?.isApproximate ?? false,
     );
   }
 

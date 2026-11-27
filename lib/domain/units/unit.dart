@@ -30,6 +30,7 @@ class Unit {
     required this.toCanonical,
     this.aliases = const <String>[],
     this.system = UnitSystem.any,
+    this.namesAPackage = false,
   });
 
   /// Stable identifier, persisted with the row. Never localise this.
@@ -48,6 +49,24 @@ class Unit {
   final List<String> aliases;
 
   final UnitSystem system;
+
+  /// Whether this unit names the *container* a food is sold in rather than a
+  /// piece of the food itself — a can, a packet, a bottle.
+  ///
+  /// Load-bearing in one place: a recipe line reading "2 cans" asks for two
+  /// of whatever one package holds, and the only statement of that is the
+  /// food's reviewed package relationship, which records how many of its
+  /// nutrition serving one package contains (spec R9, R10). No density can
+  /// answer a count, so without this the line was flagged "no serving in
+  /// can" while the food's own label sat there saying "about 3.5 servings
+  /// per container".
+  ///
+  /// Deliberately not every count unit. A bar, a slice, a patty, a scoop and
+  /// a tortilla are *portions out of* a package, so reading "2 bars" as two
+  /// packages would multiply a box of twelve by twelve. `item` is the generic
+  /// count and names nothing in particular. Only the words that can mean
+  /// nothing but the whole container are marked.
+  final bool namesAPackage;
 
   @override
   bool operator ==(Object other) => other is Unit && other.id == id;
@@ -247,6 +266,7 @@ abstract final class Units {
     kind: UnitKind.count,
     toCanonical: 1,
     aliases: <String>['packages', 'pkg', 'pack', 'packs'],
+    namesAPackage: true,
   );
   static const Unit packet = Unit(
     id: 'packet',
@@ -254,6 +274,7 @@ abstract final class Units {
     kind: UnitKind.count,
     toCanonical: 1,
     aliases: <String>['packets', 'sachet', 'sachets'],
+    namesAPackage: true,
   );
   static const Unit container = Unit(
     id: 'container',
@@ -261,6 +282,7 @@ abstract final class Units {
     kind: UnitKind.count,
     toCanonical: 1,
     aliases: <String>['containers', 'tub', 'tubs'],
+    namesAPackage: true,
   );
   static const Unit bottle = Unit(
     id: 'bottle',
@@ -268,6 +290,7 @@ abstract final class Units {
     kind: UnitKind.count,
     toCanonical: 1,
     aliases: <String>['bottles'],
+    namesAPackage: true,
   );
   static const Unit can = Unit(
     id: 'can',
@@ -275,6 +298,7 @@ abstract final class Units {
     kind: UnitKind.count,
     toCanonical: 1,
     aliases: <String>['cans', 'tin', 'tins'],
+    namesAPackage: true,
   );
   static const Unit piece = Unit(
     id: 'piece',

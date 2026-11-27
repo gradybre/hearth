@@ -304,6 +304,20 @@ class Food {
       ? null
       : packageNutrition?.gramsPerMillilitre;
 
+  /// How many of [activePackageServing] one whole package holds — null when
+  /// no reviewed relationship is active (spec R9, R10).
+  ///
+  /// The same figure [packageGramsPerMillilitre] is derived *from*, exposed
+  /// on its own because it answers a question a density cannot: a recipe
+  /// line written in whole packages — "2 cans" — is a count, and nothing
+  /// crosses into a count. The label's own "about 3.5 servings per
+  /// container" is the only statement of what one container is worth, so a
+  /// count of containers is the one case where this figure is the answer
+  /// rather than a step towards one.
+  double? get servingsPerActivePackage => activePackageServing == null
+      ? null
+      : packageNutrition?.servingsPerPackage;
+
   /// Whether the package relationship's implied density disagrees with this
   /// food's own by more than 5% (spec R12).
   ///
@@ -395,6 +409,21 @@ class Food {
   ServingOption? servingForKind(UnitKind kind) {
     for (final ServingOption option in servingOptions) {
       if (option.amount.kind == kind) return option;
+    }
+    return null;
+  }
+
+  /// The first serving measured in exactly [unit], if any.
+  ///
+  /// Stricter than [servingForKind] on purpose, and only the count units
+  /// need it: every mass converts into every other mass, but a scoop, a bar
+  /// and a can are three unrelated things that happen to share
+  /// [UnitKind.count]. Asking by kind answers "2 cans" with a tub's "1
+  /// scoop" row.
+  ServingOption? servingForUnit(Unit? unit) {
+    if (unit == null) return null;
+    for (final ServingOption option in servingOptions) {
+      if (option.amount.preferredUnit == unit) return option;
     }
     return null;
   }
