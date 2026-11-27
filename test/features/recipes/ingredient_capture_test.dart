@@ -4,6 +4,8 @@ import 'package:hearth/data/adapters/label_reader.dart';
 import 'package:hearth/data/adapters/nutrition_source.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
+import 'package:hearth/domain/models/package_nutrition.dart';
+import 'package:hearth/domain/units/quantity.dart';
 import 'package:hearth/domain/units/unit.dart';
 
 import '../../support/app_harness.dart';
@@ -410,6 +412,50 @@ void main() {
 
       expect(find.textContaining('no serving in'), findsNothing);
       expect(find.byIcon(Icons.link), findsWidgets);
+    });
+
+    testWidgets('a line counted in cans counts, because the can says how '
+        'many servings it holds', (WidgetTester tester) async {
+      // The bug this guards: a recipe imported from a photo asked for 2 cans
+      // of beans, the beans were matched to a food built from photographs of
+      // that very can, and the line still read "no serving in can" — while
+      // the food's own label said "about 3.5 servings per container".
+      const Macros perServing = Macros(kcal: 110, proteinG: 7, fiberG: 6);
+      await openEditorWith(
+        tester,
+        line: '2 cans black beans',
+        foods: <Food>[
+          aFood(
+            'Black beans',
+            id: 'food-beans',
+            packSize: Quantity.of(15, Units.ounce),
+            packageNutrition: PackageNutrition.manual(
+              servingsPerPackage: 3.5,
+              servingOptionId: 'serving-cup',
+              servingAmount: Quantity.of(0.5, Units.cup),
+              packageAmount: Quantity.of(15, Units.ounce),
+              isApproximate: true,
+              source: PackageNutritionSource.photos,
+            ),
+            servingOptions: <ServingOption>[
+              aServing(
+                amount: 0.5,
+                unit: Units.cup,
+                id: 'serving-cup',
+                macros: perServing,
+              ),
+              aServing(amount: 130, unit: Units.gram, macros: perServing),
+            ],
+          ),
+        ],
+      );
+
+      expect(find.textContaining('no serving in'), findsNothing);
+      expect(find.byIcon(Icons.link), findsWidgets);
+      // 2 cans x 3.5 servings x 110 kcal. Shown as the recipe's own total,
+      // qualified because the label said "about" (spec R10, R12).
+      expect(find.textContaining('770'), findsWidgets);
+      expect(find.text('Uses approximate package servings'), findsWidgets);
     });
 
     testWidgets('an unmatched line still says so plainly', (
