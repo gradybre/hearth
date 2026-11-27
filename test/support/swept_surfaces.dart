@@ -1037,6 +1037,16 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
       farEnd: find.text('Go back'),
     ),
   SweptSurface(
+    name: 'which meal to log food to',
+    opensFrom: 'lib/features/plan/log_slot_sheet.dart',
+    open: (WidgetTester tester, SweepTools tools) async {
+      await tools.tab('Plan');
+      await tools.reach(find.text('Log food'));
+    },
+    arrived: find.text('Log food to'),
+    farEnd: find.text('Snacks'),
+  ),
+  SweptSurface(
     // Not a sheet: a branch inside the day's summary card. The guard cannot
     // find this one by reading the source, which is exactly why the list is
     // written by hand rather than generated from it.

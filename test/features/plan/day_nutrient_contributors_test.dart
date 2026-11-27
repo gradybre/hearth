@@ -195,7 +195,32 @@ Finder _total(SupportedNutrient nutrient) => find.byKey(
   ),
 );
 
+/// The screen's own vertical list, which is what a drag has to move.
+Finder get _scroller => find
+    .byWidgetPredicate(
+      (Widget widget) =>
+          widget is Scrollable &&
+          widget.restorationId != 'editable' &&
+          widget.physics?.allowUserScrolling != false &&
+          (widget.axisDirection == AxisDirection.down ||
+              widget.axisDirection == AxisDirection.up),
+    )
+    .last;
+
 Future<void> _tap(WidgetTester tester, Finder finder) async {
+  // Not built is not the same as not on screen, and `ensureVisible` cannot
+  // tell you which it met — it asks the finder for its single element and
+  // throws "No element" either way.
+  //
+  // The day's list is lazy, so collapsing the summary from a scroll position
+  // that was reached to press "Less" leaves the card above the viewport and
+  // disposed. The compact totals are then absent rather than off-screen, and
+  // `find.byType(MacroRings)` finding nothing a line earlier passes for the
+  // wrong reason. Scrolling back to the top puts the card in the tree again.
+  if (finder.evaluate().isEmpty) {
+    await tester.dragUntilVisible(finder, _scroller, const Offset(0, 120));
+    await pumpFrames(tester, frames: 4);
+  }
   await tester.ensureVisible(finder);
   await pumpFrames(tester);
   expect(finder.hitTestable(), findsOneWidget);

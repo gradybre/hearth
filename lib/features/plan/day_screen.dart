@@ -30,6 +30,7 @@ import '../../domain/recipes/macro_calculator.dart';
 import 'day_picker_sheet.dart';
 import 'entry_resolver.dart';
 import 'log_sheet.dart';
+import 'log_slot_sheet.dart';
 import 'log_state_feedback.dart';
 import 'logged_details_sheet.dart';
 import 'macro_targets_sheet.dart';
@@ -112,7 +113,22 @@ class DayScreen extends ConsumerWidget {
                 targets: targets,
                 targetResolution: targetResolution,
               ),
+              const SizedBox(height: HearthSpacing.lg),
+              // The primary action, directly under the figure it changes.
+              // Logging used to be a 24pt `+` at the end of a meal's heading
+              // — four of them, each the smallest control on the screen, on
+              // the screen the success bar is measured on. The `+`s are
+              // still there for somebody who has already scrolled to the
+              // meal they mean; this is the way in for somebody who has just
+              // eaten.
+              _LogFoodButton(date: date),
               const SizedBox(height: HearthSpacing.xl),
+              // No "Meals" heading above these, although the templates draw
+              // one. It is 36 points on the one screen where the fold is the
+              // binding constraint: U01's promise is that you can see what
+              // you ate for breakfast without scrolling past a summary of
+              // it, and with the heading and the button both above it, you
+              // could not. The four slot headings already name the group.
               for (final MealSlot slot in MealSlot.values) ...<Widget>[
                 _SlotSection(
                   slot: slot,
@@ -129,6 +145,33 @@ class DayScreen extends ConsumerWidget {
       },
     );
   }
+}
+
+/// The day's primary action (spec §5.6, and the November 2026 templates).
+///
+/// Full width and filled, because logging is what this screen is for and
+/// "every extra tap is a tax you pay three times a day" (§5.6). It asks
+/// which meal before it opens the log sheet — see [showLogSlotSheet] for
+/// why that is asked rather than guessed.
+class _LogFoodButton extends StatelessWidget {
+  const _LogFoodButton({required this.date});
+
+  final DateTime date;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity,
+    child: FilledButton.icon(
+      // Sized for a kitchen rather than to the 48pt floor: this is pressed
+      // with the hand that just put the pan down (spec §5.6, §6.3).
+      style: FilledButton.styleFrom(
+        minimumSize: const Size.fromHeight(HearthTouch.kitchenTarget),
+      ),
+      onPressed: () => showLogSlotSheet(context, date: date),
+      icon: const Icon(Icons.add),
+      label: Text('Log food', style: context.text.label),
+    ),
+  );
 }
 
 class _DayHeader extends ConsumerWidget {
