@@ -18,24 +18,85 @@ import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/recipes/recipe_query.dart';
 import 'add_recipe_sheet.dart';
 import 'macro_stats_row.dart';
+import 'recipe_detail_screen.dart';
 import 'recipe_filter_bar.dart';
 import 'recipe_icon.dart';
 import 'recipe_photo.dart';
 
-/// The household's recipe library (spec §5.2).
+/// The household's recipe library (spec §5.2, and the November 2026
+/// templates).
 ///
 /// Reads from the local cache, so it works with no network. Recipes appear
 /// here the moment they are saved, whether or not the sync has caught up.
+///
+/// **Two shapes.** On a phone, a half-screen window, or anything narrower
+/// than [HearthLayout.detailPaneBreakpoint], this is a list and opening a
+/// recipe pushes over it. Wider than that, the list keeps a column of its
+/// own and the recipe opens in a pane beside it — which is what the desktop
+/// template draws, and what the screenshot that prompted this redesign was
+/// missing: a correct layout by the letter of §6.2 that still left the right
+/// half of a 1280pt window as empty paper.
+///
+/// `/recipe/:id` stays a real route either way. The pane is a layout, not a
+/// second way of navigating: a link, a plan entry and a search result all
+/// still open a whole screen.
 class RecipeLibraryScreen extends ConsumerWidget {
   const RecipeLibraryScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Scaffold(
+    backgroundColor: context.colors.background,
+    body: SafeArea(
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          // The section's own width, not the window's: the sidebar has
+          // already taken 208 points and a divider out of it, and asking
+          // MediaQuery here would split a window that has no room for it.
+          if (constraints.maxWidth < HearthLayout.detailPaneBreakpoint) {
+            return const ReadingColumn(child: _LibraryList());
+          }
+          return Row(
+            // Stretched, so the divider runs the height of the pane rather
+            // than sizing itself to whichever column is shorter.
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              const SizedBox(
+                width: HearthLayout.listColumnWidth,
+                child: _LibraryList(inPane: true),
+              ),
+              VerticalDivider(
+                width: 1,
+                thickness: 1,
+                color: context.colors.outline,
+              ),
+              const Expanded(child: _DetailPane()),
+            ],
+          );
+        },
+      ),
+    ),
+  );
+}
+
+/// The library itself: heading, filters, and the rows.
+class _LibraryList extends ConsumerWidget {
+  const _LibraryList({this.inPane = false});
+
+  /// Whether a detail pane is beside this list.
+  ///
+  /// It changes two things: a row opens into the pane instead of pushing,
+  /// and the row that is open says so.
+  final bool inPane;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<List<Recipe>> library = ref.watch(recipeLibraryProvider);
     final AsyncValue<List<Recipe>> shown = ref.watch(filteredRecipesProvider);
     final RecipeFilter filter = ref.watch(recipeFilterProvider);
-    final HearthColors colors = context.colors;
-    final double gutter = MediaQuery.sizeOf(context).width >= 840
+    // The column beside a pane is 400 points wide whatever the window is, so
+    // it takes the compact gutter: the expanded one would spend a tenth of
+    // the column on its own margins.
+    final double gutter = !inPane && MediaQuery.sizeOf(context).width >= 840
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
 
@@ -44,110 +105,144 @@ class RecipeLibraryScreen extends ConsumerWidget {
     // the controls on screen to be undone.
     final bool hasLibrary = (library.value ?? const <Recipe>[]).isNotEmpty;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: SafeArea(
-        child: ReadingColumn(
-          child: library.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (Object error, StackTrace stack) =>
-                _LibraryError(error: error, gutter: gutter),
-            data: (List<Recipe> recipes) {
-              // Computed here rather than in the header so the button knows
-              // whether it would find anything before it is offered.
-              final bool sweepable = DefaultSweep.proposals(
-                recipes: recipes,
-                library: ref.watch(foodLibraryProvider).value ?? const <Food>[],
-              ).isNotEmpty;
+    return library.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (Object error, StackTrace stack) =>
+          _LibraryError(error: error, gutter: gutter),
+      data: (List<Recipe> recipes) {
+        // Computed here rather than in the header so the button knows
+        // whether it would find anything before it is offered.
+        final bool sweepable = DefaultSweep.proposals(
+          recipes: recipes,
+          library: ref.watch(foodLibraryProvider).value ?? const <Food>[],
+        ).isNotEmpty;
 
-              // Slivers rather than a Column with an Expanded list.
-              //
-              // The header and the filter bar were fixed chrome above the list,
-              // and on a 320x568 phone at three times the text they are taller
-              // than the screen on their own — so the list was handed a
-              // negative height and the whole thing overflowed by ten points.
-              // As slivers the chrome scrolls away with the content, which is
-              // what a short screen needs and what a tall one never noticed.
-              return CustomScrollView(
-                slivers: <Widget>[
-                  // Outside the empty/non-empty branch on purpose. The household
-                  // control used to live only in the populated case, which hid it
-                  // from exactly the person who needs it — someone with an empty
-                  // library, about to share a code.
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
-                      // A Wrap rather than a Row: at three times the text
-                      // the heading and the button together are wider than
-                      // a phone, and the button drops to its own line
-                      // instead of squeezing the words (spec §6.3).
-                      child: Wrap(
-                        alignment: WrapAlignment.spaceBetween,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: HearthSpacing.md,
-                        runSpacing: HearthSpacing.sm,
-                        children: <Widget>[
-                          Text('Recipes', style: context.text.recipeTitle),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              // Flexible, because the Wrap wraps this pair
-                              // as a unit: on its own line at three times
-                              // the text the button is still wider than a
-                              // 320pt phone, and the label has to be allowed
-                              // to take two lines rather than overflow.
-                              const Flexible(child: _AddRecipeButton()),
-                              _MaintenanceMenu(sweepable: sweepable),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SliverToBoxAdapter(
-                    child: SizedBox(height: HearthSpacing.md),
-                  ),
-                  if (hasLibrary) ...<Widget>[
-                    SliverToBoxAdapter(child: RecipeFilterBar(gutter: gutter)),
-                    const SliverToBoxAdapter(
-                      child: SizedBox(height: HearthSpacing.md),
+        // Slivers rather than a Column with an Expanded list.
+        //
+        // The header and the filter bar were fixed chrome above the list,
+        // and on a 320x568 phone at three times the text they are taller
+        // than the screen on their own — so the list was handed a
+        // negative height and the whole thing overflowed by ten points.
+        // As slivers the chrome scrolls away with the content, which is
+        // what a short screen needs and what a tall one never noticed.
+        return CustomScrollView(
+          slivers: <Widget>[
+            // Outside the empty/non-empty branch on purpose. The household
+            // control used to live only in the populated case, which hid it
+            // from exactly the person who needs it — someone with an empty
+            // library, about to share a code.
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
+                // A Wrap rather than a Row: at three times the text
+                // the heading and the button together are wider than
+                // a phone, and the button drops to its own line
+                // instead of squeezing the words (spec §6.3).
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: HearthSpacing.md,
+                  runSpacing: HearthSpacing.sm,
+                  children: <Widget>[
+                    Text('Recipes', style: context.text.recipeTitle),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        // Flexible, because the Wrap wraps this pair
+                        // as a unit: on its own line at three times
+                        // the text the button is still wider than a
+                        // 320pt phone, and the label has to be allowed
+                        // to take two lines rather than overflow.
+                        const Flexible(child: _AddRecipeButton()),
+                        _MaintenanceMenu(sweepable: sweepable),
+                      ],
                     ),
                   ],
-                  if (recipes.isEmpty)
-                    // Filling what is left, so a centred message stays centred
-                    // on a tall screen and grows past it when it must.
-                    //
-                    // `hasScrollBody: false` asks the child for an intrinsic
-                    // height, which a LayoutBuilder cannot answer — so the
-                    // message is told not to scroll, and answers. With a scroll
-                    // body instead, this sliver claims a whole viewport of
-                    // scroll extent regardless of the chrome above it, and the
-                    // empty states gain dead scroll they never had.
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: _EmptyLibrary(gutter: gutter),
-                    )
-                  else if ((shown.value ?? const <Recipe>[]).isEmpty)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: _NoMatches(
-                        gutter: gutter,
-                        filter: filter,
-                        onClear: () =>
-                            ref.read(recipeFilterProvider.notifier).clearAll(),
-                      ),
-                    )
-                  else
-                    _RecipeSliver(
-                      recipes: shown.value ?? const <Recipe>[],
-                      gutter: gutter,
-                    ),
-                ],
-              );
-            },
+                ),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: HearthSpacing.md)),
+            if (hasLibrary) ...<Widget>[
+              SliverToBoxAdapter(child: RecipeFilterBar(gutter: gutter)),
+              const SliverToBoxAdapter(
+                child: SizedBox(height: HearthSpacing.md),
+              ),
+            ],
+            if (recipes.isEmpty)
+              // Filling what is left, so a centred message stays centred
+              // on a tall screen and grows past it when it must.
+              //
+              // `hasScrollBody: false` asks the child for an intrinsic
+              // height, which a LayoutBuilder cannot answer — so the
+              // message is told not to scroll, and answers. With a scroll
+              // body instead, this sliver claims a whole viewport of
+              // scroll extent regardless of the chrome above it, and the
+              // empty states gain dead scroll they never had.
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EmptyLibrary(gutter: gutter),
+              )
+            else if ((shown.value ?? const <Recipe>[]).isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _NoMatches(
+                  gutter: gutter,
+                  filter: filter,
+                  onClear: () =>
+                      ref.read(recipeFilterProvider.notifier).clearAll(),
+                ),
+              )
+            else
+              _RecipeSliver(
+                recipes: shown.value ?? const <Recipe>[],
+                gutter: gutter,
+                inPane: inPane,
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// The recipe beside the list, or the invitation to choose one.
+class _DetailPane extends ConsumerWidget {
+  const _DetailPane();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final String? selected = ref.watch(selectedRecipeIdProvider);
+    if (selected == null) {
+      // Nothing is opened for you. A window wide enough for two columns is
+      // not a reason to open a recipe nobody asked for — and the first row
+      // of a list sorted by "recent" is a different recipe every week.
+      return CentredMessage(
+        gutter: HearthSpacing.gutterExpanded,
+        children: <Widget>[
+          Text(
+            'Choose a recipe',
+            style: context.text.sectionHeader,
+            textAlign: TextAlign.center,
           ),
-        ),
-      ),
+          const SizedBox(height: HearthSpacing.sm),
+          Text(
+            'Pick one from the list and it opens here.',
+            style: context.text.body.copyWith(
+              color: context.colors.textSecondary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      );
+    }
+    return RecipeDetailScreen(
+      // Keyed by recipe, so choosing another one rebuilds the pane from
+      // scratch. Without this the state inside it — the servings it has
+      // been scaled to, above all — travels from one recipe to the next,
+      // and a 12-serving stew opens as a doubled bowl of oats.
+      key: ValueKey<String>('detail-pane-$selected'),
+      recipeId: selected,
+      embedded: true,
     );
   }
 }
@@ -312,10 +407,15 @@ class _NoMatches extends StatelessWidget {
 /// The list, as a sliver so it shares one scroll view with the chrome above
 /// it (see the comment on that scroll view).
 class _RecipeSliver extends StatelessWidget {
-  const _RecipeSliver({required this.recipes, required this.gutter});
+  const _RecipeSliver({
+    required this.recipes,
+    required this.gutter,
+    required this.inPane,
+  });
 
   final List<Recipe> recipes;
   final double gutter;
+  final bool inPane;
 
   @override
   Widget build(BuildContext context) => SliverPadding(
@@ -330,30 +430,48 @@ class _RecipeSliver extends StatelessWidget {
         // its swiped-open state straight to whatever moved up into its place.
         key: ValueKey<String>(recipes[index].id),
         recipe: recipes[index],
+        inPane: inPane,
       ),
     ),
   );
 }
 
 class _DeletableRecipe extends ConsumerWidget {
-  const _DeletableRecipe({required this.recipe, super.key});
+  const _DeletableRecipe({
+    required this.recipe,
+    this.inPane = false,
+    super.key,
+  });
 
   final Recipe recipe;
+  final bool inPane;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => SwipeToDelete(
     name: recipe.title,
-    onDelete: () => ref.read(recipeRepositoryProvider).delete(recipe.id),
+    onDelete: () {
+      // A recipe cannot stay open in the pane after it has gone from the
+      // list beside it. Cleared before the delete, so the pane is not
+      // reading a row that is on its way out.
+      if (ref.read(selectedRecipeIdProvider) == recipe.id) {
+        ref.read(selectedRecipeIdProvider.notifier).show(null);
+      }
+      return ref.read(recipeRepositoryProvider).delete(recipe.id);
+    },
     onRestore: () => ref.read(recipeRepositoryProvider).restore(recipe.id),
-    child: RecipeCard(recipe: recipe),
+    child: RecipeCard(recipe: recipe, inPane: inPane),
   );
 }
 
 /// One recipe in the library list.
 class RecipeCard extends ConsumerWidget {
-  const RecipeCard({required this.recipe, super.key});
+  const RecipeCard({required this.recipe, this.inPane = false, super.key});
 
   final Recipe recipe;
+
+  /// Whether this row opens into a pane beside the list rather than pushing
+  /// a screen over it.
+  final bool inPane;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -369,6 +487,16 @@ class RecipeCard extends ConsumerWidget {
         food.id: food,
     };
     final RecipeMacros macros = MacroCalculator.forRecipe(recipe, foods: foods);
+    final bool selected =
+        inPane && ref.watch(selectedRecipeIdProvider) == recipe.id;
+    void open() {
+      if (inPane) {
+        ref.read(selectedRecipeIdProvider.notifier).show(recipe.id);
+      } else {
+        context.push('/recipe/${recipe.id}');
+      }
+    }
+
     // Shown for any recipe with ingredients, complete or not. Hiding a
     // partial total was meant to avoid quoting a number that undercounts,
     // but it made a whole recipe's nutrition vanish over one unresolved
@@ -384,84 +512,107 @@ class RecipeCard extends ConsumerWidget {
           '${showMacros ? '. ${_macroLabel(macros.perServing)}'
                     '${macros.isIncomplete ? '. Partial — ${macros.incompleteReason}' : ''}' : ''}'
           '${isFavorite ? '. Favourite' : ''}',
-      onTap: () => context.push('/recipe/${recipe.id}'),
+      // Announced as well as drawn: the bar down its edge says which recipe
+      // the pane is showing to somebody looking at the screen, and this
+      // says it to somebody who is not (spec §6.3).
+      selected: inPane ? selected : null,
+      onTap: open,
       excludeSemantics: true,
-      child: Material(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(HearthRadius.lg),
-        child: InkWell(
-          onTap: () => context.push('/recipe/${recipe.id}'),
+      // The bar down the open row's leading edge, drawn as a ground the
+      // card is inset from rather than as a border: a `Border` cannot have
+      // one side thicker than the others and keep a radius, and a `Stack`
+      // over the card would take the taps along that edge.
+      //
+      // A shape, not a shade. The tint and the accent outline below say the
+      // same thing in colour, and colour alone is never the meaning
+      // (spec §6.3) — this is what survives a greyscale print.
+      child: Container(
+        decoration: BoxDecoration(
+          color: selected ? colors.accent : null,
           borderRadius: BorderRadius.circular(HearthRadius.lg),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(HearthRadius.lg),
-              border: Border.all(color: colors.outline),
-            ),
-            padding: const EdgeInsets.fromLTRB(
-              HearthSpacing.lg,
-              HearthSpacing.lg,
-              HearthSpacing.sm,
-              HearthSpacing.lg,
-            ),
-            // The heart sits beside the whole text block rather than beside
-            // the title alone: a 44pt tap target inside the title row would
-            // set the row's height and open a gap above the summary line.
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                if (hasRecipePhoto(ref, recipe.id)) ...<Widget>[
-                  RecipePhoto(
-                    recipeId: recipe.id,
-                    width: 64,
-                    height: 64,
-                    borderRadius: BorderRadius.circular(HearthRadius.md),
-                  ),
-                  const SizedBox(width: HearthSpacing.md),
-                ]
-                // A photograph of the actual dish beats a sketch of the idea
-                // of it, so the icon takes the slot only when there is no
-                // photo — never both, which would be two pictures of one
-                // recipe competing in a 64pt square.
-                else if (RecipeIcon.canDraw(recipe.iconSvg)) ...<Widget>[
-                  RecipeIcon(svg: recipe.iconSvg, size: 40),
-                  const SizedBox(width: HearthSpacing.md),
-                ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(recipe.title, style: text.sectionHeader),
-                      const SizedBox(height: HearthSpacing.xs),
-                      Text(
-                        _summary(recipe),
-                        style: text.metadata.copyWith(color: colors.textMuted),
-                      ),
-                      if (showMacros) ...<Widget>[
-                        const SizedBox(height: HearthSpacing.xxs),
-                        MacroStatsLine(
-                          macros: macros.perServing,
-                          isPartial: macros.isIncomplete,
-                        ),
-                      ],
-                      if (recipe.tags.isNotEmpty) ...<Widget>[
-                        const SizedBox(height: HearthSpacing.md),
-                        Wrap(
-                          spacing: HearthSpacing.sm,
-                          runSpacing: HearthSpacing.xs,
-                          children: <Widget>[
-                            for (final String tag in recipe.tags)
-                              _Tag(label: tag),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
+        ),
+        padding: EdgeInsets.only(left: selected ? 4 : 0),
+        child: Material(
+          color: selected ? colors.surfaceSunken : colors.surface,
+          borderRadius: BorderRadius.circular(HearthRadius.lg),
+          child: InkWell(
+            onTap: open,
+            borderRadius: BorderRadius.circular(HearthRadius.lg),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(HearthRadius.lg),
+                border: Border.all(
+                  color: selected ? colors.accent : colors.outline,
                 ),
-                // Favouriting from the list, not only from inside the recipe:
-                // the heart is worth nothing if reaching it costs two
-                // navigations.
-                _FavoriteButton(recipeId: recipe.id, compact: true),
-              ],
+              ),
+              padding: const EdgeInsets.fromLTRB(
+                HearthSpacing.lg,
+                HearthSpacing.lg,
+                HearthSpacing.sm,
+                HearthSpacing.lg,
+              ),
+              // The heart sits beside the whole text block rather than beside
+              // the title alone: a 44pt tap target inside the title row would
+              // set the row's height and open a gap above the summary line.
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  if (hasRecipePhoto(ref, recipe.id)) ...<Widget>[
+                    RecipePhoto(
+                      recipeId: recipe.id,
+                      width: 64,
+                      height: 64,
+                      borderRadius: BorderRadius.circular(HearthRadius.md),
+                    ),
+                    const SizedBox(width: HearthSpacing.md),
+                  ]
+                  // A photograph of the actual dish beats a sketch of the idea
+                  // of it, so the icon takes the slot only when there is no
+                  // photo — never both, which would be two pictures of one
+                  // recipe competing in a 64pt square.
+                  else if (RecipeIcon.canDraw(recipe.iconSvg)) ...<Widget>[
+                    RecipeIcon(svg: recipe.iconSvg, size: 40),
+                    const SizedBox(width: HearthSpacing.md),
+                  ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(recipe.title, style: text.sectionHeader),
+                        const SizedBox(height: HearthSpacing.xs),
+                        Text(
+                          _summary(recipe),
+                          style: text.metadata.copyWith(
+                            color: colors.textMuted,
+                          ),
+                        ),
+                        if (showMacros) ...<Widget>[
+                          const SizedBox(height: HearthSpacing.xxs),
+                          MacroStatsLine(
+                            macros: macros.perServing,
+                            isPartial: macros.isIncomplete,
+                          ),
+                        ],
+                        if (recipe.tags.isNotEmpty) ...<Widget>[
+                          const SizedBox(height: HearthSpacing.md),
+                          Wrap(
+                            spacing: HearthSpacing.sm,
+                            runSpacing: HearthSpacing.xs,
+                            children: <Widget>[
+                              for (final String tag in recipe.tags)
+                                _Tag(label: tag),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  // Favouriting from the list, not only from inside the recipe:
+                  // the heart is worth nothing if reaching it costs two
+                  // navigations.
+                  _FavoriteButton(recipeId: recipe.id, compact: true),
+                ],
+              ),
             ),
           ),
         ),

@@ -38,9 +38,20 @@ import 'timer_bar.dart';
 /// the reader is ruthlessly focused, because this is what you look at with
 /// flour on your hands.
 class RecipeDetailScreen extends ConsumerStatefulWidget {
-  const RecipeDetailScreen({required this.recipeId, super.key});
+  const RecipeDetailScreen({
+    required this.recipeId,
+    this.embedded = false,
+    super.key,
+  });
 
   final String recipeId;
+
+  /// Whether this is the library's detail pane rather than a pushed screen.
+  ///
+  /// The only thing it changes is the back arrow. Everything else about
+  /// reading a recipe is the same in both places, and a pane that quietly
+  /// dropped a control would make the desktop the lesser of the two.
+  final bool embedded;
 
   @override
   ConsumerState<RecipeDetailScreen> createState() => _RecipeDetailScreenState();
@@ -90,6 +101,9 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
       appBar: AppBar(
         backgroundColor: colors.surface,
         surfaceTintColor: Colors.transparent,
+        // Nothing to go back to in a pane: the list it was opened from is
+        // beside it, still on the screen.
+        automaticallyImplyLeading: !widget.embedded,
         title: const SizedBox.shrink(),
         actions: <Widget>[
           if (available != null) ...<Widget>[
