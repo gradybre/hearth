@@ -1,0 +1,168 @@
+# UI redesign, November 2026 — survey and staged plan
+
+The brief is the two mock-ups beside this file:
+
+- `mobile-home-today-recipes.webp` — Home, Today, Recipes on a phone.
+- `desktop-recipes-detail.webp` — sidebar / list / detail on a desktop window.
+
+They sharpen §6.1 rather than replace it. Nothing below is built yet; this is
+the plan put to Brendan before writing code, per CLAUDE.md.
+
+---
+
+## 1. What the survey found
+
+**The token layer is already right, and that is the good news.** The palette in
+`hearth_colors.dart` (`#ECE2D0` ground, `#2A211A` cocoa text, `#9A410C`
+terracotta) is the mock-ups' palette. `hearth_typography.dart` already runs
+Fraunces for titles with the optical-size axis tracked, and Source Sans 3 with
+tabular figures for data. Spacing is a 4pt grid with gentle radii. Dark mode is
+a first-class concern with its own reasoned ramp.
+
+So **this is not a re-skin. It is a composition and hierarchy change**, and the
+tokens mostly already exist to pay for it.
+
+Rendered the current UI through the gallery
+(`HEARTH_RENDER=1 flutter test test/render --tags render`) and compared screen
+by screen. The gap:
+
+| Area | Today | Template | Size |
+|---|---|---|---|
+| Palette / type / spacing | as specified | same | **none** |
+| Today summary | light "Daily totals" card, flat; the headline figure is the same weight as the macro lines | dark cocoa card, huge serif "850 kcal left", progress bar, one support line, "Nutrition details ›" | **large** |
+| Today logging | a small `+` per meal slot | a full-width terracotta `+ Log food` above Meals | **medium** (success-bar relevant) |
+| Today meal rows | one card per entry; check icon, kcal, overflow menu | slot label in accent, dish in bold, "✓ Logged" / *Planned* + outlined `Log` | medium |
+| Today chrome | Day/Week control stacked above the title | Day/Week beside the title; `‹ Fri, Nov 27 ›` stepper | small |
+| Recipes filters | four outlined rect chips wrapping to two rows | underlined tabs (phone) / filled pills (desktop) | medium |
+| Recipes rows | no thumbnail unless the recipe has one; four-up macro line | sketch thumbnail throughout, one photographic hero card | medium |
+| Recipes add | FAB floating bottom-right | outlined `+ Add` beside the heading | small |
+| **Desktop** | sidebar + one 820pt column; the right half of a 1280pt window is empty paper and the FAB sits alone in the far corner | sidebar + list column + detail pane | **large** |
+| Sidebar | Home / section / tabs / Settings — already the template's structure | plus wordmark and pot mark at the top | small |
+| Recipe detail | photo, title, Cook + outlined actions, scale control, ingredients | same parts, re-laid: action row with vertical rules, servings stepper beside the Ingredients heading, right-aligned quantity column | medium |
+| Home | four equal section cards + a footer sentence | one hero (illustration, serif title, strapline, primary action, link) + compact secondary rows + italic footer | **large** |
+| Illustrations | none exist | pot mark, hero pot, cottage sketch | **new assets** |
+
+The desktop screenshot is the one worth looking at: the layout is correct by
+the letter of §6.2 and still wastes half the window.
+
+## 2. Things that are already in place and should be reused
+
+- **`SketchIcon` + `RecipeIcon`** (`lib/domain/recipes/sketch_icon.dart`) is a
+  whitelisted stroke-only SVG subset parser that discards the document's
+  colours and takes one from the theme. The small sketch thumbnails the
+  mock-ups put in list rows are this, already built — the gallery fixtures
+  simply have no icons, which is why the rendered rows look bare.
+- **`RecipePhoto`** gives the photographic hero card; it renders nothing when
+  there is no photo, so a hero treatment has to degrade to the sketch.
+- **The sidebar** already puts Home at the top, the section name under it,
+  tinted icon nav, and Settings pinned below the tabs — the template's
+  left column, minus the wordmark.
+- **`HearthLayout.readingWidth` / `launcherWidth`** already exist as the
+  single place column widths are decided.
+
+## 3. Spec conflicts to settle before building (do not decide these alone)
+
+1. **§6.2 says the home screen lists sections as cards, and carries no live
+   data.** The template makes Nutrition a hero and demotes House to a row, and
+   puts `+ Log food` on it. The button is an action, not live data, but it does
+   wire the home screen to Nutrition's logging route — the coupling §6.2 exists
+   to prevent. Doing it cleanly means the registry gains a per-section primary
+   action, and §6.2 is amended in the same change.
+2. **The template's filter bar drops "Recent" and "Eaten out" and adds "All".**
+   That is a loss of two controls, not a restyle. Proposal: All / Favourites as
+   the underlined tabs, Recent and Eaten out folded into Filters.
+3. **The template's recipe rows carry no macro line.** The app shows
+   `kcal · protein · carbs · fat · partial` per row. Dropping it to match the
+   mock-up loses data from the library view.
+4. **§12** — nothing in the templates appears to lift a deferred item. The hero
+   photo is §5.2 and already built; step/gallery photos stay deferred.
+
+## 4. Spelling — a pre-existing inconsistency, surfaced
+
+The templates read "Favourites" and "chilli". The app's **user-visible copy is
+already mixed**: four quoted strings say "Favourite", five say "Favorite"
+(`recipe_filter_bar.dart` says Favourites; `food_archive_screen.dart` and
+`export_review_screen.dart` say "Favourite recipes" keyed off `favorite_*`
+ids). `Fibre` appears in fifteen places in `lib/`, and PR #136 renames it to
+"Fiber". After #136 lands the app will say "Fiber" and "Favourites" on adjacent
+screens.
+
+This wants one app-wide decision, and it wants its own PR — a copy sweep mixed
+into a layout change makes both unreviewable. Identifiers and database ids stay
+American either way; this is about displayed text only.
+
+## 5. Illustrations — new assets, and a decision
+
+`assets/` holds two fonts and one app-icon source. The pot mark, the hero pot
+and the cottage sketch do not exist, and the mock-ups' art is clearly rendered
+raster line art.
+
+Three ways to get them, in the order I would pick:
+
+- **(a) Build the seam now, art later.** An `AppSketch` widget that renders
+  nothing until given something, wired into Home and the sidebar. The redesign
+  lands without being blocked on art, and the art drops in as one small change.
+- **(b) Hand-authored vector paths** in Dart, drawn with a `CustomPainter` and
+  coloured from tokens. Theme-correct in both modes, crisp at any size, no
+  binary in the repo, no licence question — and visibly simpler than the
+  mock-up's rendered art.
+- **(c) Committed raster assets** matching the mock-up exactly. Needs a source
+  Brendan is happy with, a licence note, and light/dark treatment.
+
+Generating this art is not something to do quietly, so the plan assumes (a) and
+leaves (b)/(c) to Brendan.
+
+## 6. Staged plan — five PRs
+
+Ordered so the success-bar screen moves early and the riskiest structural
+change stands alone. Each is independently reviewable and shippable.
+
+### PR 1 — Tokens for the inverted surface, and Today's summary card
+Add the token pair the dark cocoa card needs (`inkSurface` / `onInkSurface`,
+cocoa + cream in light, a lifted warm-dark in dark so it still reads as a card
+against a near-black ground), plus the serif hero-readout role and the accent
+slot-label role. Rebuild `_RemainingCard` as the template's card: "N kcal left"
+as the headline, progress bar, "X of Y kcal logged", "Nutrition details ›".
+
+Watch: the compact/expanded summary split (`daySummaryExpandedProvider`, the
+`< 372pt or 16pt → >20pt` compact rule) has to survive, and the contrast sweep
+in `guidelines_test.dart` reads real painted pixels, so the new ground is
+checked for free in both themes — which is the right gate for an inverted card.
+
+*Depends on PR #136 landing first; it touches the same card.*
+
+### PR 2 — Today: logging speed
+Primary `+ Log food`, meal-slot rows in the template's shape, Day/Week beside
+the title, the date stepper. The screen the success bar is measured on.
+
+### PR 3 — Recipes library
+Filter tabs, `+ Add` beside the heading, sketch thumbnails throughout, the hero
+card treatment. Carries the filter-bar and macro-line decisions from §3.
+
+### PR 4 — Desktop list + detail
+Recipes as a master-detail pane above the sidebar breakpoint, with the detail
+pane's action row, servings stepper and right-aligned quantities. The largest
+structural change and the one most likely to need iteration, so it is alone.
+`/recipe/:id` stays a real route — the pane is a layout, not a new navigation
+model.
+
+### PR 5 — Home
+Nutrition as a hero, the other sections as compact rows, the italic footer.
+Last because it is the least load-bearing for the success bar and because it
+needs the §3.1 answer.
+
+### Optional PR 6 — the illustrations, once the art question is settled.
+
+## 7. Gates, every PR
+
+`dart format .`, `flutter analyze` clean, `flutter test` green read by exit
+code (never piped to `tail`), and the render gallery green. Tests are authored
+with each change, not after.
+
+The a11y sweeps are the real gate here and every stage must keep them green:
+`screen_sweep_test.dart`, `flow_sweep_test.dart`, `guidelines_test.dart`,
+`every_surface_is_swept_test.dart` — tap targets at both 44 and 48, dynamic
+type honoured to 3x on a 320pt phone, semantics on interactive elements *and*
+data, never colour alone. The known trap: a row that sets
+`excludeSemantics: true` and hand-builds one label silently drops any figure
+the label does not name, and the template's denser rows are exactly that shape.
