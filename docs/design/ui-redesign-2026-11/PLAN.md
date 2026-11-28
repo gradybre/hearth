@@ -330,6 +330,33 @@ What the drawing turned up:
   little plainer than it should be. Every mark in the file is held to the
   gate, to being strokes rather than fills, and to fitting its own viewBox.
 
+### PR 8 — Recipe artwork
+**The plumbing, done.** A library of archetype drawings — a jar, a bowl, a
+stew pot — matched to a recipe by its words, below its own photograph and
+its own sketch. 150 subjects in `recipe_artwork.dart`, which is both what
+the app matches against and the brief somebody draws from; a test holds
+[ARTWORK_BRIEF.md](ARTWORK_BRIEF.md) to it.
+
+Archetypes rather than art per recipe because that is what the templates
+themselves are: the jar and the lasagne in the mock-ups are not portraits of
+particular recipes. A fixed set is drawn once, reviewed once, licensed once
+and works offline; art generated per recipe costs money on every recipe for
+ever and needs a review step before it lands in somebody's library.
+
+What the build turned up:
+
+- **Longest phrase first, then the count.** Scoring by hits made "Sweet
+  potato mash" a potato — "potato" and "mash" both point there, against one
+  hit for "sweet potato". A two-word phrase is a more specific claim than
+  two one-word hits.
+- **Keywords match their own plural, one way only.** "Tacos" has to find the
+  taco, but stripping an s makes hummus a hummu.
+- **What exists is declared, not discovered.** Asking the asset bundle for a
+  file that is not there is an error rather than an answer: it logs, and
+  every widget test asserting no exception would fail for a picture nobody
+  had drawn. `kArtworkShipped` names the drawings that exist, and it is
+  empty until the art arrives — so the library looks exactly as it does now.
+
 ### PR 3b — Recipes rows
 Sketch thumbnails throughout and the hero card. Unblocked by PR 7: the
 default drawing for a recipe with no icon of its own is the thing it was
