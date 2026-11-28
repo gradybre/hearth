@@ -50,6 +50,27 @@ abstract final class HearthLayout {
   /// decision — `HomeScreen` held its own copy, which is how a pair of
   /// widths becomes a pair of unrelated widths.
   static const double launcherWidth = 640;
+
+  /// Content width at or above which a list and the thing it opens sit side
+  /// by side instead of one pushing over the other.
+  ///
+  /// Measured on the space the section actually has, not on the window: the
+  /// sidebar takes 208 points and a divider, so a 1280pt desktop leaves
+  /// about 1070 here. The sidebar's own breakpoint cannot be reused — at 840
+  /// of window there are barely 630 points of content, which is one reading
+  /// column and not two.
+  ///
+  /// Below this the list keeps the whole width and opening a recipe pushes,
+  /// which is the right answer on a phone and on a half-screen window.
+  static const double detailPaneBreakpoint = 1000;
+
+  /// The list column beside a detail pane.
+  ///
+  /// Enough for a thumbnail, a title that wraps once and a line of
+  /// metadata. Fixed rather than a fraction: the list is the same list at
+  /// every window size, and a column that grew with the window would put the
+  /// titles further from their thumbnails on a bigger screen.
+  static const double listColumnWidth = 400;
 }
 
 /// Minimum interactive sizes.

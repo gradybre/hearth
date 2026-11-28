@@ -522,6 +522,22 @@ final mealRecentLogsProvider = FutureProvider.family<List<RecentLog>, MealSlot>(
 ///
 /// The day is the default because daily logging is the loop the app is judged
 /// on; the week is where you step back and look.
+/// The recipe showing in the library's detail pane, where there is one.
+///
+/// Null is the pane's empty state, and the state the library opens in: a
+/// window wide enough for two columns is not a reason to open a recipe
+/// nobody asked for. Below `HearthLayout.detailPaneBreakpoint` there is no
+/// pane and this is not read — opening a recipe pushes, as it always has.
+final NotifierProvider<SelectedRecipe, String?> selectedRecipeIdProvider =
+    NotifierProvider<SelectedRecipe, String?>(SelectedRecipe.new);
+
+class SelectedRecipe extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void show(String? recipeId) => state = recipeId;
+}
+
 enum PlanView { day, week }
 
 final NotifierProvider<PlanViewMode, PlanView> planViewProvider =
@@ -642,6 +658,15 @@ class RecipeFilterController extends Notifier<RecipeFilter> {
   void search(String text) => state = state.copyWith(text: text);
   void toggleFavoritesOnly() =>
       state = state.copyWith(favoritesOnly: !state.favoritesOnly);
+
+  /// Sets the favourites narrowing outright.
+  ///
+  /// The library's All / Favourites tabs are two states of one control, not
+  /// one control tapped twice: pressing the tab you are already on has to
+  /// leave you where you are. A toggle there would make "All" mean
+  /// "favourites" on every second press.
+  void setFavoritesOnly(bool value) =>
+      state = state.copyWith(favoritesOnly: value);
   void toggleEatenOutOnly() =>
       state = state.copyWith(eatenOutOnly: !state.eatenOutOnly);
   void toggleTag(String tag) => state = state.toggleTag(tag);

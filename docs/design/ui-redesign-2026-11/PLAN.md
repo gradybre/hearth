@@ -71,9 +71,12 @@ the letter of §6.2 and still wastes half the window.
 2. **The template's filter bar drops "Recent" and "Eaten out" and adds "All".**
    That is a loss of two controls, not a restyle. Proposal: All / Favourites as
    the underlined tabs, Recent and Eaten out folded into Filters.
+   **Settled: keep both.** Eaten out is behind Filters; Recent stayed in the
+   row, because sort is not a narrowing — see PR 3 below.
 3. **The template's recipe rows carry no macro line.** The app shows
    `kcal · protein · carbs · fat · partial` per row. Dropping it to match the
    mock-up loses data from the library view.
+   **Settled: it stays.**
 4. **§12** — nothing in the templates appears to lift a deferred item. The hero
    photo is §5.2 and already built; step/gallery photos stay deferred.
 
@@ -153,9 +156,44 @@ Four things the build turned up that the survey had not:
 Primary `+ Log food`, meal-slot rows in the template's shape, Day/Week beside
 the title, the date stepper. The screen the success bar is measured on.
 
-### PR 3 — Recipes library
-Filter tabs, `+ Add` beside the heading, sketch thumbnails throughout, the hero
-card treatment. Carries the filter-bar and macro-line decisions from §3.
+### PR 3 — Recipes library: the chrome
+Filter tabs and `+ Add` beside the heading. Brendan's answer to §3.2 and §3.3
+was to keep both: nothing is dropped, so Eaten out moved behind Filters with
+the other narrowings rather than off the screen, and the per-row macro line
+stays.
+
+**Done**, and split: the rows (sketch thumbnails throughout, the hero card)
+are PR 3b. Two reasons. The first is size — the chrome is already a filter
+bar, a sheet and the whole floating-button apparatus, and a row restyle on
+top of it is not one reviewable diff. The second is that "thumbnails
+throughout" needs a sketch for a recipe that has none, which is the art
+question in §5 and now PR 7: the rows cannot land before it.
+
+What the build turned up:
+
+- **The floating button is gone, and so is the machinery under it.** `+ Add`
+  in the heading ends the defect `add_recipe_covers_no_row_test` was written
+  for rather than working around it: no pill over the rows, so no second
+  docked shape past the reflow threshold, and no band of clearance under the
+  last row. What is given up is that it scrolls away with the heading — the
+  same bargain the search field above it already makes. The test file stays,
+  and its first case — walk the whole scroll at four text sizes and press
+  every delete that is on the glass — is now the guard against anything
+  floating over the rows again.
+- **Eaten out had to leave the row, not just be restyled.** All and
+  Favourites are one control in two states; Eaten out is a narrowing that
+  combines with either. Drawn as a third tab it would have looked like a
+  scope and behaved like a filter. It is a chip in the sheet, it counts
+  towards "Filters (n)", and the applied strip still names it.
+- **Sort stayed.** §3.2 proposed folding Recent into Filters with Eaten out.
+  It is not a filter: it hides nothing and excludes nothing, and behind the
+  button the order the list is in would be invisible until somebody opened a
+  sheet called Filters to look for it. It sits at the end of the row.
+- **The heading row has to wrap, and so does the button.** At three times the
+  text on a 320pt phone the serif heading alone is wider than the screen, and
+  the button on its own line is still wider than 288 points — so the pair
+  wraps below the heading and the label takes two lines rather than
+  overflowing.
 
 ### PR 4 — Desktop list + detail
 Recipes as a master-detail pane above the sidebar breakpoint, with the detail
@@ -163,6 +201,37 @@ pane's action row, servings stepper and right-aligned quantities. The largest
 structural change and the one most likely to need iteration, so it is alone.
 `/recipe/:id` stays a real route — the pane is a layout, not a new navigation
 model.
+
+**Done**, and split: the pane's own contents — the action row with its
+vertical rules, the servings stepper beside the Ingredients heading, the
+amounts in their own column — are PR 4b. The shell and the contents are
+separate concerns, and the shell is the part the empty right half of a
+1280pt window was about.
+
+What the build turned up:
+
+- **The breakpoint cannot be the sidebar's.** At 840 of window the section
+  has barely 630 points, which is one reading column and not two. It is
+  measured on what the section actually has, through a `LayoutBuilder`, and
+  set at 1000 — a 1280pt desktop leaves about 1070 once the sidebar has
+  taken its 208 and a divider.
+- **Embedding was nearly free.** `RecipeDetailScreen` is a Scaffold with an
+  app bar and a footer of actions, and inside an `Expanded` it is all still
+  correct. The one thing an `embedded` flag changes is the back arrow:
+  there is nothing to go back to when the list it was opened from is beside
+  it.
+- **The pane is keyed by recipe.** Without that the state inside it travels
+  from one recipe to the next — the servings it has been scaled to above
+  all, so a 12-serving stew would open as a doubled bowl of oats.
+- **It opens on nothing.** The template draws a recipe in the pane, but a
+  window wide enough for two columns is not a reason to open a recipe
+  nobody asked for, and the first row of a list sorted by "recent" is a
+  different recipe every week.
+- **The open row needed a shape, not a shade.** A tint and an accent
+  outline are both colour. The bar down its leading edge is drawn as a
+  ground the card is inset from — a `Border` cannot have one side thicker
+  than the others and keep a radius, and a `Stack` over the card would take
+  the taps along that edge.
 
 ### PR 5 — Home
 Nutrition as a hero, the other sections as compact rows, the italic footer.

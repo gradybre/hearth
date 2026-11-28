@@ -1507,6 +1507,14 @@ const List<Scene> scenes = <Scene>[
     taps: <String>['Recipes'],
     size: Size(1280, 900),
   ),
+  // The pane with something in it. The scene above is the state the library
+  // opens in — nothing chosen — and a picture of the empty half is not a
+  // picture of the layout.
+  Scene(
+    name: 'recipes-desktop-open',
+    taps: <String>['Recipes', 'Weeknight chilli'],
+    size: Size(1280, 900),
+  ),
   Scene(name: 'foods', taps: <String>['Foods']),
   // The empty list, which since §5.7 was amended is the app asking which of
   // the two ways in you want rather than a date picker and a Build button.
