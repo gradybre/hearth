@@ -149,9 +149,15 @@ void main() {
             : '${section.label} is empty and is not said to be',
       );
     }
-    // Said in a different voice from everything above it: it is a sentence,
-    // not a control, and nothing in it can be pressed.
-    expect(tester.widget<Text>(footer).style?.fontStyle, FontStyle.italic);
+    // Upright, although the templates draw it in italic: the app bundles
+    // one roman face per family, so asking for italic asks for a synthesised
+    // slant — and at twelve points in the muted tone that is thin enough to
+    // fail the §6.3 contrast guideline, which reads the painted pixels
+    // rather than the colour it was told to paint with.
+    expect(
+      tester.widget<Text>(footer).style?.fontStyle,
+      isNot(FontStyle.italic),
+    );
   });
 
   testWidgets('every room is still a door', (WidgetTester tester) async {

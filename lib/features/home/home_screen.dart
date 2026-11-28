@@ -333,14 +333,19 @@ class _ComingLater extends StatelessWidget {
       child: Text(
         'In development · $listed',
         textAlign: TextAlign.center,
-        // Italic, as the templates draw it, and still a sentence rather than
-        // a control: nothing here can be tapped, so nothing here can
-        // disappoint. The icon that used to lead it is gone — a foundation
-        // glyph beside the words was saying the same thing twice.
-        style: context.text.metadata.copyWith(
-          color: colors.textMuted,
-          fontStyle: FontStyle.italic,
-        ),
+        // Upright, although the templates draw it in italic. Hearth bundles
+        // one roman face per family and no italic, so `FontStyle.italic`
+        // here is a synthesised slant — and at twelve points in the muted
+        // tone it is thin enough that the §6.3 contrast guideline cannot
+        // find a glyph pixel anywhere near the text colour: it measured the
+        // darkest thing in the line at 1.64:1 against the page. The middot
+        // and the muted tone already say "aside"; a faux italic was only
+        // ever going to say it worse.
+        //
+        // Not caught here, either. The guideline reads painted pixels, so
+        // what it measures depends on how the glyphs rasterise, and this
+        // failed on CI's fonts while passing on a Mac's.
+        style: context.text.metadata.copyWith(color: colors.textMuted),
       ),
     );
   }
