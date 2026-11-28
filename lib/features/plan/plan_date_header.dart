@@ -126,16 +126,18 @@ class PlanDateHeader extends StatelessWidget {
           _dateLabel(currentDay),
           key: const ValueKey<String>('plan-date-label'),
           textAlign: compact ? TextAlign.start : TextAlign.center,
-          style: compact
-              ? context.text.label
-              : _isWeek
-              ? context.text.sectionHeader.copyWith(
-                  color: context.colors.textSecondary,
-                )
-              // Up from the muted metadata it used to be. Alone in the
-              // middle of its own row it is no longer a caption under a
-              // heading — it is the thing the row is about.
-              : context.text.label,
+          // One role everywhere it appears, up from the muted metadata the
+          // day used to draw and down from the serif heading the week did.
+          // Alone in the middle of its own row it is no longer a caption
+          // under a heading — it is the thing the row is about.
+          //
+          // The week took the heading role because it was the week's only
+          // name, and in the stepper that cost more than it bought: the two
+          // buttons on each side take a fixed 192 points, so on a 390pt
+          // phone the date has about 166 to live in, and "Dec 28, 2026 –
+          // Jan 3, 2027" at twenty points of serif is two lines of it at
+          // the ordinary text size.
+          style: context.text.label,
         ),
       );
 
