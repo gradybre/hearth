@@ -58,14 +58,22 @@ void main() {
     expect(find.text('Chilli'), findsOneWidget);
   });
 
-  testWidgets('and the chip narrows to it rather than hiding it', (
+  testWidgets('and the filter narrows to it rather than hiding it', (
     WidgetTester tester,
   ) async {
     await pumpHearthApp(tester, recipes: <Recipe>[burritoBowl(), chilli()]);
     await tester.tap(find.text('Recipes').last);
     await pumpFrames(tester);
 
+    // Behind Filters with the other narrowings since the November 2026
+    // templates: the row above the list is All / Favourites, which is a
+    // scope, and "eaten out" is a filter that combines with it rather than
+    // a third scope that replaces it.
+    await tester.tap(find.textContaining(RegExp(r'^Filters')));
+    await pumpFrames(tester, frames: 12);
     await tester.tap(find.text('Eaten out'));
+    await pumpFrames(tester, frames: 12);
+    await tester.tap(find.text('Done'));
     await pumpFrames(tester, frames: 12);
 
     expect(find.text('My usual bowl'), findsOneWidget);

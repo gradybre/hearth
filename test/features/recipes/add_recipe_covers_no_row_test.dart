@@ -11,12 +11,20 @@ import '../../support/fixtures.dart';
 
 /// The way in must not sit on top of the way out (spec §6.3, CLAUDE.md 6).
 ///
-/// "Add recipe" floats over the library list. At three times the text on a
-/// short desktop window it is 274pt wide and 72pt tall with its margin,
+/// "Add recipe" used to float over the library list. At three times the text
+/// on a short desktop window it was 274pt wide and 72pt tall with its margin,
 /// parked over the right-hand end of every row — which is exactly where the
 /// delete a swipe uncovers lands. The delete was not merely hidden under it:
 /// the hit test stopped at the floating button, so a tap on a visible,
-/// enabled Delete opened the Add recipe sheet instead.
+/// enabled Delete opened the Add recipe sheet instead. The cure then was a
+/// second shape: a docked bar, switched in at accessibility text sizes.
+///
+/// The November 2026 templates put the button beside the heading, which ends
+/// the whole argument — there is no floating case left to dock. These tests
+/// stay, and the first of them is the one that matters: it walks the entire
+/// scroll at four text sizes and asserts that every delete on the glass can
+/// actually be pressed. It passed before only because of the docking, and it
+/// is what would catch anything floating over the rows again.
 ///
 /// Dynamic type is to be *honoured*, not survived, so what is asserted here
 /// is a real hit test rather than `findsOneWidget` — a button under another
@@ -157,27 +165,45 @@ void main() {
     });
   }
 
-  testWidgets('the pill is still the pill at an ordinary text size', (
+  for (final double scale in <double>[1.0, 3.0]) {
+    testWidgets('nothing floats over the rows at text scale $scale', (
+      WidgetTester tester,
+    ) async {
+      // The guard this file exists for, stated directly rather than as a
+      // property of whichever shape the button is wearing. A pill at one
+      // size and a docked bar at another was the old answer; a button in
+      // the heading is the new one, and either way the rows underneath are
+      // nobody else's to draw on.
+      await pumpHearthApp(
+        tester,
+        size: shortWindow,
+        textScale: scale,
+        recipes: <Recipe>[chilli()],
+      );
+      await pumpFrames(tester);
+
+      expect(find.byType(FloatingActionButton), findsNothing);
+      // The library's own Scaffold, not the shell's: the shell's bottom bar
+      // is the four tabs, and it is not what used to cover a row.
+      final Scaffold library = tester.widget<Scaffold>(
+        find.descendant(
+          of: find.byType(RecipeLibraryScreen),
+          matching: find.byType(Scaffold),
+        ),
+      );
+      expect(
+        library.bottomNavigationBar,
+        isNull,
+        reason: 'the docked bar is gone with the pill',
+      );
+      expect(library.floatingActionButton, isNull);
+    });
+  }
+
+  testWidgets('and the way in is still one labelled control that works', (
     WidgetTester tester,
   ) async {
-    // The cure is scoped to accessibility sizes on purpose. A floating button
-    // over a list is the design at ordinary sizes and is not being changed —
-    // this is here so that "dock it everywhere" cannot arrive quietly.
-    await pumpHearthApp(
-      tester,
-      size: shortWindow,
-      textScale: 1.0,
-      recipes: <Recipe>[chilli()],
-    );
-    await pumpFrames(tester);
-
-    expect(find.byType(FloatingActionButton), findsOneWidget);
-    expect(find.text('Add recipe'), findsOneWidget);
-  });
-
-  testWidgets('and gives way to a bar at an accessibility one', (
-    WidgetTester tester,
-  ) async {
+    // Same words, same four ways in — only where it sits has changed (U05).
     await pumpHearthApp(
       tester,
       size: shortWindow,
@@ -186,12 +212,6 @@ void main() {
     );
     await pumpFrames(tester);
 
-    expect(
-      find.byType(FloatingActionButton),
-      findsNothing,
-      reason: 'nothing may float over the rows at accessibility text sizes',
-    );
-    // Same words, same way in — only the shape changes (U05).
     expect(find.text('Add recipe'), findsOneWidget);
     await tester.tap(find.text('Add recipe'));
     await pumpFrames(tester, frames: 12);

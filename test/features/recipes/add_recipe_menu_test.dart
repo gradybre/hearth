@@ -21,12 +21,14 @@ void main() {
     await openLibrary(tester);
 
     expect(find.text('Add recipe'), findsOneWidget);
-    // One, not a stack. An extended FAB is still a FloatingActionButton, so
-    // the question is how many, not whether.
+    // One, not a stack — and not floating over the list either. The pill
+    // this replaced covered the delete a swipe uncovers at accessibility
+    // text sizes, so it needed a second docked shape to be usable; a button
+    // beside the heading needs neither (see add_recipe_covers_no_row_test).
     expect(
       find.byType(FloatingActionButton),
-      findsOneWidget,
-      reason: 'the stacked icon buttons are still there',
+      findsNothing,
+      reason: 'nothing floats over the rows',
     );
   });
 
