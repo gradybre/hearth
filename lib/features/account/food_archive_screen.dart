@@ -466,7 +466,7 @@ class _FoodArchiveScreenState extends ConsumerState<FoodArchiveScreen> {
         title: 'Whose data and what is left out',
         children: <Widget>[
           const Text(
-            'Your personal plans, logs, targets, saved weeks, favourites '
+            'Your personal plans, logs, targets, saved weeks, favorites '
             'and food profile; your household’s shared recipes, foods, '
             'collections, shopping data and ingredient matches.',
           ),
@@ -678,7 +678,7 @@ String _countLabel(String key) => switch (key) {
   'ongoing_macro_targets' => 'Ongoing target decisions',
   'plan_templates' => 'Saved weeks',
   'collections' => 'Collections',
-  'favorite_recipes' => 'Favourite recipes',
+  'favorite_recipes' => 'Favorite recipes',
   'ingredient_matches' => 'Ingredient matches',
   'shopping_lists' => 'Shopping lists',
   'shopping_items' => 'Shopping items',

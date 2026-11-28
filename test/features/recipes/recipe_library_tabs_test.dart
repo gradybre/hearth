@@ -70,7 +70,7 @@ void main() {
     await openLibrary(tester);
 
     expect(find.text('All'), findsOneWidget);
-    expect(find.text('Favourites'), findsOneWidget);
+    expect(find.text('Favorites'), findsOneWidget);
     expect(filterOf(tester).favoritesOnly, isFalse);
     expect(find.text('Braised short ribs'), findsOneWidget);
     expect(find.text('Hand rolls'), findsOneWidget);
@@ -81,7 +81,7 @@ void main() {
   ) async {
     await openLibrary(tester);
 
-    await tapTab(tester, 'Favourites');
+    await tapTab(tester, 'Favorites');
     expect(filterOf(tester).favoritesOnly, isTrue);
     expect(find.text('Hand rolls'), findsOneWidget);
     expect(find.text('Braised short ribs'), findsNothing);
@@ -99,8 +99,8 @@ void main() {
     // — the control would be reporting one thing and doing the opposite.
     await openLibrary(tester);
 
-    await tapTab(tester, 'Favourites');
-    await tapTab(tester, 'Favourites');
+    await tapTab(tester, 'Favorites');
+    await tapTab(tester, 'Favorites');
     expect(filterOf(tester).favoritesOnly, isTrue);
 
     await tapTab(tester, 'All');
@@ -121,15 +121,15 @@ void main() {
       reason: 'the chosen tab carries no rule',
     );
     expect(
-      (ruleUnder(tester, 'Favourites').border! as Border).bottom.color,
+      (ruleUnder(tester, 'Favorites').border! as Border).bottom.color,
       Colors.transparent,
       reason: 'a tab that is not chosen is wearing the chosen tab\'s rule',
     );
 
-    await tapTab(tester, 'Favourites');
+    await tapTab(tester, 'Favorites');
 
     expect(
-      (ruleUnder(tester, 'Favourites').border! as Border).bottom.color,
+      (ruleUnder(tester, 'Favorites').border! as Border).bottom.color,
       isNot(Colors.transparent),
     );
     expect(
@@ -148,7 +148,7 @@ void main() {
         .style
         ?.fontWeight;
     final FontWeight? other = tester
-        .widget<Text>(find.text('Favourites'))
+        .widget<Text>(find.text('Favorites'))
         .style
         ?.fontWeight;
 
@@ -171,8 +171,8 @@ void main() {
       isSemantics(label: 'All', isSelected: true, isButton: true),
     );
     expect(
-      tester.getSemantics(find.bySemanticsLabel('Favourites')),
-      isSemantics(label: 'Favourites', isSelected: false),
+      tester.getSemantics(find.bySemanticsLabel('Favorites')),
+      isSemantics(label: 'Favorites', isSelected: false),
     );
 
     // Filters is in the row and is not a scope: it opens a sheet. Announcing
@@ -192,7 +192,7 @@ void main() {
     // guidelines, and 44 passes one of them.
     await openLibrary(tester);
 
-    for (final String label in <String>['All', 'Favourites', 'Filters']) {
+    for (final String label in <String>['All', 'Favorites', 'Filters']) {
       final Size size = tester.getSize(
         find
             .ancestor(of: find.text(label), matching: find.byType(InkWell))

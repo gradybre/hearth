@@ -545,7 +545,7 @@ class RecipeCard extends ConsumerWidget {
           '${recipe.title}. ${_summary(recipe)}'
           '${showMacros ? '. ${_macroLabel(macros.perServing)}'
                     '${macros.isIncomplete ? '. Partial — ${macros.incompleteReason}' : ''}' : ''}'
-          '${isFavorite ? '. Favourite' : ''}',
+          '${isFavorite ? '. Favorite' : ''}',
       // Announced as well as drawn: the bar down its edge says which recipe
       // the pane is showing to somebody looking at the screen, and this
       // says it to somebody who is not (spec §6.3).
@@ -808,7 +808,7 @@ class _FavoriteButton extends ConsumerWidget {
         color: isFavorite ? colors.accent : colors.textMuted,
         size: compact ? 20 : 24,
       ),
-      tooltip: isFavorite ? 'Remove from favourites' : 'Add to favourites',
+      tooltip: isFavorite ? 'Remove from favorites' : 'Add to favorites',
       onPressed: () =>
           ref.read(collectionRepositoryProvider).toggleFavorite(recipeId),
     );

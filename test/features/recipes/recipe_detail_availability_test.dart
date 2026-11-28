@@ -57,8 +57,8 @@ Future<ProviderContainer> _openRecipe(
 }
 
 void _expectNoRecipeActions() {
-  expect(find.byTooltip('Add to favourites'), findsNothing);
-  expect(find.byTooltip('Remove from favourites'), findsNothing);
+  expect(find.byTooltip('Add to favorites'), findsNothing);
+  expect(find.byTooltip('Remove from favorites'), findsNothing);
   expect(find.byTooltip('Cookbooks'), findsNothing);
   expect(find.byTooltip('Duplicate this recipe'), findsNothing);
   for (final String label in <String>['Edit', 'Cook', 'Plan', 'Shop']) {

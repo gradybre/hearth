@@ -113,8 +113,8 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                 color: isFavorite ? colors.accent : colors.textMuted,
               ),
               tooltip: isFavorite
-                  ? 'Remove from favourites'
-                  : 'Add to favourites',
+                  ? 'Remove from favorites'
+                  : 'Add to favorites',
               onPressed: () {
                 if (_currentRecipe == null) return;
                 ref.read(collectionRepositoryProvider).toggleFavorite(recipeId);

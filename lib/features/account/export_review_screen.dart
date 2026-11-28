@@ -254,7 +254,7 @@ class _ExportReviewScreenState extends ConsumerState<ExportReviewScreen> {
       children: <Widget>[
         Text(
           'Your personal data: plans, logged meals, nutrition targets, saved '
-          'weeks, favourites and food profile.',
+          'weeks, favorites and food profile.',
         ),
         SizedBox(height: HearthSpacing.md),
         Text(
@@ -517,7 +517,7 @@ String _countLabel(String key) => switch (key) {
   'ongoing_macro_targets' => 'Ongoing target decisions',
   'plan_templates' => 'Saved weeks',
   'collections' => 'Collections',
-  'favorite_recipes' => 'Favourite recipes',
+  'favorite_recipes' => 'Favorite recipes',
   'ingredient_matches' => 'Ingredient matches',
   'shopping_lists' => 'Shopping lists',
   'shopping_items' => 'Shopping items',
