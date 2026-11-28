@@ -55,16 +55,21 @@ List<String> recipeWords(String text) => text
 /// recipes are whatever they cooked last week, and a wrong picture is worse
 /// than none. The caller falls through to the recipe's own sketch.
 ///
-/// **The longest phrase wins, and only then the most hits.** "Sweet potato
+/// **The title decides first.** "Teriyaki Beef Rice Bowls" filed under
+/// "meal prep" is a rice bowl, not a lunchbox — but "meal prep" is two
+/// words and "rice" is one, so ranking by phrase length alone handed it to
+/// the lunchbox. A tag says how a dish was filed and sometimes how it is
+/// cooked; the title says what it is. So a drawing named in the title beats
+/// one named only in a tag or a cuisine, however long the phrase.
+///
+/// **Then the longest phrase, and only then the most hits.** "Sweet potato
 /// mash" says potato twice over — "potato" and "mash" both point at the
 /// potato drawing — and says "sweet potato" once; counting hits gives the
 /// wrong one. A two-word phrase is a more specific claim than two one-word
-/// hits, so length is the first question and the count is the tie-break.
+/// hits.
 ///
-/// Within a count, a hit in the title is worth more than one in a tag or a
-/// cuisine: the title is what the dish is called and a tag is how it was
-/// filed. Registry order breaks what is still level, which makes the answer
-/// stable rather than merely plausible.
+/// Registry order breaks what is still level, which makes the answer stable
+/// rather than merely plausible.
 ///
 /// A keyword also matches its own plural, so "tacos" finds the taco and
 /// "brownies" the brownie. One direction only — the keyword gains an s, the
@@ -82,12 +87,14 @@ String? pickRecipeArtwork({
   ];
 
   String? best;
+  bool bestTitled = false;
   int bestScore = 0;
   int bestLength = 0;
 
   for (final RecipeArtwork art in kRecipeArtwork) {
     int score = 0;
     int longest = 0;
+    bool titled = false;
     for (final String keyword in art.keywords) {
       final List<String> phrase = recipeWords(keyword);
       if (phrase.isEmpty) continue;
@@ -95,11 +102,18 @@ String? pickRecipeArtwork({
       final bool inOther = _contains(otherWords, phrase);
       if (!inTitle && !inOther) continue;
       score += inTitle ? 3 : 2;
+      if (inTitle) titled = true;
       if (phrase.length > longest) longest = phrase.length;
     }
     if (score == 0) continue;
-    if (longest > bestLength || (longest == bestLength && score > bestScore)) {
+    final bool better =
+        (titled && !bestTitled) ||
+        (titled == bestTitled &&
+            (longest > bestLength ||
+                (longest == bestLength && score > bestScore)));
+    if (better) {
       best = art.id;
+      bestTitled = titled;
       bestScore = score;
       bestLength = longest;
     }
