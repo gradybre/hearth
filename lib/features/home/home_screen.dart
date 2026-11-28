@@ -9,24 +9,27 @@ import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
 import '../recipes/timer_bar.dart';
 
-/// The way into the house (spec §6.2).
+/// The way into the house (spec §6.2, and the November 2026 templates).
 ///
 /// Hearth is one app with several rooms in it, and this is the landing that
-/// says so. Nutrition is the only room that is built; the rest are named in a
-/// single line at the bottom rather than laid out as tiles you cannot press.
+/// says so. Four cards of equal weight said something untrue about it: the
+/// rooms are not equal, one of them is the reason the app exists, and the
+/// screen read as a menu of four equivalent choices.
 ///
-/// That is the whole design argument. A grid with one live tile in it reads as
-/// a screen that failed to load, and a grid padded out with dead ones teaches
-/// people that tapping does nothing — which is worse, because it is a lesson
-/// they will carry into the tiles that *do* work. A single wide card, under a
-/// masthead, with a sentence underneath saying what is coming, reads as
-/// deliberate at one section and still reads as deliberate at four.
+/// So the first room leads — its name in the serif, what is in it, and the
+/// one thing it offers from the front door — and the rest are rows under it.
+/// A row is still a door; what it is not is a claim to the same share of the
+/// screen.
 ///
-/// Deliberately no live data. A card showing today's remaining calories would
-/// be the obvious next thing and would also wire the home screen to Nutrition's
-/// providers — the exact coupling the section registry exists to avoid. When a
-/// section wants to say something on this screen it should say it through the
-/// registry, not by being special.
+/// **Still no live data.** A hero showing today's remaining calories would be
+/// the obvious next thing and would wire this screen to Nutrition's providers
+/// — the exact coupling the registry exists to avoid. The button is not that:
+/// it is an action the registry declares, so this screen knows that a section
+/// may have one and how to draw it, and does not know what logging is or
+/// which room does it.
+///
+/// One thing the templates draw that is not here yet: the illustrations. They
+/// are hand-authored vector paths and their own change.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -66,11 +69,24 @@ class HomeScreen extends StatelessWidget {
               children: <Widget>[
                 const _Masthead(),
                 const SizedBox(height: HearthSpacing.xl),
-                for (final BuiltSection section in builtSections) ...<Widget>[
-                  _SectionCard(section: section),
-                  const SizedBox(height: HearthSpacing.md),
+                // The first built room leads. Registry order already means
+                // "what is built first, then what is coming", so which room
+                // that is stays a fact about the registry rather than a
+                // name written into this screen.
+                //
+                // Guarded, because `builtSections` is a runtime filter over
+                // editable data and the type system does not promise it
+                // anything: a registry of nothing but planned rooms is one
+                // line away, and `.first` on the app's root screen would
+                // throw before its first frame. The loop this replaced
+                // degraded to a masthead and a footer, and so does this.
+                if (builtSections.isNotEmpty) ...<Widget>[
+                  _SectionHero(section: builtSections.first),
+                  const SizedBox(height: HearthSpacing.xl),
                 ],
-                const SizedBox(height: HearthSpacing.sm),
+                for (final BuiltSection section in builtSections.skip(1))
+                  _SectionRow(section: section),
+                const SizedBox(height: HearthSpacing.xl),
                 const _ComingLater(),
               ],
             ),
@@ -93,96 +109,158 @@ class _Masthead extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    // The strapline under the wordmark is gone. It said what the app is for
+    // directly above a hero that says what the first room is for, and two
+    // sentences of orientation in a column is one more than anybody reads.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Semantics(
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            Expanded(
+              child: Semantics(
                 header: true,
                 container: true,
                 child: Text('Hearth', style: context.text.recipeTitle),
               ),
-              const SizedBox(height: HearthSpacing.xxs),
-              Text(
-                'Everything the house keeps track of.',
-                style: context.text.body.copyWith(color: colors.textSecondary),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(width: HearthSpacing.sm),
+            IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              tooltip: 'Settings',
+              onPressed: () => context.push('/settings'),
+            ),
+          ],
         ),
-        const SizedBox(width: HearthSpacing.sm),
-        IconButton(
-          icon: const Icon(Icons.settings_outlined),
-          tooltip: 'Settings',
-          onPressed: () => context.push('/settings'),
+        const SizedBox(height: HearthSpacing.sm),
+        Divider(height: 1, thickness: 1, color: colors.outlineStrong),
+      ],
+    );
+  }
+}
+
+/// The room that leads, and the one thing it offers from the front door.
+///
+/// Its name in the serif at the size the templates draw it, what is in it,
+/// a primary action if the registry gave it one, and the way in under that.
+///
+/// The way in is the link, not the whole block. A hero whose every pixel is
+/// a button swallows the button inside it: the only thing on this screen
+/// that should be bigger than "open the room" is "log a meal", and nesting
+/// one tap target inside another is how a press lands on the wrong one.
+class _SectionHero extends ConsumerWidget {
+  const _SectionHero({required this.section});
+
+  final BuiltSection section;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final HearthColors colors = context.colors;
+    void enter() => context.go(
+      // Back where you were in it, not to its first tab (U08).
+      ref.read(lastDestinationProvider.notifier).pathFor(section),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        // A heading, not merely heading-sized. The masthead above marks
+        // itself as one, so without this a screen reader navigating by
+        // headings finds the app's name and nothing for the room filling
+        // most of the screen (spec §6.3).
+        Semantics(
+          header: true,
+          child: Text(section.label, style: context.text.recipeTitle),
+        ),
+        const SizedBox(height: HearthSpacing.xs),
+        Text(
+          section.blurb,
+          style: context.text.body.copyWith(color: colors.textSecondary),
+        ),
+        if (section.primaryAction case final SectionAction action) ...<Widget>[
+          const SizedBox(height: HearthSpacing.lg),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              // Sized for a kitchen rather than to the 48pt floor, like the
+              // day screen's: it is the same action and the same hands
+              // (spec §5.6, §6.3).
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(HearthTouch.kitchenTarget),
+              ),
+              onPressed: () => action.onTap(context),
+              icon: Icon(action.icon),
+              label: Text(action.label, style: context.text.label),
+            ),
+          ),
+        ],
+        const SizedBox(height: HearthSpacing.sm),
+        // No hand-written semantics over this one. It used to carry
+        // [AppSection.semanticLabel] with the button's own label excluded,
+        // which left a control reading "Open Nutrition" answering to
+        // "Nutrition. Recipes, meal plans, shopping lists, and nutrition
+        // logs." — so saying the words on it did nothing, which is what
+        // WCAG 2.5.3 is about. The button's own label is the right one,
+        // and the room's name and sentence are read as themselves above.
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: enter,
+            // The arrow after the words, which is the direction it goes.
+            iconAlignment: IconAlignment.end,
+            icon: const Icon(Icons.arrow_forward, size: 18),
+            label: Text(section.openLabel),
+          ),
         ),
       ],
     );
   }
 }
 
-/// One room, and the way into it.
-class _SectionCard extends ConsumerWidget {
-  const _SectionCard({required this.section});
+/// One of the other rooms, and the way into it.
+///
+/// A row rather than a card. The cards were all the same size, which said
+/// the rooms were of the same importance — and on the one screen whose job
+/// is to point at the room you want, that is the wrong thing to say.
+class _SectionRow extends ConsumerWidget {
+  const _SectionRow({required this.section});
 
-  /// Built, because the card's whole job is to be the way in. A room that is
+  /// Built, because the row's whole job is to be the way in. A room that is
   /// only named has no `path` to offer, and the type says so.
   final BuiltSection section;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final HearthColors colors = context.colors;
+    void enter() => context.go(
+      // Back where you were in it, not to its first tab (U08).
+      ref.read(lastDestinationProvider.notifier).pathFor(section),
+    );
 
     return Semantics(
       button: true,
       label: section.semanticLabel,
-      // Back where you were in it, not to its first tab (U08).
-      onTap: () => context.go(
-        ref.read(lastDestinationProvider.notifier).pathFor(section),
-      ),
+      onTap: enter,
       container: true,
       excludeSemantics: true,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: BorderRadius.circular(HearthRadius.lg),
-          border: Border.all(color: colors.outline),
-        ),
-        // So the ink stays inside the rounded corner, the way a settings card
-        // does.
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(HearthRadius.lg),
-          child: Material(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Divider(height: 1, thickness: 1, color: colors.outline),
+          Material(
             color: Colors.transparent,
             child: InkWell(
-              // Back where you were in it, not to its first tab (U08).
-              onTap: () => context.go(
-                ref.read(lastDestinationProvider.notifier).pathFor(section),
-              ),
+              onTap: enter,
               child: Padding(
-                padding: const EdgeInsets.all(HearthSpacing.lg),
+                padding: const EdgeInsets.symmetric(vertical: HearthSpacing.md),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    // The accent, used once per card and nowhere else on this
-                    // screen — 60/30/10 (spec §6.1).
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: colors.surfaceSunken,
-                        borderRadius: BorderRadius.circular(HearthRadius.md),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(HearthSpacing.md),
-                        child: Icon(
-                          section.icon,
-                          size: 28,
-                          color: colors.accent,
-                        ),
-                      ),
-                    ),
+                    // Muted, not accent. The hero below the masthead already
+                    // spends the accent twice — the button and the link —
+                    // and a tinted icon on every row after it is the 60/30/10
+                    // leak §6.1 is about.
+                    Icon(section.icon, size: 28, color: colors.textSecondary),
                     const SizedBox(width: HearthSpacing.lg),
                     Expanded(
                       child: Column(
@@ -190,14 +268,12 @@ class _SectionCard extends ConsumerWidget {
                         children: <Widget>[
                           Text(
                             section.label,
-                            style: context.text.recipeTitle.copyWith(
-                              fontSize: 22,
-                            ),
+                            style: context.text.sectionHeader,
                           ),
-                          const SizedBox(height: HearthSpacing.xs),
+                          const SizedBox(height: HearthSpacing.xxs),
                           Text(
                             section.blurb,
-                            style: context.text.body.copyWith(
+                            style: context.text.metadata.copyWith(
                               color: colors.textSecondary,
                             ),
                           ),
@@ -211,7 +287,7 @@ class _SectionCard extends ConsumerWidget {
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -241,27 +317,35 @@ class _ComingLater extends StatelessWidget {
     if (later.isEmpty) return const SizedBox.shrink();
 
     final HearthColors colors = context.colors;
-    // A colon and commas rather than a sentence with "and" in it: the names
-    // are proper nouns, and a proper noun joined by "and" halfway through a
-    // sentence reads as the sentence continuing. A list item does not.
-    final String listed = <String>[
+    // A proper list, because the middot has taken over the job the old
+    // colon was doing. The names used to be joined by commas alone to stop
+    // "Fitness and Health" reading as the sentence continuing — after a
+    // separator there is no sentence left to continue.
+    final List<String> names = <String>[
       for (final AppSection section in later) section.label,
-    ].join(', ');
+    ];
+    final String listed = names.length < 2
+        ? names.join()
+        : '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: HearthSpacing.xs),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Icon(Icons.foundation_outlined, size: 18, color: colors.textMuted),
-          const SizedBox(width: HearthSpacing.sm),
-          Expanded(
-            child: Text(
-              'Still being built: $listed.',
-              style: context.text.metadata.copyWith(color: colors.textMuted),
-            ),
-          ),
-        ],
+      child: Text(
+        'In development · $listed',
+        textAlign: TextAlign.center,
+        // Upright, although the templates draw it in italic. Hearth bundles
+        // one roman face per family and no italic, so `FontStyle.italic`
+        // here is a synthesised slant — and at twelve points in the muted
+        // tone it is thin enough that the §6.3 contrast guideline cannot
+        // find a glyph pixel anywhere near the text colour: it measured the
+        // darkest thing in the line at 1.64:1 against the page. The middot
+        // and the muted tone already say "aside"; a faux italic was only
+        // ever going to say it worse.
+        //
+        // Not caught here, either. The guideline reads painted pixels, so
+        // what it measures depends on how the glyphs rasterise, and this
+        // failed on CI's fonts while passing on a Mac's.
+        style: context.text.metadata.copyWith(color: colors.textMuted),
       ),
     );
   }

@@ -142,7 +142,8 @@ void main() {
       await pumpHearthApp(tester, size: phone, launchTarget: LaunchTarget.home);
       await pumpFrames(tester);
 
-      await tester.tap(find.text('Nutrition'));
+      // The hero's link, not its heading — see the home screen's own tests.
+      await tester.tap(find.text('Open Nutrition'));
       await pumpFrames(tester);
       await tester.tap(find.text('Shopping').last);
       await pumpFrames(tester);

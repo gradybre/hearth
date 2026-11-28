@@ -39,7 +39,10 @@ void main() {
   }
 
   Future<void> backToNutrition(WidgetTester tester) async {
-    await tester.tap(find.text('Nutrition').last);
+    // The link under the hero, not its heading: since the November 2026
+    // redesign the leading room's name is a title and the way in is the
+    // "Open Nutrition" beneath it.
+    await tester.tap(find.text('Open Nutrition'));
     await pumpFrames(tester, frames: 16);
   }
 
