@@ -95,6 +95,13 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    # The recipe artwork (spec §5.2). Bundled rather than fetched: a library
+    # row draws one on every scroll frame and the app must work with no
+    # network at all (spec §7.1). See docs/design/ui-redesign-2026-11/
+    # ARTWORK_BRIEF.md for what a drawing has to be.
+    - assets/art/
+
   fonts:
     # Bundled, not fetched at runtime: the app must work offline in the kitchen
     # and the store (spec §7.1). Both are SIL OFL; licences live beside them.

@@ -79,6 +79,12 @@ so they cost nothing at runtime and work with the aeroplane mode on.
 > a `.png` extension: `pot-pie.png`, `stew-pot.png`. Nothing else in the file
 > name.
 >
+> **Size.** 512 by 512 is what the app wants. Batch one came at 1024 and was
+> halved on the way in, which is fine but is work; 512 is the delivery size.
+> If you can also give WebP, do — a hundred and fifty drawings at batch
+> one's PNG weight is twenty megabytes of app, and WebP is a quarter of
+> that.
+>
 > Draw the following subjects. The words after each id are what a recipe
 > might be called to deserve that drawing — they are there to tell you what
 > the picture has to evoke, not to be written on it.
@@ -94,9 +100,25 @@ Before anything is accepted into the app:
 3. Shrink one to 40 points. If it is a smudge, the hatching is too dense.
 4. Put six of them side by side. If one looks like a different artist, it is.
 
-Converted to WebP and added under `assets/art/`, with the id added to
-`kArtworkShipped` in `lib/app/widgets/recipe_art.dart` in the same change —
-the app only draws what that set names, so a file alone does nothing.
+Added under `assets/art/`, with the id added to `kArtworkShipped` in
+`lib/app/widgets/recipe_art.dart` in the same change — the app only draws
+what that set names, so a file alone does nothing.
+
+Those four checks are also a test. `artwork_is_line_art_test.dart` opens
+every drawing that ships and measures it: square and at least 450 pixels,
+nothing in the corners, mostly transparent, one ink with no colour in it,
+and partial alpha somewhere so the grain has somewhere to live. None of
+those failures is visible in a folder of PNGs on a white page, which is
+where a batch gets looked at.
+
+## 3a. Batch log
+
+**Batch one, November 2026** — six drawings: `chilli-bowl`, `porridge-jar`,
+`pot-pie`, `ramen-bowl`, `soup-bowl`, `stew-pot`. All six passed on the
+first pass: corners fully transparent, 70 to 87 per cent of each image
+empty, no colour anywhere, and 13 to 30 per cent partial alpha — the ink
+catching on the paper, exactly as asked. Delivered at 1024 and halved to
+512 on the way in. Shipped as PNG; see the WebP note above.
 
 ## 4. The subjects
 
