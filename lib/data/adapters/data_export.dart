@@ -434,9 +434,9 @@ class DataExport {
     const List<String> exclusions = <String>[
       'Recipe photos. The file names them where a recipe has one, which '
           'is a reference and not a backup.',
-      'The global food catalogue, apart from the definitions this file '
+      'The global food catalog, apart from the definitions this file '
           'points at.',
-      'Anybody else\'s plans, logs, targets, favourites or food profile.',
+      'Anybody else\'s plans, logs, targets, favorites or food profile.',
     ];
 
     final Map<String, Object?> data = <String, Object?>{

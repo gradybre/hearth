@@ -215,7 +215,7 @@ void main() {
       );
       await pumpFrames(tester);
 
-      await tapChip(tester, 'Favourites');
+      await tapChip(tester, 'Favorites');
 
       expect(find.byType(RecipeCard), findsOneWidget);
       expect(find.text('Pad see ew'), findsOneWidget);
@@ -235,7 +235,7 @@ void main() {
       await pumpFrames(tester);
 
       expect(
-        find.bySemanticsLabel(RegExp('Pad see ew.*Favourite')),
+        find.bySemanticsLabel(RegExp('Pad see ew.*Favorite')),
         findsOneWidget,
       );
       handle.dispose();
