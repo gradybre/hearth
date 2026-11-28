@@ -739,7 +739,7 @@ Future<HearthDatabase> _openVariation(
   final SweepTools tools = SweepTools(tester);
   if (date == null) {
     await tools.tab('Recipes');
-    await tools.reach(find.text('Add recipe'));
+    await tools.reach(find.text('Add'));
     await tools.reach(find.text('Eat out'));
   } else {
     await tools.tab('Plan');

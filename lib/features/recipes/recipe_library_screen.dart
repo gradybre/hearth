@@ -13,14 +13,11 @@ import '../../app/widgets/reading_column.dart';
 import '../../app/widgets/recipe_art.dart';
 import '../../app/widgets/swipe_to_delete.dart';
 import '../../domain/models/food.dart';
-import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/recipes/default_sweep.dart';
-import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/recipes/recipe_artwork.dart';
 import '../../domain/recipes/recipe_query.dart';
 import 'add_recipe_sheet.dart';
-import 'macro_stats_row.dart';
 import 'recipe_detail_screen.dart';
 import 'recipe_filter_bar.dart';
 import 'recipe_icon.dart';
@@ -208,6 +205,14 @@ class _LibraryList extends ConsumerWidget {
                 recipes: shown.value ?? const <Recipe>[],
                 gutter: gutter,
                 inPane: inPane,
+                // The templates lead with a photograph of the first
+                // recipe. Only when there is one: a hero with a grey
+                // rectangle in it is worse than no hero, and the list
+                // falls back to an ordinary row with nothing on screen
+                // saying anything was missing.
+                heroFirst:
+                    (shown.value ?? const <Recipe>[]).isNotEmpty &&
+                    hasRecipePhoto(ref, shown.value!.first.id),
               ),
           ],
         );
@@ -276,9 +281,16 @@ class _DetailPane extends ConsumerWidget {
 /// given up is that it scrolls away with the heading — the same bargain the
 /// search field above it already makes.
 ///
-/// It keeps the words "Add recipe" rather than the templates' "+ Add": U05's
-/// rule is that every way in says what it is, and three of the four doors
-/// this replaced were icon-only with their meaning in a tooltip — a hover,
+/// **It says "Add" and answers to "Add recipe".** The templates print the
+/// short word, and beside a heading that says Recipes it is not ambiguous
+/// to anybody looking at it. Somebody who is not looking gets the long
+/// form, because a button announced as "Add" on a screen with four tabs is
+/// a question rather than an answer — and the accessible name contains the
+/// word on the label, which is what WCAG 2.5.3 asks so that saying what it
+/// says still presses it.
+///
+/// U05's rule is intact either way: it has words. Three of the four doors
+/// this replaced were icon-only, with their meaning in a tooltip — a hover,
 /// on a device with no pointer.
 class _AddRecipeButton extends StatelessWidget {
   const _AddRecipeButton();
@@ -286,27 +298,33 @@ class _AddRecipeButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    return OutlinedButton.icon(
-      onPressed: () => showAddRecipeSheet(context),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: colors.accent,
-        side: BorderSide(color: colors.accent),
-        // A floor, never a fixed height: the label grows with the text
-        // setting and the control grows with it (spec §6.3).
-        minimumSize: const Size(
-          HearthTouch.androidTarget,
-          HearthTouch.androidTarget,
+    return Semantics(
+      button: true,
+      label: 'Add recipe',
+      onTap: () => showAddRecipeSheet(context),
+      excludeSemantics: true,
+      child: OutlinedButton.icon(
+        onPressed: () => showAddRecipeSheet(context),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: colors.accent,
+          side: BorderSide(color: colors.accent),
+          // A floor, never a fixed height: the label grows with the text
+          // setting and the control grows with it (spec §6.3).
+          minimumSize: const Size(
+            HearthTouch.androidTarget,
+            HearthTouch.androidTarget,
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: HearthSpacing.md,
+            vertical: HearthSpacing.sm,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(HearthRadius.md),
+          ),
         ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: HearthSpacing.md,
-          vertical: HearthSpacing.sm,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(HearthRadius.md),
-        ),
+        icon: const Icon(Icons.add, size: 18),
+        label: Text('Add', style: context.text.label),
       ),
-      icon: const Icon(Icons.add, size: 18),
-      label: Text('Add recipe', style: context.text.label),
     );
   }
 }
@@ -422,19 +440,26 @@ class _RecipeSliver extends StatelessWidget {
     required this.recipes,
     required this.gutter,
     required this.inPane,
+    required this.heroFirst,
   });
 
   final List<Recipe> recipes;
   final double gutter;
   final bool inPane;
 
+  /// Whether the first recipe is drawn large, with its photograph.
+  final bool heroFirst;
+
   @override
   Widget build(BuildContext context) => SliverPadding(
     padding: EdgeInsets.fromLTRB(gutter, 0, gutter, gutter),
     sliver: SliverList.separated(
       itemCount: recipes.length,
+      // A rule between rows, which is the whole of what separates them now
+      // that each one is not a card. The templates draw this and nothing
+      // else, and it is what lets three recipes fit where two did.
       separatorBuilder: (BuildContext context, int index) =>
-          const SizedBox(height: HearthSpacing.md),
+          Divider(height: 1, thickness: 1, color: context.colors.outline),
       itemBuilder: (BuildContext context, int index) => _DeletableRecipe(
         // Keyed by recipe, not by position. Without this the element at an
         // index is reused when the list shifts, so deleting a recipe handed
@@ -442,6 +467,7 @@ class _RecipeSliver extends StatelessWidget {
         key: ValueKey<String>(recipes[index].id),
         recipe: recipes[index],
         inPane: inPane,
+        hero: heroFirst && index == 0,
       ),
     ),
   );
@@ -451,11 +477,13 @@ class _DeletableRecipe extends ConsumerWidget {
   const _DeletableRecipe({
     required this.recipe,
     this.inPane = false,
+    this.hero = false,
     super.key,
   });
 
   final Recipe recipe;
   final bool inPane;
+  final bool hero;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => SwipeToDelete(
@@ -485,19 +513,55 @@ class _DeletableRecipe extends ConsumerWidget {
         ref.read(selectedRecipeIdProvider.notifier).show(recipe.id);
       }
     },
-    child: RecipeCard(recipe: recipe, inPane: inPane),
+    child: RecipeCard(recipe: recipe, inPane: inPane, hero: hero),
   );
 }
 
-/// One recipe in the library list.
+/// One recipe in the library list (spec §5.2, and the November 2026
+/// templates).
+///
+/// **A row, not a card.** Every row used to be a filled, bordered,
+/// rounded container with sixteen points of padding inside it — about
+/// forty points of furniture per recipe, on the screen whose whole job is
+/// to let you find one among fifty. The templates draw a rule between rows
+/// and nothing else, and in the same height they show three recipes where
+/// the cards showed two.
+///
+/// **A picture, a name, and what it serves.** The macro line and the tag
+/// pills are gone from here. Both were defensible on their own and
+/// together they doubled the row; the numbers are on the recipe and the
+/// tags are in the filter sheet, which is where you act on them. What is
+/// left is what the templates draw and what a person scanning a library
+/// actually reads.
 class RecipeCard extends ConsumerWidget {
-  const RecipeCard({required this.recipe, this.inPane = false, super.key});
+  const RecipeCard({
+    required this.recipe,
+    this.inPane = false,
+    this.hero = false,
+    super.key,
+  });
 
   final Recipe recipe;
 
-  /// Whether this row opens into a pane beside the list rather than pushing
-  /// a screen over it.
+  /// Whether this row opens into a pane beside the list rather than
+  /// pushing a screen over it.
   final bool inPane;
+
+  /// Whether this is the first recipe, drawn large with its photograph.
+  final bool hero;
+
+  /// The picture's slot, reserved whether or not there is a picture.
+  ///
+  /// A row with nothing to show leaves the space rather than closing it
+  /// up: a ragged left edge down a list reads as a mistake, and the gap
+  /// closes on its own as drawings land.
+  ///
+  /// Sized off the templates rather than off a hunch: the drawing there
+  /// is about a fifth of the list's width and stands taller than the two
+  /// lines beside it. At 48 it was a favicon next to a headline, and the
+  /// drawings — the thing the redesign is actually for — were too small
+  /// to tell a jar of oats from a bowl of chilli.
+  static const double _thumb = 72;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -506,13 +570,6 @@ class RecipeCard extends ConsumerWidget {
     final bool isFavorite =
         (ref.watch(favoriteRecipeIdsProvider).value ?? const <String>{})
             .contains(recipe.id);
-
-    final Map<String, Food> foods = <String, Food>{
-      for (final Food food
-          in ref.watch(foodLibraryProvider).value ?? const <Food>[])
-        food.id: food,
-    };
-    final RecipeMacros macros = MacroCalculator.forRecipe(recipe, foods: foods);
     final bool selected =
         inPane && ref.watch(selectedRecipeIdProvider) == recipe.id;
     final RecipeArt art = RecipeArt(
@@ -521,7 +578,7 @@ class RecipeCard extends ConsumerWidget {
         tags: recipe.tags,
         cuisine: recipe.cuisine,
       ),
-      size: 40,
+      size: _thumb,
     );
     void open() {
       if (inPane) {
@@ -531,20 +588,14 @@ class RecipeCard extends ConsumerWidget {
       }
     }
 
-    // Shown for any recipe with ingredients, complete or not. Hiding a
-    // partial total was meant to avoid quoting a number that undercounts,
-    // but it made a whole recipe's nutrition vanish over one unresolved
-    // line, with nothing on screen to say why — so the total stays and is
-    // marked as partial instead, which is the same "flag, never block" rule
-    // the rest of the app follows (spec §5.3).
-    final bool showMacros = recipe.allIngredients.isNotEmpty;
+    final Widget body = hero
+        ? _hero(context, ref, colors, text)
+        : _row(context, ref, colors, text, art);
 
     return Semantics(
       button: true,
       label:
           '${recipe.title}. ${_summary(recipe)}'
-          '${showMacros ? '. ${_macroLabel(macros.perServing)}'
-                    '${macros.isIncomplete ? '. Partial — ${macros.incompleteReason}' : ''}' : ''}'
           '${isFavorite ? '. Favorite' : ''}',
       // Announced as well as drawn: the bar down its edge says which recipe
       // the pane is showing to somebody looking at the screen, and this
@@ -552,124 +603,130 @@ class RecipeCard extends ConsumerWidget {
       selected: inPane ? selected : null,
       onTap: open,
       excludeSemantics: true,
-      // The bar down the open row's leading edge, drawn as a ground the
-      // card is inset from rather than as a border: a `Border` cannot have
-      // one side thicker than the others and keep a radius, and a `Stack`
-      // over the card would take the taps along that edge.
-      //
-      // A shape, not a shade. The tint and the accent outline below say the
-      // same thing in colour, and colour alone is never the meaning
-      // (spec §6.3) — this is what survives a greyscale print.
-      child: Container(
-        decoration: BoxDecoration(
-          color: selected ? colors.accent : null,
-          borderRadius: BorderRadius.circular(HearthRadius.lg),
-        ),
-        padding: EdgeInsets.only(left: selected ? 4 : 0),
-        child: Material(
-          color: selected ? colors.surfaceSunken : colors.surface,
-          borderRadius: BorderRadius.circular(HearthRadius.lg),
-          child: InkWell(
-            onTap: open,
-            borderRadius: BorderRadius.circular(HearthRadius.lg),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(HearthRadius.lg),
-                border: Border.all(
-                  color: selected ? colors.accent : colors.outline,
+      // The page's own paper, not transparent: a swipe uncovers a Delete
+      // *behind* the row, and a see-through row shows it at rest. The card
+      // this replaced was opaque by accident of being a card.
+      child: Material(
+        color: selected ? colors.surfaceSunken : colors.background,
+        child: InkWell(
+          onTap: open,
+          child: Container(
+            // The open row's bar, which is a shape and not a shade: the
+            // tint behind it says the same thing in colour, and colour
+            // alone is never the meaning (spec §6.3). A one-sided border
+            // is only allowed because a flat row has no radius to fight.
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  color: selected ? colors.accent : Colors.transparent,
+                  width: 4,
                 ),
               ),
-              padding: const EdgeInsets.fromLTRB(
-                HearthSpacing.lg,
-                HearthSpacing.lg,
-                HearthSpacing.sm,
-                HearthSpacing.lg,
-              ),
-              // The heart sits beside the whole text block rather than beside
-              // the title alone: a 44pt tap target inside the title row would
-              // set the row's height and open a gap above the summary line.
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  if (hasRecipePhoto(ref, recipe.id)) ...<Widget>[
-                    RecipePhoto(
-                      recipeId: recipe.id,
-                      width: 64,
-                      height: 64,
-                      borderRadius: BorderRadius.circular(HearthRadius.md),
-                    ),
-                    const SizedBox(width: HearthSpacing.md),
-                  ]
-                  // A photograph of the actual dish beats any drawing of
-                  // it, so nothing below takes the slot when there is one —
-                  // never both, which would be two pictures of one recipe
-                  // competing in a 64pt square.
-                  //
-                  // Then the house's drawing of what kind of thing this is,
-                  // and only then the recipe's own sketch. That order was
-                  // the other way round at first, on the reasoning that a
-                  // drawing *of this recipe* beats a drawing of its
-                  // category. It holds only while the specific one is good,
-                  // and seen side by side on a phone it is not: the sketches
-                  // are written by a language model asked for a doodle in a
-                  // notebook margin, and the drawings are engravings. A good
-                  // general picture beats a poor specific one.
-                  //
-                  // The sketch keeps the job it is better suited to —
-                  // standing in for a kind of food nobody has drawn yet,
-                  // which is most of them.
-                  else if (art.hasArt) ...<Widget>[
-                    art,
-                    const SizedBox(width: HearthSpacing.md),
-                  ] else if (RecipeIcon.canDraw(recipe.iconSvg)) ...<Widget>[
-                    RecipeIcon(svg: recipe.iconSvg, size: 40),
-                    const SizedBox(width: HearthSpacing.md),
-                  ],
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(recipe.title, style: text.sectionHeader),
-                        const SizedBox(height: HearthSpacing.xs),
-                        Text(
-                          _summary(recipe),
-                          style: text.metadata.copyWith(
-                            color: colors.textMuted,
-                          ),
-                        ),
-                        if (showMacros) ...<Widget>[
-                          const SizedBox(height: HearthSpacing.xxs),
-                          MacroStatsLine(
-                            macros: macros.perServing,
-                            isPartial: macros.isIncomplete,
-                          ),
-                        ],
-                        if (recipe.tags.isNotEmpty) ...<Widget>[
-                          const SizedBox(height: HearthSpacing.md),
-                          Wrap(
-                            spacing: HearthSpacing.sm,
-                            runSpacing: HearthSpacing.xs,
-                            children: <Widget>[
-                              for (final String tag in recipe.tags)
-                                _Tag(label: tag),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  // Favouriting from the list, not only from inside the recipe:
-                  // the heart is worth nothing if reaching it costs two
-                  // navigations.
-                  _FavoriteButton(recipeId: recipe.id, compact: true),
-                ],
-              ),
             ),
+            padding: const EdgeInsets.symmetric(
+              vertical: HearthSpacing.md,
+              horizontal: HearthSpacing.sm,
+            ),
+            child: body,
           ),
         ),
       ),
     );
   }
+
+  /// The first recipe, with its photograph above its name.
+  ///
+  /// Only ever a recipe that has one. A hero with a grey rectangle where
+  /// the photograph should be is worse than no hero at all, so the list
+  /// falls back to an ordinary row and nothing on the screen says anything
+  /// was missing.
+  Widget _hero(
+    BuildContext context,
+    WidgetRef ref,
+    HearthColors colors,
+    HearthTextStyles text,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      ClipRRect(
+        borderRadius: BorderRadius.circular(HearthRadius.lg),
+        child: RecipePhoto(
+          recipeId: recipe.id,
+          width: double.infinity,
+          height: 190,
+        ),
+      ),
+      const SizedBox(height: HearthSpacing.md),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Expanded(child: Text(recipe.title, style: text.recipeTitle)),
+          _FavoriteButton(recipeId: recipe.id),
+        ],
+      ),
+      Text(
+        _summary(recipe),
+        style: text.metadata.copyWith(color: colors.textMuted),
+      ),
+    ],
+  );
+
+  Widget _row(
+    BuildContext context,
+    WidgetRef ref,
+    HearthColors colors,
+    HearthTextStyles text,
+    RecipeArt art,
+  ) => Row(
+    children: <Widget>[
+      SizedBox.square(
+        dimension: _thumb,
+        child: Center(
+          child: hasRecipePhoto(ref, recipe.id)
+              ? RecipePhoto(
+                  recipeId: recipe.id,
+                  width: _thumb,
+                  height: _thumb,
+                  borderRadius: BorderRadius.circular(HearthRadius.md),
+                )
+              // A photograph of the actual dish beats any drawing of it.
+              // Then the house's drawing of what kind of thing this is,
+              // and only then the recipe's own sketch — see the chain's
+              // own tests for why that order and not the other.
+              : art.hasArt
+              ? art
+              // Nothing at all rather than a widget that draws nothing:
+              // the slot stays, so the titles line up, but a row with no
+              // picture has no picture in its tree either.
+              : RecipeIcon.canDraw(recipe.iconSvg)
+              ? RecipeIcon(svg: recipe.iconSvg, size: _thumb)
+              : const SizedBox.shrink(),
+        ),
+      ),
+      const SizedBox(width: HearthSpacing.md),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(recipe.title, style: text.sectionHeader),
+            const SizedBox(height: HearthSpacing.xxs),
+            // Body, not metadata. With the row down to two lines this is
+            // half of what it says, and 12pt made it a footnote to its
+            // own title; the templates set it a short step below the name
+            // and no further.
+            Text(
+              _summary(recipe),
+              style: text.body.copyWith(color: colors.textMuted),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(width: HearthSpacing.xs),
+      // Favouriting from the list, not only from inside the recipe: the
+      // heart is worth nothing if reaching it costs two navigations.
+      _FavoriteButton(recipeId: recipe.id, compact: true),
+    ],
+  );
 
   static String _summary(Recipe recipe) {
     final List<String> parts = <String>[
@@ -680,12 +737,6 @@ class RecipeCard extends ConsumerWidget {
     return parts.join('  ·  ');
   }
 
-  static String _macroLabel(Macros perServing) =>
-      'Per serving: ${perServing.kcal.round()} calories, '
-      '${perServing.proteinG.round()} grams protein, '
-      '${perServing.carbG.round()} grams carbohydrates, '
-      '${perServing.fatG.round()} grams fat';
-
   static String _trimZero(double value) =>
       value == value.roundToDouble() ? value.round().toString() : '$value';
 
@@ -695,33 +746,6 @@ class RecipeCard extends ConsumerWidget {
     if (hours == 0) return '$minutes min';
     if (minutes == 0) return '$hours hr';
     return '$hours hr $minutes min';
-  }
-}
-
-class _Tag extends StatelessWidget {
-  const _Tag({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final HearthColors colors = context.colors;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colors.surfaceSunken,
-        borderRadius: BorderRadius.circular(HearthRadius.sm),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: HearthSpacing.sm,
-          vertical: HearthSpacing.xxs,
-        ),
-        child: Text(
-          label,
-          style: context.text.metadata.copyWith(color: colors.textSecondary),
-        ),
-      ),
-    );
   }
 }
 

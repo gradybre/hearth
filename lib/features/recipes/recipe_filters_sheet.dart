@@ -121,9 +121,25 @@ class _RecipeFiltersSheet extends ConsumerWidget {
                     horizontal: HearthSpacing.lg,
                   ),
                   children: <Widget>[
-                    // First, because it is the one narrowing that changes
-                    // what kind of thing the list is about rather than how
-                    // much of it there is. It used to sit in the rail beside
+                    // Not a narrowing, and first all the same: it is the
+                    // only thing in here that is always on, and the list
+                    // behind the sheet reorders as it is tapped.
+                    _Group(
+                      heading: 'Sort',
+                      children: <Widget>[
+                        for (final RecipeSort sort in RecipeSort.values)
+                          RecipeFilterChip(
+                            label: sort.label,
+                            icon: _sortIcon(sort),
+                            selected: filter.sort == sort,
+                            onTap: () => control.setSort(sort),
+                          ),
+                      ],
+                    ),
+                    // First of the narrowings, because it is the one that
+                    // changes what kind of thing the list is about rather
+                    // than how much of it there is. It used to sit in the
+                    // rail beside
                     // Favourites; the templates' tabs are a scope, and a
                     // switch among them would have read as a third scope
                     // while behaving as a filter (spec §5.2).
@@ -374,3 +390,15 @@ class RecipeFilterChip extends StatelessWidget {
     );
   }
 }
+
+/// A face per sort, not one shared arrow.
+///
+/// Four chips carrying the same glyph teach nothing and read as a
+/// rendering fault; the icon is also the half of the chip that is not
+/// colour, so it has to mean something of its own (spec §6.3).
+IconData _sortIcon(RecipeSort sort) => switch (sort) {
+  RecipeSort.recent => Icons.schedule,
+  RecipeSort.nameAsc => Icons.sort_by_alpha,
+  RecipeSort.caloriesAsc => Icons.local_fire_department_outlined,
+  RecipeSort.proteinDesc => Icons.egg_outlined,
+};

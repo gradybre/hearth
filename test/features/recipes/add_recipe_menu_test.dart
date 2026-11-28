@@ -20,7 +20,7 @@ void main() {
   ) async {
     await openLibrary(tester);
 
-    expect(find.text('Add recipe'), findsOneWidget);
+    expect(find.text('Add'), findsOneWidget);
     // One, not a stack — and not floating over the list either. The pill
     // this replaced covered the delete a swipe uncovers at accessibility
     // text sizes, so it needed a second docked shape to be usable; a button
@@ -36,7 +36,7 @@ void main() {
     WidgetTester tester,
   ) async {
     await openLibrary(tester);
-    await tester.tap(find.text('Add recipe'));
+    await tester.tap(find.text('Add'));
     await pumpFrames(tester, frames: 12);
 
     expect(find.text('Write a recipe'), findsOneWidget);
@@ -54,7 +54,7 @@ void main() {
   ]) {
     testWidgets('$label goes where it says', (WidgetTester tester) async {
       await openLibrary(tester);
-      await tester.tap(find.text('Add recipe'));
+      await tester.tap(find.text('Add'));
       await pumpFrames(tester, frames: 12);
       await tester.tap(find.text(label));
       await pumpFrames(tester, frames: 16);
@@ -78,7 +78,7 @@ void main() {
     await tester.tap(find.text('Recipes').last);
     await pumpFrames(tester, frames: 12);
 
-    await tester.tap(find.text('Add recipe'));
+    await tester.tap(find.text('Add'));
     await pumpFrames(tester, frames: 12);
     expect(tester.takeException(), isNull);
 

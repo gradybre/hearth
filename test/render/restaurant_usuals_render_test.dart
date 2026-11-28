@@ -37,7 +37,7 @@ void main() {
       );
       final SweepTools tools = SweepTools(tester);
       await tools.tab('Recipes');
-      await tools.reach(find.text('Add recipe'));
+      await tools.reach(find.text('Add'));
       await tools.reach(find.text('Eat out'));
       await tools.reach(find.text('Corner Kitchen'));
       await tools.bring(find.byKey(const Key('usual-log-saved-usual')));

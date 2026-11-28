@@ -621,7 +621,7 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     opensFrom: 'lib/app/widgets/unsaved_work_guard.dart',
     open: (WidgetTester tester, SweepTools tools) async {
       await tools.tab('Recipes');
-      await tools.reach(find.text('Add recipe'));
+      await tools.reach(find.text('Add'));
       await tools.reach(find.text('Write a recipe'));
       // Dirty first: a clean editor leaves without asking, which is the
       // point of it, and would sweep nothing.
@@ -636,7 +636,7 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     opensFrom: 'lib/features/recipes/eat_out_screen.dart',
     open: (WidgetTester tester, SweepTools tools) async {
       await tools.tab('Recipes');
-      await tools.reach(find.text('Add recipe'));
+      await tools.reach(find.text('Add'));
       await tools.reach(find.text('Eat out'));
       await tools.reach(find.text('Chopt'));
       // Something has to be picked before there is anything to review.
@@ -1170,7 +1170,7 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
     opensFrom: 'lib/features/recipes/add_recipe_sheet.dart',
     open: (WidgetTester tester, SweepTools tools) async {
       await tools.tab('Recipes');
-      await tools.reach(find.text('Add recipe'));
+      await tools.reach(find.text('Add'));
     },
     arrived: find.text('Write a recipe'),
     farEnd: find.text('Generate with AI'),
@@ -1191,7 +1191,7 @@ final List<SweptSurface> sweptSurfaces = <SweptSurface>[
 
 Future<void> _openUsual(SweepTools tools) async {
   await tools.tab('Recipes');
-  await tools.reach(find.text('Add recipe'));
+  await tools.reach(find.text('Add'));
   await tools.reach(find.text('Eat out'));
   await tools.reach(find.text('Corner Kitchen'));
 }
@@ -1228,7 +1228,7 @@ Future<void> _openIngredientReview(
   SweepTools tools,
 ) async {
   await tools.tab('Recipes');
-  await tools.reach(find.text('Add recipe'));
+  await tools.reach(find.text('Add'));
   await tools.reach(find.text('Write a recipe'));
   await tester.enterText(
     await tools.bring(find.widgetWithText(TextField, 'Braised short ribs')),
