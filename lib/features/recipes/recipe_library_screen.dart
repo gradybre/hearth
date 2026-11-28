@@ -160,9 +160,9 @@ class RecipeLibraryScreen extends ConsumerWidget {
 /// 274 points wide and 72 tall, parked over the right-hand end of every row
 /// — which is exactly where the delete a swipe uncovers lands. The hit test
 /// stopped at the pill, so pressing a visible, enabled Delete opened the Add
-/// recipe sheet. The cure was a second shape, a docked bar, switched in past
-/// [A11y.reflowThreshold], plus a band of clearance under the last row for
-/// the floating case.
+/// recipe sheet. The cure was a second shape — a docked bar, switched in
+/// past the app's reflow threshold — plus a band of clearance under the last
+/// row for the floating case.
 ///
 /// In the heading there is no floating case, no second shape and no
 /// clearance: the Scaffold lays the button out above the list like anything

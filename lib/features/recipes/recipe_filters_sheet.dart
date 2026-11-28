@@ -280,18 +280,19 @@ class _Group extends StatelessWidget {
   );
 }
 
-/// The filter chip the rail and the sheet share.
+/// A filter in the sheet: a word, a glyph, and whether it is on.
 ///
-/// It lives here rather than in the bar so the import runs one way: the bar
-/// opens this sheet, and both draw the same chip.
+/// Every chip here is a toggle. It used to carry an `activeIcon` and an
+/// `isToggle` flag for the one caller that was not — the "Filters (3)"
+/// button in the rail — and that is a tab now, drawn by the bar itself. The
+/// parameters went with it rather than waiting for a second caller that was
+/// never going to come.
 class RecipeFilterChip extends StatelessWidget {
   const RecipeFilterChip({
     required this.label,
     required this.icon,
     required this.selected,
     required this.onTap,
-    this.activeIcon,
-    this.isToggle = true,
     super.key,
   });
 
@@ -300,16 +301,6 @@ class RecipeFilterChip extends StatelessWidget {
 
   /// Whether the chip is lit.
   final bool selected;
-
-  /// What to draw when it is lit, for a chip that is not a toggle.
-  ///
-  /// A toggle swaps to a tick, so its state does not rest on the fill colour
-  /// alone (spec §6.3). "Filters (3)" is not a toggle — a tick on it would
-  /// say it was switched on — and carries its count in its own label instead.
-  final IconData? activeIcon;
-
-  /// Whether to announce a selected state to a screen reader.
-  final bool isToggle;
 
   final VoidCallback onTap;
 
@@ -320,7 +311,7 @@ class RecipeFilterChip extends StatelessWidget {
       padding: const EdgeInsets.only(right: HearthSpacing.sm),
       child: Semantics(
         button: true,
-        selected: isToggle ? selected : null,
+        selected: selected,
         label: label,
         onTap: onTap,
         excludeSemantics: true,
@@ -356,7 +347,9 @@ class RecipeFilterChip extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   Icon(
-                    selected ? (activeIcon ?? Icons.check) : icon,
+                    // A tick when it is on, so the state does not rest on
+                    // the fill colour alone (spec §6.3).
+                    selected ? Icons.check : icon,
                     size: 16,
                     color: selected ? colors.onAccent : colors.textSecondary,
                   ),
