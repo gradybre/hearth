@@ -122,7 +122,7 @@ class _RecipeFilterBarState extends ConsumerState<RecipeFilterBar> {
                 onTap: () => control.setFavoritesOnly(false),
               ),
               _FilterTab(
-                label: 'Favourites',
+                label: 'Favorites',
                 selected: filter.favoritesOnly,
                 onTap: () => control.setFavoritesOnly(true),
               ),
@@ -217,7 +217,7 @@ class _RecipeFilterBarState extends ConsumerState<RecipeFilterBar> {
     List<CollectionSummary> collections,
   ) => <_Applied>[
     if (filter.favoritesOnly)
-      _Applied('Only favourites', control.toggleFavoritesOnly),
+      _Applied('Only favorites', control.toggleFavoritesOnly),
     if (filter.eatenOutOnly)
       _Applied('Only eaten out', control.toggleEatenOutOnly),
     if (filter.maxTotalTime case final Duration limit)

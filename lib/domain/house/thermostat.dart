@@ -375,7 +375,7 @@ class ThermostatState {
     }
     if (mode == ThermostatMode.off) return 'The thermostat is off.';
     if (mode == ThermostatMode.unknown) {
-      return 'Hearth does not recognise the mode this thermostat is in.';
+      return 'Hearth does not recognize the mode this thermostat is in.';
     }
 
     if (mode == ThermostatMode.heatCool) {

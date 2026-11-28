@@ -303,6 +303,21 @@ Displayed text only; identifiers and database ids are unaffected either way.
 It touches copy across the whole app, so it goes last: a sweep like that
 conflicts with every open branch.
 
+**Done**, and it found a third category nobody had planned for. The two
+expected were what the app *says* (changed) and identifiers and stored keys
+(left alone — the `favourites` key in a house dashboard's stored JSON would
+empty every household's chosen devices if it were renamed). The third is
+**words the app reads rather than writes**: `litre` as a unit alias, `food
+colouring` as an ingredient the matcher leaves alone, `flavoured` as a word
+that makes a food name less specific. Each already lists both spellings on
+purpose. Hearth speaks American and has to understand British, because
+people type "1 litre" and a jar says what it says.
+
+Nine displayed strings changed, across six files. Comments, doc comments
+and test names stay British: that is the house voice and nobody reads it
+but us, which is also why the guard that keeps this from drifting back
+reads string literals rather than files.
+
 ### PR 7 — the illustrations
 **Done.** Brendan chose §5's option (b): hand-authored vector paths. They are
 SVG path data in `lib/app/widgets/hearth_marks.dart`, drawn through the same
@@ -382,9 +397,13 @@ the app's own marks as well as to a recipe's.
   flat.
 
 ### PR 3b — Recipes rows
-Sketch thumbnails throughout and the hero card. Unblocked by PR 7: the
-default drawing for a recipe with no icon of its own is the thing it was
-waiting for.
+Sketch thumbnails throughout and the hero card.
+
+**Parked**, by Brendan, after seeing the two side by side: today's rows
+stay. Worth recording that PR 8 delivered most of what this was for —
+"thumbnails throughout" is the archetype artwork now — so what is left of
+it is the hero card and the flat-row restyle, which are the two parts he
+declined.
 
 ## 7. Gates, every PR
 

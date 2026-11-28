@@ -215,10 +215,10 @@ void main() {
       expect(
         find.descendant(of: row, matching: find.byType(Text)),
         findsNWidgets(4),
-        reason: 'All, Favourites, Filters, sort — and nothing else',
+        reason: 'All, Favorites, Filters, sort — and nothing else',
       );
       expect(find.text('All'), findsOneWidget);
-      expect(find.text('Favourites'), findsOneWidget);
+      expect(find.text('Favorites'), findsOneWidget);
     });
 
     testWidgets('does not scroll sideways inside the list that scrolls down', (
@@ -326,7 +326,7 @@ void main() {
       );
       await pumpFrames(tester, frames: 12);
 
-      await reach(tester, find.text('Favourites'));
+      await reach(tester, find.text('Favorites'));
 
       expect(filterOf(tester).favoritesOnly, isTrue);
       expect(find.byType(RecipeCard), findsOneWidget);
@@ -341,7 +341,7 @@ void main() {
 
       // Favourites is a tab, on the screen and visibly chosen. Counting it
       // behind a button that does not hold it would count it twice.
-      await reach(tester, find.text('Favourites'));
+      await reach(tester, find.text('Favorites'));
       expect(
         find.text('Filters'),
         findsOneWidget,
@@ -409,9 +409,9 @@ void main() {
       // Clear all clears them, so a strip that did not name them would be
       // answering "what is narrowing this list" wrongly.
       await openLibrary(tester);
-      await reach(tester, find.text('Favourites'));
+      await reach(tester, find.text('Favorites'));
 
-      expect(find.text('Only favourites'), findsOneWidget);
+      expect(find.text('Only favorites'), findsOneWidget);
     });
 
     testWidgets('and nothing is shown when nothing is applied', (
@@ -424,7 +424,7 @@ void main() {
     testWidgets('Clear filters clears every chip', (WidgetTester tester) async {
       await openLibrary(tester);
 
-      await reach(tester, find.text('Favourites'));
+      await reach(tester, find.text('Favorites'));
       await openFilters(tester);
       await reach(tester, find.text('Thai'));
       await reach(tester, find.text('Under 30 min'));
@@ -467,7 +467,7 @@ void main() {
     ) async {
       await openLibrary(tester, size: const Size(320, 568), textScale: 3.0);
 
-      await reach(tester, find.text('Favourites'));
+      await reach(tester, find.text('Favorites'));
       await pickInSheet(tester, 'Eaten out');
 
       expect(tester.takeException(), isNull);
@@ -482,7 +482,7 @@ void main() {
       // Tooltips are not discoverability on a touch screen, so each of these
       // is a word on the screen as well as a semantics label.
       expect(find.bySemanticsLabel('All'), findsOneWidget);
-      expect(find.bySemanticsLabel('Favourites'), findsOneWidget);
+      expect(find.bySemanticsLabel('Favorites'), findsOneWidget);
       expect(find.bySemanticsLabel(RegExp('^Filters')), findsOneWidget);
 
       handle.dispose();
