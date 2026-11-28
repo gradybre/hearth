@@ -141,6 +141,72 @@ void main() {
     );
   });
 
+  testWidgets('undoing a delete puts the recipe back in the pane', (
+    WidgetTester tester,
+  ) async {
+    // Everything Hearth deletes is soft-deleted so that the undo is a real
+    // undo (§4). One that returned the row without the half-read page you
+    // were on would not be quite one.
+    await openLibrary(tester);
+    await tester.tap(find.text('Weeknight chilli'));
+    await pumpFrames(tester, frames: 16);
+    expect(find.byType(RecipeDetailScreen), findsOneWidget);
+
+    // The row, not the pane's title: the pane is showing the same recipe
+    // and its heading answers to the same words.
+    await tester.drag(
+      find.descendant(
+        of: find.byType(RecipeCard),
+        matching: find.text('Weeknight chilli'),
+      ),
+      const Offset(-200, 0),
+    );
+    await pumpFrames(tester, frames: 12);
+    // The uncovered one: every other row keeps a disabled Delete behind
+    // it, and only the swiped row's can be pressed.
+    await tester.tap(find.widgetWithText(TextButton, 'Delete').hitTestable());
+    await pumpFrames(tester, frames: 24);
+
+    // Gone from the list, and gone from the pane with it.
+    expect(find.text('Choose a recipe'), findsOneWidget);
+
+    await tester.tap(find.text('Undo'));
+    await pumpFrames(tester, frames: 24);
+
+    expect(find.byType(RecipeDetailScreen), findsOneWidget);
+    expect(
+      tester
+          .widget<RecipeDetailScreen>(find.byType(RecipeDetailScreen))
+          .recipeId,
+      'chilli',
+    );
+  });
+
+  testWidgets('and at accessibility text sizes there is no pane at all', (
+    WidgetTester tester,
+  ) async {
+    // Everywhere else a Hearth layout gives way, it gives way at the
+    // reflow threshold — about the words rather than the window. A 400pt
+    // column of three-times-sized titles beside a pane is not the shape to
+    // hold on to on a desktop somebody has turned the text up on.
+    await openLibrary(tester);
+    expect(find.text('Choose a recipe'), findsOneWidget);
+
+    await pumpHearthApp(
+      tester,
+      size: desktop,
+      textScale: 3.0,
+      recipes: library(),
+    );
+    await tester.tap(find.text('Recipes').last);
+    await pumpFrames(tester, frames: 12);
+
+    expect(find.text('Choose a recipe'), findsNothing);
+    await tester.tap(find.text('Weeknight chilli'));
+    await pumpFrames(tester, frames: 16);
+    expect(find.byType(BackButton), findsOneWidget);
+  });
+
   testWidgets('a window with no room for two columns still pushes', (
     WidgetTester tester,
   ) async {

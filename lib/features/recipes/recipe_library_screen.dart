@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/a11y/accessibility.dart';
 import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
@@ -52,7 +53,15 @@ class RecipeLibraryScreen extends ConsumerWidget {
           // The section's own width, not the window's: the sidebar has
           // already taken 208 points and a divider out of it, and asking
           // MediaQuery here would split a window that has no room for it.
-          if (constraints.maxWidth < HearthLayout.detailPaneBreakpoint) {
+          //
+          // And the words as well as the window. Everywhere else a Hearth
+          // layout gives way it gives way at [A11y.reflowThreshold] — this
+          // file's own floating button did, until the heading took it — so
+          // a 400pt column of three-times-sized titles beside a pane is not
+          // the shape to hold on to on a desktop somebody has turned the
+          // text up on. One column, and it gets the whole window.
+          if (constraints.maxWidth < HearthLayout.detailPaneBreakpoint ||
+              A11y.scaleOf(context) > A11y.reflowThreshold) {
             return const ReadingColumn(child: _LibraryList());
           }
           return Row(
@@ -453,12 +462,27 @@ class _DeletableRecipe extends ConsumerWidget {
       // A recipe cannot stay open in the pane after it has gone from the
       // list beside it. Cleared before the delete, so the pane is not
       // reading a row that is on its way out.
-      if (ref.read(selectedRecipeIdProvider) == recipe.id) {
+      if (inPane && ref.read(selectedRecipeIdProvider) == recipe.id) {
         ref.read(selectedRecipeIdProvider.notifier).show(null);
       }
       return ref.read(recipeRepositoryProvider).delete(recipe.id);
     },
-    onRestore: () => ref.read(recipeRepositoryProvider).restore(recipe.id),
+    onRestore: () async {
+      await ref.read(recipeRepositoryProvider).restore(recipe.id);
+      // And back into the pane. Everything Hearth deletes is soft-deleted
+      // so that the undo is a real undo (§4), and one that returns the row
+      // without the half-read page you were on is not quite one.
+      //
+      // "Is the pane empty" rather than a flag set by the delete: the
+      // delete awaits a write to the database, which takes frames, and by
+      // the time the snackbar reads `onRestore` this widget has been
+      // rebuilt and any closure holding such a flag replaced. An empty
+      // pane is the state the delete left behind, and it is still there to
+      // read.
+      if (inPane && ref.read(selectedRecipeIdProvider) == null) {
+        ref.read(selectedRecipeIdProvider.notifier).show(recipe.id);
+      }
+    },
     child: RecipeCard(recipe: recipe, inPane: inPane),
   );
 }
