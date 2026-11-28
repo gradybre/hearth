@@ -298,7 +298,42 @@ What the build turned up:
   home by the way into the leading room now, taken from the registry, so a
   rename cannot quietly make it assert nothing.
 
-### Optional PR 6 — the illustrations, once the art question is settled.
+### PR 6 — American spelling
+Displayed text only; identifiers and database ids are unaffected either way.
+It touches copy across the whole app, so it goes last: a sweep like that
+conflicts with every open branch.
+
+### PR 7 — the illustrations
+**Done.** Brendan chose §5's option (b): hand-authored vector paths. They are
+SVG path data in `lib/app/widgets/hearth_marks.dart`, drawn through the same
+[SketchIcon] whitelist and the same painter a recipe's own sketch uses — the
+painter lifted out of `recipe_icon.dart` into `HearthSketch`, since a mark
+the app makes of itself belongs to no feature.
+
+What the drawing turned up:
+
+- **The herbs did not survive the translation.** The templates set a sprig
+  beside the pot; in seven pen strokes at this weight it read as a scribble,
+  and two attempts at it looked like an insect rather than thyme. The pot is
+  the subject and the garnish is what the rendered art could afford. One
+  mark now, at two sizes.
+- **A mark is decoration, so it goes first.** At three times the text a
+  150pt drawing above a 102pt heading puts the button that logs a meal off
+  the bottom of a phone, and "Hearth" is one word that a 208pt sidebar
+  cannot wrap. Both are drawn only at ordinary text sizes.
+- **The registry carries the drawing, not the screen.** A room gets its
+  sketch where one has been made and its glyph where one has not, because
+  the four rooms are not going to be drawn on the same day and a row with a
+  gap where the others have a mark reads as a row that failed to load.
+- **The one test that matters is the parse.** A typo in path data fails the
+  whitelist silently: the widget draws an empty box and the screen is just a
+  little plainer than it should be. Every mark in the file is held to the
+  gate, to being strokes rather than fills, and to fitting its own viewBox.
+
+### PR 3b — Recipes rows
+Sketch thumbnails throughout and the hero card. Unblocked by PR 7: the
+default drawing for a recipe with no icon of its own is the thing it was
+waiting for.
 
 ## 7. Gates, every PR
 
