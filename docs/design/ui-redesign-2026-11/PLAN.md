@@ -156,6 +156,42 @@ Four things the build turned up that the survey had not:
 Primary `+ Log food`, meal-slot rows in the template's shape, Day/Week beside
 the title, the date stepper. The screen the success bar is measured on.
 
+**Done**, in two parts. The button and the slot rows landed first; the chrome
+— Day/Week beside the title and the centred stepper — followed as PR 2b,
+because it touches `PlanScreen`, `WeekScreen` and `PlanDateHeader` together
+and wanted its own diff.
+
+What PR 2b turned up:
+
+- **The two halves were never in the same widget.** The control was fixed
+  chrome drawn by `PlanScreen`; the title and the date are drawn by
+  `PlanDateHeader`, inside each view's own scroll view. That is why the
+  templates' first row did not exist. The control moved into the header,
+  each view passes its own, and `PlanScreen` is now the switch between the
+  two and nothing else.
+- **It scrolls away now, and that is the point.** A pinned band cost a row
+  of the fold on the screen U01's promise is measured on, and it left the
+  date stepper — which has always scrolled — sliding out from under a
+  control that did not. The header is one block.
+- **The stepper balances rather than centring by arithmetic.** Two buttons
+  each side, so an `Expanded` between them puts the date in the middle of
+  the row. Hearth has "go to today" and a copy that the templates never
+  thought about; neither is given up to match a picture, and both sit
+  inside the arrows.
+- **The segmented control lost its icons.** They were decorative — both
+  segments are labelled — and they were 44 points of its width, which is
+  exactly the difference between the control sitting beside "Wednesday" on
+  a 390pt phone and dropping onto a line of its own under it.
+- **A semantics bug the move exposed.** The date's `Semantics` had
+  `container: false`, so its label was merged into whatever enclosed it.
+  That worked while it wrapped the header's whole left-hand column and
+  stopped working the moment it wrapped one `Text` inside a `Row` — the
+  full date was announced by nothing at all. It is its own node now.
+- **The sweep helper could only look one way.** `SweepTools.bring` dragged
+  down the list until it found something; a header at the top of a lazy
+  list has been disposed by then, and dragging further down never finds it.
+  It jumps back to the top and searches again.
+
 ### PR 3 — Recipes library: the chrome
 Filter tabs and `+ Add` beside the heading. Brendan's answer to §3.2 and §3.3
 was to keep both: nothing is dropped, so Eaten out moved behind Filters with

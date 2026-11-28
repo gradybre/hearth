@@ -410,6 +410,13 @@ class _HeaderExampleState extends State<_HeaderExample> {
     });
 
     final List<DateTime> days = weekOf(date);
+    // The control goes into the header, where the screens put it: it used to
+    // be a band above the list, and a composition that still drew it there
+    // would be testing a layout the app no longer has.
+    final Widget control = PlanViewControl(
+      value: view,
+      onChanged: (PlanView value) => setState(() => view = value),
+    );
     final Widget header = view == PlanView.day
         ? PlanDateHeader.day(
             date: date,
@@ -418,8 +425,10 @@ class _HeaderExampleState extends State<_HeaderExample> {
             onToday: today,
             onNext: next,
             onCopy: () => widget.onCopy?.call(date),
+            viewControl: control,
           )
         : PlanDateHeader.week(
+            viewControl: control,
             firstDay: days.first,
             lastDay: days.last,
             today: widget.date,
@@ -452,13 +461,6 @@ class _HeaderExampleState extends State<_HeaderExample> {
         child: ReadingColumn(
           child: Column(
             children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: PlanViewControl(
-                  value: view,
-                  onChanged: (PlanView value) => setState(() => view = value),
-                ),
-              ),
               Expanded(
                 child: ListView(
                   key: _scrollKey,

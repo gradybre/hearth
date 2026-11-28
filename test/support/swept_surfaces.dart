@@ -143,14 +143,38 @@ class SweepTools {
   /// acting on `.first` acts on the page underneath.
   Future<Finder> bring(Finder finder) async {
     if (finder.evaluate().isEmpty) {
-      await _tester.dragUntilVisible(
-        // The unfiltered finder: `dragUntilVisible` asks it whether it is
-        // empty on every step, and `.first` of nothing throws rather than
-        // answering.
-        finder,
-        verticalScroller,
-        const Offset(0, -120),
-      );
+      try {
+        await _tester.dragUntilVisible(
+          // The unfiltered finder: `dragUntilVisible` asks it whether it is
+          // empty on every step, and `.first` of nothing throws rather than
+          // answering.
+          finder,
+          verticalScroller,
+          const Offset(0, -120),
+        );
+      } on StateError {
+        // Nothing below. A lazy list disposes the children it has scrolled
+        // past, so a widget above where this started is not merely off
+        // screen — it is out of the tree, and dragging further down will
+        // never find it. The planner's Day/Week control is one: it is at
+        // the top of the day's own list now rather than in a fixed band
+        // above it.
+        //
+        // Back to the top in one jump rather than fifty drags, then down
+        // again from there, so the search has covered the whole list.
+        final ScrollableState scroller = _tester.state<ScrollableState>(
+          verticalScroller,
+        );
+        scroller.position.jumpTo(scroller.position.minScrollExtent);
+        await pumpFrames(_tester, frames: 4);
+        if (finder.evaluate().isEmpty) {
+          await _tester.dragUntilVisible(
+            finder,
+            verticalScroller,
+            const Offset(0, -120),
+          );
+        }
+      }
       await pumpFrames(_tester, frames: 4);
     }
 
@@ -194,6 +218,10 @@ class SweepTools {
     final Finder control = find.byKey(
       const ValueKey<String>('plan-view-control'),
     );
+    // Brought into view first: it moved into the day's header in the
+    // November 2026 redesign, so it is part of the list now rather than a
+    // fixed band above it, and a scrolled-down list has disposed of it.
+    await bring(control);
     expect(control, findsOneWidget);
     if (label == 'Week' &&
         find

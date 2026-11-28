@@ -23,17 +23,14 @@ import '../../domain/planning/week_template.dart';
 import 'entry_resolver.dart';
 import 'macro_targets_sheet.dart';
 import 'plan_date_header.dart';
+import 'plan_view_control.dart';
 import 'week_meals_view.dart';
 import 'week_template_sheet.dart';
 import 'week_view_preference.dart';
 
 /// A week of meal names or the existing seven-day nutrition comparison.
 class WeekScreen extends ConsumerStatefulWidget {
-  const WeekScreen({this.showViewControl = true, super.key});
-
-  /// Plan supplies one combined compact selector. Direct Week hosts still
-  /// receive a complete screen with their own Meals/Nutrition control.
-  final bool showViewControl;
+  const WeekScreen({super.key});
 
   @override
   ConsumerState<WeekScreen> createState() => _WeekScreenState();
@@ -106,7 +103,11 @@ class _WeekScreenState extends ConsumerState<WeekScreen> {
             ),
             children: <Widget>[
               _WeekHeader(days: days),
-              if (widget.showViewControl) ...<Widget>[
+              // Hidden when the header's own control has folded into one
+              // compact menu, which already covers Meals and Nutrition —
+              // two controls offering the same two choices is how somebody
+              // ends up pressing the one that does nothing.
+              if (!compact) ...<Widget>[
                 const SizedBox(height: HearthSpacing.xs),
                 _WeekContentControl(value: preference.view),
               ],
@@ -798,6 +799,19 @@ class _WeekHeader extends ConsumerWidget {
     onPrevious: () => ref.read(selectedDateProvider.notifier).shiftDays(-7),
     onToday: () => ref.read(selectedDateProvider.notifier).today(),
     onNext: () => ref.read(selectedDateProvider.notifier).shiftDays(7),
+    // The week has no heading of its own — its date range is the only name
+    // it has, and that is on the stepper — so the control has the title row
+    // to itself.
+    viewControl: PlanViewControl(
+      value: PlanView.week,
+      onChanged: (PlanView selection) =>
+          ref.read(planViewProvider.notifier).show(selection),
+      // Where one menu has to cover both levels of choice, it is this one:
+      // see [PlanViewControl].
+      weekContent: ref.watch(weekViewPreferenceProvider).view,
+      onWeekContentChanged: (WeekContentView selection) =>
+          ref.read(weekViewPreferenceProvider.notifier).choose(selection),
+    ),
     trailingAction: PopupMenuButton<VoidCallback>(
       icon: const Icon(Icons.more_vert),
       tooltip: 'More',
