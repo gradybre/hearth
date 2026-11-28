@@ -39,15 +39,30 @@ void main() {
     expect(find.byType(RecipeIcon), findsOneWidget);
   });
 
-  testWidgets('and one with nothing draws nothing while nothing is drawn', (
+  testWidgets('a recipe whose kind has been drawn wears the drawing', (
     WidgetTester tester,
   ) async {
-    // The plumbing ships before the pictures. Until a drawing exists the
-    // row looks exactly as it did — no gap, no placeholder, no broken
-    // image, and no asset asked for that is not there.
     await pumpHearthApp(
       tester,
-      recipes: <Recipe>[aRecipe(id: 'stew', title: 'Weeknight chilli')],
+      recipes: <Recipe>[aRecipe(id: 'chilli', title: 'Weeknight chilli')],
+    );
+    await tester.tap(find.text('Recipes').last);
+    await pumpFrames(tester, frames: 12);
+
+    expect(find.byType(RecipeArt), findsOneWidget);
+    expect(find.byType(Image), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('and one whose kind has not draws nothing at all', (
+    WidgetTester tester,
+  ) async {
+    // Not a gap, not a placeholder, not a broken image: the set of
+    // drawings runs behind the registry on purpose, and a row for a kind
+    // nobody has drawn looks exactly as it did before any of this.
+    await pumpHearthApp(
+      tester,
+      recipes: <Recipe>[aRecipe(id: 'x', title: 'Leftovers from Tuesday')],
     );
     await tester.tap(find.text('Recipes').last);
     await pumpFrames(tester, frames: 12);
@@ -84,7 +99,7 @@ void main() {
     test('knows where a drawing would live', () {
       // The brief tells the artist to name files exactly this way, so the
       // two have to agree in one direction at least.
-      expect(RecipeArt.assetFor('stew-pot'), 'assets/art/stew-pot.webp');
+      expect(RecipeArt.assetFor('stew-pot'), 'assets/art/stew-pot.png');
     });
   });
 }

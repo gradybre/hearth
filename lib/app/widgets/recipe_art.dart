@@ -17,9 +17,16 @@ import '../theme/hearth_theme.dart';
 /// drawn yet. Declaring what exists costs one line per drawing in the same
 /// change that adds the file.
 ///
-/// Empty today. The plumbing ships before the pictures do, so until this
-/// has something in it the library looks exactly as it does now.
-const Set<String> kArtworkShipped = <String>{};
+/// Batch one, November 2026: six drawings, checked against §3 of the brief
+/// and held to it by `artwork_is_line_art_test.dart`.
+const Set<String> kArtworkShipped = <String>{
+  'chilli-bowl',
+  'porridge-jar',
+  'pot-pie',
+  'ramen-bowl',
+  'soup-bowl',
+  'stew-pot',
+};
 
 /// A drawing of the *kind* of thing a recipe is (spec §5.2, §6.1).
 ///
@@ -61,7 +68,13 @@ class RecipeArt extends StatelessWidget {
   final Set<String> shipped;
 
   /// Where a drawing lives once it has been made.
-  static String assetFor(String id) => 'assets/art/$id.webp';
+  ///
+  /// PNG, for now. The drawings arrive as PNG with an alpha channel and
+  /// nothing on this machine converts to WebP — which is the format the
+  /// whole set will want, because a hundred and fifty of these at the size
+  /// batch one came in is twenty megabytes of app. One line here and a
+  /// pass of `cwebp` when the set is complete.
+  static String assetFor(String id) => 'assets/art/$id.png';
 
   /// Whether this would draw anything.
   ///
