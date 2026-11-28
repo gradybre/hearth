@@ -151,6 +151,18 @@ List<String> shownIds(WidgetTester tester) => <String>[
 
 /// Brings [finder] on screen and taps it.
 Future<void> reach(WidgetTester tester, Finder finder) async {
+  if (finder.evaluate().isEmpty) {
+    // Not merely off screen: the sheet is a lazy list, and a chip below
+    // the fold has not been built, so there is nothing to make visible.
+    // Sort moved into the sheet, which pushed the groups under it down far
+    // enough on a phone for this to start mattering.
+    await tester.dragUntilVisible(
+      finder,
+      find.byType(Scrollable).last,
+      const Offset(0, -120),
+    );
+    await pumpFrames(tester, frames: 4);
+  }
   await tester.ensureVisible(finder.last);
   await pumpFrames(tester, frames: 4);
   await tester.tap(finder.last);
@@ -205,17 +217,20 @@ void main() {
         );
       }
 
-      // And what is left is exactly the four: the two tabs, Filters, sort.
+      // And what is left is exactly the three the templates draw. The sort
+      // went into the sheet with the narrowings: it is not one, and that
+      // argued for keeping it here for a while, but four controls where
+      // the templates draw three is a toolbar rather than a row of tabs.
       final Finder row = find.byKey(const ValueKey('recipe-filter-controls'));
       expect(row, findsOneWidget);
       expect(
         find.descendant(of: row, matching: find.byType(SortButton<RecipeSort>)),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         find.descendant(of: row, matching: find.byType(Text)),
-        findsNWidgets(4),
-        reason: 'All, Favorites, Filters, sort — and nothing else',
+        findsNWidgets(3),
+        reason: 'All, Favorites, Filters — and nothing else',
       );
       expect(find.text('All'), findsOneWidget);
       expect(find.text('Favorites'), findsOneWidget);

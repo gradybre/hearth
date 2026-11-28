@@ -212,8 +212,8 @@ void main() {
     );
     await pumpFrames(tester);
 
-    expect(find.text('Add recipe'), findsOneWidget);
-    await tester.tap(find.text('Add recipe'));
+    expect(find.text('Add'), findsOneWidget);
+    await tester.tap(find.text('Add'));
     await pumpFrames(tester, frames: 12);
     expect(find.text('Write a recipe'), findsOneWidget);
   });
@@ -232,7 +232,7 @@ void main() {
     );
     await pumpFrames(tester);
 
-    final Finder words = find.text('Add recipe');
+    final Finder words = find.text('Add');
     expect(words, findsOneWidget);
 
     final RenderBox label = tester.renderObject<RenderBox>(words);

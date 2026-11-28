@@ -211,13 +211,13 @@ void main() {
     }
   });
 
-  testWidgets('the sort stays on the screen rather than behind Filters', (
-    WidgetTester tester,
-  ) async {
-    // It is not a narrowing: it hides nothing and excludes nothing. Behind
-    // the button the order the list is in — the one thing it exists to state
-    // — would be invisible until somebody went looking for it in a sheet
-    // called Filters.
+  testWidgets('the sort is behind Filters, and says so when it is not the '
+      'one the list opens in', (WidgetTester tester) async {
+    // It stayed in the row for a while, on the reasoning that sort is not
+    // a narrowing and that an order nobody can see is no order at all.
+    // Four controls where the templates draw three is a toolbar rather
+    // than a row of tabs, so it moved — and the second half of that
+    // reasoning is answered by the strip rather than ignored.
     await openLibrary(tester);
 
     expect(
@@ -225,7 +225,16 @@ void main() {
         of: find.byType(RecipeFilterBar),
         matching: find.text(RecipeSort.recent.label),
       ),
-      findsOneWidget,
+      findsNothing,
     );
+
+    await tester.tap(find.textContaining(RegExp(r'^Filters')));
+    await pumpFrames(tester, frames: 12);
+    await tester.tap(find.text('A–Z').last);
+    await pumpFrames(tester, frames: 12);
+    await tester.tap(find.text('Done'));
+    await pumpFrames(tester, frames: 12);
+
+    expect(find.text('Sorted by A–Z'), findsOneWidget);
   });
 }

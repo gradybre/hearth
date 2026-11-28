@@ -81,32 +81,35 @@ void main() {
     await tester.tap(find.text('Weeknight chilli'));
     await pumpFrames(tester, frames: 16);
 
-    // §6.3: the bar down its leading edge is drawn as a ground the card is
-    // inset from, so the row is 4 points narrower than its neighbour. That
-    // difference survives a greyscale print; a tint does not.
-    final double open = tester
-        .getSize(
-          find
-              .ancestor(
-                of: find.text('Weeknight chilli'),
-                matching: find.byType(Material),
-              )
-              .first,
-        )
-        .width;
-    final double shut = tester
-        .getSize(
-          find
-              .ancestor(
-                of: find.text('Blueberry overnight oats'),
-                matching: find.byType(Material),
-              )
-              .first,
-        )
-        .width;
-    expect(open, lessThan(shut), reason: 'the open row carries no bar');
+    // §6.3: the bar down its leading edge is a shape. The tint behind it
+    // says the same thing in colour, and a greyscale print keeps only the
+    // bar — so that is what is asserted, by reading the border the row
+    // draws rather than the colour it is filled with.
+    BorderSide edgeOf(String title) {
+      final Finder row = find.ancestor(
+        of: find.text(title),
+        matching: find.byType(Container),
+      );
+      for (final Container box in tester.widgetList<Container>(row)) {
+        final Decoration? decoration = box.decoration;
+        if (decoration is BoxDecoration && decoration.border is Border) {
+          return (decoration.border! as Border).left;
+        }
+      }
+      fail('$title has no row to read an edge from');
+    }
 
-    // And said out loud for somebody who is not looking at it.
+    expect(
+      edgeOf('Weeknight chilli').color,
+      isNot(Colors.transparent),
+      reason: 'the open row carries no bar',
+    );
+    expect(
+      edgeOf('Blueberry overnight oats').color,
+      Colors.transparent,
+      reason: 'a row that is not open is wearing the open row\'s bar',
+    );
+
     // The first of the two: the pane beside the list is showing the same
     // recipe and its title answers to the same words, and the list comes
     // first in the Row. If that ever stopped being true this would be

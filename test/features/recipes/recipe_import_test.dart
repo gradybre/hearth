@@ -169,7 +169,7 @@ void main() {
     // editor, and it sits next to writing one and to having Hearth write one
     // (§5.3, §5.4, U05).
     await pumpHearthApp(tester);
-    await tester.tap(find.text('Add recipe'));
+    await tester.tap(find.text('Add'));
     await pumpFrames(tester, frames: 12);
 
     expect(find.text('Import a recipe'), findsOneWidget);

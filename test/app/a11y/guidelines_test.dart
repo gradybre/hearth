@@ -1063,7 +1063,7 @@ final List<_Destination> _destinations = <_Destination>[
     name: 'the recipe editor',
     open: (WidgetTester tester, SweepTools tools) async {
       await tools.tab('Recipes');
-      await tools.reach(find.text('Add recipe'));
+      await tools.reach(find.text('Add'));
       await tools.reach(find.text('Write a recipe'));
     },
     arrived: find.text('New recipe'),
@@ -1111,7 +1111,7 @@ final List<_Destination> _destinations = <_Destination>[
     name: 'eating out',
     open: (WidgetTester tester, SweepTools tools) async {
       await tools.tab('Recipes');
-      await tools.reach(find.text('Add recipe'));
+      await tools.reach(find.text('Add'));
       await tools.reach(find.text('Eat out'));
     },
     arrived: find.text('Chopt'),

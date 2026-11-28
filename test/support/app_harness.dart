@@ -567,7 +567,7 @@ class FakePdf implements PdfPages {
 /// through it is what a person does — a test that reached past it would stop
 /// noticing if the sheet broke.
 Future<void> addRecipeVia(WidgetTester tester, String way) async {
-  await tester.tap(find.text('Add recipe'));
+  await tester.tap(find.text('Add'));
   await pumpFrames(tester, frames: 12);
   await tester.tap(find.text(way));
   await pumpFrames(tester, frames: 16);

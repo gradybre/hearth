@@ -11,6 +11,7 @@
 /// anybody's actual nutrition.
 library;
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -20,6 +21,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth/app/providers.dart';
 import 'package:hearth/app/shell/launch_target.dart';
+import 'package:hearth/app/widgets/recipe_art.dart';
 import 'package:hearth/data/adapters/thermostat.dart';
 import 'package:hearth/domain/house/thermostat.dart';
 import 'package:hearth/domain/models/food.dart';
@@ -86,6 +88,40 @@ Future<void> writeScene(WidgetTester tester, Scene scene) async {
 /// Loaded here rather than globally because it is only the gallery that cares
 /// what an icon *looks* like, and widening a shared hook to suit one directory
 /// is how shared hooks stop being predictable.
+/// Decodes every drawing that ships, so a scene can photograph one.
+///
+/// A widget test paints an asset image as nothing at all until its bytes
+/// have been read *and decoded*, and both are asynchronous — so without
+/// this a library row's artwork is a blank square in every picture the
+/// gallery takes, and nothing fails. The first scene drawn after the
+/// artwork landed showed three recipes with three empty slots and passed
+/// every assertion in it.
+///
+/// Per scene rather than once, because the binding empties the image cache
+/// between tests. Resolved rather than `precacheImage`d so that no
+/// `BuildContext` is needed and it can run before anything is pumped.
+Future<void> loadArtwork(WidgetTester tester) async {
+  await tester.runAsync(() async {
+    for (final String id in kArtworkShipped) {
+      final ImageStream stream = AssetImage(RecipeArt.assetFor(id))
+          .resolve(ImageConfiguration.empty);
+      final Completer<void> done = Completer<void>();
+      late final ImageStreamListener listener;
+      void finish() {
+        stream.removeListener(listener);
+        if (!done.isCompleted) done.complete();
+      }
+
+      listener = ImageStreamListener(
+        (ImageInfo _, bool _) => finish(),
+        onError: (Object _, StackTrace? _) => finish(),
+      );
+      stream.addListener(listener);
+      await done.future;
+    }
+  });
+}
+
 Future<void> loadIconFont() async {
   final String? root =
       Platform.environment['FLUTTER_ROOT'] ?? _flutterRootFromExecutable();
@@ -1645,17 +1681,12 @@ const List<Scene> scenes = <Scene>[
   Scene(
     name: 'eat-out-restaurants',
     longMenu: true,
-    taps: <String>['Recipes', 'Add recipe', 'Eat out'],
+    taps: <String>['Recipes', 'Add', 'Eat out'],
   ),
   Scene(
     name: 'eat-out-menu',
     longMenu: true,
-    taps: <String>[
-      'Recipes',
-      'Add recipe',
-      'Eat out',
-      'Chopt Creative Salad Co.',
-    ],
+    taps: <String>['Recipes', 'Add', 'Eat out', 'Chopt Creative Salad Co.'],
   ),
   // A salad and two things on it, which is what somebody actually orders —
   // and it takes three taps spread over thirty-six rows to say so.
@@ -1676,7 +1707,7 @@ const List<Scene> scenes = <Scene>[
     longMenu: true,
     taps: <String>[
       'Recipes',
-      'Add recipe',
+      'Add',
       'Eat out',
       'Chopt Creative Salad Co.',
       'Kale Caesar',
@@ -1748,11 +1779,6 @@ const List<Scene> scenes = <Scene>[
     longMenu: true,
     size: Size(320, 640),
     textScale: 2.0,
-    taps: <String>[
-      'Recipes',
-      'Add recipe',
-      'Eat out',
-      'Chopt Creative Salad Co.',
-    ],
+    taps: <String>['Recipes', 'Add', 'Eat out', 'Chopt Creative Salad Co.'],
   ),
 ];

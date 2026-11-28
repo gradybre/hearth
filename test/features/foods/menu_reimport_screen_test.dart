@@ -66,7 +66,7 @@ void main() {
     );
     await tester.tap(find.text('Recipes').last);
     await pumpFrames(tester);
-    await tester.tap(find.text('Add recipe'));
+    await tester.tap(find.text('Add'));
     await pumpFrames(tester, frames: 12);
     // At three times the text the sheet's rows run past the fold, and a lazy
     // list has not built the last of them at all.

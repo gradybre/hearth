@@ -46,6 +46,7 @@ void main() {
   for (final Scene scene in scenes) {
     testWidgets('gallery: ${scene.name}', (WidgetTester tester) async {
       final DateTime day = DateTime(2026, 9, 10);
+      await loadArtwork(tester);
 
       await pumpHearthApp(
         tester,

@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hearth/app/widgets/sort_button.dart';
 import 'package:hearth/domain/models/food.dart';
 import 'package:hearth/domain/models/macros.dart';
 import 'package:hearth/domain/models/recipe.dart';
-import 'package:hearth/domain/recipes/recipe_query.dart';
 import 'package:hearth/domain/units/unit.dart';
 import 'package:hearth/features/recipes/macro_stats_row.dart';
 import 'package:hearth/features/recipes/recipe_library_screen.dart';
@@ -78,7 +76,7 @@ void main() {
 
     testWidgets('still offers a way to add one', (WidgetTester tester) async {
       await pumpHearthApp(tester);
-      expect(find.text('Add recipe'), findsOneWidget);
+      expect(find.text('Add'), findsOneWidget);
     });
   });
 
@@ -197,33 +195,42 @@ void main() {
     });
   });
 
-  group('per-serving macros on the card', () {
-    testWidgets('a fully matched recipe shows its numbers', (
+  group('what a row says, and what it leaves to the recipe', () {
+    testWidgets('a row is a picture, a name and what it serves', (
       WidgetTester tester,
     ) async {
+      // The macro line used to be here, and the tags under it. Each was
+      // defensible and together they doubled the row — four lines where
+      // the templates draw two, on the screen whose job is to let you find
+      // one recipe among fifty. The numbers are a property of the recipe
+      // and they are on the recipe.
       await pumpHearthApp(
         tester,
         recipes: <Recipe>[shortRibsWithMatchedOil()],
         foods: <Food>[oliveOilPerTbsp()],
       );
+      await pumpFrames(tester);
 
-      // 2 tbsp at 120 kcal / 14 g fat per tbsp, across 4 servings.
-      expect(find.textContaining('60 kcal'), findsOneWidget);
-      expect(find.textContaining('7g fat'), findsOneWidget);
+      expect(find.byType(MacroStatsLine), findsNothing);
+      expect(find.textContaining('60 kcal'), findsNothing);
+      expect(find.textContaining('7g fat'), findsNothing);
+      expect(find.textContaining('Serves'), findsWidgets);
     });
 
-    testWidgets('an incomplete recipe still shows a total, marked partial', (
+    testWidgets('and a partial total is still honest where it is shown', (
       WidgetTester tester,
     ) async {
-      // shortRibs()'s oil carries no foodId. Hiding the line entirely made a
-      // recipe's nutrition vanish over one unresolved ingredient with nothing
-      // on screen to say why; marking it partial keeps the numbers honest
-      // without keeping them secret.
+      // shortRibs()'s oil carries no foodId. Hiding the line entirely made
+      // a recipe's nutrition vanish over one unresolved ingredient with
+      // nothing on screen to say why; marking it partial keeps the numbers
+      // honest without keeping them secret. That rule did not move with
+      // the line — it lives on the recipe now.
       await pumpHearthApp(tester, recipes: <Recipe>[shortRibs()]);
+      await pumpFrames(tester);
+      await tester.tap(find.text('Braised short ribs'));
+      await pumpFrames(tester, frames: 16);
 
-      expect(find.byType(MacroStatsLine), findsOneWidget);
-      // Never colour alone (§6.3) — the caveat is a word.
-      expect(find.textContaining('partial'), findsOneWidget);
+      expect(find.textContaining('not matched'), findsWidgets);
     });
 
     testWidgets('a complete recipe is not marked partial', (
@@ -299,18 +306,29 @@ void main() {
       await pumpHearthApp(tester, recipes: byDate());
       await pumpFrames(tester);
 
-      // The order is never something you have to open a menu to discover.
-      expect(find.text('Recent'), findsOneWidget);
+      // The order the list opens in is the one nobody has to be told, so
+      // the row above it says nothing. It is named the moment it is not
+      // that one — see the chip the next test leaves behind.
+      expect(find.text('Recent'), findsNothing);
+      expect(find.textContaining('Sorted by'), findsNothing);
     });
 
-    testWidgets('choosing A–Z reorders the list', (WidgetTester tester) async {
+    testWidgets('choosing A–Z reorders the list, and says so', (
+      WidgetTester tester,
+    ) async {
       await pumpHearthApp(tester, recipes: byDate());
       await pumpFrames(tester);
 
-      await tester.tap(find.byType(SortButton<RecipeSort>));
-      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining(RegExp(r'^Filters')));
+      await pumpFrames(tester, frames: 12);
       await tester.tap(find.text('A–Z').last);
-      await tester.pumpAndSettle();
+      await pumpFrames(tester, frames: 12);
+      await tester.tap(find.text('Done'));
+      await pumpFrames(tester, frames: 12);
+
+      // Behind a button called Filters, an order nobody can see is the
+      // thing that argued against moving the sort in there at all.
+      expect(find.text('Sorted by A–Z'), findsOneWidget);
 
       final List<RecipeCard> cards = tester
           .widgetList<RecipeCard>(find.byType(RecipeCard))

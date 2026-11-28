@@ -5,7 +5,6 @@ import '../../app/providers.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
-import '../../app/widgets/sort_button.dart';
 import '../../data/local/collection_store.dart';
 import '../../domain/recipes/recipe_query.dart';
 import 'recipe_filters_sheet.dart';
@@ -23,7 +22,16 @@ import 'recipe_filters_sheet.dart';
 /// the "All" the rail never had. Eaten out moved behind Filters with the
 /// other narrowings — it is one, and the tabs are a scope, not a set of
 /// switches. Nothing it did was taken away: it is a chip in the sheet, it
-/// still combines with Favourites, and the strip below still names it.
+/// still combines with Favorites, and the strip below still names it.
+///
+/// The sort went the same way, and this is the second time that decision
+/// has been made. It stayed in the row at first because it is not a
+/// narrowing — it hides nothing, and behind a button called Filters the
+/// order the list is in would be invisible. That reasoning is still true
+/// and it lost anyway: four controls where the templates draw three is the
+/// difference between a row of tabs and a toolbar, and the applied strip
+/// below now names a sort that is not the default, so the order is on the
+/// screen whenever it is worth saying.
 ///
 /// What is applied is a strip of named chips below, each removable on its
 /// own. The rail before this could only say what was on by being scrolled
@@ -87,11 +95,27 @@ class _RecipeFilterBarState extends ConsumerState<RecipeFilterBar> {
                         control.search('');
                       },
                     ),
+              // Paper with a line drawn round it, not a sunken trough.
+              // The template's field is the same cream as the page and
+              // reads as a field because of its outline; a filled block
+              // under the title was the heaviest thing on the screen and
+              // put the weight in the wrong place.
               filled: true,
-              fillColor: colors.surfaceSunken,
+              fillColor: colors.background,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(HearthRadius.md),
-                borderSide: BorderSide.none,
+                borderSide: BorderSide(color: colors.outline),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(HearthRadius.md),
+                borderSide: BorderSide(color: colors.outline),
+              ),
+              // The focus ring keeps its own 3:1 token; a hairline that
+              // only changes shade would be the one thing on the screen
+              // saying "here" in colour alone (spec §6.3).
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(HearthRadius.md),
+                borderSide: BorderSide(color: colors.outlineStrong, width: 2),
               ),
             ),
           ),
@@ -138,19 +162,6 @@ class _RecipeFilterBarState extends ConsumerState<RecipeFilterBar> {
                 selected: false,
                 isTab: false,
                 onTap: () => showRecipeFiltersSheet(context),
-              ),
-              // Sort stays on the screen rather than moving behind Filters
-              // with the narrowings. It is not one: it hides nothing and
-              // excludes nothing, and burying it would leave the order the
-              // list is in — the thing it exists to state — invisible until
-              // somebody opened a sheet called Filters to look for it.
-              SortButton<RecipeSort>(
-                value: filter.sort,
-                choices: <SortChoice<RecipeSort>>[
-                  for (final RecipeSort sort in RecipeSort.values)
-                    SortChoice<RecipeSort>(value: sort, label: sort.label),
-                ],
-                onChanged: control.setSort,
               ),
             ],
           ),
@@ -216,6 +227,15 @@ class _RecipeFilterBarState extends ConsumerState<RecipeFilterBar> {
     RecipeFilterController control,
     List<CollectionSummary> collections,
   ) => <_Applied>[
+    // The order the list is in, whenever it is not the one it opens in.
+    // Sort moved behind Filters to leave the templates' three tabs alone,
+    // and a sort nobody can see is the thing that argued against moving
+    // it — so it says so here, and tapping it puts the order back.
+    if (filter.sort != RecipeSort.recent)
+      _Applied(
+        'Sorted by ${filter.sort.label}',
+        () => control.setSort(RecipeSort.recent),
+      ),
     if (filter.favoritesOnly)
       _Applied('Only favorites', control.toggleFavoritesOnly),
     if (filter.eatenOutOnly)

@@ -207,7 +207,7 @@ void main() {
     await pumpFrames(tester);
     await _tap(tester, find.text('Discard choices'));
     expect(find.byType(EatOutScreen), findsNothing);
-    expect(find.text('Add recipe'), findsOneWidget);
+    expect(find.text('Add'), findsOneWidget);
     expect(await db.select(db.recipes).get(), hasLength(1));
     expect(await db.select(db.mealPlanEntries).get(), isEmpty);
     expect(tester.takeException(), isNull);
@@ -972,7 +972,7 @@ Future<HearthDatabase> _openMenu(
   if (mealDate == null) {
     await tester.tap(find.text('Recipes').last);
     await pumpFrames(tester);
-    await _tap(tester, find.text('Add recipe'));
+    await _tap(tester, find.text('Add'));
     await _tap(tester, find.text('Eat out'));
   } else {
     await tester.tap(find.text('Plan').last);
