@@ -93,6 +93,45 @@ void main() {
     expect(find.text('Hearth'), findsOneWidget);
   });
 
+  testWidgets('the way in answers to the words printed on it', (
+    WidgetTester tester,
+  ) async {
+    // WCAG 2.5.3, and the reason the hand-written semantics came off it:
+    // speech input matches on a control's accessible name, so a link
+    // reading "Open Nutrition" that answered to "Nutrition. Recipes, meal
+    // plans, shopping lists, and nutrition logs." could not be pressed by
+    // saying what it says.
+    final SemanticsHandle handle = tester.ensureSemantics();
+    await pumpHome(tester);
+
+    final String printed = leader().openLabel;
+    expect(find.text(printed), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text(printed)).label,
+      contains(printed),
+      reason: 'the way in does not answer to its own words',
+    );
+
+    handle.dispose();
+  });
+
+  testWidgets('and the room it leads with is a heading', (
+    WidgetTester tester,
+  ) async {
+    // The masthead marks itself as one, so without this a screen reader
+    // navigating by headings finds the app's name and nothing for the room
+    // filling most of the screen (spec §6.3).
+    final SemanticsHandle handle = tester.ensureSemantics();
+    await pumpHome(tester);
+
+    expect(
+      tester.getSemantics(find.text(leader().label)),
+      isSemantics(isHeader: true),
+    );
+
+    handle.dispose();
+  });
+
   testWidgets('the footer names the rooms with nothing in them, and no more', (
     WidgetTester tester,
   ) async {
@@ -123,8 +162,13 @@ void main() {
     await pumpHome(tester);
 
     for (final AppSection section in appSections) {
+      // The hero's link answers to the words printed on it and every row's
+      // to the room and its sentence — see `wayIn` in home_screen_test.
+      final String label = section.id == builtSections.first.id
+          ? section.openLabel
+          : section.semanticLabel;
       expect(
-        find.bySemanticsLabel(section.semanticLabel),
+        find.bySemanticsLabel(label),
         findsOneWidget,
         reason: '${section.label} has no way in',
       );

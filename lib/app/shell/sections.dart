@@ -101,6 +101,15 @@ sealed class AppSection {
 
   /// Spoken as one thought: what the room is, then what is in it (spec §6.3).
   String get semanticLabel => '$label. $blurb';
+
+  /// What the home screen prints on the way into the room it leads with,
+  /// and what that control answers to.
+  ///
+  /// One string for both, deliberately. Speech input matches on a control's
+  /// accessible name, and WCAG 2.5.3 asks that the name contain the words
+  /// printed on it — so a button reading "Open Nutrition" that answered to
+  /// [semanticLabel] could not be pressed by saying what it says.
+  String get openLabel => 'Open $label';
 }
 
 /// A room you can walk into: it has screens, so it has a way in.

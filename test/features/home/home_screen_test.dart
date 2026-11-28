@@ -10,6 +10,16 @@ Future<void> pumpHome(
   Size size = const Size(390, 844),
 }) => pumpHearthApp(tester, size: size, launchTarget: LaunchTarget.home);
 
+/// What a section's way in answers to on the home screen.
+///
+/// The room that leads is opened by a link printed "Open Nutrition", and a
+/// control's accessible name has to contain the words on it (WCAG 2.5.3) —
+/// so the hero's is [AppSection.openLabel] where every row's is
+/// [AppSection.semanticLabel].
+String wayIn(AppSection section) => section.id == builtSections.first.id
+    ? section.openLabel
+    : section.semanticLabel;
+
 void main() {
   group('the way into the house (spec §6.2)', () {
     testWidgets('the app can open on it', (WidgetTester tester) async {
@@ -46,7 +56,7 @@ void main() {
       final SemanticsHandle handle = tester.ensureSemantics();
       for (final AppSection section in appSections) {
         expect(
-          find.bySemanticsLabel(section.semanticLabel),
+          find.bySemanticsLabel(wayIn(section)),
           findsOneWidget,
           reason: '${section.label} is not on the home screen',
         );
@@ -136,7 +146,7 @@ void main() {
       await pumpFrames(tester);
 
       for (final AppSection section in builtSections) {
-        expect(find.bySemanticsLabel(section.semanticLabel), findsOneWidget);
+        expect(find.bySemanticsLabel(wayIn(section)), findsOneWidget);
       }
       handle.dispose();
     });

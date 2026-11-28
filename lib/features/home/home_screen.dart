@@ -73,8 +73,17 @@ class HomeScreen extends StatelessWidget {
                 // "what is built first, then what is coming", so which room
                 // that is stays a fact about the registry rather than a
                 // name written into this screen.
-                _SectionHero(section: builtSections.first),
-                const SizedBox(height: HearthSpacing.xl),
+                //
+                // Guarded, because `builtSections` is a runtime filter over
+                // editable data and the type system does not promise it
+                // anything: a registry of nothing but planned rooms is one
+                // line away, and `.first` on the app's root screen would
+                // throw before its first frame. The loop this replaced
+                // degraded to a masthead and a footer, and so does this.
+                if (builtSections.isNotEmpty) ...<Widget>[
+                  _SectionHero(section: builtSections.first),
+                  const SizedBox(height: HearthSpacing.xl),
+                ],
                 for (final BuiltSection section in builtSections.skip(1))
                   _SectionRow(section: section),
                 const SizedBox(height: HearthSpacing.xl),
@@ -156,7 +165,14 @@ class _SectionHero extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(section.label, style: context.text.recipeTitle),
+        // A heading, not merely heading-sized. The masthead above marks
+        // itself as one, so without this a screen reader navigating by
+        // headings finds the app's name and nothing for the room filling
+        // most of the screen (spec §6.3).
+        Semantics(
+          header: true,
+          child: Text(section.label, style: context.text.recipeTitle),
+        ),
         const SizedBox(height: HearthSpacing.xs),
         Text(
           section.blurb,
@@ -180,21 +196,21 @@ class _SectionHero extends ConsumerWidget {
           ),
         ],
         const SizedBox(height: HearthSpacing.sm),
-        Semantics(
-          button: true,
-          label: section.semanticLabel,
-          onTap: enter,
-          container: true,
-          excludeSemantics: true,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: enter,
-              // The arrow after the words, which is the direction it goes.
-              iconAlignment: IconAlignment.end,
-              icon: const Icon(Icons.arrow_forward, size: 18),
-              label: Text('Open ${section.label}'),
-            ),
+        // No hand-written semantics over this one. It used to carry
+        // [AppSection.semanticLabel] with the button's own label excluded,
+        // which left a control reading "Open Nutrition" answering to
+        // "Nutrition. Recipes, meal plans, shopping lists, and nutrition
+        // logs." — so saying the words on it did nothing, which is what
+        // WCAG 2.5.3 is about. The button's own label is the right one,
+        // and the room's name and sentence are read as themselves above.
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: enter,
+            // The arrow after the words, which is the direction it goes.
+            iconAlignment: IconAlignment.end,
+            icon: const Icon(Icons.arrow_forward, size: 18),
+            label: Text(section.openLabel),
           ),
         ),
       ],
