@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/recipes/timer_bar.dart';
+import '../a11y/accessibility.dart';
 import '../theme/hearth_colors.dart';
 import '../theme/hearth_spacing.dart';
 import '../theme/hearth_theme.dart';
+import '../widgets/hearth_marks.dart';
+import '../widgets/hearth_sketch.dart';
 import 'destinations.dart';
 import 'sections.dart';
 
@@ -202,6 +205,39 @@ class _Sidebar extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
+              // The app's own name and mark, above the room you are in
+              // (the November 2026 templates).
+              //
+              // Only at ordinary text sizes. "Hearth" is one word and a
+              // 208pt rail cannot wrap it: at three times the text the
+              // wordmark alone is wider than the column, and this rail is
+              // already tight enough that a way home, a section heading and
+              // four rows run past the bottom of a 400pt window. Decoration
+              // gives up the space first.
+              if (A11y.scaleOf(context) <= A11y.reflowThreshold) ...<Widget>[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    HearthSpacing.md,
+                    0,
+                    HearthSpacing.md,
+                    HearthSpacing.sm,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text('Hearth', style: context.text.sectionHeader),
+                      const SizedBox(height: HearthSpacing.xs),
+                      HearthSketch(
+                        svg: kPotMark,
+                        size: 44,
+                        color: colors.textMuted,
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(height: 1, thickness: 1, color: colors.outline),
+                const SizedBox(height: HearthSpacing.sm),
+              ],
               // The way out, above everything it is a way out of.
               _HomeItem(section: section, onTap: onLeave),
               const SizedBox(height: HearthSpacing.sm),

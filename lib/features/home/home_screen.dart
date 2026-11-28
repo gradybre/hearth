@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/a11y/accessibility.dart';
 import '../../app/providers.dart';
 import '../../app/shell/sections.dart';
 import '../../app/theme/hearth_colors.dart';
 import '../../app/theme/hearth_spacing.dart';
 import '../../app/theme/hearth_theme.dart';
+import '../../app/widgets/hearth_sketch.dart';
 import '../recipes/timer_bar.dart';
 
 /// The way into the house (spec §6.2, and the November 2026 templates).
@@ -162,9 +164,29 @@ class _SectionHero extends ConsumerWidget {
       ref.read(lastDestinationProvider.notifier).pathFor(section),
     );
 
+    // Dropped at accessibility text sizes. It is decoration, and
+    // decoration is the first thing to give up the screen when the words
+    // need it: at three times the text a 150pt drawing above a 102pt
+    // heading puts the button that logs a meal off the bottom of a phone.
+    final bool drawn =
+        section.sketch != null && A11y.scaleOf(context) <= A11y.reflowThreshold;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
+        if (drawn) ...<Widget>[
+          Center(
+            child: HearthSketch(
+              svg: section.sketch,
+              size: 150,
+              // A shade lighter than the words under it: the drawing is the
+              // welcome and the heading is the information, and a line
+              // drawing at full text weight competes with its own title.
+              color: colors.textMuted,
+            ),
+          ),
+          const SizedBox(height: HearthSpacing.lg),
+        ],
         // A heading, not merely heading-sized. The masthead above marks
         // itself as one, so without this a screen reader navigating by
         // headings finds the app's name and nothing for the room filling
@@ -256,11 +278,23 @@ class _SectionRow extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(vertical: HearthSpacing.md),
                 child: Row(
                   children: <Widget>[
-                    // Muted, not accent. The hero below the masthead already
+                    // A drawing where the room has one, the glyph where it
+                    // has not: the rooms will not all be drawn on the same
+                    // day, and a row with a gap in it where the others have
+                    // a mark reads as a row that failed to load.
+                    //
+                    // Muted, not accent, either way. The hero above already
                     // spends the accent twice — the button and the link —
-                    // and a tinted icon on every row after it is the 60/30/10
-                    // leak §6.1 is about.
-                    Icon(section.icon, size: 28, color: colors.textSecondary),
+                    // and a tinted icon on every row after it is the
+                    // 60/30/10 leak §6.1 is about.
+                    if (section.sketch case final String sketch)
+                      HearthSketch(
+                        svg: sketch,
+                        size: 32,
+                        color: colors.textSecondary,
+                      )
+                    else
+                      Icon(section.icon, size: 28, color: colors.textSecondary),
                     const SizedBox(width: HearthSpacing.lg),
                     Expanded(
                       child: Column(

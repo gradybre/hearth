@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../features/plan/log_slot_sheet.dart';
+import '../widgets/hearth_marks.dart';
 import 'destinations.dart';
 import 'unbuilt_screen.dart';
 
@@ -56,6 +57,7 @@ sealed class AppSection {
     required this.label,
     required this.blurb,
     required this.icon,
+    this.sketch,
   });
 
   /// Stable across renames — it is what the launch preference stores, so
@@ -70,6 +72,14 @@ sealed class AppSection {
   final String blurb;
 
   final IconData icon;
+
+  /// A drawing of the room, where one has been made (spec §6.1).
+  ///
+  /// Null for a room nobody has drawn yet, and the home screen falls back to
+  /// [icon] — which is why this is a separate field rather than a replacement
+  /// for one. A glyph and a line drawing are not the same thing and the
+  /// rooms are not going to get their drawings on the same day.
+  final String? sketch;
 
   /// The section's own tabs, in navigation order. Empty for a section that has
   /// not been built.
@@ -124,6 +134,7 @@ final class BuiltSection extends AppSection {
     required super.label,
     required super.blurb,
     required super.icon,
+    super.sketch,
     required this.destinations,
     this.primaryAction,
   });
@@ -154,6 +165,7 @@ final class PlannedSection extends AppSection {
     required super.label,
     required super.blurb,
     required super.icon,
+    super.sketch,
   });
 
   @override
@@ -171,6 +183,7 @@ const List<AppSection> appSections = <AppSection>[
     label: 'Nutrition',
     blurb: 'Recipes, meal plans, shopping lists, and nutrition logs.',
     icon: Icons.soup_kitchen_outlined,
+    sketch: kPotMark,
     destinations: foodDestinations,
     // The one Hearth is judged on: replacing MacrosFirst for daily logging.
     // From here it is one tap to the meal chooser and a second to the food,
@@ -204,6 +217,7 @@ const List<AppSection> appSections = <AppSection>[
     label: 'House',
     blurb: 'Thermostat and household controls.',
     icon: Icons.thermostat_outlined,
+    sketch: kCottageMark,
     destinations: houseDestinations,
   ),
 ];
