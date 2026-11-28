@@ -10,12 +10,14 @@ import '../../app/theme/hearth_theme.dart';
 import '../../app/theme/hearth_typography.dart';
 import '../../app/widgets/centred_message.dart';
 import '../../app/widgets/reading_column.dart';
+import '../../app/widgets/recipe_art.dart';
 import '../../app/widgets/swipe_to_delete.dart';
 import '../../domain/models/food.dart';
 import '../../domain/models/macros.dart';
 import '../../domain/models/recipe.dart';
 import '../../domain/recipes/default_sweep.dart';
 import '../../domain/recipes/macro_calculator.dart';
+import '../../domain/recipes/recipe_artwork.dart';
 import '../../domain/recipes/recipe_query.dart';
 import 'add_recipe_sheet.dart';
 import 'macro_stats_row.dart';
@@ -513,6 +515,14 @@ class RecipeCard extends ConsumerWidget {
     final RecipeMacros macros = MacroCalculator.forRecipe(recipe, foods: foods);
     final bool selected =
         inPane && ref.watch(selectedRecipeIdProvider) == recipe.id;
+    final RecipeArt art = RecipeArt(
+      artworkId: pickRecipeArtwork(
+        title: recipe.title,
+        tags: recipe.tags,
+        cuisine: recipe.cuisine,
+      ),
+      size: 40,
+    );
     void open() {
       if (inPane) {
         ref.read(selectedRecipeIdProvider.notifier).show(recipe.id);
@@ -596,6 +606,16 @@ class RecipeCard extends ConsumerWidget {
                   // recipe competing in a 64pt square.
                   else if (RecipeIcon.canDraw(recipe.iconSvg)) ...<Widget>[
                     RecipeIcon(svg: recipe.iconSvg, size: 40),
+                    const SizedBox(width: HearthSpacing.md),
+                  ]
+                  // And the house's drawing of what kind of thing this is,
+                  // last of the three, because it is the one that knows
+                  // least about the recipe in front of it: a photograph is
+                  // this dish, a sketch is this recipe's own doodle of
+                  // itself, and this is a drawing of the category. It only
+                  // ever fills a slot that would have been empty.
+                  else if (art.hasArt) ...<Widget>[
+                    art,
                     const SizedBox(width: HearthSpacing.md),
                   ],
                   Expanded(
