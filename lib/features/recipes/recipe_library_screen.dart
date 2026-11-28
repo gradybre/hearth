@@ -600,22 +600,29 @@ class RecipeCard extends ConsumerWidget {
                     ),
                     const SizedBox(width: HearthSpacing.md),
                   ]
-                  // A photograph of the actual dish beats a sketch of the idea
-                  // of it, so the icon takes the slot only when there is no
-                  // photo — never both, which would be two pictures of one
-                  // recipe competing in a 64pt square.
-                  else if (RecipeIcon.canDraw(recipe.iconSvg)) ...<Widget>[
-                    RecipeIcon(svg: recipe.iconSvg, size: 40),
-                    const SizedBox(width: HearthSpacing.md),
-                  ]
-                  // And the house's drawing of what kind of thing this is,
-                  // last of the three, because it is the one that knows
-                  // least about the recipe in front of it: a photograph is
-                  // this dish, a sketch is this recipe's own doodle of
-                  // itself, and this is a drawing of the category. It only
-                  // ever fills a slot that would have been empty.
+                  // A photograph of the actual dish beats any drawing of
+                  // it, so nothing below takes the slot when there is one —
+                  // never both, which would be two pictures of one recipe
+                  // competing in a 64pt square.
+                  //
+                  // Then the house's drawing of what kind of thing this is,
+                  // and only then the recipe's own sketch. That order was
+                  // the other way round at first, on the reasoning that a
+                  // drawing *of this recipe* beats a drawing of its
+                  // category. It holds only while the specific one is good,
+                  // and seen side by side on a phone it is not: the sketches
+                  // are written by a language model asked for a doodle in a
+                  // notebook margin, and the drawings are engravings. A good
+                  // general picture beats a poor specific one.
+                  //
+                  // The sketch keeps the job it is better suited to —
+                  // standing in for a kind of food nobody has drawn yet,
+                  // which is most of them.
                   else if (art.hasArt) ...<Widget>[
                     art,
+                    const SizedBox(width: HearthSpacing.md),
+                  ] else if (RecipeIcon.canDraw(recipe.iconSvg)) ...<Widget>[
+                    RecipeIcon(svg: recipe.iconSvg, size: 40),
                     const SizedBox(width: HearthSpacing.md),
                   ],
                   Expanded(

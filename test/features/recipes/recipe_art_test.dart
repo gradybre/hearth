@@ -15,16 +15,19 @@ import '../../support/fixtures.dart';
 /// itself, and the house's drawing of the category. The last only ever
 /// fills a slot that would have been empty.
 void main() {
-  testWidgets('a recipe with its own sketch keeps it', (
+  testWidgets('a drawn kind beats the recipe\'s own sketch', (
     WidgetTester tester,
   ) async {
-    // The artwork is the fallback, not a replacement: a sketch drawn for
-    // this recipe beats a drawing of its category.
+    // The order was the other way round at first, on the reasoning that a
+    // drawing of this recipe beats a drawing of its category. That holds
+    // only while the specific one is good — and side by side on a phone it
+    // is not, because the sketches are a language model's doodle and the
+    // drawings are engravings.
     await pumpHearthApp(
       tester,
       recipes: <Recipe>[
         aRecipe(
-          id: 'stew',
+          id: 'chilli',
           title: 'Weeknight chilli',
           iconSvg:
               '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
@@ -36,7 +39,32 @@ void main() {
     await tester.tap(find.text('Recipes').last);
     await pumpFrames(tester, frames: 12);
 
+    expect(find.byType(RecipeArt), findsOneWidget);
+    expect(find.byType(RecipeIcon), findsNothing);
+  });
+
+  testWidgets('and the sketch still stands in for a kind nobody has drawn', (
+    WidgetTester tester,
+  ) async {
+    // Which is most of them, and the job the sketch is better suited to.
+    await pumpHearthApp(
+      tester,
+      recipes: <Recipe>[
+        aRecipe(
+          id: 'x',
+          title: 'Leftovers from Tuesday',
+          iconSvg:
+              '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+              '<path d="M4 12 L20 12" fill="none" stroke="currentColor"/>'
+              '</svg>',
+        ),
+      ],
+    );
+    await tester.tap(find.text('Recipes').last);
+    await pumpFrames(tester, frames: 12);
+
     expect(find.byType(RecipeIcon), findsOneWidget);
+    expect(find.byType(Image), findsNothing);
   });
 
   testWidgets('a recipe whose kind has been drawn wears the drawing', (

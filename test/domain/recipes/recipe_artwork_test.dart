@@ -61,6 +61,40 @@ void main() {
     expect(pickRecipeArtwork(title: 'Hammered flat'), isNull);
   });
 
+  group('a tag cannot outrank the title, however long the phrase', () {
+    // Found on Brendan's own library in the simulator, which is the only
+    // place it could have been found: both of these were drawn as a
+    // lunchbox, because "meal prep" is two words and everything the dish
+    // is actually called is one.
+    test('a rice bowl filed under meal prep is a rice bowl', () {
+      expect(
+        pickRecipeArtwork(
+          title: 'Teriyaki Beef Rice Bowls',
+          tags: <String>['slow cooker', 'meal prep', 'rice bowl', 'beef'],
+          cuisine: 'Japanese-inspired',
+        ),
+        'rice-bowl',
+      );
+    });
+
+    test('and a turkey bowl filed the same way is not a lunchbox', () {
+      expect(
+        pickRecipeArtwork(
+          title: 'Apple Cheddar Turkey Bowls',
+          tags: <String>['meal prep', 'high protein', 'high fiber', 'fall'],
+        ),
+        'turkey',
+      );
+    });
+
+    test('but a tag still answers when the title says nothing', () {
+      expect(
+        pickRecipeArtwork(title: 'Sunday batch', tags: <String>['meal prep']),
+        'lunchbox',
+      );
+    });
+  });
+
   test('the title outranks a tag', () {
     // A soup filed under "batch" is a soup. The title is what the dish is
     // called; a tag is how it was filed.
