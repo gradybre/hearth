@@ -522,6 +522,22 @@ final mealRecentLogsProvider = FutureProvider.family<List<RecentLog>, MealSlot>(
 ///
 /// The day is the default because daily logging is the loop the app is judged
 /// on; the week is where you step back and look.
+/// The recipe showing in the library's detail pane, where there is one.
+///
+/// Null is the pane's empty state, and the state the library opens in: a
+/// window wide enough for two columns is not a reason to open a recipe
+/// nobody asked for. Below `HearthLayout.detailPaneBreakpoint` there is no
+/// pane and this is not read — opening a recipe pushes, as it always has.
+final NotifierProvider<SelectedRecipe, String?> selectedRecipeIdProvider =
+    NotifierProvider<SelectedRecipe, String?>(SelectedRecipe.new);
+
+class SelectedRecipe extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void show(String? recipeId) => state = recipeId;
+}
+
 enum PlanView { day, week }
 
 final NotifierProvider<PlanViewMode, PlanView> planViewProvider =

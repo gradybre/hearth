@@ -202,6 +202,37 @@ structural change and the one most likely to need iteration, so it is alone.
 `/recipe/:id` stays a real route — the pane is a layout, not a new navigation
 model.
 
+**Done**, and split: the pane's own contents — the action row with its
+vertical rules, the servings stepper beside the Ingredients heading, the
+amounts in their own column — are PR 4b. The shell and the contents are
+separate concerns, and the shell is the part the empty right half of a
+1280pt window was about.
+
+What the build turned up:
+
+- **The breakpoint cannot be the sidebar's.** At 840 of window the section
+  has barely 630 points, which is one reading column and not two. It is
+  measured on what the section actually has, through a `LayoutBuilder`, and
+  set at 1000 — a 1280pt desktop leaves about 1070 once the sidebar has
+  taken its 208 and a divider.
+- **Embedding was nearly free.** `RecipeDetailScreen` is a Scaffold with an
+  app bar and a footer of actions, and inside an `Expanded` it is all still
+  correct. The one thing an `embedded` flag changes is the back arrow:
+  there is nothing to go back to when the list it was opened from is beside
+  it.
+- **The pane is keyed by recipe.** Without that the state inside it travels
+  from one recipe to the next — the servings it has been scaled to above
+  all, so a 12-serving stew would open as a doubled bowl of oats.
+- **It opens on nothing.** The template draws a recipe in the pane, but a
+  window wide enough for two columns is not a reason to open a recipe
+  nobody asked for, and the first row of a list sorted by "recent" is a
+  different recipe every week.
+- **The open row needed a shape, not a shade.** A tint and an accent
+  outline are both colour. The bar down its leading edge is drawn as a
+  ground the card is inset from — a `Border` cannot have one side thicker
+  than the others and keep a radius, and a `Stack` over the card would take
+  the taps along that edge.
+
 ### PR 5 — Home
 Nutrition as a hero, the other sections as compact rows, the italic footer.
 Last because it is the least load-bearing for the success bar and because it
