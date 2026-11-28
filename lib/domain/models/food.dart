@@ -40,6 +40,13 @@ enum FoodSource {
   restaurant,
 }
 
+/// An active package relationship's anchored serving together with how many
+/// of it one package holds (spec R9, R10).
+///
+/// The two halves travel together because establishing that a relationship is
+/// active at all is the expensive part, and both halves need it established.
+typedef ActivePackageCount = ({ServingOption serving, double perPackage});
+
 /// One way a food can be portioned, with the macros for that portion.
 ///
 /// A food carries several: "1 cup", "100 g", "1 slice" (spec §5.5).
@@ -314,9 +321,26 @@ class Food {
   /// container" is the only statement of what one container is worth, so a
   /// count of containers is the one case where this figure is the answer
   /// rather than a step towards one.
-  double? get servingsPerActivePackage => activePackageServing == null
-      ? null
-      : packageNutrition?.servingsPerPackage;
+  double? get servingsPerActivePackage => activePackageCount?.perPackage;
+
+  /// The active relationship's anchored serving and its per-package count,
+  /// from one walk rather than two (spec R9, R10).
+  ///
+  /// [activePackageServing] and [servingsPerActivePackage] each answer half,
+  /// and each one re-establishes that the relationship is active —
+  /// `PackageNutrition.isValid`, which encodes the record to JSON to measure
+  /// it against the column's cap, and twice over, because `matches`
+  /// validates again on its own account. Reading the halves apart cost one
+  /// recipe line four encodings, on a path recomputed on every ingredient
+  /// edit (§4). Nothing about *which* figures answer changes here.
+  ActivePackageCount? get activePackageCount {
+    final ServingOption? serving = activePackageServing;
+    if (serving == null) return null;
+    final double? perPackage = packageNutrition?.servingsPerPackage;
+    return perPackage == null
+        ? null
+        : (serving: serving, perPackage: perPackage);
+  }
 
   /// Whether the package relationship's implied density disagrees with this
   /// food's own by more than 5% (spec R12).
@@ -420,10 +444,20 @@ class Food {
   /// and a can are three unrelated things that happen to share
   /// [UnitKind.count]. Asking by kind answers "2 cans" with a tub's "1
   /// scoop" row.
+  ///
+  /// A row that states no unit counts as its kind's canonical one, which is
+  /// what [Quantity.canonical] means and what `QuantityMapper.fromSql`
+  /// leaves behind when the stored `amount_unit` is null or names a unit
+  /// this build has never heard of. A count with no word is the item, so an
+  /// `item` line has to find it — matching on the stored unit alone fell
+  /// past it to whichever count row came first.
+  /// `CartQuantity.sameCountUnit` has always read a missing unit this way.
   ServingOption? servingForUnit(Unit? unit) {
     if (unit == null) return null;
     for (final ServingOption option in servingOptions) {
-      if (option.amount.preferredUnit == unit) return option;
+      final Unit effective =
+          option.amount.preferredUnit ?? Units.canonicalFor(option.amount.kind);
+      if (effective == unit) return option;
     }
     return null;
   }

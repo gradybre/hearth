@@ -150,6 +150,28 @@ void main() {
       expect(Units.parse('tins'), Units.can);
       expect(Units.parse('tubs'), Units.container);
     });
+
+    test('the serving and its count come from one lookup, and agree with '
+        'reading them apart', () {
+      // Read apart, each getter walks the relationship's validity again, and
+      // that walk is not cheap: `PackageNutrition.isValid` encodes the record
+      // to JSON to measure it against the column's cap. One recipe line did
+      // it four times, on a path recomputed on every ingredient edit (§4).
+      // They come back together now; this pins that the pair still says
+      // exactly what the two getters say on their own, staleness included.
+      final Food beans = cannedBeans();
+      final ActivePackageCount? pair = beans.activePackageCount;
+      expect(pair, isNotNull);
+      expect(pair!.serving.id, beans.activePackageServing?.id);
+      expect(pair.perPackage, beans.servingsPerActivePackage);
+
+      final Food stale = cannedBeans(
+        packSize: Quantity.of(28, Units.ounce),
+        reviewedPack: Quantity.of(15, Units.ounce),
+      );
+      expect(stale.activePackageCount, isNull);
+      expect(stale.servingsPerActivePackage, isNull);
+    });
   });
 
   group('what the package count must not answer', () {
@@ -463,6 +485,49 @@ void main() {
         expect(result.macros.kcal, closeTo(12, 1e-9));
       },
     );
+
+    test('a count row stored with no unit at all is still an item row', () {
+      // `QuantityMapper.fromSql` leaves `preferredUnit` null whenever the
+      // stored `amount_unit` is null, or names a unit this build has never
+      // heard of. A serving whose word was dropped is the very thing the
+      // count vocabulary was added to stop producing, so rows like this are
+      // already in the database -- and a count with no unit *is* an item
+      // row, because `Units.canonicalFor(UnitKind.count)` is the item.
+      // Matching on the stored unit alone could not see it, so the line fell
+      // straight past it to whichever count row came first: the scoop, here,
+      // at six times the truth. `CartQuantity.sameCountUnit` has always read
+      // a missing unit this way; this is the same reading one layer up.
+      final Food protein = aFood(
+        'Whey',
+        servingOptions: <ServingOption>[
+          aServing(
+            amount: 1,
+            unit: Units.scoop,
+            macros: const Macros(kcal: 120),
+          ),
+          const ServingOption(
+            id: 'serving-legacy',
+            label: '1',
+            amount: Quantity.canonical(
+              canonicalAmount: 1,
+              kind: UnitKind.count,
+            ),
+            macros: Macros(kcal: 20),
+          ),
+        ],
+      );
+      expect(
+        protein.servingForUnit(Units.item)?.id,
+        'serving-legacy',
+        reason: 'a count with no unit is the canonical count, the item',
+      );
+      final IngredientMacros result = MacroCalculator.forIngredient(
+        anIngredient('whey', amount: 2, unit: Units.item),
+        food: protein,
+      );
+      expect(result.status, IngredientMacroStatus.resolved);
+      expect(result.macros.kcal, closeTo(40, 1e-9));
+    });
   });
 
   group('the recipe around the line', () {
