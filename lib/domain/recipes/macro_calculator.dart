@@ -461,18 +461,22 @@ abstract final class MacroCalculator {
     final Unit? unit = quantity.preferredUnit;
     if (unit == null || !unit.namesAPackage) return null;
 
-    final ServingOption? serving = food.activePackageServing;
-    final double? perPackage = food.servingsPerActivePackage;
-    if (serving == null || perPackage == null) return null;
+    // Both halves from one lookup. Asking [Food.activePackageServing] and
+    // [Food.servingsPerActivePackage] separately established the same
+    // relationship twice, and establishing it encodes the record to JSON —
+    // four encodings for one line, on a path recomputed on every ingredient
+    // edit (§4).
+    final ActivePackageCount? active = food.activePackageCount;
+    if (active == null) return null;
 
-    final double count = quantity.canonicalAmount * perPackage;
+    final double count = quantity.canonicalAmount * active.perPackage;
     if (!count.isFinite) return null;
 
     return IngredientMacros(
       ingredient: ingredient,
-      macros: serving.macros.scaledBy(count),
+      macros: active.serving.macros.scaledBy(count),
       status: IngredientMacroStatus.resolved,
-      serving: serving,
+      serving: active.serving,
       servingCount: count,
       usesApproximatePackage: food.packageNutrition?.isApproximate ?? false,
     );
