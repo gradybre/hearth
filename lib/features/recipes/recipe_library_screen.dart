@@ -19,32 +19,93 @@ import '../../domain/recipes/macro_calculator.dart';
 import '../../domain/recipes/recipe_query.dart';
 import 'add_recipe_sheet.dart';
 import 'macro_stats_row.dart';
+import 'recipe_detail_screen.dart';
 import 'recipe_filter_bar.dart';
 import 'recipe_icon.dart';
 import 'recipe_photo.dart';
 
-/// What the floating pill needs left free at the end of the list: its own 56
-/// points plus the 16 the Scaffold floats it above the edge.
-///
-/// Room for the *last* row to scroll clear. It is not a fix for the rows above
-/// it — a floating button covers a different one at every scroll offset, which
-/// is why large text stops floating it at all.
-const double _pillClearance = 72;
-
-/// The household's recipe library (spec §5.2).
+/// The household's recipe library (spec §5.2, and the November 2026
+/// templates).
 ///
 /// Reads from the local cache, so it works with no network. Recipes appear
 /// here the moment they are saved, whether or not the sync has caught up.
+///
+/// **Two shapes.** On a phone, a half-screen window, or anything narrower
+/// than [HearthLayout.detailPaneBreakpoint], this is a list and opening a
+/// recipe pushes over it. Wider than that, the list keeps a column of its
+/// own and the recipe opens in a pane beside it — which is what the desktop
+/// template draws, and what the screenshot that prompted this redesign was
+/// missing: a correct layout by the letter of §6.2 that still left the right
+/// half of a 1280pt window as empty paper.
+///
+/// `/recipe/:id` stays a real route either way. The pane is a layout, not a
+/// second way of navigating: a link, a plan entry and a search result all
+/// still open a whole screen.
 class RecipeLibraryScreen extends ConsumerWidget {
   const RecipeLibraryScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Scaffold(
+    backgroundColor: context.colors.background,
+    body: SafeArea(
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          // The section's own width, not the window's: the sidebar has
+          // already taken 208 points and a divider out of it, and asking
+          // MediaQuery here would split a window that has no room for it.
+          //
+          // And the words as well as the window. Everywhere else a Hearth
+          // layout gives way it gives way at [A11y.reflowThreshold] — this
+          // file's own floating button did, until the heading took it — so
+          // a 400pt column of three-times-sized titles beside a pane is not
+          // the shape to hold on to on a desktop somebody has turned the
+          // text up on. One column, and it gets the whole window.
+          if (constraints.maxWidth < HearthLayout.detailPaneBreakpoint ||
+              A11y.scaleOf(context) > A11y.reflowThreshold) {
+            return const ReadingColumn(child: _LibraryList());
+          }
+          return Row(
+            // Stretched, so the divider runs the height of the pane rather
+            // than sizing itself to whichever column is shorter.
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              const SizedBox(
+                width: HearthLayout.listColumnWidth,
+                child: _LibraryList(inPane: true),
+              ),
+              VerticalDivider(
+                width: 1,
+                thickness: 1,
+                color: context.colors.outline,
+              ),
+              const Expanded(child: _DetailPane()),
+            ],
+          );
+        },
+      ),
+    ),
+  );
+}
+
+/// The library itself: heading, filters, and the rows.
+class _LibraryList extends ConsumerWidget {
+  const _LibraryList({this.inPane = false});
+
+  /// Whether a detail pane is beside this list.
+  ///
+  /// It changes two things: a row opens into the pane instead of pushing,
+  /// and the row that is open says so.
+  final bool inPane;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<List<Recipe>> library = ref.watch(recipeLibraryProvider);
     final AsyncValue<List<Recipe>> shown = ref.watch(filteredRecipesProvider);
     final RecipeFilter filter = ref.watch(recipeFilterProvider);
-    final HearthColors colors = context.colors;
-    final double gutter = MediaQuery.sizeOf(context).width >= 840
+    // The column beside a pane is 400 points wide whatever the window is, so
+    // it takes the compact gutter: the expanded one would spend a tenth of
+    // the column on its own margins.
+    final double gutter = !inPane && MediaQuery.sizeOf(context).width >= 840
         ? HearthSpacing.gutterExpanded
         : HearthSpacing.gutterCompact;
 
@@ -53,186 +114,197 @@ class RecipeLibraryScreen extends ConsumerWidget {
     // the controls on screen to be undone.
     final bool hasLibrary = (library.value ?? const <Recipe>[]).isNotEmpty;
 
-    // Past the scale where layouts give way, the way in stops floating over
-    // the list and becomes a bar the Scaffold lays out — which insets the body
-    // instead of drawing on top of it.
-    //
-    // The pill is 274 points wide and 72 tall with its margin at 3x, parked
-    // over the right-hand end of every row — which is exactly where the delete
-    // a swipe uncovers sits. It did not merely hide that button: the hit test
-    // stopped at the pill, so pressing a visible, enabled Delete opened the
-    // Add recipe sheet. Dynamic type is honoured, not survived (§6.3), and a
-    // control you can see and cannot press is not honoured.
-    //
-    // Bottom padding on the list — the usual answer — only frees the *last*
-    // row, so it is kept for the floating case and is not the fix here. Nor is
-    // waiting for the label to outgrow its pill, which does not happen until
-    // about 2.5x: by 2x a Delete is already under the pill and losing the tap.
-    //
-    // [A11y.reflowThreshold] rather than a number of this screen's own: it is
-    // already the app's line for "the layout gives way around the words", and
-    // one line is worth more than two four points apart.
-    final bool docked = A11y.scaleOf(context) > A11y.reflowThreshold;
+    return library.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (Object error, StackTrace stack) =>
+          _LibraryError(error: error, gutter: gutter),
+      data: (List<Recipe> recipes) {
+        // Computed here rather than in the header so the button knows
+        // whether it would find anything before it is offered.
+        final bool sweepable = DefaultSweep.proposals(
+          recipes: recipes,
+          library: ref.watch(foodLibraryProvider).value ?? const <Food>[],
+        ).isNotEmpty;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      // One labelled control rather than four buttons stacked up the corner.
-      // Three of those four were icon-only, so what they did lived in a
-      // tooltip — a hover, on a device with no pointer — and the stack grew
-      // by one every time another way in was built (U05). Both shapes below
-      // keep the words, for that reason.
-      floatingActionButton: docked
-          ? null
-          : FloatingActionButton.extended(
-              heroTag: 'recipe-add',
-              onPressed: () => showAddRecipeSheet(context),
-              backgroundColor: colors.accent,
-              foregroundColor: colors.onAccent,
-              icon: const Icon(Icons.add),
-              label: Text('Add recipe', style: context.text.label),
-            ),
-      bottomNavigationBar: docked ? _AddRecipeBar(gutter: gutter) : null,
-      body: SafeArea(
-        child: ReadingColumn(
-          child: library.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (Object error, StackTrace stack) =>
-                _LibraryError(error: error, gutter: gutter),
-            data: (List<Recipe> recipes) {
-              // Computed here rather than in the header so the button knows
-              // whether it would find anything before it is offered.
-              final bool sweepable = DefaultSweep.proposals(
-                recipes: recipes,
-                library: ref.watch(foodLibraryProvider).value ?? const <Food>[],
-              ).isNotEmpty;
-
-              // Slivers rather than a Column with an Expanded list.
-              //
-              // The header and the filter bar were fixed chrome above the list,
-              // and on a 320x568 phone at three times the text they are taller
-              // than the screen on their own — so the list was handed a
-              // negative height and the whole thing overflowed by ten points.
-              // As slivers the chrome scrolls away with the content, which is
-              // what a short screen needs and what a tall one never noticed.
-              return CustomScrollView(
-                slivers: <Widget>[
-                  // Outside the empty/non-empty branch on purpose. The household
-                  // control used to live only in the populated case, which hid it
-                  // from exactly the person who needs it — someone with an empty
-                  // library, about to share a code.
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
-                      child: Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: Text(
-                              'Recipes',
-                              style: context.text.recipeTitle,
-                            ),
-                          ),
-                          _MaintenanceMenu(sweepable: sweepable),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SliverToBoxAdapter(
-                    child: SizedBox(height: HearthSpacing.md),
-                  ),
-                  if (hasLibrary) ...<Widget>[
-                    SliverToBoxAdapter(child: RecipeFilterBar(gutter: gutter)),
-                    const SliverToBoxAdapter(
-                      child: SizedBox(height: HearthSpacing.md),
+        // Slivers rather than a Column with an Expanded list.
+        //
+        // The header and the filter bar were fixed chrome above the list,
+        // and on a 320x568 phone at three times the text they are taller
+        // than the screen on their own — so the list was handed a
+        // negative height and the whole thing overflowed by ten points.
+        // As slivers the chrome scrolls away with the content, which is
+        // what a short screen needs and what a tall one never noticed.
+        return CustomScrollView(
+          slivers: <Widget>[
+            // Outside the empty/non-empty branch on purpose. The household
+            // control used to live only in the populated case, which hid it
+            // from exactly the person who needs it — someone with an empty
+            // library, about to share a code.
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
+                // A Wrap rather than a Row: at three times the text
+                // the heading and the button together are wider than
+                // a phone, and the button drops to its own line
+                // instead of squeezing the words (spec §6.3).
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: HearthSpacing.md,
+                  runSpacing: HearthSpacing.sm,
+                  children: <Widget>[
+                    Text('Recipes', style: context.text.recipeTitle),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        // Flexible, because the Wrap wraps this pair
+                        // as a unit: on its own line at three times
+                        // the text the button is still wider than a
+                        // 320pt phone, and the label has to be allowed
+                        // to take two lines rather than overflow.
+                        const Flexible(child: _AddRecipeButton()),
+                        _MaintenanceMenu(sweepable: sweepable),
+                      ],
                     ),
                   ],
-                  if (recipes.isEmpty)
-                    // Filling what is left, so a centred message stays centred
-                    // on a tall screen and grows past it when it must.
-                    //
-                    // `hasScrollBody: false` asks the child for an intrinsic
-                    // height, which a LayoutBuilder cannot answer — so the
-                    // message is told not to scroll, and answers. With a scroll
-                    // body instead, this sliver claims a whole viewport of
-                    // scroll extent regardless of the chrome above it, and the
-                    // empty states gain dead scroll they never had.
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: _EmptyLibrary(gutter: gutter),
-                    )
-                  else if ((shown.value ?? const <Recipe>[]).isEmpty)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: _NoMatches(
-                        gutter: gutter,
-                        filter: filter,
-                        onClear: () =>
-                            ref.read(recipeFilterProvider.notifier).clearAll(),
-                      ),
-                    )
-                  else
-                    _RecipeSliver(
-                      recipes: shown.value ?? const <Recipe>[],
-                      gutter: gutter,
-                      // Nothing floats over the end of the list once the
-                      // button is docked, so the list stops reserving room
-                      // for it rather than trailing a band of empty paper.
-                      clearance: docked ? 0 : _pillClearance,
-                    ),
-                ],
-              );
-            },
-          ),
-        ),
-      ),
+                ),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: HearthSpacing.md)),
+            if (hasLibrary) ...<Widget>[
+              SliverToBoxAdapter(child: RecipeFilterBar(gutter: gutter)),
+              const SliverToBoxAdapter(
+                child: SizedBox(height: HearthSpacing.md),
+              ),
+            ],
+            if (recipes.isEmpty)
+              // Filling what is left, so a centred message stays centred
+              // on a tall screen and grows past it when it must.
+              //
+              // `hasScrollBody: false` asks the child for an intrinsic
+              // height, which a LayoutBuilder cannot answer — so the
+              // message is told not to scroll, and answers. With a scroll
+              // body instead, this sliver claims a whole viewport of
+              // scroll extent regardless of the chrome above it, and the
+              // empty states gain dead scroll they never had.
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EmptyLibrary(gutter: gutter),
+              )
+            else if ((shown.value ?? const <Recipe>[]).isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _NoMatches(
+                  gutter: gutter,
+                  filter: filter,
+                  onClear: () =>
+                      ref.read(recipeFilterProvider.notifier).clearAll(),
+                ),
+              )
+            else
+              _RecipeSliver(
+                recipes: shown.value ?? const <Recipe>[],
+                gutter: gutter,
+                inPane: inPane,
+              ),
+          ],
+        );
+      },
     );
   }
 }
 
-/// "Add recipe", at accessibility text sizes: a bar the Scaffold lays out
-/// rather than a pill floating over the list.
-///
-/// The words and the action are the pill's, unchanged — what changes is that
-/// the Scaffold insets the list above this instead of drawing it on top, so
-/// no row's controls end up underneath. It grows with the text rather than
-/// clipping it: the pill is a fixed 56 points tall, which the label's own line
-/// box outgrows by 3x.
-class _AddRecipeBar extends StatelessWidget {
-  const _AddRecipeBar({required this.gutter});
+/// The recipe beside the list, or the invitation to choose one.
+class _DetailPane extends ConsumerWidget {
+  const _DetailPane();
 
-  final double gutter;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final String? selected = ref.watch(selectedRecipeIdProvider);
+    if (selected == null) {
+      // Nothing is opened for you. A window wide enough for two columns is
+      // not a reason to open a recipe nobody asked for — and the first row
+      // of a list sorted by "recent" is a different recipe every week.
+      return CentredMessage(
+        gutter: HearthSpacing.gutterExpanded,
+        children: <Widget>[
+          Text(
+            'Choose a recipe',
+            style: context.text.sectionHeader,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: HearthSpacing.sm),
+          Text(
+            'Pick one from the list and it opens here.',
+            style: context.text.body.copyWith(
+              color: context.colors.textSecondary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      );
+    }
+    return RecipeDetailScreen(
+      // Keyed by recipe, so choosing another one rebuilds the pane from
+      // scratch. Without this the state inside it — the servings it has
+      // been scaled to, above all — travels from one recipe to the next,
+      // and a 12-serving stew opens as a doubled bowl of oats.
+      key: ValueKey<String>('detail-pane-$selected'),
+      recipeId: selected,
+      embedded: true,
+    );
+  }
+}
+
+/// The way into the library, beside its heading (the November 2026
+/// templates).
+///
+/// **It used to float.** A 56pt pill over the list is the shape this was for
+/// two years, and it cost a documented defect: at three times the text it is
+/// 274 points wide and 72 tall, parked over the right-hand end of every row
+/// — which is exactly where the delete a swipe uncovers lands. The hit test
+/// stopped at the pill, so pressing a visible, enabled Delete opened the Add
+/// recipe sheet. The cure was a second shape — a docked bar, switched in
+/// past the app's reflow threshold — plus a band of clearance under the last
+/// row for the floating case.
+///
+/// In the heading there is no floating case, no second shape and no
+/// clearance: the Scaffold lays the button out above the list like anything
+/// else, and nothing is ever drawn over a row at any text size. What is
+/// given up is that it scrolls away with the heading — the same bargain the
+/// search field above it already makes.
+///
+/// It keeps the words "Add recipe" rather than the templates' "+ Add": U05's
+/// rule is that every way in says what it is, and three of the four doors
+/// this replaced were icon-only with their meaning in a tooltip — a hover,
+/// on a device with no pointer.
+class _AddRecipeButton extends StatelessWidget {
+  const _AddRecipeButton();
 
   @override
   Widget build(BuildContext context) {
     final HearthColors colors = context.colors;
-    return Material(
-      // The page's own paper, so the bar reads as the foot of the screen
-      // rather than a second surface laid over it.
-      color: colors.background,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: EdgeInsets.all(gutter),
-          child: SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: () => showAddRecipeSheet(context),
-              style: FilledButton.styleFrom(
-                backgroundColor: colors.accent,
-                foregroundColor: colors.onAccent,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: HearthSpacing.lg,
-                  vertical: HearthSpacing.md,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(HearthRadius.lg),
-                ),
-              ),
-              icon: const Icon(Icons.add),
-              label: Text('Add recipe', style: context.text.label),
-            ),
-          ),
+    return OutlinedButton.icon(
+      onPressed: () => showAddRecipeSheet(context),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: colors.accent,
+        side: BorderSide(color: colors.accent),
+        // A floor, never a fixed height: the label grows with the text
+        // setting and the control grows with it (spec §6.3).
+        minimumSize: const Size(
+          HearthTouch.androidTarget,
+          HearthTouch.androidTarget,
+        ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: HearthSpacing.md,
+          vertical: HearthSpacing.sm,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(HearthRadius.md),
         ),
       ),
+      icon: const Icon(Icons.add, size: 18),
+      label: Text('Add recipe', style: context.text.label),
     );
   }
 }
@@ -347,18 +419,16 @@ class _RecipeSliver extends StatelessWidget {
   const _RecipeSliver({
     required this.recipes,
     required this.gutter,
-    required this.clearance,
+    required this.inPane,
   });
 
   final List<Recipe> recipes;
   final double gutter;
-
-  /// Room left at the end of the list for anything floating over it.
-  final double clearance;
+  final bool inPane;
 
   @override
   Widget build(BuildContext context) => SliverPadding(
-    padding: EdgeInsets.fromLTRB(gutter, 0, gutter, gutter + clearance),
+    padding: EdgeInsets.fromLTRB(gutter, 0, gutter, gutter),
     sliver: SliverList.separated(
       itemCount: recipes.length,
       separatorBuilder: (BuildContext context, int index) =>
@@ -369,30 +439,63 @@ class _RecipeSliver extends StatelessWidget {
         // its swiped-open state straight to whatever moved up into its place.
         key: ValueKey<String>(recipes[index].id),
         recipe: recipes[index],
+        inPane: inPane,
       ),
     ),
   );
 }
 
 class _DeletableRecipe extends ConsumerWidget {
-  const _DeletableRecipe({required this.recipe, super.key});
+  const _DeletableRecipe({
+    required this.recipe,
+    this.inPane = false,
+    super.key,
+  });
 
   final Recipe recipe;
+  final bool inPane;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => SwipeToDelete(
     name: recipe.title,
-    onDelete: () => ref.read(recipeRepositoryProvider).delete(recipe.id),
-    onRestore: () => ref.read(recipeRepositoryProvider).restore(recipe.id),
-    child: RecipeCard(recipe: recipe),
+    onDelete: () {
+      // A recipe cannot stay open in the pane after it has gone from the
+      // list beside it. Cleared before the delete, so the pane is not
+      // reading a row that is on its way out.
+      if (inPane && ref.read(selectedRecipeIdProvider) == recipe.id) {
+        ref.read(selectedRecipeIdProvider.notifier).show(null);
+      }
+      return ref.read(recipeRepositoryProvider).delete(recipe.id);
+    },
+    onRestore: () async {
+      await ref.read(recipeRepositoryProvider).restore(recipe.id);
+      // And back into the pane. Everything Hearth deletes is soft-deleted
+      // so that the undo is a real undo (§4), and one that returns the row
+      // without the half-read page you were on is not quite one.
+      //
+      // "Is the pane empty" rather than a flag set by the delete: the
+      // delete awaits a write to the database, which takes frames, and by
+      // the time the snackbar reads `onRestore` this widget has been
+      // rebuilt and any closure holding such a flag replaced. An empty
+      // pane is the state the delete left behind, and it is still there to
+      // read.
+      if (inPane && ref.read(selectedRecipeIdProvider) == null) {
+        ref.read(selectedRecipeIdProvider.notifier).show(recipe.id);
+      }
+    },
+    child: RecipeCard(recipe: recipe, inPane: inPane),
   );
 }
 
 /// One recipe in the library list.
 class RecipeCard extends ConsumerWidget {
-  const RecipeCard({required this.recipe, super.key});
+  const RecipeCard({required this.recipe, this.inPane = false, super.key});
 
   final Recipe recipe;
+
+  /// Whether this row opens into a pane beside the list rather than pushing
+  /// a screen over it.
+  final bool inPane;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -408,6 +511,16 @@ class RecipeCard extends ConsumerWidget {
         food.id: food,
     };
     final RecipeMacros macros = MacroCalculator.forRecipe(recipe, foods: foods);
+    final bool selected =
+        inPane && ref.watch(selectedRecipeIdProvider) == recipe.id;
+    void open() {
+      if (inPane) {
+        ref.read(selectedRecipeIdProvider.notifier).show(recipe.id);
+      } else {
+        context.push('/recipe/${recipe.id}');
+      }
+    }
+
     // Shown for any recipe with ingredients, complete or not. Hiding a
     // partial total was meant to avoid quoting a number that undercounts,
     // but it made a whole recipe's nutrition vanish over one unresolved
@@ -423,84 +536,107 @@ class RecipeCard extends ConsumerWidget {
           '${showMacros ? '. ${_macroLabel(macros.perServing)}'
                     '${macros.isIncomplete ? '. Partial — ${macros.incompleteReason}' : ''}' : ''}'
           '${isFavorite ? '. Favourite' : ''}',
-      onTap: () => context.push('/recipe/${recipe.id}'),
+      // Announced as well as drawn: the bar down its edge says which recipe
+      // the pane is showing to somebody looking at the screen, and this
+      // says it to somebody who is not (spec §6.3).
+      selected: inPane ? selected : null,
+      onTap: open,
       excludeSemantics: true,
-      child: Material(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(HearthRadius.lg),
-        child: InkWell(
-          onTap: () => context.push('/recipe/${recipe.id}'),
+      // The bar down the open row's leading edge, drawn as a ground the
+      // card is inset from rather than as a border: a `Border` cannot have
+      // one side thicker than the others and keep a radius, and a `Stack`
+      // over the card would take the taps along that edge.
+      //
+      // A shape, not a shade. The tint and the accent outline below say the
+      // same thing in colour, and colour alone is never the meaning
+      // (spec §6.3) — this is what survives a greyscale print.
+      child: Container(
+        decoration: BoxDecoration(
+          color: selected ? colors.accent : null,
           borderRadius: BorderRadius.circular(HearthRadius.lg),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(HearthRadius.lg),
-              border: Border.all(color: colors.outline),
-            ),
-            padding: const EdgeInsets.fromLTRB(
-              HearthSpacing.lg,
-              HearthSpacing.lg,
-              HearthSpacing.sm,
-              HearthSpacing.lg,
-            ),
-            // The heart sits beside the whole text block rather than beside
-            // the title alone: a 44pt tap target inside the title row would
-            // set the row's height and open a gap above the summary line.
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                if (hasRecipePhoto(ref, recipe.id)) ...<Widget>[
-                  RecipePhoto(
-                    recipeId: recipe.id,
-                    width: 64,
-                    height: 64,
-                    borderRadius: BorderRadius.circular(HearthRadius.md),
-                  ),
-                  const SizedBox(width: HearthSpacing.md),
-                ]
-                // A photograph of the actual dish beats a sketch of the idea
-                // of it, so the icon takes the slot only when there is no
-                // photo — never both, which would be two pictures of one
-                // recipe competing in a 64pt square.
-                else if (RecipeIcon.canDraw(recipe.iconSvg)) ...<Widget>[
-                  RecipeIcon(svg: recipe.iconSvg, size: 40),
-                  const SizedBox(width: HearthSpacing.md),
-                ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(recipe.title, style: text.sectionHeader),
-                      const SizedBox(height: HearthSpacing.xs),
-                      Text(
-                        _summary(recipe),
-                        style: text.metadata.copyWith(color: colors.textMuted),
-                      ),
-                      if (showMacros) ...<Widget>[
-                        const SizedBox(height: HearthSpacing.xxs),
-                        MacroStatsLine(
-                          macros: macros.perServing,
-                          isPartial: macros.isIncomplete,
-                        ),
-                      ],
-                      if (recipe.tags.isNotEmpty) ...<Widget>[
-                        const SizedBox(height: HearthSpacing.md),
-                        Wrap(
-                          spacing: HearthSpacing.sm,
-                          runSpacing: HearthSpacing.xs,
-                          children: <Widget>[
-                            for (final String tag in recipe.tags)
-                              _Tag(label: tag),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
+        ),
+        padding: EdgeInsets.only(left: selected ? 4 : 0),
+        child: Material(
+          color: selected ? colors.surfaceSunken : colors.surface,
+          borderRadius: BorderRadius.circular(HearthRadius.lg),
+          child: InkWell(
+            onTap: open,
+            borderRadius: BorderRadius.circular(HearthRadius.lg),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(HearthRadius.lg),
+                border: Border.all(
+                  color: selected ? colors.accent : colors.outline,
                 ),
-                // Favouriting from the list, not only from inside the recipe:
-                // the heart is worth nothing if reaching it costs two
-                // navigations.
-                _FavoriteButton(recipeId: recipe.id, compact: true),
-              ],
+              ),
+              padding: const EdgeInsets.fromLTRB(
+                HearthSpacing.lg,
+                HearthSpacing.lg,
+                HearthSpacing.sm,
+                HearthSpacing.lg,
+              ),
+              // The heart sits beside the whole text block rather than beside
+              // the title alone: a 44pt tap target inside the title row would
+              // set the row's height and open a gap above the summary line.
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  if (hasRecipePhoto(ref, recipe.id)) ...<Widget>[
+                    RecipePhoto(
+                      recipeId: recipe.id,
+                      width: 64,
+                      height: 64,
+                      borderRadius: BorderRadius.circular(HearthRadius.md),
+                    ),
+                    const SizedBox(width: HearthSpacing.md),
+                  ]
+                  // A photograph of the actual dish beats a sketch of the idea
+                  // of it, so the icon takes the slot only when there is no
+                  // photo — never both, which would be two pictures of one
+                  // recipe competing in a 64pt square.
+                  else if (RecipeIcon.canDraw(recipe.iconSvg)) ...<Widget>[
+                    RecipeIcon(svg: recipe.iconSvg, size: 40),
+                    const SizedBox(width: HearthSpacing.md),
+                  ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(recipe.title, style: text.sectionHeader),
+                        const SizedBox(height: HearthSpacing.xs),
+                        Text(
+                          _summary(recipe),
+                          style: text.metadata.copyWith(
+                            color: colors.textMuted,
+                          ),
+                        ),
+                        if (showMacros) ...<Widget>[
+                          const SizedBox(height: HearthSpacing.xxs),
+                          MacroStatsLine(
+                            macros: macros.perServing,
+                            isPartial: macros.isIncomplete,
+                          ),
+                        ],
+                        if (recipe.tags.isNotEmpty) ...<Widget>[
+                          const SizedBox(height: HearthSpacing.md),
+                          Wrap(
+                            spacing: HearthSpacing.sm,
+                            runSpacing: HearthSpacing.xs,
+                            children: <Widget>[
+                              for (final String tag in recipe.tags)
+                                _Tag(label: tag),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  // Favouriting from the list, not only from inside the recipe:
+                  // the heart is worth nothing if reaching it costs two
+                  // navigations.
+                  _FavoriteButton(recipeId: recipe.id, compact: true),
+                ],
+              ),
             ),
           ),
         ),

@@ -193,6 +193,10 @@ void main() {
         'Under 30 min',
         'Protein 30 g+',
         'Under 600 kcal',
+        // Behind Filters since the November 2026 templates, with the other
+        // narrowings. The row above the list is a scope, and this is not
+        // one: it combines with Favourites rather than replacing it.
+        'Eaten out',
       ]) {
         expect(
           find.descendant(of: bar, matching: find.text(buried)),
@@ -201,7 +205,7 @@ void main() {
         );
       }
 
-      // And what is left is exactly the four: sort, two toggles, Filters.
+      // And what is left is exactly the four: the two tabs, Filters, sort.
       final Finder row = find.byKey(const ValueKey('recipe-filter-controls'));
       expect(row, findsOneWidget);
       expect(
@@ -211,10 +215,10 @@ void main() {
       expect(
         find.descendant(of: row, matching: find.byType(Text)),
         findsNWidgets(4),
-        reason: 'sort, Favourites, Eaten out, Filters — and nothing else',
+        reason: 'All, Favourites, Filters, sort — and nothing else',
       );
+      expect(find.text('All'), findsOneWidget);
       expect(find.text('Favourites'), findsOneWidget);
-      expect(find.text('Eaten out'), findsOneWidget);
     });
 
     testWidgets('does not scroll sideways inside the list that scrolls down', (
@@ -310,7 +314,7 @@ void main() {
       expect(shownIds(tester), hasLength(5));
     });
 
-    testWidgets('the two toggles stay in the rail', (
+    testWidgets('the favourites scope, from the row above the list', (
       WidgetTester tester,
     ) async {
       await pumpHearthApp(
@@ -335,14 +339,13 @@ void main() {
       await openLibrary(tester);
       expect(find.text('Filters'), findsOneWidget);
 
-      // Favourites and Eaten out are in the rail, visibly lit. Counting them
-      // behind a button that does not hold them would double-count them.
+      // Favourites is a tab, on the screen and visibly chosen. Counting it
+      // behind a button that does not hold it would count it twice.
       await reach(tester, find.text('Favourites'));
-      await reach(tester, find.text('Eaten out'));
       expect(
         find.text('Filters'),
         findsOneWidget,
-        reason: 'neither toggle lives behind Filters',
+        reason: 'the scope does not live behind Filters',
       );
 
       await pickInSheet(tester, 'Thai');
@@ -350,6 +353,10 @@ void main() {
 
       await pickInSheet(tester, 'Under 30 min');
       expect(find.text('Filters (2)'), findsOneWidget);
+
+      // And Eaten out does live behind it, so it counts.
+      await pickInSheet(tester, 'Eaten out');
+      expect(find.text('Filters (3)'), findsOneWidget);
     });
 
     testWidgets('and says the number rather than only lighting up', (
@@ -461,7 +468,7 @@ void main() {
       await openLibrary(tester, size: const Size(320, 568), textScale: 3.0);
 
       await reach(tester, find.text('Favourites'));
-      await reach(tester, find.text('Eaten out'));
+      await pickInSheet(tester, 'Eaten out');
 
       expect(tester.takeException(), isNull);
     });
@@ -474,8 +481,8 @@ void main() {
 
       // Tooltips are not discoverability on a touch screen, so each of these
       // is a word on the screen as well as a semantics label.
+      expect(find.bySemanticsLabel('All'), findsOneWidget);
       expect(find.bySemanticsLabel('Favourites'), findsOneWidget);
-      expect(find.bySemanticsLabel('Eaten out'), findsOneWidget);
       expect(find.bySemanticsLabel(RegExp('^Filters')), findsOneWidget);
 
       handle.dispose();
