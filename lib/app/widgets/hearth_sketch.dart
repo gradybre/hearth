@@ -1,10 +1,12 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
 import '../../domain/recipes/sketch_icon.dart';
 import '../theme/hearth_theme.dart';
+import 'sketch_style.dart';
 
 /// A line drawing, wherever the app wants one.
 ///
@@ -55,6 +57,9 @@ class HearthSketch extends StatelessWidget {
           painter: SketchPainter(
             icon: icon,
             color: color ?? context.colors.textSecondary,
+            // The craft is the painter's, and how much of it to spend is a
+            // question about size: see [SketchStyle].
+            style: SketchStyle.forSize(size),
           ),
         ),
       ),
@@ -71,15 +76,18 @@ class HearthSketch extends StatelessWidget {
 /// marks and a recipe's — and a second copy of the viewBox arithmetic is
 /// a second place for it to drift.
 class SketchPainter extends CustomPainter {
-  const SketchPainter({required this.icon, required this.color});
+  const SketchPainter({
+    required this.icon,
+    required this.color,
+    this.style = SketchStyle.plain,
+  });
 
   final SketchIcon icon;
   final Color color;
 
-  /// A filled area is painted as a wash of the same colour rather than a
-  /// solid block: one colour at full strength everywhere would turn a sketch
-  /// into a silhouette.
-  static const double _fillOpacity = 0.16;
+  /// How much craft to draw with. Plain by default, so a caller that has
+  /// not thought about it gets what the painter has always done.
+  final SketchStyle style;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -99,6 +107,7 @@ class SketchPainter extends CustomPainter {
     canvas.scale(scale);
     canvas.translate(-icon.minX, -icon.minY);
 
+    int index = 0;
     for (final SketchShape shape in icon.shapes) {
       final Path path = _pathFor(shape);
       if (!shape.transform.isIdentity) {
@@ -106,12 +115,25 @@ class SketchPainter extends CustomPainter {
       }
 
       if (shape.filled) {
+        // The wash: a fraction of the ink, feathered rather than cut, so a
+        // shaded region reads as shadow instead of as a second shape. One
+        // colour at full strength everywhere would turn a sketch into a
+        // silhouette.
         canvas.drawPath(
           path,
           Paint()
             ..style = PaintingStyle.fill
-            ..color = color.withValues(alpha: color.a * _fillOpacity),
+            ..color = color.withValues(alpha: color.a * style.washAlpha)
+            ..maskFilter = style.hatch
+                ? const MaskFilter.blur(BlurStyle.normal, 1.6)
+                : null,
         );
+        if (style.hatch) _hatch(canvas, path);
+      }
+      if (style.brokenInk) {
+        _brokenInk(canvas, path, shape.strokeWidth, index);
+        index++;
+        continue;
       }
       canvas.drawPath(
         path,
@@ -124,9 +146,76 @@ class SketchPainter extends CustomPainter {
           ..strokeJoin = StrokeJoin.round
           ..color = color,
       );
+      index++;
     }
 
     canvas.restore();
+  }
+
+  /// Shades a region with lines instead of a flat tone.
+  ///
+  /// This is the reference art's signature, and the one thing a language
+  /// model cannot be asked for: twenty evenly spaced parallel lines are
+  /// twenty chances to be slightly wrong. The markup says *this region is
+  /// shaded* by filling it; the spacing and the angle are the house's.
+  void _hatch(Canvas canvas, Path region) {
+    final Rect bounds = region.getBounds();
+    if (bounds.isEmpty) return;
+    canvas.save();
+    canvas.clipPath(region);
+    final Paint paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.55
+      ..strokeCap = StrokeCap.round
+      ..color = color.withValues(alpha: color.a * 0.5);
+    // Forty-five degrees, drawn across the whole bounding box and clipped
+    // back: starting at the shape's own edge would leave the first and last
+    // lines short in a way the eye reads as a mistake.
+    final double span = bounds.width + bounds.height;
+    for (
+      double x = bounds.left - bounds.height;
+      x < bounds.right;
+      x += style.hatchSpacing
+    ) {
+      canvas.drawLine(
+        Offset(x, bounds.bottom),
+        Offset(x + span, bounds.bottom - span),
+        paint,
+      );
+    }
+    canvas.restore();
+  }
+
+  /// Draws a stroke whose ink wanders, the way a pen on rough paper does.
+  ///
+  /// Walked in short segments with the alpha modulated along the length.
+  /// Seeded by the shape's position in the drawing, never random: an icon
+  /// that shimmered on every repaint would be worse than one drawn flat.
+  void _brokenInk(Canvas canvas, Path path, double width, int seed) {
+    for (final ui.PathMetric metric in path.computeMetrics()) {
+      if (metric.length <= 0) continue;
+      final int steps = math.max(6, (metric.length / 1.6).round());
+      for (int i = 0; i < steps; i++) {
+        final ui.Tangent? a = metric.getTangentForOffset(
+          metric.length * i / steps,
+        );
+        final ui.Tangent? b = metric.getTangentForOffset(
+          metric.length * (i + 1) / steps,
+        );
+        if (a == null || b == null) continue;
+        canvas.drawLine(
+          a.position,
+          b.position,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = width
+            ..strokeCap = StrokeCap.round
+            ..color = color.withValues(
+              alpha: color.a * SketchStyle.inkAt((i + 0.5) / steps, seed),
+            ),
+        );
+      }
+    }
   }
 
   static Path _pathFor(SketchShape shape) {
@@ -236,5 +325,5 @@ class SketchPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(SketchPainter old) =>
-      old.icon != icon || old.color != color;
+      old.icon != icon || old.color != color || old.style != style;
 }

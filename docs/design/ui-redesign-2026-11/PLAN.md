@@ -357,6 +357,30 @@ What the build turned up:
   had drawn. `kArtworkShipped` names the drawings that exist, and it is
   empty until the art arrives — so the library looks exactly as it does now.
 
+### PR 9 — The painter does the craft
+**Done.** Route C from the artwork conversation, built as the backup to the
+drawn library: hatching, a feathered wash and ink that wanders, supplied by
+the renderer rather than asked of the model.
+
+The reframe is the point. A language model placing forty consistent strokes
+is a model failing silently; the same model is perfectly good at eight plain
+shapes with one of them marked as shaded. So the markup gets simpler and the
+craft moves to one place that can be tuned and tested — and it applies to
+the app's own marks as well as to a recipe's.
+
+- **Hatching is opt-in through markup that already exists.** A filled shape
+  used to get a flat 16% wash and now gets a lighter feathered wash with
+  hatching clipped to it, so "this region is shaded" is something a drawing
+  can already say. The pot and the cottage use `fill="none"` throughout, so
+  they take the ink and not the hatching.
+- **All of it is off below 72 points.** A probe showed hatching at forty is
+  a smudge and broken ink is a dotted line — character nobody can see,
+  bought with legibility. The decision is a pure function with its own
+  tests rather than a condition inside `paint` that nothing can check.
+- **The ink is seeded, never random.** A library row repaints on every
+  scroll frame, and a drawing that shimmered would be worse than one drawn
+  flat.
+
 ### PR 3b — Recipes rows
 Sketch thumbnails throughout and the hero card. Unblocked by PR 7: the
 default drawing for a recipe with no icon of its own is the thing it was
